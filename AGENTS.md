@@ -49,6 +49,8 @@ Design complete; version 1 is being built to [the v1 plan](docs/v1-plan.md).
 ## Working conventions
 
 - Record new decisions in `docs/decisions.md` in the same change that makes them.
+- Add a `CHANGELOG.md` entry under `[Unreleased]` for every user-visible change
+  and every security fix, following [CONTRIBUTING.md](CONTRIBUTING.md#changelog).
 - Keep design docs in sync with any change that alters behavior they describe.
 - Never put credentials, real hostnames or real personal data in the repository,
   including in examples, fixtures and recorded API cassettes.

@@ -68,6 +68,11 @@ version 1).
 - [External services](docs/external-services.md) (maintainers)
 - [Decision log and open questions](docs/decisions.md)
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are recorded in
+[CHANGELOG.md](CHANGELOG.md).
+
 ## Licence
 
 [MIT](LICENSE)
