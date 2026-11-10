@@ -158,7 +158,7 @@ differently shaped engine, before breadth.
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md` | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request |
+| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, and the release script with its changelog gate | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request |
 | M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
 | M2 | **Non-production side.** Promote, export store, sidecars, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), publish adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
 | M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |
@@ -177,6 +177,9 @@ differently shaped engine, before breadth.
   `main` directly.
 - **No releases.** The run never tags a release or publishes to PyPI; the
   first release is a maintainer's decision.
+- **Changelog.** Every milestone pull request adds its user-visible changes to
+  `CHANGELOG.md` under `[Unreleased]`, so the first release's notes are ready
+  when it is cut.
 - **Design changes go through the docs.** If implementation shows a design
   doc is wrong, the same pull request updates the doc and records the decision.
 - **Machine:** running Oracle and SQL Server together needs roughly 6 GB of RAM

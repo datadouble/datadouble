@@ -40,6 +40,8 @@
 | 34 | Engines add Elasticsearch and OpenSearch, as separate adapters | Their APIs and clients have diverged since the fork |
 | 35 | A filesystem engine adapter: selection by `find` expressions, cleanup by shell commands, a mandatory files PII scan | File trees that rows refer to are needed alongside databases and may hold personal data |
 | 36 | Salesforce in version 1 works against the in-memory fake; cassettes are recorded later, outside the run, against a development org | The run never holds org credentials |
+| 37 | `CHANGELOG.md` in Keep a Changelog format with an `[Unreleased]` section; every user-visible change and every security fix gets an entry; the release script refuses to tag with an empty `[Unreleased]` | Users learn what an upgrade changes, and security-only releases are possible and explained |
+| 38 | Until 1.0, all packages are versioned and released together, with one changelog | One release gate and one changelog while the adapter interface is still changing; independent versions can follow once it is stable |
 
 ## Open
 
