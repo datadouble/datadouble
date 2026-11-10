@@ -48,9 +48,15 @@ Salesforce cannot run in a container. Three layers cover it:
 
 Only re-recording needs a Salesforce org; everything else runs offline.
 
+## CI/CD systems
+
+Each Tier 1 CI/CD system also has an opt-in container profile under `dev/ci/`
+(GitLab CE and Runner, Jenkins, a kind cluster with Argo CD, and `act` for GitHub
+Actions). See [CI/CD integration](ci-cd.md#testing).
+
 ## Conformance suite
 
 Every adapter must pass a shared suite under `conformance/`, run against its
 container (or fake): catalog introspection, consistent snapshot behavior, subset
 correctness on the sample data, load round-trips, and excludes/strict-mode
-behavior.
+behavior. CI/CD adapters have their own suite under `conformance/ci/`.

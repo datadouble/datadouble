@@ -29,7 +29,7 @@ covers the whole estate.
 ## Shape of the tool
 
 ```
-plan → extract → load → transform → verify → package → store → replicate
+plan → extract → load → transform → package → verify → store → promote → fetch → replicate → publish
 ```
 
 - **Subsetting happens during extract**, pushed down to the source, so multi-terabyte
@@ -39,6 +39,11 @@ plan → extract → load → transform → verify → package → store → rep
 - **JSON in, JSON out** is the primary interface; the CLI is a thin layer over it.
 - **Jailer extraction models (`.jm`) are supported natively**, so subsets can be
   designed in Jailer's GUI and run repeatedly by Datadouble.
+- **Ready-made CI/CD integrations** for GitHub Actions, GitLab CI, Jenkins and
+  Argo CD. Golden images are built inside production, and only a verified,
+  anonymized image ever leaves it.
+- **Agent skills** let a coding agent set up any part of a pipeline, or a whole
+  pipeline at once.
 - **Strict mode** refuses to copy tables or columns the subset model has never
   seen, the usual way unmasked personal data leaks into test copies.
 
@@ -49,6 +54,8 @@ plan → extract → load → transform → verify → package → store → rep
 - [Subsetting](docs/subsetting.md)
 - [Excludes and strict mode](docs/excludes-and-strict-mode.md)
 - [Jailer compatibility](docs/jailer.md)
+- [CI/CD integration](docs/ci-cd.md)
+- [Agent skills](docs/agent-skills.md)
 - [Local development and testing](docs/local-development.md)
 - [Prior art](docs/prior-art.md)
 - [Decision log and open questions](docs/decisions.md)

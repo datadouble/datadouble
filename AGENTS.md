@@ -18,6 +18,8 @@ Planning. There is no code yet; the repository holds design documents only.
    - [subsetting](docs/subsetting.md)
    - [excludes and strict mode](docs/excludes-and-strict-mode.md)
    - [Jailer compatibility](docs/jailer.md)
+   - [CI/CD integration](docs/ci-cd.md): jobs, the production boundary, CI/CD adapters
+   - [agent skills](docs/agent-skills.md)
    - [local development and testing](docs/local-development.md)
    - [prior art](docs/prior-art.md)
 
@@ -35,6 +37,9 @@ Planning. There is no code yet; the repository holds design documents only.
 - **Fail loudly.** No silent configuration merges, and no warn-and-continue for
   anything that could put real personal data into a copy. `strict: columns` is
   the default.
+- **Real personal data stays in production.** Only a verified golden image
+  crosses out, through `promote`. CI/CD adapters and agent skills contain no
+  pipeline logic; they only drive `datadouble` commands.
 - **Wrap mature tools rather than reimplement them** (native dump tools, SFDMU,
   DBLab Engine, Jailer models).
 

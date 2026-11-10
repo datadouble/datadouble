@@ -35,10 +35,19 @@
 8. **Programmatic interface:** JSON request in, JSON response out.
 9. **CLI:** conventional `datadouble <command> --switch ... args`, a thin layer over
    the JSON interface. Every CLI invocation can print the equivalent JSON request.
+10. **CI/CD adapters** for the major systems (Tier 1: GitHub Actions, GitLab CI,
+    Jenkins, Argo CD), each tested end to end. Given a spec, a team can quickly
+    wire up any of: building the golden image inside production, promoting it
+    to an export store, fetching it into non-production, provisioning copies
+    (as a ready pool or on demand), publishing them where consumers find them,
+    releasing them, pruning old images, and rolling back to an earlier image.
+    See [CI/CD integration](ci-cd.md).
+11. **Agent skills** for setting up each part of a pipeline, or a whole pipeline
+    at once, in a team's own repositories. See [agent skills](agent-skills.md).
 
 ## Development
 
-10. **Local development with containers** for every engine, each with sample data.
+12. **Local development with containers** for every engine, each with sample data.
     Salesforce, which cannot run in a container, is covered by recorded API
     interactions and an in-memory fake. See [local development](local-development.md).
 
@@ -48,5 +57,7 @@
   configuration files, artifacts, manifests or logs.
 - Any run's output is explainable from its manifest: source versions, subset
   rules, anonymization strategy hashes, verification results.
+- Real personal data never leaves the environment it was extracted in. Only a
+  golden image with a passing verification report crosses into non-production.
 - Fail loudly. No silent merges of configuration, no "warning and carry on" for
   anything that can put real personal data into a copy.

@@ -18,6 +18,17 @@
 | 12 | One repository, each adapter a separately published package | Adapter interface will change heavily before 1.0 |
 | 13 | Repository private during planning | Publish when ready |
 | 14 | Licence: MIT | Maximum ease of adoption |
+| 15 | CI/CD adapters, Tier 1: GitHub Actions, GitLab CI, Jenkins, Argo CD; each tested end to end | Datadouble mostly runs inside other teams' pipelines |
+| 16 | Lifecycle split into jobs: build, promote, fetch, provision, release, prune, activate; stages `promote`, `fetch`, `publish`; operations `release`, `prune`, `activate` | Jobs run in different environments, on different schedules, with different credentials |
+| 17 | Everything up to `verify` runs where `extract` runs; `promote` into an export store is the only production crossing and refuses unverified images; non-production pulls from the export store only | Raw extracts and working databases contain real personal data |
+| 18 | CI/CD adapters contain no pipeline logic and never put data artifacts in CI artifact storage | Same reason as the thin CLI; CI storage is often outside production |
+| 19 | `build` refuses to generate or run on vendor-hosted runners | Prevents production data being pulled onto a vendor's machines |
+| 20 | `verify` runs after `package`, against a scratch restore of the image | Verifies the artifact that ships, including that it restores |
+| 21 | Run outcomes: success, warning, failure; anything that could leak personal data is a failure; no continue-on-error switch | Operators need "fix this soon" without weakening fail-loudly |
+| 22 | Images identified by spec, engine, target engine version and generation; addressed through channels; sidecar manifests readable without download | Cheap change detection, rollback, and test channels that can't replace live images |
+| 23 | `replicate` supports pool mode (N unclaimed copies, recycled by generation) and on-demand mode; copies are volumes or instances | Large images copy slower than people will wait; small ones suit per-request copies |
+| 24 | Agent skills (Agent Skills format) for each job, the spec, and a whole pipeline; shipped in this repository as a Claude Code plugin and plain skill directories | Agents increasingly do pipeline setup; skills make it repeatable |
+| 25 | Skills contain no logic: all files come from `datadouble` commands, and skills never weaken safety settings or handle secrets | Same reason as the thin CLI; an agent must not trade safety for a passing run |
 
 ## Open
 
@@ -28,3 +39,8 @@
 | Spec format details | YAML and JSON both, or JSON Schema-defined YAML only |
 | Golden image formats | Logical dump, physical data directory, or both per engine |
 | Trademark and domain checks | Before announcing the name publicly |
+| Golden image signing | Sign manifests in `build` so non-production can check provenance before `provision` (e.g. Sigstore/cosign) |
+| Jenkins packaging | Shared library only, or a plugin too |
+| Non-database assets | File trees (uploads, media) that rows refer to are often needed alongside the database, and may hold personal data. A `files` engine adapter, and how to anonymize or filter its contents |
+| Several images from one spec | One combined image, one per database, or both from one build |
+| CI/CD in first release | Proposed: GitHub Actions and the Kubernetes base first, the rest of Tier 1 next |
