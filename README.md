@@ -52,3 +52,7 @@ plan → extract → load → transform → verify → package → store → rep
 - [Local development and testing](docs/local-development.md)
 - [Prior art](docs/prior-art.md)
 - [Decision log and open questions](docs/decisions.md)
+
+## Licence
+
+[MIT](LICENSE)

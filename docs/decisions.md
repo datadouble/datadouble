@@ -17,13 +17,13 @@
 | 11 | Containers and sample data for every engine; Salesforce via recorded interactions plus an in-memory fake | Local development requirement |
 | 12 | One repository, each adapter a separately published package | Adapter interface will change heavily before 1.0 |
 | 13 | Repository private during planning | Publish when ready |
+| 14 | Licence: MIT | Maximum ease of adoption |
 
 ## Open
 
 | Question | Notes |
 |---|---|
 | Implementation language | Python favored: mature drivers for every target and a strong anonymization ecosystem. Go would give single-binary distribution. |
-| Licence | Apache-2.0 for adoption, or AGPL to discourage closed hosted forks |
 | First release scope | Proposed: PostgreSQL, Faker-style anonymization, local and S3 storage, Docker-volume replication; MySQL next |
 | Spec format details | YAML and JSON both, or JSON Schema-defined YAML only |
 | Golden image formats | Logical dump, physical data directory, or both per engine |
