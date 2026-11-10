@@ -49,6 +49,9 @@ plan → extract → load → transform → package → verify → store → pro
 - **Strict mode** refuses to copy tables or columns the subset model has never
   seen, the usual way unmasked personal data leaks into test copies.
 
+Documentation: <https://datadouble.tightlinesoftware.com/> (published with
+version 1).
+
 ## Design documents
 
 - [Requirements](docs/requirements.md)

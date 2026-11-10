@@ -31,7 +31,8 @@ moves on only when they pass.
     [supply chain](#supply-chain)).
 12. Tier 1 CI/CD libraries: GitHub Actions, GitLab CI, Jenkins, Argo CD.
 13. All agent skills, including filesystem help, and the Claude Code plugin.
-14. A GitHub Pages documentation site and a public example repository,
+14. A GitHub Pages documentation site at
+    `https://datadouble.tightlinesoftware.com/` and a public example repository,
     `datadouble/example-pipeline`, covering the production and non-production
     sides.
 

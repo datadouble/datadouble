@@ -51,8 +51,22 @@ secret.
    - requires linear history
 4. **Environments:** create `pypi` with yourself as a required reviewer, so
    every PyPI release waits for your approval.
-5. **Pages → Build and deployment:** source "GitHub Actions". The site is
-   served at `https://datadouble.github.io/datadouble/`.
+5. **Pages → Build and deployment:** source "GitHub Actions", custom domain
+   `datadouble.tightlinesoftware.com`, HTTPS enforced once GitHub has issued
+   the certificate.
+
+### Site domain
+
+The documentation site is served at `https://datadouble.tightlinesoftware.com/`.
+
+1. **Public DNS (Cloudflare):** a `CNAME` from `datadouble` to
+   `datadouble.github.io`, set to DNS only, not proxied. GitHub cannot issue
+   the site's certificate through Cloudflare's proxy.
+2. **Internal DNS:** networks with their own private copy of the
+   `tightlinesoftware.com` zone need the same record there, or the name won't
+   resolve inside them.
+3. **Domain verification:** under **datadouble → Settings → Pages → Verified
+   domains**, so no other GitHub account can serve a site on this domain.
 
 ### Example repository
 
