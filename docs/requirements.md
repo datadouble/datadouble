@@ -3,12 +3,14 @@
 ## Functional
 
 1. **Breadth of engines.** Minimum supported systems: PostgreSQL, MySQL, Microsoft
-   SQL Server, Oracle, Redis, MongoDB and Salesforce. Breadth is a core goal, not
-   a stretch goal.
+   SQL Server, Oracle, Redis, MongoDB, Elasticsearch, OpenSearch, Salesforce,
+   and filesystem trees. Breadth is a core goal, not a stretch goal.
 2. **Pluggable adapters** for each concern:
    - Dump/load (native dump tools, ETL exports, CSV, APIs)
    - Subsetting
-   - Anonymization (Faker-style generators, hashing, nulling, format-preserving)
+   - Anonymization (Faker-style generators, hashing, nulling, format-preserving,
+     engine-native expressions such as SQL, and hooks for changes that aren't
+     column-shaped). See [anonymization](anonymization.md).
    - Verification (referential integrity, row counts, PII scanning)
    - Storage, for both inputs and golden-image outputs (local disk, object storage,
      artifact repositories, network shares)

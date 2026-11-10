@@ -63,7 +63,8 @@ scans and user-supplied SQL assertions.
 
 A spec may declare SQL **hooks**: `before_load` (server settings, extensions)
 and `after_transform` (seed data developers need, such as test accounts). Hooks
-run before `verify`, so their effects are verified too.
+run before `verify`, so their effects are verified too. See
+[anonymization](anonymization.md#hooks).
 
 A run ends in one of three outcomes:
 

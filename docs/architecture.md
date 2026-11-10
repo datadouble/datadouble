@@ -43,7 +43,7 @@ engine-specific logic; engine quirks stay inside the adapter.
 |---|---|---|
 | Engine (dump/load) | Introspect the catalog, open a consistent snapshot, extract, load, package | postgres, mysql, mssql, oracle, mongodb, redis, salesforce |
 | Subset | Turn a subset spec into per-table extraction queries | FK-graph planner, Jailer `.jm` front end |
-| Anonymize | Rewrite values column by column | faker, hash, null, format-preserving |
+| Anonymize | Rewrite values column by column (see [anonymization](anonymization.md)) | faker, hash, null, format-preserving, expression (e.g. SQL) |
 | Verify | Check a restored golden image | fk-integrity, row-counts, pii-scan |
 | Storage | Read and write immutable artifacts | local, s3, gcs, artifact repository, nfs |
 | Replicate | Turn a staged image into copies (volumes or instances), and destroy them | docker-volume, nfs-copy, csi-snapshot, zfs, plain-restore |

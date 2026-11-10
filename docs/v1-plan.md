@@ -1,0 +1,184 @@
+# Version 1 plan
+
+The plan for building version 1, written so that a long autonomous development
+run can check itself against it. Each milestone has acceptance criteria; the run
+moves on only when they pass.
+
+## Scope
+
+1. A local development environment for every engine that can run locally.
+2. Engine adapters, each implementing every stage, with a sample dataset:
+   PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Redis, Elasticsearch,
+   OpenSearch, a filesystem adapter, and Salesforce against an in-memory fake.
+3. The core: spec and catalog lock, excludes, strict mode, the subset planner
+   (both strategies), Jailer import, manifests and resumability, channels and
+   sidecar manifests, the JSON API and CLI.
+4. Anonymization as described in [anonymization](anonymization.md): faker
+   (deterministic), hash, null, format-preserving, engine-native expressions,
+   and hooks.
+5. Verify adapters: restore check, referential integrity, row counts, PII scan
+   (database and files), SQL assertions.
+6. Storage and replication adapters, for sourcing, cloning and replication:
+   `filesystem`, `s3`, `btrfs`, `k8s-pv`, plus `docker-volume` for local and CI
+   use.
+7. Publish adapters: `k8s-pv`, `k8s-secret`, `ci-outputs`, `dotenv`, `vault`.
+8. Operations: `promote`, `fetch`, `release`, `prune`, `activate`, in pool and
+   on-demand modes.
+9. Golden-image signing with cosign keyless signing in `build`, checked by
+   `promote` and `fetch`.
+10. Tests in containers under Docker Compose, with mix-and-match groups.
+11. GitHub CI that builds signed, attested runtime images (see
+    [supply chain](#supply-chain)).
+12. Tier 1 CI/CD libraries: GitHub Actions, GitLab CI, Jenkins, Argo CD.
+13. All agent skills, including filesystem help, and the Claude Code plugin.
+14. A GitHub Pages documentation site and a public example repository,
+    `datadouble/example-pipeline`, covering the production and non-production
+    sides.
+
+### Not in version 1
+
+- Recording Salesforce API cassettes. The run builds the recording, scrubbing
+  and replay tooling; cassettes are recorded afterwards against a development
+  org, outside the run, so the run never holds org credentials.
+- ZFS and CSI-snapshot replication.
+- Tier 2 CI/CD systems.
+
+## Choices made for the run
+
+- **Python 3.13** as the minimum version.
+- **Typing** per [architecture](architecture.md#typing): `mypy --strict`,
+  `pyright` strict and `ruff`, with no unexplained suppressions.
+- **Anonymization runs inside the working database.** Faker generates seeded
+  value tables in the Datadouble process; the engine applies them in native
+  updates. There is no separate anonymization service.
+- **Per-engine container images.** One runtime image holding every engine's
+  native tools would be very large, so images are built per engine (plus a
+  core image). Redistribution terms for Oracle's and Microsoft's client tools
+  are checked before images containing them are published.
+- **Sample data licences** are checked before a dataset is committed; data is
+  generated where a licence is unclear.
+- **Copyright and licence:** every source file starts with SPDX headers (see
+  [AGENTS.md](../AGENTS.md)).
+
+## New adapters
+
+### Elasticsearch and OpenSearch
+
+Separate adapters, because the APIs have diverged since the fork (security,
+snapshots, k-NN) and the official Elasticsearch client refuses to talk to
+OpenSearch. Neither has foreign keys, so subsetting is per-index queries plus
+declared join keys, strict mode applies to mapping fields, and point-in-time
+searches give a consistent view across indices.
+
+### Filesystem
+
+```yaml
+files:
+  root: /srv/uploads
+  select:                                   # one or more find(1) expressions
+    - find . -path './avatars/*' -type f -mtime -30
+    - find . -path './documents/*' -type f -size -10M
+  paths_from: customer_documents.path       # follow the database subset
+  exclude: ["./tmp", "./cache"]
+  cleanup:                                  # shell, run on the copy only
+    - find . -name '*.log' -delete
+    - exiftool -all= -overwrite_original -r ./avatars
+```
+
+- **Consistency:** a consistent snapshot needs btrfs, ZFS or LVM. Elsewhere,
+  extract fails unless the spec explicitly accepts an inconsistent copy, and the
+  manifest records it.
+- **Strict mode:** every top-level directory is matched by a `find` or
+  explicitly excluded.
+- **Following the database subset:** `paths_from` feeds a path list from the
+  database extract to `find`, so only files for rows in the subset are copied.
+- **Cleanup is not proof.** A files PII scan stays mandatory in `verify`.
+- **Portability:** GNU findutils is pinned in the image. The filesystem skill
+  explains each expression back in plain words and dry-runs it against a sample
+  directory before writing it into the spec.
+
+## Sample datasets
+
+| Adapter | Dataset |
+|---|---|
+| PostgreSQL | Pagila |
+| MySQL | Sakila (also the Jailer conformance test) |
+| SQL Server | AdventureWorks |
+| Oracle | HR / SH sample schemas |
+| MongoDB | `sample_mflix`, or generated if its licence is unclear |
+| Redis | Generated keyspace with every data type and key-encoded references |
+| Elasticsearch, OpenSearch | Generated indices derived from Pagila, with join keys across indices |
+| Filesystem | Generated upload tree keyed by Pagila customer IDs, with EXIF metadata and text files containing fake personal data |
+| Salesforce | In-memory fake seeded from `describe` output |
+
+Every dataset includes the awkward cases listed in
+[local development](local-development.md).
+
+## Test environment
+
+Docker Compose profiles. Services without a profile start on plain
+`docker compose up`; the rest are opt-in and combinable.
+
+| Group | Services | Notes |
+|---|---|---|
+| default | Test runner, PostgreSQL | Core and PostgreSQL tests |
+| `mysql`, `mssql`, `oracle` | One engine each | SQL Server and Oracle images are amd64-only |
+| `mongodb`, `redis` | One engine each | |
+| `elasticsearch`, `opensearch` | Single-node clusters | |
+| `s3` | MinIO | Storage and export store |
+| `btrfs` | Privileged helper with a loop-mounted btrfs volume | Needs privileged Docker |
+| `k8s` | k3s in a container | k8s-pv, k8s-secret, Argo CD |
+| `ci-gitlab`, `ci-jenkins`, `ci-argocd` | CI systems for end-to-end tests | Heavy |
+
+```
+docker compose up                                  # core + PostgreSQL
+docker compose --profile mysql --profile s3 up     # MySQL with an S3 export store
+docker compose --profile k8s --profile btrfs up    # replication back ends
+```
+
+## Supply chain
+
+- Every action pinned by commit SHA; `step-security/harden-runner` on every job;
+  workflow tokens read-only by default
+- CodeQL, dependency review, OpenSSF Scorecard, Snyk, SonarQube Cloud, Codecov
+- SBOMs (Syft) with SBOM attestations, and build provenance attestations
+- cosign keyless signing of every published image through GitHub OIDC, with
+  documented `cosign verify` and `gh attestation verify` commands
+- Images per pull request for testing; release images only from tags
+- PyPI trusted publishing with attestations for every package
+
+Account setup for these services is in
+[external services](external-services.md).
+
+## Milestones
+
+Ordered so the core is proven end to end on one engine, then tested on a
+differently shaped engine, before breadth.
+
+| # | Milestone | Done when |
+|---|---|---|
+| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md` | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request |
+| M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
+| M2 | **Non-production side.** Promote, export store, sidecars, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), publish adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
+| M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |
+| M4 | **MySQL, SQL Server, Oracle** | Each passes conformance; Jailer and Datadouble produce identical key sets on Sakila |
+| M5 | **Redis, Elasticsearch, OpenSearch** | Each passes conformance, including strict mode on keys or mapping fields |
+| M6 | **Filesystem** | Only files for subset rows are copied; an unmatched top-level directory fails the plan; a planted file of fake personal data fails verify |
+| M7 | **Salesforce against the fake**, plus cassette recording, scrubbing and replay tooling | Conformance passes offline; the scrubber removes tokens, session IDs, instance URLs and org IDs from a synthetic recording |
+| M8 | **CI/CD libraries** | The CI/CD conformance suite passes for all four systems, locally and in the nightly hosted runs |
+| M9 | **Agent skills and plugin** | `claude plugin validate` passes and every skill scenario holds, including the refusal cases |
+| M10 | **Documentation site and example repository** | The example repository's pipelines run green from a fresh clone, on both sides of the boundary |
+
+## How the run works
+
+- **One branch and pull request per milestone,** with checkpoint commits. A
+  pull request merges when its required checks pass; the run never pushes to
+  `main` directly.
+- **No releases.** The run never tags a release or publishes to PyPI; the
+  first release is a maintainer's decision.
+- **Design changes go through the docs.** If implementation shows a design
+  doc is wrong, the same pull request updates the doc and records the decision.
+- **Machine:** running Oracle and SQL Server together needs roughly 6 GB of RAM
+  or more, and the btrfs tests need privileged containers.
+- **CI minutes:** heavy profiles and hosted CI/CD runs are scheduled, not run on
+  every push.

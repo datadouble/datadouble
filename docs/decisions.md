@@ -16,7 +16,7 @@
 | 10 | `strict: off \| tables \| columns`, default `columns`; removed/changed objects always fail | Unknown tables and columns are the usual PII leak |
 | 11 | Containers and sample data for every engine; Salesforce via recorded interactions plus an in-memory fake | Local development requirement |
 | 12 | One repository, each adapter a separately published package | Adapter interface will change heavily before 1.0 |
-| 13 | Repository private during planning | Publish when ready |
+| 13 | ~~Repository private during planning~~ (superseded by 31) | Publish when ready |
 | 14 | Licence: MIT | Maximum ease of adoption |
 | 15 | CI/CD adapters, Tier 1: GitHub Actions, GitLab CI, Jenkins, Argo CD; each tested end to end | Datadouble mostly runs inside other teams' pipelines |
 | 16 | Lifecycle split into jobs: build, promote, fetch, provision, release, prune, activate; stages `promote`, `fetch`, `publish`; operations `release`, `prune`, `activate` | Jobs run in different environments, on different schedules, with different credentials |
@@ -32,17 +32,20 @@
 | 26 | This repository is the Claude Code marketplace and the plugin; no separate marketplace repository and no packaging step | Skills stay versioned with the CLI and cannot drift; an org-wide marketplace can later reference this repository by tag |
 | 27 | Implementation language: Python | Mature drivers for every target engine and the Faker ecosystem; the JSON interface keeps callers in other languages unaffected |
 | 28 | Strict static typing: `mypy --strict` and `pyright` strict in CI, `ruff` with annotation rules; no stringly-typed values | Untyped dicts and magic strings make adapters hard to extend; types catch interface breaks before runtime |
+| 29 | Anonymization strategies include engine-native expressions (SQL, MongoDB aggregation, Painless, Lua) as column rules; `after_transform` hooks that rewrite personal data declare the columns they rewrite | Expressions are often the simplest rule, and declaring columns keeps per-column hashes, reports and strict-mode resolution working |
+| 30 | Version 1 scope is [the v1 plan](v1-plan.md), replacing the PostgreSQL-first proposal | Prove the core on one engine, then go wide in one long run |
+| 31 | Everything is public: this repository, the documentation site, the example repository; the trademark and domain check is not a gate | Openness over caution for an MIT project |
+| 32 | Copyright "(c) 2026- Tight Line LLC", MIT licence; every source file carries a copyright line and `SPDX-License-Identifier: MIT` | Clear ownership and licence on every file |
+| 33 | Golden images are signed with cosign keyless signing in `build`; `promote` and `fetch` verify the signature | Non-production can check an image came from the production pipeline |
+| 34 | Engines add Elasticsearch and OpenSearch, as separate adapters | Their APIs and clients have diverged since the fork |
+| 35 | A filesystem engine adapter: selection by `find` expressions, cleanup by shell commands, a mandatory files PII scan | File trees that rows refer to are needed alongside databases and may hold personal data |
+| 36 | Salesforce in version 1 works against the in-memory fake; cassettes are recorded later, outside the run, against a development org | The run never holds org credentials |
 
 ## Open
 
 | Question | Notes |
 |---|---|
-| First release scope | Proposed: PostgreSQL, Faker-style anonymization, local and S3 storage, Docker-volume replication; MySQL next |
 | Spec format details | YAML and JSON both, or JSON Schema-defined YAML only |
 | Golden image formats | Logical dump, physical data directory, or both per engine |
-| Trademark and domain checks | Before announcing the name publicly |
-| Golden image signing | Sign manifests in `build` so non-production can check provenance before `provision` (e.g. Sigstore/cosign) |
 | Jenkins packaging | Shared library only, or a plugin too |
-| Non-database assets | File trees (uploads, media) that rows refer to are often needed alongside the database, and may hold personal data. A `files` engine adapter, and how to anonymize or filter its contents |
 | Several images from one spec | One combined image, one per database, or both from one build |
-| CI/CD in first release | Proposed: GitHub Actions and the Kubernetes base first, the rest of Tier 1 next |

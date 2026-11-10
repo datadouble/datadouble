@@ -13,10 +13,12 @@ different systems:
 |---|---|
 | Relational | PostgreSQL, MySQL, Microsoft SQL Server, Oracle |
 | Document / key-value | MongoDB, Redis |
+| Search | Elasticsearch, OpenSearch |
+| Files | Filesystem trees |
 | SaaS | Salesforce |
 
-> **Status: planning.** There is no code yet. This repository currently holds the
-> design documents. Everything here is open for discussion.
+> **Status: in development.** The design is complete and version 1 is being
+> built to [the v1 plan](docs/v1-plan.md). There is no release yet.
 
 ## Why
 
@@ -52,12 +54,15 @@ plan → extract → load → transform → package → verify → store → pro
 - [Requirements](docs/requirements.md)
 - [Architecture](docs/architecture.md)
 - [Subsetting](docs/subsetting.md)
+- [Anonymization](docs/anonymization.md)
 - [Excludes and strict mode](docs/excludes-and-strict-mode.md)
 - [Jailer compatibility](docs/jailer.md)
 - [CI/CD integration](docs/ci-cd.md)
 - [Agent skills](docs/agent-skills.md)
 - [Local development and testing](docs/local-development.md)
 - [Prior art](docs/prior-art.md)
+- [Version 1 plan](docs/v1-plan.md)
+- [External services](docs/external-services.md) (maintainers)
 - [Decision log and open questions](docs/decisions.md)
 
 ## Licence

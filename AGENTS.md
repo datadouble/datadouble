@@ -6,7 +6,7 @@ store, and replicate. See the [README](README.md).
 
 ## Status
 
-Planning. There is no code yet; the repository holds design documents only.
+Design complete; version 1 is being built to [the v1 plan](docs/v1-plan.md).
 
 ## Before proposing anything
 
@@ -16,17 +16,20 @@ Planning. There is no code yet; the repository holds design documents only.
    - [requirements](docs/requirements.md)
    - [architecture](docs/architecture.md): stages, adapters, manifests, interfaces, repo layout
    - [subsetting](docs/subsetting.md)
+   - [anonymization](docs/anonymization.md)
    - [excludes and strict mode](docs/excludes-and-strict-mode.md)
    - [Jailer compatibility](docs/jailer.md)
    - [CI/CD integration](docs/ci-cd.md): jobs, the production boundary, CI/CD adapters
    - [agent skills](docs/agent-skills.md)
    - [local development and testing](docs/local-development.md)
    - [prior art](docs/prior-art.md)
+   - [v1 plan](docs/v1-plan.md): scope, milestones and acceptance criteria
+   - [external services](docs/external-services.md): accounts and secrets CI needs
 
 ## Design principles to preserve
 
 - **Engine breadth is a core goal:** PostgreSQL, MySQL, SQL Server, Oracle,
-  MongoDB, Redis and Salesforce. Don't design anything that only works for one
+  MongoDB, Redis, Elasticsearch, OpenSearch, Salesforce and filesystems. Don't design anything that only works for one
   engine without saying how the others fit.
 - **Assume terabyte-scale sources.** Subsetting is pushed down into extract and
   reads one consistent snapshot. Designs that require a full copy first don't work.
@@ -52,4 +55,10 @@ Planning. There is no code yet; the repository holds design documents only.
 - Code is fully typed and must pass `mypy --strict`, `pyright` (strict) and
   `ruff`. No stringly-typed values: use enums, typed identifiers and parsed
   models (see [architecture](docs/architecture.md#typing)).
+- Every source file starts with a copyright line and SPDX licence identifier,
+  in the file's comment syntax:
+  ```
+  # Copyright (c) 2026- Tight Line LLC
+  # SPDX-License-Identifier: MIT
+  ```
 - Commit messages: a short imperative subject line, then a body explaining why.
