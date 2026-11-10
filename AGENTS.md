@@ -49,4 +49,7 @@ Planning. There is no code yet; the repository holds design documents only.
 - Keep design docs in sync with any change that alters behavior they describe.
 - Never put credentials, real hostnames or real personal data in the repository,
   including in examples, fixtures and recorded API cassettes.
+- Code is fully typed and must pass `mypy --strict`, `pyright` (strict) and
+  `ruff`. No stringly-typed values: use enums, typed identifiers and parsed
+  models (see [architecture](docs/architecture.md#typing)).
 - Commit messages: a short imperative subject line, then a body explaining why.

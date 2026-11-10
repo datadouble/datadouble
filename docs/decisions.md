@@ -30,12 +30,13 @@
 | 24 | Agent skills (Agent Skills format) for each job, the spec, and a whole pipeline; shipped in this repository as a Claude Code plugin and plain skill directories | Agents increasingly do pipeline setup; skills make it repeatable |
 | 25 | Skills contain no logic: all files come from `datadouble` commands, and skills never weaken safety settings or handle secrets | Same reason as the thin CLI; an agent must not trade safety for a passing run |
 | 26 | This repository is the Claude Code marketplace and the plugin; no separate marketplace repository and no packaging step | Skills stay versioned with the CLI and cannot drift; an org-wide marketplace can later reference this repository by tag |
+| 27 | Implementation language: Python | Mature drivers for every target engine and the Faker ecosystem; the JSON interface keeps callers in other languages unaffected |
+| 28 | Strict static typing: `mypy --strict` and `pyright` strict in CI, `ruff` with annotation rules; no stringly-typed values | Untyped dicts and magic strings make adapters hard to extend; types catch interface breaks before runtime |
 
 ## Open
 
 | Question | Notes |
 |---|---|
-| Implementation language | Python favored: mature drivers for every target and a strong anonymization ecosystem. Go would give single-binary distribution. |
 | First release scope | Proposed: PostgreSQL, Faker-style anonymization, local and S3 storage, Docker-volume replication; MySQL next |
 | Spec format details | YAML and JSON both, or JSON Schema-defined YAML only |
 | Golden image formats | Logical dump, physical data directory, or both per engine |

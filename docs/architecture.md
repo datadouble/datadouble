@@ -133,6 +133,25 @@ datadouble/
 adapter packages directly. Adapters can move to their own repositories after the
 adapter interface stabilizes, without users noticing.
 
+## Typing
+
+Python with strict static typing, enforced in CI by `mypy --strict`, `pyright`
+in strict mode, and `ruff` with its annotation rules. The aim is that no value
+is "stringly typed":
+
+- **Parse at the boundary.** Specs, manifests and JSON requests are parsed once
+  into typed, immutable models (Pydantic in strict mode), which also generate
+  the published JSON Schemas. Raw dicts never travel past the parser.
+- **Closed sets are enums.** Stage names, strict-mode levels, outcomes, copy
+  kinds and replicate modes are `StrEnum`s, not string literals.
+- **Identifiers have types.** Table names, column paths, generations and channel
+  names are distinct types (`NewType` or small value classes), so one can't be
+  passed where another is expected.
+- **Adapter interfaces are typed `Protocol`s,** and every package ships
+  `py.typed`, so third-party adapters are checked against them too.
+- `Any`, `cast` and `# type: ignore` need a comment explaining why, and CI
+  counts them.
+
 ## Credentials
 
 Configuration refers to secrets indirectly (environment variables, Vault paths,
