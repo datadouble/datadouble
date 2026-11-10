@@ -29,6 +29,7 @@
 | 23 | `replicate` supports pool mode (N unclaimed copies, recycled by generation) and on-demand mode; copies are volumes or instances | Large images copy slower than people will wait; small ones suit per-request copies |
 | 24 | Agent skills (Agent Skills format) for each job, the spec, and a whole pipeline; shipped in this repository as a Claude Code plugin and plain skill directories | Agents increasingly do pipeline setup; skills make it repeatable |
 | 25 | Skills contain no logic: all files come from `datadouble` commands, and skills never weaken safety settings or handle secrets | Same reason as the thin CLI; an agent must not trade safety for a passing run |
+| 26 | This repository is the Claude Code marketplace and the plugin; no separate marketplace repository and no packaging step | Skills stay versioned with the CLI and cannot drift; an org-wide marketplace can later reference this repository by tag |
 
 ## Open
 

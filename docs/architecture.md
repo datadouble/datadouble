@@ -122,6 +122,7 @@ datadouble/
     gitlab/          # CI/CD Catalog components
     jenkins/         # shared library
     kubernetes/      # container image, Job templates, Helm chart (Argo CD)
+  .claude-plugin/  # Claude Code marketplace and plugin manifests
   skills/          # agent skills, one directory per skill
   conformance/     # shared test suites (engine, CI/CD, agent skills)
   dev/             # container profiles and sample data per engine and CI system

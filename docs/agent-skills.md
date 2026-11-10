@@ -14,8 +14,39 @@ versioned and released with the core package.
 
 They are distributed as:
 
-- A Claude Code plugin, through a marketplace manifest in this repository
+- A Claude Code plugin, with this repository as its marketplace
 - Plain skill directories, for any agent that reads the Agent Skills format
+
+### Claude Code plugin
+
+This repository is both the marketplace and the plugin. There is no separate
+marketplace repository and no build step that copies skills into a plugin:
+
+```
+.claude-plugin/
+  marketplace.json   # one plugin, "datadouble", with source "./"
+  plugin.json        # plugin manifest; version is the release version
+skills/              # read by Claude Code as the plugin's skills
+```
+
+```
+/plugin marketplace add datadouble/datadouble
+/plugin install datadouble@datadouble
+```
+
+While the repository is private, adding the marketplace uses each person's own
+git credentials, so organization members can install it and nobody else can.
+
+A copy step would create a second artifact that can drift from the CLI the
+skills are versioned with. If an organization-wide marketplace is needed later
+(for example `datadouble/claude-plugins`, listing other tools too), its entry
+points at this repository by release tag, still without copying files.
+
+CI checks, rather than builds, the plugin:
+
+- `claude plugin validate` on both manifests
+- `plugin.json`'s version must equal the core package version
+- The skill tests below
 
 ## Skills
 
