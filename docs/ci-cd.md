@@ -13,7 +13,7 @@ operations, runs in a known place, and is usually triggered on its own schedule:
 |---|---|---|---|
 | **build** | plan → extract → load → transform → package → verify → store | Production | Schedule (e.g. weekly) |
 | **promote** | promote | Production | After a successful build |
-| **fetch** | fetch | Non-production | Schedule (cheap: polls a sidecar manifest) |
+| **fetch** | fetch | Non-production | Schedule (cheap: reads the channel and the image summary, not the image) |
 | **provision** | replicate → announce | Non-production | Schedule (pool mode) or a request such as a pull request (on-demand mode) |
 | **release** | release | Non-production | Pull request closed, environment stopped, or schedule |
 | **prune** | prune | Each environment | Schedule |
@@ -79,7 +79,7 @@ never a warning. CI/CD adapters map warnings to the system's native state
 (Jenkins `UNSTABLE`, a GitHub Actions warning annotation, a distinct exit code
 that GitLab `allow_failure: exit_codes` recognizes).
 
-### Image identity, channels and sidecars
+### Image identity, channels and image summaries
 
 An image is identified by spec name, image group (see
 [golden images](architecture.md#golden-images)), engine, target engine version
@@ -87,9 +87,21 @@ and a **generation** (a unique ID assigned at build, shared by every image from
 that build). Consumers usually select by
 engine and engine version, since a copy must be started by a compatible server.
 
-Every store holds, next to each image, a small **sidecar manifest** that can be
-read without downloading the image. `fetch` reads it to decide whether anything
-newer exists, which makes frequent polling cheap.
+Every store holds, next to each image, a small **image summary**: a few
+kilobytes with the image's identity, build time, content hashes, verification
+result and signature reference, copied from its full manifest (which travels
+inside the image). It is read without downloading the image:
+
+```
+export-store/billing/postgres-16/
+  0193a7c2.image.tar.zst     # the golden image, possibly many GB
+  0193a7c2.summary.json      # the image summary
+  channels/latest            # points at generation 0193a7c2
+```
+
+`fetch` reads the channel and the image summary to decide whether anything newer
+exists, so running it every few minutes is cheap; it downloads an image only
+when there is one, then checks it against the summary's hashes.
 
 Images are addressed through **channels**: named, movable pointers such as
 `latest`. `promote` advances a channel in the export store; `fetch` advances one
@@ -101,7 +113,7 @@ experimenting with a spec never replaces the image live copies are made from.
 `fetch` pulls an image from the export store into non-production **staging**,
 checks its hashes, unpacks it into the form `replicate` copies from (for example
 a ready-to-mount data directory), and advances the staging channel. It skips
-work when the sidecar shows nothing newer than what is already staged.
+work when the image summary shows nothing newer than what is already staged.
 
 An image being written to staging is locked until complete, so `replicate`
 never copies a partial image. Staging keeps the last N images, so `activate` can
