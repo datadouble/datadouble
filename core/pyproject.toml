@@ -12,7 +12,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Tight Line LLC" }]
 requires-python = ">=3.13"
-dependencies = ["pydantic>=2.11"]
+dependencies = ["faker>=40.0", "pydantic>=2.11", "pyyaml>=6.0.3"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: Console",
