@@ -89,7 +89,8 @@ def _flatten(document: Mapping[str, object], prefix: str = "") -> Iterable[tuple
             yield path, value
 
 
-def _sampled(documents: Iterable[Mapping[str, object]]) -> tuple[Column, ...]:
+def sampled_columns(documents: Iterable[Mapping[str, object]]) -> tuple[Column, ...]:
+    """Columns for the field paths seen in ``documents``."""
     seen: defaultdict[str, set[tuple[ColumnKind, str]]] = defaultdict(set)
     present: set[str] = set()
     for document in documents:
@@ -113,7 +114,8 @@ def _sampled(documents: Iterable[Mapping[str, object]]) -> tuple[Column, ...]:
     return tuple(columns)
 
 
-def _from_schema(schema: Mapping[str, object]) -> tuple[Column, ...] | None:
+def schema_columns(schema: Mapping[str, object]) -> tuple[Column, ...] | None:
+    """Columns for a ``$jsonSchema``'s properties, or None if it declares none."""
     properties = as_document(schema.get("properties"))
     if properties is None:
         return None
@@ -138,15 +140,14 @@ def _from_schema(schema: Mapping[str, object]) -> tuple[Column, ...] | None:
 def introspect(database: Database[dict[str, object]], sample: int) -> Catalog:
     """Read the catalog: one table per collection, columns from sampling or a validator."""
     tables: list[Table] = []
-    for info in database.list_collections(filter={"type": "collection"}):
+    ordinary = {"type": "collection", "name": {"$not": {"$regex": r"^system\."}}}
+    for info in database.list_collections(filter=ordinary):
         name = str(info["name"])
-        if name.startswith("system."):
-            continue
         options = as_document(info.get("options")) or {}
         validator = as_document(options.get("validator")) or {}
         schema = as_document(validator.get("$jsonSchema"))
-        declared = (_from_schema(schema) if schema is not None else None) or ()
-        sampled = _sampled(database[name].find({}, limit=sample))
+        declared = (schema_columns(schema) if schema is not None else None) or ()
+        sampled = sampled_columns(database[name].find({}, limit=sample))
         known = {column.name for column in declared}
         columns = (*declared, *(column for column in sampled if column.name not in known))
         tables.append(

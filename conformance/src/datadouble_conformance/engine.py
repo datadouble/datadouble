@@ -291,7 +291,7 @@ class EngineConformance:
         spec = builds.sample()
         result = builds.run(spec, builds.lock(spec.source.connection), "work")
         failures = [c for r in result.verification for c in r.checks() if not c.passed]
-        assert not failures
+        assert not failures, failures
         assert result.stored
         for summary in result.images:
             assert {a.format for a in summary.archives} == {
@@ -332,7 +332,7 @@ class EngineConformance:
         status = {(r.stage, r.group): r.status for r in result.stages}
         assert status[(Stage.PLAN, None)] is StageStatus.REUSED
         assert status[(Stage.EXTRACT, None)] is StageStatus.REUSED
-        assert not result.failed()
+        assert not result.failed(), result.verification
         assert result.stored
 
     def test_groups_share_a_generation_and_agree(

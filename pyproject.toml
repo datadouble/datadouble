@@ -108,6 +108,7 @@ known-first-party = [
     "fakes",
     "fake_engine",
     "test_conformance",
+    "test_mongodb_conformance",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -138,7 +139,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -165,7 +166,7 @@ include = [
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/postgres/tests"]
+extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/postgres/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 

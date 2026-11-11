@@ -24,7 +24,6 @@ names a callable that takes the adapter's settings and returns a
 import datetime as dt
 import os
 import shutil
-import subprocess
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -34,6 +33,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, JsonValue, TypeAdapter
 
+from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
 from datadouble.names import Generation, GroupName
 from datadouble.settings import parse_settings
@@ -422,15 +422,10 @@ class FilesystemReplicator:
         """Copy under a temporary name, then rename."""
         self.root.mkdir(parents=True, exist_ok=True)
         partial = self.root / f".{copy_id}.partial"
-        result = subprocess.run(  # noqa: S603 - fixed program, paths from this module
-            ["cp", "-a", "--reflink=auto", str(image), str(partial)],  # noqa: S607 - coreutils cp
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
+        problem = copy_tree(image, partial)
+        if problem:
             shutil.rmtree(partial, ignore_errors=True)
-            message = f"copying {summary.identity.generation} failed: {result.stderr.strip()}"
+            message = f"copying {summary.identity.generation} failed: {problem}"
             raise ReplicateError(message)
         final = self.root / copy_id
         partial.rename(final)

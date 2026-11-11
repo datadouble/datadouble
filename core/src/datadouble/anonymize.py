@@ -24,6 +24,7 @@ from typing import assert_never
 from faker import Faker
 
 from datadouble.catalog import ColumnKind
+from datadouble.pii import detect
 from datadouble.spec import FakerKind, FakerRule, FormatPreservingRule, HashRule
 
 _MAX_ATTEMPTS = 100
@@ -131,6 +132,10 @@ class Anonymizer:
         for value in sorted(set(values)):
             for attempt in range(_MAX_ATTEMPTS):
                 replacement = self.replacement(rule, kind, value, attempt)
+                # A hash is meant to look like nothing; hex text can still hold a
+                # digit run the PII scan reads as a card number, so try again.
+                if isinstance(rule, HashRule) and detect(replacement):
+                    continue
                 if not unique or replacement not in taken:
                     break
             else:

@@ -13,23 +13,22 @@ a ``mongodump`` archive (logical); ``restore`` brings either back up.
 
 import datetime as dt
 import shutil
-import subprocess
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from bson import json_util
 from pydantic import BaseModel, ConfigDict
 from pymongo import UpdateMany
 from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
-from datadouble_mongodb.filters import Document, parse
+from datadouble_mongodb.filters import Document, as_document, as_list, parse
 from datadouble_mongodb.server import Server, Tools
 from datadouble_mongodb.source import ExtractIndex, failure
 
@@ -103,26 +102,43 @@ class MongoRestored:
         """Documents an assertion returns: ``{"collection": ..., "pipeline": [...]}``."""
         assertion = parse(query, _EPOCH, "an assertion")
         collection = assertion.get("collection")
-        pipeline = assertion.get("pipeline")
-        if not isinstance(collection, str) or not isinstance(pipeline, list):
+        pipeline = as_list(assertion.get("pipeline"))
+        if not isinstance(collection, str) or pipeline is None:
             message = 'a MongoDB assertion is {"collection": "...", "pipeline": [...]}'
             raise EngineError(message)
         try:
-            return len(list(self.database[collection].aggregate(pipeline)))  # pyright: ignore[reportUnknownArgumentType] - a parsed pipeline
+            stages = [stage for item in pipeline if (stage := as_document(item)) is not None]
+            return len(list(self.database[collection].aggregate(stages)))
         except PyMongoError as error:
             raise failure(error, "running an assertion") from None
 
 
 def _copy_tree(source: Path, destination: Path) -> None:
-    result = subprocess.run(  # noqa: S603 - fixed program, paths from this adapter
-        ["cp", "-a", "--reflink=auto", str(source), str(destination)],  # noqa: S607 - coreutils cp
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = f"cannot copy {source.name}: {result.stderr.strip()}"
+    """Copy a directory, sharing blocks where the filesystem allows."""
+    problem = copy_tree(source, destination)
+    if problem:
+        message = f"cannot copy {source.name}: {problem}"
         raise EngineError(message)
+
+
+def apply_fixup(database: Database[dict[str, object]], fixup: Fixup) -> None:
+    """Null references to missing parents, or insert stub parents for them."""
+    edge = fixup.edge
+    child, parent = _single(edge)
+    when: Document = parse(edge.when, _EPOCH, f"{edge.name} `when`") if edge.when else {}
+    try:
+        present = database[edge.parent.name].distinct(parent) if fixup.parent_present else []
+        missing: Document = {**when, child: {"$ne": None, "$nin": present}}
+        if fixup.mode is EdgeMode.NULL:
+            database[edge.child.name].update_many(missing, {"$set": {child: None}})
+            return
+        values = database[edge.child.name].distinct(child, missing)
+        for value in values:
+            database[edge.parent.name].update_one(
+                {parent: value}, {"$setOnInsert": {parent: value}}, upsert=True
+            )
+    except PyMongoError as error:
+        raise failure(error, f"applying the fallback for {edge.name}") from None
 
 
 class MongoWorking:
@@ -171,30 +187,11 @@ class MongoWorking:
                 )
             database = client[index.database]
             for fixup in group.fixups:
-                self._fixup(database, fixup)
+                apply_fixup(database, fixup)
             counts = MongoRestored(database).counts(group.tables)
         info = DatabaseInfo(database=index.database, server_version=self.tools.version())
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
-
-    @staticmethod
-    def _fixup(database: Database[dict[str, object]], fixup: Fixup) -> None:
-        edge = fixup.edge
-        child, parent = _single(edge)
-        when: Document = parse(edge.when, _EPOCH, f"{edge.name} `when`") if edge.when else {}
-        try:
-            present = database[edge.parent.name].distinct(parent) if fixup.parent_present else []
-            missing: Document = {**when, child: {"$ne": None, "$nin": present}}
-            if fixup.mode is EdgeMode.NULL:
-                database[edge.child.name].update_many(missing, {"$set": {child: None}})
-                return
-            values = database[edge.child.name].distinct(child, missing)
-            for value in values:
-                database[edge.parent.name].update_one(
-                    {parent: value}, {"$setOnInsert": {parent: value}}, upsert=True
-                )
-        except PyMongoError as error:
-            raise failure(error, f"applying the fallback for {edge.name}") from None
 
     def transform(
         self,
@@ -297,8 +294,3 @@ def _typed(original: object, replacement: str) -> object:
     if isinstance(original, int) and not isinstance(original, bool) and replacement.isdigit():
         return int(replacement)
     return replacement
-
-
-def dump(document: Document) -> str:
-    """Canonical Extended JSON, for messages and files."""
-    return json_util.dumps(document, json_options=json_util.CANONICAL_JSON_OPTIONS)

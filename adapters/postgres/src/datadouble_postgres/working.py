@@ -14,7 +14,6 @@ archive (logical); ``restore`` brings either back up for verification.
 
 import re
 import shutil
-import subprocess
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -25,6 +24,7 @@ from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Column, ColumnKind
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
@@ -558,12 +558,7 @@ class PostgresWorking:
 
 def _copy_tree(source: Path, destination: Path) -> None:
     """Copy a directory, sharing blocks where the filesystem allows."""
-    result = subprocess.run(  # noqa: S603 - fixed program, paths from this adapter
-        ["cp", "-a", "--reflink=auto", str(source), str(destination)],  # noqa: S607 - coreutils cp
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = f"cannot copy {source.name}: {result.stderr.strip()}"
+    problem = copy_tree(source, destination)
+    if problem:
+        message = f"cannot copy {source.name}: {problem}"
         raise EngineError(message)
