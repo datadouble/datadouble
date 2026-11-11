@@ -27,7 +27,7 @@ dev = [
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "ruff>=0.13",
-    "psycopg[binary]>=3.2",
+    "psycopg[binary]>=3.3.8",
 ]
 docs = ["zensical==0.1.1"]
 
