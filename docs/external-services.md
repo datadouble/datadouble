@@ -27,10 +27,10 @@ secret.
 **datadouble → Settings:**
 
 1. **Actions → General:**
-   - Allow actions: all actions, but require them to be pinned to a full-length
-     commit SHA, if the setting is offered.
-   - Workflow permissions: read repository contents only.
-   - Leave "Allow GitHub Actions to create and approve pull requests" off.
+    - Allow actions: all actions, but require them to be pinned to a full-length
+      commit SHA, if the setting is offered.
+    - Workflow permissions: read repository contents only.
+    - Leave "Allow GitHub Actions to create and approve pull requests" off.
 2. **Packages:** allow public packages.
 
 ### Repository
@@ -42,13 +42,13 @@ secret.
    secret scanning with push protection, and private vulnerability reporting.
    CodeQL runs from a workflow, so leave its default setup off.
 3. **Rules → Rulesets:** a ruleset for `main` that:
-   - requires a pull request before merging, with no required approvals during
-     the version 1 run (so the run can merge its own pull requests once checks
-     pass); turn on required approvals after version 1
-   - requires status checks to pass (add the check names once the M0 pull
-     request has created them)
-   - blocks force pushes and deletion
-   - requires linear history
+    - requires a pull request before merging, with no required approvals during
+      the version 1 run (so the run can merge its own pull requests once checks
+      pass); turn on required approvals after version 1
+    - requires status checks to pass (add the check names once the M0 pull
+      request has created them)
+    - blocks force pushes and deletion
+    - requires linear history
 4. **Environments:** create `pypi` with yourself as a required reviewer, so
    every PyPI release waits for your approval.
 5. **Pages → Build and deployment:** source "GitHub Actions", custom domain
@@ -101,11 +101,11 @@ so there is no PyPI token anywhere.
 1. Create a PyPI account (or use yours), with two-factor authentication on.
 2. **Your account → Publishing → Add a new pending publisher**, once per
    package name:
-   - PyPI project name: see the list below
-   - Owner: `datadouble`
-   - Repository name: `datadouble`
-   - Workflow name: `release.yml`
-   - Environment name: `pypi`
+    - PyPI project name: see the list below
+    - Owner: `datadouble`
+    - Repository name: `datadouble`
+    - Workflow name: `release.yml`
+    - Environment name: `pypi`
 3. A pending publisher does not reserve the name. The first release from
    `release.yml` creates the project and turns the pending publisher into a
    normal one.
@@ -161,8 +161,8 @@ Formerly SonarCloud, still at `sonarcloud.io`.
 2. Import the `datadouble` GitHub organization, installing the SonarQube Cloud
    app for the `datadouble/datadouble` repository only. Choose the free plan.
 3. Analyze `datadouble/datadouble`. The keys CI expects:
-   - organization `datadouble`
-   - project `datadouble_datadouble`
+    - organization `datadouble`
+    - project `datadouble_datadouble`
 4. Choose GitHub Actions as the analysis method, and under the project's
    **Administration → Analysis Method**, turn automatic analysis off.
 5. Save the token it generates as `SONAR_TOKEN`.
@@ -187,13 +187,13 @@ directly.
    taken, pick another and update [CI/CD integration](ci-cd.md)), then an empty
    public project `datadouble` in it, with a description.
 2. **Mirror key.** GitHub Actions pushes to GitLab over SSH:
-   1. Generate a key pair locally: `ssh-keygen -t ed25519 -N '' -C datadouble-mirror -f mirror_key`.
-   2. In the GitLab project, **Settings → Repository → Deploy keys**: add
-      `mirror_key.pub` with write access granted.
-   3. **Settings → Repository → Protected branches and Protected tags:** allow
-      the deploy key to push to `main` and to `v*` tags.
-   4. Save the contents of `mirror_key` as `GITLAB_MIRROR_SSH_KEY`, then delete
-      both files.
+    1. Generate a key pair locally: `ssh-keygen -t ed25519 -N '' -C datadouble-mirror -f mirror_key`.
+    2. In the GitLab project, **Settings → Repository → Deploy keys**: add
+       `mirror_key.pub` with write access granted.
+    3. **Settings → Repository → Protected branches and Protected tags:** allow
+       the deploy key to push to `main` and to `v*` tags.
+    4. Save the contents of `mirror_key` as `GITLAB_MIRROR_SSH_KEY`, then delete
+       both files.
 3. **Ephemeral runner.** **Settings → CI/CD → Runners → New project runner**,
    with tag `datadouble-e2e` and "run untagged jobs" off. Save the runner
    authentication token (it starts `glrt-`) as `GITLAB_RUNNER_TOKEN`.

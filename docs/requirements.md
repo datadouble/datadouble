@@ -6,17 +6,17 @@
    SQL Server, Oracle, Redis, MongoDB, Elasticsearch, OpenSearch, Salesforce,
    and filesystem trees. Breadth is a core goal, not a stretch goal.
 2. **Pluggable adapters** for each concern:
-   - Dump/load (native dump tools, ETL exports, CSV, APIs)
-   - Subsetting
-   - Anonymization (Faker-style generators, hashing, nulling, format-preserving,
-     engine-native expressions such as SQL, and hooks for changes that aren't
-     column-shaped). See [anonymization](anonymization.md).
-   - Verification (referential integrity, row counts, PII scanning)
-   - Storage, for both inputs and golden-image outputs (local disk, object storage,
-     artifact repositories, network shares)
-   - Replication, turning a golden image into many copies (Docker volumes,
-     Kubernetes persistent volumes and CSI snapshots, copy-on-write filesystems,
-     plain restore)
+    - Dump/load (native dump tools, ETL exports, CSV, APIs)
+    - Subsetting
+    - Anonymization (Faker-style generators, hashing, nulling, format-preserving,
+      engine-native expressions such as SQL, and hooks for changes that aren't
+      column-shaped). See [anonymization](anonymization.md).
+    - Verification (referential integrity, row counts, PII scanning)
+    - Storage, for both inputs and golden-image outputs (local disk, object storage,
+      artifact repositories, network shares)
+    - Replication, turning a golden image into many copies (Docker volumes,
+      Kubernetes persistent volumes and CSI snapshots, copy-on-write filesystems,
+      plain restore)
 3. **Subsetting during extract.** Sources may be hundreds of gigabytes or
    terabytes. Filtering must be pushed down to the source while producing a
    relationally consistent result with minimal data transferred.

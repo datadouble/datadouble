@@ -19,6 +19,9 @@ items are settled unless a pull request makes the case for reopening one.
    behavior they describe or makes a new decision.
 4. Start every new source file with the copyright and SPDX lines described in
    [AGENTS.md](AGENTS.md).
+5. In Markdown, indent nested list items four spaces past their parent's
+   marker. GitHub accepts two, but the documentation site's Markdown parser
+   flattens them into the parent list. Run `make docs` to check.
 
 ## Changelog
 
