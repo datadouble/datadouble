@@ -5,7 +5,9 @@
 
 import datetime as dt
 import json
+import os
 import shutil
+import uuid
 from collections.abc import Generator
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from datadouble_postgres.cluster import Cluster, find_binaries
 from datadouble_postgres.render import trusted
 from datadouble_postgres.source import PostgresSession
 from datadouble_postgres.working import PostgresWorking
+from datadouble_s3 import S3Store, s3_store
 from test_conformance import PostgresScratch, scratch
 
 pytestmark = pytest.mark.integration
@@ -82,7 +85,10 @@ def source() -> Generator[PostgresScratch]:
 
 
 def registry() -> Registry:
-    return Registry(engines={"postgres": PostgresEngine}, stores={"filesystem": filesystem_store})
+    return Registry(
+        engines={"postgres": PostgresEngine},
+        stores={"filesystem": filesystem_store, "s3": s3_store},
+    )
 
 
 def build(
@@ -136,6 +142,27 @@ def test_fallbacks_hooks_and_partition_references(source: PostgresScratch, tmp_p
             restored.failing_rows("SELECT nope FROM public.child")
         with pytest.raises(EngineError, match=r"scanning public\.child\.nope failed"):
             list(restored.text_values(ColumnRef(table=children, column=ColumnName("nope"))))
+
+
+def test_images_go_to_s3(source: PostgresScratch, tmp_path: Path) -> None:
+    endpoint = os.environ.get("DATADOUBLE_TEST_S3_ENDPOINT")
+    if not endpoint:
+        pytest.skip("no S3 endpoint; run in the Compose default group")
+    bucket = f"dd-{uuid.uuid4().hex[:12]}"
+    store = s3_store({"bucket": bucket, "endpoint_url": endpoint})
+    assert isinstance(store, S3Store)
+    store.client.create_bucket(Bucket=bucket)
+    spec = SPEC.replace(
+        "  - filesystem: {path: STORE}",
+        f"  - s3: {{bucket: {bucket}, prefix: golden, endpoint_url: '{endpoint}'}}",
+    )
+    result = build(source, tmp_path, spec=spec)
+    assert not result.failed()
+    (summary,) = result.images
+    assert result.stored == (f"s3://{bucket}/golden/{summary.identity.summary_key()}",)
+    keys = store.list("golden/")
+    assert f"golden/{summary.identity.summary_key()}" in keys
+    assert len(keys) == 4
 
 
 def test_failing_hooks_name_objects_not_values(source: PostgresScratch, tmp_path: Path) -> None:

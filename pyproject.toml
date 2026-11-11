@@ -14,18 +14,21 @@ requires-python = ">=3.13"
 package = false
 
 [tool.uv.workspace]
-members = ["core", "adapters/postgres", "conformance"]
+members = ["core", "adapters/postgres", "adapters/s3", "conformance"]
 
 [tool.uv.sources]
 datadouble = { workspace = true }
 datadouble-postgres = { workspace = true }
 datadouble-conformance = { workspace = true }
+datadouble-s3 = { workspace = true }
 
 [dependency-groups]
 dev = [
     "datadouble",
     "datadouble-conformance",
     "datadouble-postgres",
+    "datadouble-s3",
+    "boto3-stubs[s3]>=1.40",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
@@ -74,6 +77,7 @@ known-first-party = [
     "datadouble",
     "datadouble_conformance",
     "datadouble_postgres",
+    "datadouble_s3",
     "check_source",
     "make_tag",
     "fakes",
@@ -93,11 +97,13 @@ files = [
     "core/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
+    "adapters/s3/src",
+    "adapters/s3/tests",
     "conformance/src",
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/postgres/src:adapters/postgres/tests:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -108,6 +114,8 @@ include = [
     "core/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
+    "adapters/s3/src",
+    "adapters/s3/tests",
     "conformance/src",
     "scripts",
     "tests",
@@ -117,7 +125,7 @@ reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pytest.ini_options]
-testpaths = ["core/tests", "adapters/postgres/tests", "tests"]
+testpaths = ["core/tests", "adapters/postgres/tests", "adapters/s3/tests", "tests"]
 pythonpath = ["scripts"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 markers = [
@@ -130,6 +138,7 @@ branch = true
 source = [
     "core/src/datadouble",
     "adapters/postgres/src/datadouble_postgres",
+    "adapters/s3/src/datadouble_s3",
     "scripts",
 ]
 

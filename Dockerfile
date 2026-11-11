@@ -53,7 +53,8 @@ COPY --chown=tester:tester pyproject.toml uv.lock ./
 COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
 COPY --chown=tester:tester core/src/datadouble/__init__.py core/src/datadouble/
 COPY --chown=tester:tester adapters/postgres/pyproject.toml adapters/postgres/README.md adapters/postgres/LICENSE adapters/postgres/
-COPY --chown=tester:tester adapters/postgres/src/datadouble_postgres/__init__.py adapters/postgres/src/datadouble_postgres/
+COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
+COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/
 RUN uv sync --no-install-workspace
 COPY --chown=tester:tester . .
 RUN uv sync
