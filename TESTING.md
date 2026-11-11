@@ -20,6 +20,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
 | `make test-integration` | The whole suite, integration and conformance tests included, in the default Compose group, with the 100% gate on every package | Containers |
+| `make test-k8s`, `make test-btrfs` | The Kubernetes and btrfs adapters against k3s and a real btrfs filesystem (privileged) | Containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 
 ## Test layers
@@ -64,9 +65,17 @@ that milestones add and that combine freely, for example
 
 | Group | Services | Since |
 |---|---|---|
-| default | Test runner (PostgreSQL 18 binaries, Python from uv); PostgreSQL 18 with Pagila (`dev/postgres`); S3 (SeaweedFS) | M0, Pagila and S3 in M1 |
+| default | Test runner (PostgreSQL 18 binaries, Python from uv, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2 |
+| `k8s` (`make test-k8s`) | k3s, and a test runner reading its kubeconfig | M2 |
+| `btrfs` (`make test-btrfs`) | A privileged test runner with a loop-mounted btrfs filesystem | M2 |
 
 The full list of planned groups is in the [v1 plan](docs/v1-plan.md#test-environment).
+
+The `k8s` and `btrfs` groups need privileged containers, so they are opt-in and
+run in their own CI job. Their tests are marked `k8s` and `btrfs`; elsewhere
+they skip, and stand-in `kubectl` and `btrfs` scripts give the unit tests full
+coverage of the adapters. The Docker adapter's containers go to the
+Docker-in-Docker daemon, never to the host's.
 
 The test runner is built on the same PostgreSQL image as the Pagila service, so
 it can start the throwaway clusters working databases live in, and runs as an
@@ -106,6 +115,7 @@ anonymized values.
 |---|---|---|
 | CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test`, on Python 3.13 |
 | CI | Unit tests (Python 3.x) | `make test` on each later supported version |
+| CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs` |
 | CI | Integration tests (Docker Compose) | `make test-integration`, then uploads coverage to Codecov |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |

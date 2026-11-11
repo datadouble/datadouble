@@ -109,6 +109,13 @@ class S3Store:
             raise _failure(error, f"downloading {key}") from None
         return True
 
+    def delete(self, key: str) -> None:
+        """Remove an object; S3 does not mind if it does not exist."""
+        try:
+            self.client.delete_object(Bucket=self.settings.bucket, Key=self._key(key))
+        except (BotoCoreError, ClientError) as error:
+            raise _failure(error, f"deleting {key}") from None
+
     def list(self, prefix: str) -> list[str]:
         """Keys starting with ``prefix``, relative to the store's own prefix."""
         root = f"{self.prefix}/" if self.prefix else ""

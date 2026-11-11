@@ -278,6 +278,145 @@ class Verify(_Model):
     assertions: tuple[Assertion, ...] = ()
 
 
+type AdapterSettings = dict[str, dict[str, JsonValue]]
+"""One adapter, as a mapping with a single key naming it: ``{s3: {bucket: ...}}``."""
+
+
+def _one_adapter(value: AdapterSettings) -> AdapterSettings:
+    if len(value) != 1:
+        message = "name exactly one adapter, as a mapping with a single key"
+        raise ValueError(message)
+    return value
+
+
+class CosignSigning(_Model):
+    """Signing with cosign: a key pair, or keyless through the CI system's identity."""
+
+    key: SecretRef | None = None
+    """The private key, in cosign's encrypted format; its password is COSIGN_PASSWORD."""
+    keyless: bool = False
+    transparency_log: bool = True
+    """Record signatures in the transparency log; off only where it cannot be reached."""
+
+    @model_validator(mode="after")
+    def _one_way(self) -> "CosignSigning":
+        if (self.key is None) != self.keyless:
+            message = "give exactly one of `key` or `keyless: true`"
+            raise ValueError(message)
+        return self
+
+
+class Signing(_Model):
+    """How ``store`` signs images."""
+
+    cosign: CosignSigning
+
+
+class CosignTrust(_Model):
+    """Which signatures ``promote`` and ``fetch`` accept."""
+
+    public_key: SecretRef | None = None
+    identity: str | None = None
+    """For keyless signatures: the signer's certificate identity, matched exactly."""
+    issuer: str | None = None
+    """For keyless signatures: the OIDC issuer, matched exactly."""
+    transparency_log: bool = True
+    """Require a transparency log entry; turn off only for signatures made without one."""
+
+    @model_validator(mode="after")
+    def _one_way(self) -> "CosignTrust":
+        keyless = self.identity is not None and self.issuer is not None
+        partial = (self.identity is None) != (self.issuer is None)
+        if partial or (self.public_key is None) != keyless:
+            message = "give either `public_key`, or both `identity` and `issuer`"
+            raise ValueError(message)
+        return self
+
+
+class Trust(_Model):
+    """The signatures images must carry to cross into non-production."""
+
+    cosign: CosignTrust
+
+
+class Promote(_Model):
+    """Where ``promote`` copies verified images, and what it requires of them."""
+
+    to: tuple[AdapterSettings, ...] = Field(min_length=1)
+    channel: str = "latest"
+    strict: StrictLevel = StrictLevel.COLUMNS
+    """The least strict strict-mode level an image may have been built with."""
+
+    @field_validator("to")
+    @classmethod
+    def _stores(cls, value: tuple[AdapterSettings, ...]) -> tuple[AdapterSettings, ...]:
+        return tuple(_one_adapter(entry) for entry in value)
+
+    @field_validator("channel")
+    @classmethod
+    def _channel(cls, value: str) -> str:
+        return check_name("channel", value)
+
+
+class Fetch(_Model):
+    """Where ``fetch`` reads images from and keeps them."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid", validate_by_name=True)
+
+    source: AdapterSettings = Field(alias="from")
+    staging: Path
+    channel: str = "latest"
+    staging_channel: str = "active"
+    format: ImageFormat = ImageFormat.PHYSICAL
+    engine_version: str | None = None
+    """Which engine version's images to fetch; the newest when omitted."""
+    keep: int = Field(default=3, ge=1)
+    """How many generations staging keeps, for ``activate`` to roll back to."""
+
+    @field_validator("source")
+    @classmethod
+    def _store(cls, value: AdapterSettings) -> AdapterSettings:
+        return _one_adapter(value)
+
+    @field_validator("channel", "staging_channel")
+    @classmethod
+    def _channels(cls, value: str) -> str:
+        return check_name("channel", value)
+
+
+class ReplicateMode(StrEnum):
+    """How ``replicate`` decides how many copies to make."""
+
+    POOL = "pool"
+    """Keep a number of unclaimed copies of the active generation ready."""
+    ON_DEMAND = "on-demand"
+    """Make copies for a named requester."""
+
+
+class Replicate(_Model):
+    """How copies are made from staging."""
+
+    using: AdapterSettings
+    mode: ReplicateMode = ReplicateMode.POOL
+    size: int = Field(default=2, ge=1)
+    """Unclaimed copies to keep ready (pool), or copies per request (on-demand)."""
+    expires_hours: int = Field(default=24, ge=1)
+    """How long an on-demand copy lives before ``release --expired`` removes it."""
+
+    @field_validator("using")
+    @classmethod
+    def _adapter(cls, value: AdapterSettings) -> AdapterSettings:
+        return _one_adapter(value)
+
+
+class Retention(_Model):
+    """What ``prune`` keeps."""
+
+    keep: int = Field(default=3, ge=1)
+    keep_days: int = Field(default=7, ge=0)
+    keep_versions: int = Field(default=2, ge=1)
+
+
 class Secrets(_Model):
     """Secrets the run needs, by reference."""
 
@@ -305,7 +444,19 @@ class Spec(_Model):
     package: Package = Package()
     verify: Verify = Verify()
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
+    signing: Signing | None = None
+    trust: Trust | None = None
+    promote: Promote | None = None
+    fetch: Fetch | None = None
+    replicate: Replicate | None = None
+    announce: tuple[AdapterSettings, ...] = ()
+    prune: Retention = Retention()
     secrets: Secrets = Secrets()
+
+    @field_validator("announce")
+    @classmethod
+    def _announcers(cls, value: tuple[AdapterSettings, ...]) -> tuple[AdapterSettings, ...]:
+        return tuple(_one_adapter(entry) for entry in value)
 
     @field_validator("strict", mode="before")
     @classmethod

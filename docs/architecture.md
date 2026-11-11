@@ -113,8 +113,8 @@ engine-specific logic; engine quirks stay inside the adapter.
 | Anonymize | Rewrite values column by column (see [anonymization](anonymization.md)) | faker, hash, null, format-preserving, expression (e.g. SQL) |
 | Verify | Check a restored golden image | fk-integrity, row-counts, pii-scan |
 | Storage | Read and write immutable artifacts | local, s3, gcs, artifact repository, nfs |
-| Replicate | Turn a staged image into copies (volumes or instances), and destroy them | docker-volume, nfs-copy, csi-snapshot, zfs, plain-restore |
-| Announce | Let consumers know where clones can be accessed, as volumes or connection parameters; never writes data | k8s-pv, k8s-secret, ci-outputs, vault, dotenv |
+| Replicate | Turn a staged image into copies (volumes or instances), and destroy them | filesystem, docker-volume, btrfs, k8s-pv; later nfs-copy, csi-snapshot, zfs |
+| Announce | Let consumers know where clones can be accessed, as volumes or connection parameters; never writes data | k8s-secret, ci-outputs, vault, dotenv (a `k8s-pv` copy announces itself) |
 | CI/CD | Package, generate and bridge jobs for a CI/CD system; no pipeline logic | github-actions, gitlab, jenkins, argocd |
 
 Adapters declare their capabilities (supported formats, tool versions, whether

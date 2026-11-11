@@ -56,7 +56,8 @@ from datadouble.names import Generation, GroupName
 from datadouble.planner import Plan, PlannedGroup, PlannedRule, PlanOptions, plan
 from datadouble.registry import Registry
 from datadouble.secrets import resolve_secret
-from datadouble.spec import FakerRule, FormatPreservingRule, HashRule, Spec
+from datadouble.signing import bundle_key, sign
+from datadouble.spec import FakerRule, FormatPreservingRule, HashRule, Spec, StrictLevel
 from datadouble.storage import Store
 from datadouble.subset import key_conditions, nested_conditions
 from datadouble.verify import FormatReport, VerificationReport, check_image, restore_failed
@@ -517,7 +518,9 @@ class Run:
         manifest = self._stage(Stage.VERIFY, group.name, inputs, work)
         return _load(VerificationReport, manifest.outputs["report"])
 
-    def summary(self, group: PlannedGroup, report: VerificationReport) -> ImageSummary:
+    def summary(
+        self, planned: Plan, group: PlannedGroup, report: VerificationReport
+    ) -> ImageSummary:
         """The image summary for the group's image."""
         packaged = self.required(Stage.PACKAGE, group.name)
         checks = report.checks()
@@ -526,6 +529,7 @@ class Run:
             built_at=packaged.finished_at,
             archives=_load(tuple[ImageArchive, ...], packaged.outputs["archives"]),
             manifest_sha256=str(packaged.outputs["manifest_sha256"]),
+            strict=StrictLevel.OFF if planned.strict is None else planned.strict.level,
             verification=Verification(
                 passed=report.passed(),
                 checks=len(checks),
@@ -556,15 +560,21 @@ class Run:
 
         def work(_directory: Path) -> dict[str, JsonValue]:
             written: list[JsonValue] = []
+            signed, bundle = summary, None
+            if self.spec.signing is not None:
+                bundle = sign(summary, self.spec.signing.cosign)
+                signed = summary.model_copy(update={"signature": bundle_key(summary)})
             for store in stores:
                 for archive in summary.archives:
                     name = archive.key.rsplit("/", 1)[1]
                     store.put_file(archive.key, self._dir(Stage.PACKAGE, group.name) / name)
                 report_key = summary.identity.summary_key().replace(".summary.json", ".verify.json")
                 store.put_bytes(report_key, report.model_dump_json(indent=2).encode())
+                if bundle is not None:
+                    store.put_bytes(bundle_key(summary), bundle)
                 # The summary goes last: its presence means the image is complete.
                 store.put_bytes(
-                    summary.identity.summary_key(), summary.model_dump_json(indent=2).encode()
+                    summary.identity.summary_key(), signed.model_dump_json(indent=2).encode()
                 )
                 written.append(f"{store.describe()}/{summary.identity.summary_key()}")
             return {"stored": written}
@@ -615,7 +625,7 @@ class Run:
         if self._needs(Stage.VERIFY):
             report = self.verify(working, planned, group)
             outputs.reports.append(report)
-            summary = self.summary(group, report)
+            summary = self.summary(planned, group, report)
             outputs.summaries.append(summary)
             # Only verified images are stored; a failed one makes the run fail.
             if self._wanted(Stage.STORE) and report.passed():

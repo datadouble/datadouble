@@ -14,20 +14,37 @@ requires-python = ">=3.13"
 package = false
 
 [tool.uv.workspace]
-members = ["core", "adapters/postgres", "adapters/s3", "conformance"]
+members = [
+    "core",
+    "adapters/btrfs",
+    "adapters/docker",
+    "adapters/kubernetes",
+    "adapters/postgres",
+    "adapters/s3",
+    "adapters/vault",
+    "conformance",
+]
 
 [tool.uv.sources]
 datadouble = { workspace = true }
 datadouble-postgres = { workspace = true }
 datadouble-conformance = { workspace = true }
 datadouble-s3 = { workspace = true }
+datadouble-docker = { workspace = true }
+datadouble-vault = { workspace = true }
+datadouble-kubernetes = { workspace = true }
+datadouble-btrfs = { workspace = true }
 
 [dependency-groups]
 dev = [
     "datadouble",
+    "datadouble-btrfs",
     "datadouble-conformance",
+    "datadouble-docker",
+    "datadouble-kubernetes",
     "datadouble-postgres",
     "datadouble-s3",
+    "datadouble-vault",
     "boto3-stubs[s3]>=1.43.126",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
@@ -75,9 +92,13 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = [
     "datadouble",
+    "datadouble_btrfs",
     "datadouble_conformance",
+    "datadouble_docker",
+    "datadouble_kubernetes",
     "datadouble_postgres",
     "datadouble_s3",
+    "datadouble_vault",
     "check_source",
     "make_tag",
     "fakes",
@@ -95,15 +116,23 @@ warn_unreachable = true
 files = [
     "core/src",
     "core/tests",
+    "adapters/btrfs/src",
+    "adapters/btrfs/tests",
+    "adapters/docker/src",
+    "adapters/docker/tests",
+    "adapters/kubernetes/src",
+    "adapters/kubernetes/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
+    "adapters/vault/src",
+    "adapters/vault/tests",
     "conformance/src",
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -112,10 +141,18 @@ typeCheckingMode = "strict"
 include = [
     "core/src",
     "core/tests",
+    "adapters/btrfs/src",
+    "adapters/btrfs/tests",
+    "adapters/docker/src",
+    "adapters/docker/tests",
+    "adapters/kubernetes/src",
+    "adapters/kubernetes/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
+    "adapters/vault/src",
+    "adapters/vault/tests",
     "conformance/src",
     "scripts",
     "tests",
@@ -125,11 +162,22 @@ reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pytest.ini_options]
-testpaths = ["core/tests", "adapters/postgres/tests", "adapters/s3/tests", "tests"]
-pythonpath = ["scripts"]
+testpaths = [
+    "core/tests",
+    "adapters/btrfs/tests",
+    "adapters/docker/tests",
+    "adapters/kubernetes/tests",
+    "adapters/postgres/tests",
+    "adapters/s3/tests",
+    "adapters/vault/tests",
+    "tests",
+]
+pythonpath = ["scripts", "adapters/postgres/tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 markers = [
     "integration: needs the Docker Compose services (run with `make test-integration`)",
+    "k8s: needs the k8s Compose profile (run with `make test-k8s`)",
+    "btrfs: needs the btrfs Compose profile (run with `make test-btrfs`)",
 ]
 xfail_strict = true
 
@@ -138,8 +186,12 @@ branch = true
 relative_files = true  # reports name files from the repository root, wherever they ran
 source = [
     "core/src/datadouble",
+    "adapters/btrfs/src/datadouble_btrfs",
+    "adapters/docker/src/datadouble_docker",
+    "adapters/kubernetes/src/datadouble_kubernetes",
     "adapters/postgres/src/datadouble_postgres",
     "adapters/s3/src/datadouble_s3",
+    "adapters/vault/src/datadouble_vault",
     "scripts",
 ]
 

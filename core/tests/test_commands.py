@@ -273,15 +273,23 @@ def test_errors_map_to_codes(spec_file: Path, tmp_path: Path) -> None:
     ],
 )
 def test_run_errors(
-    error: Exception, code: ErrorCode, spec_file: Path, monkeypatch: pytest.MonkeyPatch
+    error: Exception,
+    code: ErrorCode,
+    spec_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def explode(_self: Run) -> None:
         raise error
 
     monkeypatch.setattr(Run, "execute", explode)
-    response = api.handle_json(
-        json.dumps({"command": "run", "spec": str(spec_file), "stages": ["plan"]})
-    )
+    request = {
+        "command": "run",
+        "spec": str(spec_file),
+        "stages": ["plan"],
+        "work": str(tmp_path / "work"),
+    }
+    response = api.handle_json(json.dumps(request))
     assert isinstance(response, api.ErrorResponse)
     assert response.error is code
     assert response.message == "x"

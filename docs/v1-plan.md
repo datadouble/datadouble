@@ -22,8 +22,9 @@ moves on only when they pass.
    `filesystem`, `s3`, `btrfs`, `k8s-pv`, plus `docker-volume` for local and CI
    use.
 7. Announce adapters, which let consumers know where clones can be accessed, as
-   volumes or connection parameters: `k8s-pv`, `k8s-secret`, `ci-outputs`,
-   `dotenv`, `vault`.
+   volumes or connection parameters: `k8s-secret`, `ci-outputs`, `dotenv`,
+   `vault`. A `k8s-pv` copy's PersistentVolume is its own announcement
+   (decision 61).
 8. Operations: `promote`, `fetch`, `release`, `prune`, `activate`, in pool and
    on-demand modes.
 9. Golden-image signing with cosign keyless signing in `build`, checked by
@@ -144,13 +145,13 @@ Docker Compose profiles. Services without a profile start on plain
 
 | Group | Services | Notes |
 |---|---|---|
-| default | Test runner, PostgreSQL with Pagila, S3 (SeaweedFS) | Core, PostgreSQL and S3 tests (decision 56) |
+| default | Test runner, PostgreSQL with Pagila, S3 (SeaweedFS), Docker-in-Docker, OpenBao | Core, PostgreSQL, S3, Docker and Vault tests (decisions 56, 64) |
 | `mysql`, `mssql`, `oracle` | One engine each | SQL Server and Oracle images are amd64-only |
 | `mongodb`, `redis` | One engine each | |
 | `elasticsearch`, `opensearch` | Single-node clusters | |
 
-| `btrfs` | Privileged helper with a loop-mounted btrfs volume | Needs privileged Docker |
-| `k8s` | k3s in a container | k8s-pv, k8s-secret, Argo CD |
+| `btrfs` | Privileged test runner with a loop-mounted btrfs volume | Needs privileged Docker |
+| `k8s` | k3s in a container | k8s-pv, k8s-secret, Argo CD (decision 64) |
 | `ci-gitlab`, `ci-jenkins`, `ci-argocd` | CI systems for end-to-end tests | Heavy |
 
 ```

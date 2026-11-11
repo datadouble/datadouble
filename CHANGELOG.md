@@ -51,3 +51,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stores:** a filesystem store in the core package, and **`datadouble-s3`**
   for S3 and S3-compatible services.
 - **`datadouble-conformance`**, the suite every engine adapter must pass.
+- **Image signing** with cosign in the `store` stage, by key reference or
+  keyless, and signature checks in `promote` and `fetch`.
+- **`datadouble promote`**: copies verified, signed images built with the
+  required strict-mode level into the export stores and advances a channel,
+  refusing any image that fails a check.
+- **`datadouble fetch`** and **`datadouble activate`**: staging in
+  non-production, skipping generations already staged, keeping the newest
+  for rollback.
+- **`datadouble replicate`**, **`claim`**, **`release`** and **`copies`**:
+  pool copies recycled one for one so the pool never empties, and on-demand
+  copies that belong to an owner and expire. Replicate adapters: `filesystem`
+  (core), **`datadouble-docker`** (`docker-volume`: volumes, or instances
+  running the engine's server with a generated password),
+  **`datadouble-btrfs`** (`btrfs`) and **`datadouble-kubernetes`** (`k8s-pv`).
+- **`datadouble announce`**: `dotenv` and `ci-outputs` (core), `k8s-secret`
+  (`datadouble-kubernetes`) and **`datadouble-vault`** (`vault`).
+- **`datadouble prune`** for the build's stores, the export stores and
+  staging, never removing a channel's target, with `--dry-run`.

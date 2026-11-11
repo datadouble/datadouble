@@ -29,8 +29,8 @@ jobs:
           # binaries.sonarsource.com serves the scanner, which the action caches,
           # so a missing endpoint only shows when the cache goes cold. The action
           # verifies the scanner's signature with keys from the two keyservers.
-          # The Compose suite needs Docker Hub, GHCR, Debian and the PostgreSQL
-          # apt repository, as in CI's integration job.
+          # The Compose suite needs what CI's integration job does: Docker Hub,
+          # GHCR, Debian, the PostgreSQL apt repository and dl.k8s.io (kubectl).
           allowed-endpoints: >
             registry-1.docker.io:443
             auth.docker.io:443
@@ -43,6 +43,8 @@ jobs:
             deb.debian.org:443
             apt.postgresql.org:80
             apt.postgresql.org:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443

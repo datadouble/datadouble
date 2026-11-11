@@ -25,7 +25,8 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from datadouble.names import EngineName, Generation, GroupName, SpecName
-from datadouble.spec import ImageFormat
+from datadouble.spec import ImageFormat, StrictLevel
+from datadouble.storage import Store
 
 CODEC: Literal["gz"] = "gz"
 """Compression for image archives (gzip, from the standard library)."""
@@ -114,8 +115,10 @@ class ImageSummary(_Model):
     archives: tuple[ImageArchive, ...]
     manifest_sha256: str
     verification: Verification
+    strict: StrictLevel
+    """The strict-mode level the image was built with."""
     signature: str | None = None
-    """The signature reference; images are signed from M2 on."""
+    """The store key of the signature bundle, if the image is signed."""
 
 
 def pack(source: Path, manifest: bytes, destination: Path) -> Digest:
@@ -146,3 +149,37 @@ def unpack(archive: Path, destination: Path) -> tuple[Path, bytes]:
         message = f"{archive.name} is not a Datadouble image"
         raise ImageError(message)
     return image, manifest.read_bytes()
+
+
+_SUMMARY = ".summary.json"
+_LINE_DEPTH = 3  # spec/group/engine-version/file
+
+
+def image_lines(store: Store, spec: str, group: str) -> list[str]:
+    """The ``<spec>/<group>/<engine>-<version>`` prefixes a store holds images under."""
+    found = {
+        "/".join(key.split("/")[:3])
+        for key in store.list(f"{spec}/{group}/")
+        if key.endswith(_SUMMARY) and key.count("/") == _LINE_DEPTH
+    }
+    return sorted(found, key=_version_order)
+
+
+def _version_order(prefix: str) -> tuple[int, ...]:
+    version = prefix.rsplit("-", 1)[-1]
+    return tuple(int(part) for part in version.split(".") if part.isdigit())
+
+
+def generations(store: Store, prefix: str) -> list[Generation]:
+    """The generations with a summary under an image line, oldest first."""
+    return sorted(
+        Generation(key.rsplit("/", 1)[1].removesuffix(_SUMMARY))
+        for key in store.list(f"{prefix}/")
+        if key.endswith(_SUMMARY) and key.count("/") == prefix.count("/") + 1
+    )
+
+
+def read_summary(store: Store, prefix: str, generation: Generation) -> ImageSummary | None:
+    """A generation's image summary, if the store has it."""
+    data = store.get_bytes(f"{prefix}/{generation}{_SUMMARY}")
+    return None if data is None else ImageSummary.model_validate_json(data)

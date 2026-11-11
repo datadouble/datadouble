@@ -57,11 +57,14 @@ def test_errors_name_the_code_not_the_request(tmp_path: Path) -> None:
         assert store.get_bytes("a/b") is None
         stub.add_client_error("head_object", service_error_code="403", http_status_code=403)
         stub.add_client_error("head_object", service_error_code="404", http_status_code=404)
+        stub.add_client_error("delete_object", service_error_code="AccessDenied")
         with pytest.raises(StoreError, match="listing / failed: S3 error NoSuchBucket"):
             store.list("")
         with pytest.raises(StoreError, match="downloading a/b failed: S3 error 403"):
             store.get_file("a/b", tmp_path / "out")
         assert not store.get_file("a/b", tmp_path / "out")
+        with pytest.raises(StoreError, match="deleting a/b failed: S3 error AccessDenied"):
+            store.delete("a/b")
     with pytest.raises(StoreError, match="not a valid store key"):
         store.put_bytes("../escape", b"x")
 
@@ -115,6 +118,9 @@ def test_round_trips(bucket: S3Store, tmp_path: Path) -> None:
     assert bucket.list("shop/") == ["shop/all/a.summary.json", "shop/all/a.tar.gz"]
     assert bucket.list("") == ["shop/all/a.summary.json", "shop/all/a.tar.gz"]
     assert bucket.list("other/") == []
+    bucket.delete("shop/all/a.summary.json")
+    bucket.delete("shop/all/never-there")
+    assert bucket.list("shop/") == ["shop/all/a.tar.gz"]
 
 
 @pytest.mark.integration

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # `docker compose up` starts the default group: the test runner, PostgreSQL
-# with Pagila, and an S3-compatible store.
+# with Pagila, an S3-compatible store, a Docker-in-Docker daemon and OpenBao.
 # Other groups are profiles, added as their milestones arrive and combined
 # freely, for example `docker compose --profile mysql --profile s3 up`.
 # See TESTING.md.
@@ -19,6 +19,10 @@ services:
         condition: service_healthy
       s3:
         condition: service_healthy
+      docker:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
@@ -26,6 +30,12 @@ services:
       AWS_ACCESS_KEY_ID: datadouble
       AWS_SECRET_ACCESS_KEY: datadouble
       AWS_DEFAULT_REGION: us-east-1
+      # Containers the Docker adapter makes go to a Docker-in-Docker daemon,
+      # never to the host's.
+      DOCKER_HOST: tcp://docker:2375
+      DATADOUBLE_TEST_DOCKER_ADDRESS: docker
+      DATADOUBLE_TEST_VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: datadouble-test
     # No bind mounts from the repository: on hosts whose home directories are
     # network mounts the Docker daemon cannot read them. Reports are copied out
     # of the stopped container instead (see `make test-integration`).
@@ -54,3 +64,88 @@ services:
       interval: 2s
       timeout: 5s
       retries: 60
+
+  # A Docker daemon for the Docker replicate adapter's tests, isolated from the
+  # host's. It needs a privileged container.
+  docker:
+    image: docker:29.9.3-dind@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["--host=tcp://0.0.0.0:2375"]
+    healthcheck:
+      test: ["CMD", "docker", "--host=tcp://127.0.0.1:2375", "info"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  # OpenBao (API-compatible with HashiCorp Vault) in dev mode, for the vault
+  # announce adapter. Dev mode keeps everything in memory, with a fixed token.
+  vault:
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    command: ["server", "-dev", "-dev-root-token-id=datadouble-test", "-dev-listen-address=0.0.0.0:8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  # Opt-in groups. Both need privileged containers.
+
+  # k3s, for the Kubernetes adapters: `make test-k8s`.
+  k3s:
+    profiles: [k8s]
+    image: rancher/k3s:v1.37.2-k3s1@sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332
+    hostname: k3s
+    privileged: true
+    command: ["server", "--disable=traefik,metrics-server", "--tls-san=k3s", "--write-kubeconfig-mode=644"]
+    environment:
+      K3S_KUBECONFIG_OUTPUT: /output/kubeconfig.yaml
+    volumes:
+      - k3s-config:/output
+    healthcheck:
+      test: ["CMD", "kubectl", "get", "--raw=/readyz"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+
+  test-k8s:
+    profiles: [k8s]
+    build:
+      context: .
+      target: test
+    depends_on:
+      k3s:
+        condition: service_healthy
+    volumes:
+      - k3s-config:/k3s:ro
+    command:
+      - sh
+      - -c
+      - >-
+        sed 's/127.0.0.1/k3s/' /k3s/kubeconfig.yaml > /tmp/kubeconfig
+        && KUBECONFIG=/tmp/kubeconfig uv run pytest -m k8s adapters/kubernetes
+
+  # A loop-mounted btrfs filesystem, for the btrfs replicate adapter:
+  # `make test-btrfs`. Mounting needs root; the tests run as the test user.
+  test-btrfs:
+    profiles: [btrfs]
+    build:
+      context: .
+      target: test
+    privileged: true
+    user: root
+    command:
+      - sh
+      - -c
+      - >-
+        truncate -s 512M /tmp/btrfs.img
+        && mkfs.btrfs -q /tmp/btrfs.img
+        && mkdir -p /mnt/btrfs
+        && mount -o loop,user_subvol_rm_allowed /tmp/btrfs.img /mnt/btrfs
+        && chown tester:tester /mnt/btrfs
+        && su -s /bin/sh tester -c
+        'DATADOUBLE_TEST_BTRFS=/mnt/btrfs uv run pytest -m btrfs adapters/btrfs'
+
+volumes:
+  k3s-config:

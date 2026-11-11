@@ -340,6 +340,19 @@ def test_store_problems(tmp_path: Path, registry: Registry) -> None:
     assert built.stored == ()
 
 
+def test_signed_images(tmp_path: Path, registry: Registry) -> None:
+    signed = SPEC + "signing: {cosign: {key: {env: COSIGN_KEY}}}\n"
+    result = run(tmp_path, registry, spec=signed)
+    (summary,) = result.images
+    stored = FilesystemStore(tmp_path / "store")
+    data = stored.get_bytes(summary.identity.summary_key())
+    assert data is not None
+    on_disk = ImageSummary.model_validate_json(data)
+    signature = summary.identity.summary_key().replace("summary", "sigstore")
+    assert on_disk.signature == signature
+    assert stored.get_bytes(signature) is not None
+
+
 def test_the_anonymization_key(
     tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
 ) -> None:
