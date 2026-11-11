@@ -49,6 +49,7 @@ ignore = [
 "scripts/*.py" = ["INP001"]  # standalone scripts, not a package
 "**/tests/**" = [
     "INP001",   # test directories are not packages
+    "ARG002",   # test doubles ignore inputs they don't need
     "D",        # test names say what they check
     "FBT001",   # parametrized tests take positional booleans
     "PLR0911",  # test doubles mirror the branching of what they stand in for
