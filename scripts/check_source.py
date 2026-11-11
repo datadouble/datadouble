@@ -98,14 +98,23 @@ def check_suppressions(path: Path, text: str) -> tuple[list[Problem], int]:
     return problems, count
 
 
-def check_files(paths: Iterable[Path]) -> tuple[list[Problem], int]:
-    """Check every file that needs it; return the problems and the suppression count."""
+def check_files(paths: Iterable[Path], root: Path | None = None) -> tuple[list[Problem], int]:
+    """Check every file that needs it; return the problems and the suppression count.
+
+    Only files inside ``root`` (the current directory by default) are read; any
+    other path is reported as a problem rather than opened.
+    """
+    base = (root or Path.cwd()).resolve()
     problems: list[Problem] = []
     suppressions = 0
     for path in paths:
-        if not needs_header(path) or not path.is_file():
+        resolved = (base / path).resolve()
+        if not resolved.is_relative_to(base):
+            problems.append(Problem(path, 1, "outside the repository; not checked"))
             continue
-        text = path.read_text(encoding="utf-8")
+        if not needs_header(resolved) or not resolved.is_file():
+            continue
+        text = resolved.read_text(encoding="utf-8")
         problems.extend(check_header(path, text))
         if path.suffix == ".py":
             found, count = check_suppressions(path, text)
