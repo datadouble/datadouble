@@ -45,6 +45,7 @@ jobs:
             apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            fastdl.mongodb.org:443
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
@@ -66,12 +67,14 @@ jobs:
           fetch-depth: 0  # full history for blame and new-code detection
 
       # Adapter code is only reachable with databases running, so coverage
-      # comes from the whole suite in the Compose default group. Its report
-      # lists repository-relative source directories, which the scanner reads
-      # as absolute, so they are anchored to the checkout.
+      # comes from the whole suite in the Compose default group. The report
+      # must name every analysed file exactly once, or the scanner counts it
+      # as uncovered. Its source roots are repository-relative, which the
+      # scanner reads as absolute, so they are anchored to the checkout.
       - name: Tests with coverage (Docker Compose)
         run: |
           make test-integration
+          python3 scripts/check_coverage.py .reports/coverage.xml sonar-project.properties
           sed -E "s#<source>([^/<][^<]*)</source>#<source>${GITHUB_WORKSPACE}/\1</source>#" \
             .reports/coverage.xml > coverage.xml
 

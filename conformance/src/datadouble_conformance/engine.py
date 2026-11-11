@@ -76,8 +76,8 @@ class EngineHarness:
     sample_spec: str
     """A spec over the sample dataset; ``STORE`` stands for a store directory.
 
-    It must plan with the nested strategy, produce both formats, anonymize
-    ``sample_column`` and verify cleanly.
+    It must plan with the nested strategy if the engine offers it, produce both
+    formats, anonymize ``sample_column`` and verify cleanly.
     """
     sample_column: ColumnRef
     """A column the sample spec anonymizes."""
@@ -158,7 +158,8 @@ def _extract_counts(result: RunResult) -> list[tuple[str, int]]:
     return sorted((str(count.table), count.rows) for count in extracted.counts)
 
 
-def _wait_for_stage(root: Path, stage: str, process: subprocess.Popen[bytes]) -> Path:
+def wait_for_stage(root: Path, stage: str, process: subprocess.Popen[bytes]) -> Path:
+    """The generation under ``root`` that reaches ``stage`` while ``process`` runs."""
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline and process.poll() is None:
         for generation in root.glob("*"):
@@ -245,10 +246,20 @@ class EngineConformance:
     def test_both_strategies_choose_the_same_rows(
         self, harness: EngineHarness, tmp_path: Path
     ) -> None:
-        """Strategies A and B produce identical row sets on the sample data."""
+        """Strategies A and B produce identical row sets on the sample data.
+
+        An engine without strategy A runs strategy B alone, which must verify.
+        """
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
         lock = builds.lock(spec.source.connection)
+        if not harness.engine.capabilities().nested:
+            only = builds.run(
+                spec, lock, "keys", stages=_BUILD, options=PlanOptions(strategy=Strategy.KEYS)
+            )
+            assert not only.failed(), only.verification
+            assert any(rows for _, rows in _extract_counts(only))
+            return
         results = {
             strategy: builds.run(
                 spec, lock, str(strategy), stages=_BUILD, options=PlanOptions(strategy=strategy)
@@ -281,7 +292,7 @@ class EngineConformance:
         spec = builds.sample()
         result = builds.run(spec, builds.lock(spec.source.connection), "work")
         failures = [c for r in result.verification for c in r.checks() if not c.passed]
-        assert not failures
+        assert not failures, failures
         assert result.stored
         for summary in result.images:
             assert {a.format for a in summary.archives} == {
@@ -314,7 +325,7 @@ class EngineConformance:
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ.copy()
         )
         try:
-            generation = _wait_for_stage(work / spec.name, "transform", process)
+            generation = wait_for_stage(work / spec.name, "transform", process)
         finally:
             process.send_signal(signal.SIGKILL)
             process.wait()
@@ -322,7 +333,7 @@ class EngineConformance:
         status = {(r.stage, r.group): r.status for r in result.stages}
         assert status[(Stage.PLAN, None)] is StageStatus.REUSED
         assert status[(Stage.EXTRACT, None)] is StageStatus.REUSED
-        assert not result.failed()
+        assert not result.failed(), result.verification
         assert result.stored
 
     def test_groups_share_a_generation_and_agree(

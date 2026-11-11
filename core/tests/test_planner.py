@@ -424,6 +424,13 @@ exclude: ["dba_*"]
     )
 
 
+def test_engines_without_hooks() -> None:
+    caps = CAPABILITIES.model_copy(update={"hooks": False})
+    reasons = problems("hooks: {before_load: [{sql: x}]}", capabilities=caps)
+    assert reasons == ("the fake adapter does not run hooks",)
+    assert planned(capabilities=caps).spec == "shop"
+
+
 def test_plan_error_message() -> None:
     error = PlanError(("one",))
     assert str(error) == "the plan has 1 problem"

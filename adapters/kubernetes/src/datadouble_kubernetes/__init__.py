@@ -25,6 +25,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from datadouble.announce import Announced, AnnounceError, Announcer
+from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.settings import parse_settings
@@ -148,15 +149,10 @@ class PvReplicator:
         root = self.settings.path
         root.mkdir(parents=True, exist_ok=True)
         partial = root / f".{copy_id}.partial"
-        result = subprocess.run(  # noqa: S603 - fixed program, paths from this adapter
-            ["cp", "-a", "--reflink=auto", str(image), str(partial)],  # noqa: S607 - coreutils cp
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
+        problem = copy_tree(image, partial)
+        if problem:
             shutil.rmtree(partial, ignore_errors=True)
-            message = f"copying {summary.identity.generation} failed: {result.stderr.strip()}"
+            message = f"copying {summary.identity.generation} failed: {problem}"
             raise ReplicateError(message)
         partial.rename(root / copy_id)
         identity = summary.identity

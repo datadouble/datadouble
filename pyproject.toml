@@ -19,6 +19,7 @@ members = [
     "adapters/btrfs",
     "adapters/docker",
     "adapters/kubernetes",
+    "adapters/mongodb",
     "adapters/postgres",
     "adapters/s3",
     "adapters/vault",
@@ -34,6 +35,7 @@ datadouble-docker = { workspace = true }
 datadouble-vault = { workspace = true }
 datadouble-kubernetes = { workspace = true }
 datadouble-btrfs = { workspace = true }
+datadouble-mongodb = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -42,6 +44,7 @@ dev = [
     "datadouble-conformance",
     "datadouble-docker",
     "datadouble-kubernetes",
+    "datadouble-mongodb",
     "datadouble-postgres",
     "datadouble-s3",
     "datadouble-vault",
@@ -96,14 +99,17 @@ known-first-party = [
     "datadouble_conformance",
     "datadouble_docker",
     "datadouble_kubernetes",
+    "datadouble_mongodb",
     "datadouble_postgres",
     "datadouble_s3",
     "datadouble_vault",
     "check_source",
     "make_tag",
+    "check_coverage",
     "fakes",
     "fake_engine",
     "test_conformance",
+    "test_mongodb_conformance",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -122,6 +128,8 @@ files = [
     "adapters/docker/tests",
     "adapters/kubernetes/src",
     "adapters/kubernetes/tests",
+    "adapters/mongodb/src",
+    "adapters/mongodb/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
@@ -129,10 +137,11 @@ files = [
     "adapters/vault/src",
     "adapters/vault/tests",
     "conformance/src",
+    "conformance/tests",
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -147,6 +156,8 @@ include = [
     "adapters/docker/tests",
     "adapters/kubernetes/src",
     "adapters/kubernetes/tests",
+    "adapters/mongodb/src",
+    "adapters/mongodb/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
@@ -154,10 +165,11 @@ include = [
     "adapters/vault/src",
     "adapters/vault/tests",
     "conformance/src",
+    "conformance/tests",
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/postgres/tests"]
+extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/postgres/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -167,9 +179,11 @@ testpaths = [
     "adapters/btrfs/tests",
     "adapters/docker/tests",
     "adapters/kubernetes/tests",
+    "adapters/mongodb/tests",
     "adapters/postgres/tests",
     "adapters/s3/tests",
     "adapters/vault/tests",
+    "conformance/tests",
     "tests",
 ]
 pythonpath = ["scripts", "adapters/postgres/tests"]
@@ -184,14 +198,18 @@ xfail_strict = true
 [tool.coverage.run]
 branch = true
 relative_files = true  # reports name files from the repository root, wherever they ran
+# Roots are src directories, so reports name files by package
+# (datadouble_mongodb/working.py) and no two files share a name.
 source = [
-    "core/src/datadouble",
-    "adapters/btrfs/src/datadouble_btrfs",
-    "adapters/docker/src/datadouble_docker",
-    "adapters/kubernetes/src/datadouble_kubernetes",
-    "adapters/postgres/src/datadouble_postgres",
-    "adapters/s3/src/datadouble_s3",
-    "adapters/vault/src/datadouble_vault",
+    "core/src",
+    "adapters/btrfs/src",
+    "adapters/docker/src",
+    "adapters/kubernetes/src",
+    "adapters/mongodb/src",
+    "adapters/postgres/src",
+    "adapters/s3/src",
+    "adapters/vault/src",
+    "conformance/src",
     "scripts",
 ]
 

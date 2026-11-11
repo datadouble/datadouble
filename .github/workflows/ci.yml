@@ -146,6 +146,7 @@ jobs:
             apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            fastdl.mongodb.org:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -213,6 +214,7 @@ jobs:
             apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            fastdl.mongodb.org:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443

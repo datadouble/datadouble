@@ -56,6 +56,17 @@ def test_hash() -> None:
     assert a.hash("x", 12, ColumnKind.TEXT) != a.hash("x", 12, ColumnKind.TEXT, attempt=1)
 
 
+def test_hashes_never_look_like_personal_data() -> None:
+    a = Anonymizer(KEY)
+    # Under KEY, this value's first hash holds a Luhn-valid 16-digit run.
+    first = a.hash("tok-2046", 24, ColumnKind.TEXT)
+    assert detect(first) == (Detector.PAYMENT_CARD,)
+    rule = HashRule(hash=HashOptions(length=24))
+    mapping = a.mapping(rule, ColumnKind.TEXT, ["tok-2046"], unique=False)
+    assert mapping["tok-2046"] == a.hash("tok-2046", 24, ColumnKind.TEXT, attempt=1)
+    assert not detect(mapping["tok-2046"])
+
+
 def test_format_preserving() -> None:
     a = Anonymizer(KEY)
     out = a.preserve_format("Ab-12 cD/" + "9" * 40, luhn=False)

@@ -86,6 +86,17 @@ spec uses it there.
 | Salesforce | None (the working copy is not a server Datadouble can run code in) | Not offered; use the other strategies |
 | Filesystem | Shell | The adapter's cleanup commands |
 
+For MongoDB, a rule's `expression` is an aggregation expression and its `where`
+a query filter, both in Extended JSON:
+
+```yaml
+anonymize:
+  comments:
+    text:
+      expression: '{"$concat": ["comment ", {"$toString": "$_id"}]}'
+      where: '{"flagged": {"$ne": true}}'
+```
+
 ## Hooks
 
 Some changes aren't column-shaped: multi-table updates, deleting rows, inserting
@@ -109,6 +120,11 @@ hooks:
 
 A hook's declared columns are taken on trust; `verify` is what checks the
 result.
+
+Engines say whether they run hooks, and the plan fails if a spec gives hooks to
+one that doesn't. MongoDB doesn't (decision 68): its column rules cover what
+hooks would, and a script language there would be a second anonymizer that
+Datadouble cannot see into.
 
 ## Values kept on purpose
 

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from datadouble.files import Reflink, copy_tree
 from datadouble.images import ImageSummary
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.settings import parse_settings
@@ -75,16 +76,13 @@ class BtrfsReplicator:
         partial = self.root / f".{copy_id}.partial"
         btrfs = btrfs_binary()
         _run([btrfs, "subvolume", "create", str(partial)], "creating the subvolume")
-        try:
-            _run(
-                ["cp", "-a", "--reflink=always", f"{image}/.", str(partial)],
-                f"copying {summary.identity.generation}",
-            )
-        except ReplicateError:
+        problem = copy_tree(image, partial, Reflink.ALWAYS, contents=True)
+        if problem:
             subprocess.run(  # noqa: S603 - btrfs, with arguments built here
                 [btrfs, "subvolume", "delete", str(partial)], capture_output=True, check=False
             )
-            raise
+            message = f"copying {summary.identity.generation} failed: {problem}"
+            raise ReplicateError(message)
         final = self.root / copy_id
         partial.rename(final)
         return Made(location={"path": str(final)})
