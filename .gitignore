@@ -1,0 +1,16 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+__pycache__/
+*.py[cod]
+.venv/
+.coverage
+.coverage.*
+coverage.xml
+.reports/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+site/
+.cache/

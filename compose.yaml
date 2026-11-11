@@ -1,0 +1,35 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# `docker compose up` starts the default group: the test runner and PostgreSQL.
+# Other groups are profiles, added as their milestones arrive and combined
+# freely, for example `docker compose --profile mysql --profile s3 up`.
+# See TESTING.md.
+
+name: datadouble
+
+services:
+  test:
+    build:
+      context: .
+      target: test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
+    # No bind mounts from the repository: on hosts whose home directories are
+    # network mounts the Docker daemon cannot read them. Reports are copied out
+    # of the stopped container instead (see `make test-integration`).
+
+  postgres:
+    image: postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    environment:
+      POSTGRES_USER: datadouble
+      POSTGRES_PASSWORD: datadouble
+      POSTGRES_DB: datadouble
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datadouble -d datadouble"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

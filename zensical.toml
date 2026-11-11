@@ -1,0 +1,95 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The documentation site, built from docs/ (decision 43). Build it with
+# `make docs`; the docs workflow deploys it to GitHub Pages from main.
+
+[project]
+site_name = "Datadouble"
+site_description = "Realistic, safe copies of production data for development and testing"
+site_url = "https://datadouble.tightlinesoftware.com/"
+repo_url = "https://github.com/datadouble/datadouble"
+repo_name = "datadouble/datadouble"
+edit_uri = "edit/main/docs/"
+copyright = "Copyright &copy; 2026- Tight Line LLC. MIT licence."
+docs_dir = "docs"
+site_dir = "site"
+extra_css = ["stylesheets/datadouble.css"]
+nav = [
+  { "Home" = "index.md" },
+  { "Design" = [
+    { "Requirements" = "requirements.md" },
+    { "Architecture" = "architecture.md" },
+    { "Subsetting" = "subsetting.md" },
+    { "Anonymization" = "anonymization.md" },
+    { "Excludes and strict mode" = "excludes-and-strict-mode.md" },
+    { "Jailer compatibility" = "jailer.md" },
+    { "CI/CD integration" = "ci-cd.md" },
+    { "Agent skills" = "agent-skills.md" },
+    { "Local development" = "local-development.md" },
+    { "Prior art" = "prior-art.md" },
+  ] },
+  { "Project" = [
+    { "Decisions" = "decisions.md" },
+    { "Version 1 plan" = "v1-plan.md" },
+    { "External services" = "external-services.md" },
+    { "Changelog" = "project/changelog.md" },
+    { "Contributing" = "project/contributing.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[project.theme.font]
+text = "IBM Plex Sans"
+code = "IBM Plex Mono"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+pymdownx.magiclink = {}
+pymdownx.snippets.base_path = ["."]
+pymdownx.snippets.check_paths = true
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true

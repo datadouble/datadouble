@@ -1,0 +1,65 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # pull request analysis reads its metadata
+    env:
+      # Empty on Dependabot and fork runs, which get no secrets.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # binaries.sonarsource.com serves the scanner, which the action caches,
+          # so a missing endpoint only shows when the cache goes cold.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            sonarcloud.io:443
+            api.sonarcloud.io:443
+            scanner.sonarcloud.io:443
+            binaries.sonarsource.com:443
+            analysis-sensorcache-eu-central-1-prod.s3.eu-central-1.amazonaws.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # full history for blame and new-code detection
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Unit tests with coverage
+        run: |
+          uv sync --frozen
+          uv run pytest -m "not integration" --cov --cov-report=xml:coverage.xml
+
+      - name: SonarQube Cloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: sonarsource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}

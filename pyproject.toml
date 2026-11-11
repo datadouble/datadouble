@@ -1,0 +1,102 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# Workspace root. Not a published package: it holds the shared development
+# tooling configuration and the list of workspace members (the core package
+# and, from M1 on, one package per adapter).
+
+[project]
+name = "datadouble-workspace"
+version = "0.0.0"
+requires-python = ">=3.13"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["core"]
+
+[tool.uv.sources]
+datadouble = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "datadouble",
+    "mypy>=1.18",
+    "pyright[nodejs]>=1.1.405",
+    "pytest>=8.4",
+    "pytest-cov>=7.0",
+    "ruff>=0.13",
+    "psycopg[binary]>=3.2",
+]
+docs = ["zensical==0.1.1"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["site"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # conflicts with the formatter
+    "D203",    # incompatible with D211
+    "D213",    # incompatible with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["INP001"]  # standalone scripts, not a package
+"**/tests/**" = [
+    "INP001",   # test directories are not packages
+    "D",        # test names say what they check
+    "FBT001",   # parametrized tests take positional booleans
+    "PLR2004",  # literal values are the point of a test
+    "S101",     # pytest uses assert
+    "S603",     # tests run fixed commands to set up fixtures
+    "S607",     # ... found on PATH
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["datadouble", "check_source", "make_tag"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+files = ["core/src", "core/tests", "scripts", "tests"]
+mypy_path = "core/src:scripts"
+explicit_package_bases = true
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = ["core/src", "core/tests", "scripts", "tests"]
+extraPaths = ["scripts"]
+reportMissingTypeStubs = true
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["core/tests", "tests"]
+pythonpath = ["scripts"]
+addopts = ["--strict-markers", "--strict-config", "-ra"]
+markers = [
+    "integration: needs the Docker Compose services (run with `make test-integration`)",
+]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["core/src/datadouble", "scripts"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "assert_never\\(",
+]

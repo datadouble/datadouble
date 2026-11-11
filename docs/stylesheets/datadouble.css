@@ -1,0 +1,136 @@
+/* Copyright (c) 2026- Tight Line LLC
+   SPDX-License-Identifier: MIT */
+
+/* The design book's look: teal accent, warm production tone, cool neutrals.
+   Light and dark values map onto the theme's colour variables. */
+
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&display=swap");
+
+:root,
+[data-md-color-scheme="default"] {
+  --dd-accent: #17656e;
+  --dd-accent-soft: #e2f0f1;
+  --dd-prod: #7a3b12;
+  --dd-prod-soft: #fbeee4;
+  --dd-line: #d9e0e1;
+  --dd-muted: #5a6a6d;
+  --dd-surface: #ffffff;
+  --md-primary-fg-color: #17656e;
+  --md-primary-fg-color--light: #2a8790;
+  --md-primary-fg-color--dark: #0f4a51;
+  --md-accent-fg-color: #17656e;
+  --md-default-bg-color: #f6f7f7;
+  --md-typeset-a-color: #17656e;
+}
+
+[data-md-color-scheme="slate"] {
+  --dd-accent: #6cc3cc;
+  --dd-accent-soft: #1b3336;
+  --dd-prod: #f0a46f;
+  --dd-prod-soft: #3a2518;
+  --dd-line: #2b3a3d;
+  --dd-muted: #94a5a8;
+  --dd-surface: #172022;
+  --md-primary-fg-color: #172022;
+  --md-primary-fg-color--light: #1d2a2c;
+  --md-primary-fg-color--dark: #111718;
+  --md-accent-fg-color: #6cc3cc;
+  --md-default-bg-color: #111718;
+  --md-typeset-a-color: #6cc3cc;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-header__title {
+  font-family: "Bricolage Grotesque", var(--md-text-font-family), sans-serif;
+  letter-spacing: -0.005em;
+}
+
+.md-typeset h1 {
+  font-weight: 700;
+}
+
+/* Production-boundary figure on the home page */
+.dd-pipeline {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.dd-zone {
+  border: 1px dashed var(--dd-line);
+  border-radius: 10px;
+  padding: 0.85rem;
+  background: var(--dd-surface);
+}
+
+.dd-zone-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.dd-zone-head span:last-child {
+  color: var(--dd-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dd-prod .dd-zone-head {
+  color: var(--dd-prod);
+}
+
+.dd-nonprod .dd-zone-head {
+  color: var(--dd-accent);
+}
+
+.dd-stages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dd-stage {
+  border: 1px solid var(--dd-line);
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  font-family: var(--md-code-font-family);
+  font-size: 0.75rem;
+}
+
+.dd-prod .dd-stage {
+  border-color: var(--dd-prod);
+  background: var(--dd-prod-soft);
+  color: var(--dd-prod);
+}
+
+.dd-nonprod .dd-stage {
+  border-color: var(--dd-accent);
+  background: var(--dd-accent-soft);
+  color: var(--dd-accent);
+}
+
+.dd-gate {
+  font-weight: 600;
+  outline: 2px solid var(--dd-prod);
+  outline-offset: 2px;
+}
+
+.dd-arrow,
+.dd-crossing,
+.dd-ops {
+  color: var(--dd-muted);
+  font-size: 0.75rem;
+}
+
+.dd-crossing {
+  text-align: center;
+}

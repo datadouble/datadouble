@@ -8,6 +8,14 @@ store, and replicate. See the [README](README.md).
 
 Design complete; version 1 is being built to [the v1 plan](docs/v1-plan.md).
 
+## Building and testing
+
+`make check` must pass before a pull request; [TESTING.md](TESTING.md) lists
+every target and the testing rules. In short: `make lint`, `make
+lint-workflows`, `make typecheck`, `make test` on the host, and `make
+test-integration` for the Docker Compose suite. Never bind-mount the repository
+into containers.
+
 ## Before proposing anything
 
 1. Read [docs/decisions.md](docs/decisions.md). Decided items are settled; don't

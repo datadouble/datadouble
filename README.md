@@ -68,6 +68,19 @@ version 1).
 - [External services](docs/external-services.md) (maintainers)
 - [Decision log and open questions](docs/decisions.md)
 
+## Development
+
+Requires uv, Docker with Compose, GNU make and actionlint.
+
+```
+uv sync            # Python 3.13 and every development tool
+make check         # lint, types and unit tests
+make test-integration
+make docs
+```
+
+See [TESTING.md](TESTING.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are recorded in
