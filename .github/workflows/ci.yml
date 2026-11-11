@@ -130,12 +130,19 @@ jobs:
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
-          # Docker Hub (its blobs come from CloudFront or Cloudflare) for the PostgreSQL and
-          # Python base images, GHCR for the uv image, Debian for git in the
-          # test image, PyPI for the workspace, Codecov for the upload.
+          # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
+          # PostgreSQL, Python and SeaweedFS images, GHCR for the uv image,
+          # Debian and the PostgreSQL apt repository for git and pgvector,
+          # GitHub release assets for uv's Python builds, raw GitHub for the
+          # pinned Pagila files, PyPI for the workspace, Codecov for the upload.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            apt.postgresql.org:80
+            apt.postgresql.org:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443

@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: MIT
 
 # Stages:
-#   test     the workspace with its development tools; runs the test suite
-#            (docker compose uses this)
-#   runtime  the published image: the core package and nothing else
+#   builder    the core package, installed for the runtime image
+#   postgres   PostgreSQL 18 server binaries with pgvector, and Python from uv,
+#              for anything that builds or restores PostgreSQL working databases
+#   test       the workspace with its development tools on top of postgres;
+#              runs the test suite as an unprivileged user (docker compose)
+#   runtime    the published image: the core package and nothing else
 #
 # Base images are pinned by digest; Dependabot keeps them current.
 
@@ -22,18 +25,38 @@ FROM base AS builder
 ENV UV_PROJECT_ENVIRONMENT=/opt/datadouble
 COPY pyproject.toml uv.lock ./
 COPY core/ core/
+COPY adapters/ adapters/
 RUN uv sync --no-dev --package datadouble --no-editable
 
-FROM base AS test
-# git: the source checker's tests build throwaway repositories.
+FROM postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42 AS postgres
+# pgvector because Pagila uses it: working databases need the source's
+# extensions. git for the source checker's tests.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends git \
+    && apt-get install --yes --no-install-recommends git postgresql-18-pgvector \
     && rm -rf /var/lib/apt/lists/*
-COPY pyproject.toml uv.lock ./
-COPY core/pyproject.toml core/README.md core/LICENSE core/
-COPY core/src/datadouble/__init__.py core/src/datadouble/
+COPY --from=uv /uv /uvx /usr/local/bin/
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_FROZEN=1 \
+    UV_PYTHON=3.15 \
+    UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed
+RUN uv python install 3.15
+WORKDIR /src
+
+FROM postgres AS test
+# initdb refuses to run as root, so the suite runs as an ordinary user.
+RUN useradd --uid 10001 --user-group --create-home --shell /usr/sbin/nologin tester \
+    && install --directory --owner tester --group tester /src /reports
+USER tester
+COPY --chown=tester:tester pyproject.toml uv.lock ./
+COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
+COPY --chown=tester:tester core/src/datadouble/__init__.py core/src/datadouble/
+COPY --chown=tester:tester adapters/postgres/pyproject.toml adapters/postgres/README.md adapters/postgres/LICENSE adapters/postgres/
+COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
+COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/
 RUN uv sync --no-install-workspace
-COPY . .
+COPY --chown=tester:tester . .
 RUN uv sync
 CMD ["uv", "run", "pytest", "--cov", "--cov-report=term-missing", "--cov-report=xml:/reports/coverage.xml"]
 

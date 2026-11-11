@@ -29,7 +29,20 @@ jobs:
           # binaries.sonarsource.com serves the scanner, which the action caches,
           # so a missing endpoint only shows when the cache goes cold. The action
           # verifies the scanner's signature with keys from the two keyservers.
+          # The Compose suite needs Docker Hub, GHCR, Debian and the PostgreSQL
+          # apt repository, as in CI's integration job.
           allowed-endpoints: >
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            deb.debian.org:80
+            deb.debian.org:443
+            apt.postgresql.org:80
+            apt.postgresql.org:443
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
@@ -50,16 +63,15 @@ jobs:
           persist-credentials: false
           fetch-depth: 0  # full history for blame and new-code detection
 
-      - name: Set up uv and Python
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          python-version: "3.13"
-          enable-cache: true
-
-      - name: Unit tests with coverage
+      # Adapter code is only reachable with databases running, so coverage
+      # comes from the whole suite in the Compose default group. Its report
+      # lists repository-relative source directories, which the scanner reads
+      # as absolute, so they are anchored to the checkout.
+      - name: Tests with coverage (Docker Compose)
         run: |
-          uv sync --frozen
-          uv run pytest -m "not integration" --cov --cov-report=xml:coverage.xml
+          make test-integration
+          sed -E "s#<source>([^/<][^<]*)</source>#<source>${GITHUB_WORKSPACE}/\1</source>#" \
+            .reports/coverage.xml > coverage.xml
 
       - name: SonarQube Cloud scan
         if: ${{ env.SONAR_TOKEN != '' }}

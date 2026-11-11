@@ -14,20 +14,27 @@ requires-python = ">=3.13"
 package = false
 
 [tool.uv.workspace]
-members = ["core"]
+members = ["core", "adapters/postgres", "adapters/s3", "conformance"]
 
 [tool.uv.sources]
 datadouble = { workspace = true }
+datadouble-postgres = { workspace = true }
+datadouble-conformance = { workspace = true }
+datadouble-s3 = { workspace = true }
 
 [dependency-groups]
 dev = [
     "datadouble",
+    "datadouble-conformance",
+    "datadouble-postgres",
+    "datadouble-s3",
+    "boto3-stubs[s3]>=1.40",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "ruff>=0.13",
-    "psycopg[binary]>=3.3.8",
+    "types-pyyaml>=6.0.12",
 ]
 docs = ["zensical==0.1.1"]
 
@@ -46,10 +53,19 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["INP001"]  # standalone scripts, not a package
+"conformance/**" = [
+    "PLR0913",  # test builders take many keyword arguments with defaults
+    "PLR2004",  # literal values are the point of a test
+    "S101",     # pytest uses assert
+]
 "**/tests/**" = [
     "INP001",   # test directories are not packages
+    "ARG002",   # test doubles ignore inputs they don't need
     "D",        # test names say what they check
     "FBT001",   # parametrized tests take positional booleans
+    "PLR0911",  # test doubles mirror the branching of what they stand in for
+    "PLR0913",  # test builders take many keyword arguments with defaults
+    "PLR0917",  # ... some of them positional
     "PLR2004",  # literal values are the point of a test
     "S101",     # pytest uses assert
     "S603",     # tests run fixed commands to set up fixtures
@@ -57,7 +73,17 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["datadouble", "check_source", "make_tag"]
+known-first-party = [
+    "datadouble",
+    "datadouble_conformance",
+    "datadouble_postgres",
+    "datadouble_s3",
+    "check_source",
+    "make_tag",
+    "fakes",
+    "fake_engine",
+    "test_conformance",
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -66,20 +92,40 @@ convention = "google"
 python_version = "3.13"
 strict = true
 warn_unreachable = true
-files = ["core/src", "core/tests", "scripts", "tests"]
-mypy_path = "core/src:scripts"
+files = [
+    "core/src",
+    "core/tests",
+    "adapters/postgres/src",
+    "adapters/postgres/tests",
+    "adapters/s3/src",
+    "adapters/s3/tests",
+    "conformance/src",
+    "scripts",
+    "tests",
+]
+mypy_path = "core/src:core/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["core/src", "core/tests", "scripts", "tests"]
-extraPaths = ["scripts"]
+include = [
+    "core/src",
+    "core/tests",
+    "adapters/postgres/src",
+    "adapters/postgres/tests",
+    "adapters/s3/src",
+    "adapters/s3/tests",
+    "conformance/src",
+    "scripts",
+    "tests",
+]
+extraPaths = ["scripts", "core/tests", "adapters/postgres/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pytest.ini_options]
-testpaths = ["core/tests", "tests"]
+testpaths = ["core/tests", "adapters/postgres/tests", "adapters/s3/tests", "tests"]
 pythonpath = ["scripts"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 markers = [
@@ -89,7 +135,13 @@ xfail_strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["core/src/datadouble", "scripts"]
+relative_files = true  # reports name files from the repository root, wherever they ran
+source = [
+    "core/src/datadouble",
+    "adapters/postgres/src/datadouble_postgres",
+    "adapters/s3/src/datadouble_s3",
+    "scripts",
+]
 
 [tool.coverage.report]
 fail_under = 100

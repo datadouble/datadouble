@@ -18,14 +18,16 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 | `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons) | Host |
 | `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows` | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
-| `make test` | Unit tests, with the 100% branch coverage gate | Host |
-| `make test-integration` | The whole suite, integration tests included, in the default Compose group | Containers |
+| `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
+| `make test-integration` | The whole suite, integration and conformance tests included, in the default Compose group, with the 100% gate on every package | Containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 
 ## Test layers
 
-**Unit tests** live next to the code they test (`core/tests/`, `tests/scripts/`)
-and need nothing but Python. They must keep branch coverage at 100%. The only
+**Unit tests** live next to the code they test (`core/tests/`,
+`adapters/*/tests/`, `tests/scripts/`) and need nothing but Python. On the host
+they must keep branch coverage of the core and scripts at 100%; the Compose
+suite holds every package, adapters included, to 100%. The only
 lines excluded from coverage are `assert_never(...)` arms (which the type
 checkers prove unreachable), `if TYPE_CHECKING:` blocks and `__main__` guards.
 
@@ -33,8 +35,8 @@ checkers prove unreachable), `if TYPE_CHECKING:` blocks and `__main__` guards.
 Docker Compose services, which they reach through environment variables (for
 example `DATADOUBLE_TEST_POSTGRES_DSN`). `make test` deselects them.
 
-**Conformance suites** under `conformance/` arrive with the adapters (M1 on):
-every engine, CI/CD and agent skill adapter must pass its suite.
+**Conformance suites** under `conformance/` must pass for every engine adapter
+(see below), and for CI/CD and agent skill adapters as they arrive.
 
 ## Supported Python versions
 
@@ -58,13 +60,30 @@ container images to it is a separate decision; Dependabot does not propose it.
 
 Plain `docker compose up` starts the default group. Other groups are profiles
 that milestones add and that combine freely, for example
-`docker compose --profile mysql --profile s3 up`.
+`docker compose --profile mysql up`.
 
 | Group | Services | Since |
 |---|---|---|
-| default | Test runner, PostgreSQL 18 | M0 |
+| default | Test runner (PostgreSQL 18 binaries, Python from uv); PostgreSQL 18 with Pagila (`dev/postgres`); S3 (SeaweedFS) | M0, Pagila and S3 in M1 |
 
 The full list of planned groups is in the [v1 plan](docs/v1-plan.md#test-environment).
+
+The test runner is built on the same PostgreSQL image as the Pagila service, so
+it can start the throwaway clusters working databases live in, and runs as an
+unprivileged user because `initdb` refuses to run as root. Pagila is fetched
+when `dev/postgres` is built, at a pinned commit and checked against its
+SHA-256.
+
+## Conformance suites
+
+`conformance/` is the `datadouble-conformance` package. An engine adapter's
+tests provide a `harness` fixture (the engine, a spec over its sample data, a
+column that spec anonymizes, and a scratch source the suite may change) and
+declare `class TestConformance(EngineConformance)`. The suite checks catalog
+references, snapshot consistency, the strict-mode table, that both subset
+strategies produce identical restored images, a whole build from plan to store,
+a run killed with SIGKILL that resumes, and two image groups agreeing on
+anonymized values.
 
 ## Rules
 
@@ -90,7 +109,8 @@ The full list of planned groups is in the [v1 plan](docs/v1-plan.md#test-environ
 | CI | Integration tests (Docker Compose) | `make test-integration`, then uploads coverage to Codecov |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |
-| CodeQL, Dependency Review, Snyk Security, SonarQube Cloud, Scorecard | | Static analysis and dependency scanning |
+| SonarQube Cloud | sonar | `make test-integration` for coverage, then the scan |
+| CodeQL, Dependency Review, Snyk Security, Scorecard | | Static analysis and dependency scanning |
 
 Every job runs on a hardened runner that blocks outbound traffic except to the
 endpoints it lists. A job that starts failing in a setup step with a refused

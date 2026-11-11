@@ -93,10 +93,12 @@ result and signature reference, copied from its full manifest (which travels
 inside the image). It is read without downloading the image:
 
 ```
-export-store/billing/postgres-16/
-  0193a7c2.image.tar.zst     # the golden image, possibly many GB
-  0193a7c2.summary.json      # the image summary
-  channels/latest            # points at generation 0193a7c2
+export-store/shop/billing/postgres-18/
+  0193a7c21b4e9f30.physical.tar.gz   # one archive per format, possibly many GB
+  0193a7c21b4e9f30.logical.tar.gz
+  0193a7c21b4e9f30.verify.json       # the full verification report
+  0193a7c21b4e9f30.summary.json      # the image summary, written last
+  channels/latest                    # points at generation 0193a7c21b4e9f30
 ```
 
 `fetch` reads the channel and the image summary to decide whether anything newer

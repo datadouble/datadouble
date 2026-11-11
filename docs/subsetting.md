@@ -66,14 +66,37 @@ replicas usually forbid them), and lets the planner estimate size before any
 heavy reads. B is the engine; A is a shortcut the planner may choose when the
 graph is shallow, and both must produce identical row sets.
 
+`subset.strategy` (`auto`, `nested` or `keys`, also `--strategy`) chooses one.
+`auto` picks A when the tables' selections depend on each other without a
+cycle, and B otherwise. A followed child edge `users -> posts` does not by
+itself make a cycle: posts reached through it already have their user, so users
+only depend on posts chosen some other way (decision 51). Cycles in the schema,
+self-references and children that pull in further parents are true recursions
+and run with B.
+
+### References in detail
+
+- A **virtual reference** with `when` applies only to the child rows matching
+  it, in both directions: a followed child edge brings in only those rows, and
+  only those rows pull in parents.
+- **Fallbacks** are applied in `load`: `null` clears references whose parent is
+  missing, `stub` inserts a placeholder parent with the referenced key and
+  neutral values in its required columns, and `drop` is part of the selection
+  itself. A reference to an excluded or structure-only table must have one.
+- **Not yet supported** (decision 52): `drop` on a virtual reference with
+  `when`, and `stub` or `drop` on a reference that leaves an image group.
+
 ## One consistent snapshot
 
 Every read in a run sees the same point in time.
 
-- **PostgreSQL:** a coordinator connection calls `pg_export_snapshot()`; parallel
-  workers attach with `SET TRANSACTION SNAPSHOT`, and `pg_dump --snapshot=` uses it
-  for unfiltered tables. Filtered tables are read with `COPY (query) TO STDOUT` in
-  the same snapshot.
+- **PostgreSQL:** a coordinator connection opens a repeatable-read, read-only
+  transaction and calls `pg_export_snapshot()`. Key reads and every table's
+  rows (`COPY (query) TO STDOUT`) run in that transaction, and `pg_dump
+  --schema-only --snapshot=` writes the schema from the same point in time.
+  Parallel workers can attach with `SET TRANSACTION SNAPSHOT`. The catalog is
+  read again inside the snapshot, and the extract fails if it changed since
+  planning.
 - **MySQL:** `START TRANSACTION WITH CONSISTENT SNAPSHOT` covers one connection.
   Parallel workers on one snapshot need a brief global lock at start, or the
   extract runs single-connection.
