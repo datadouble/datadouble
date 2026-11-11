@@ -31,7 +31,7 @@ covers the whole estate.
 ## Shape of the tool
 
 ```
-plan → extract → load → transform → package → verify → store → promote → fetch → replicate → publish
+plan → extract → load → transform → package → verify → store → promote → fetch → replicate → announce
 ```
 
 - **Subsetting happens during extract**, pushed down to the source, so multi-terabyte

@@ -21,7 +21,9 @@ moves on only when they pass.
 6. Storage and replication adapters, for sourcing, cloning and replication:
    `filesystem`, `s3`, `btrfs`, `k8s-pv`, plus `docker-volume` for local and CI
    use.
-7. Publish adapters: `k8s-pv`, `k8s-secret`, `ci-outputs`, `dotenv`, `vault`.
+7. Announce adapters, which let consumers know where clones can be accessed, as
+   volumes or connection parameters: `k8s-pv`, `k8s-secret`, `ci-outputs`,
+   `dotenv`, `vault`.
 8. Operations: `promote`, `fetch`, `release`, `prune`, `activate`, in pool and
    on-demand modes.
 9. Golden-image signing with cosign keyless signing in `build`, checked by
@@ -181,7 +183,7 @@ differently shaped engine, before breadth.
 |---|---|---|
 | M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, the release script with its changelog gate, and the documentation site with its Design section | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request; the site builds with no broken links and is live on its domain |
 | M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
-| M2 | **Non-production side.** Promote, export store, sidecars, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), publish adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
+| M2 | **Non-production side.** Promote, export store, sidecars, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), announce adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
 | M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |
 | M4 | **MySQL, SQL Server, Oracle** | Each passes conformance; Jailer and Datadouble produce identical key sets on Sakila |
 | M5 | **Redis, Elasticsearch, OpenSearch** | Each passes conformance, including strict mode on keys or mapping fields |
