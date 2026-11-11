@@ -19,6 +19,30 @@ a per-run secret, so the same input gets the same fake value in every table and
 joins on columns such as email still match. Rules can require uniqueness, and
 the generator retries until a unique value is found or fails the run.
 
+```yaml
+anonymize:
+  customer:
+    email: {faker: email, unique: true}
+    last_name: {faker: last_name}
+    password: {hash: {length: 40}}          # hex, or a 32-bit integer in integer columns
+    card_number: {format_preserving: {luhn: true}}
+    notes: {null: {}}
+secrets:
+  anonymization_key: {env: ANONYMIZATION_KEY}   # optional; a random key per generation otherwise
+```
+
+The faker kinds are `first_name`, `last_name`, `name`, `email`, `user_name`,
+`phone_number`, `street_address`, `city`, `postcode`, `company`, `ipv4`, `url`,
+`text` and `date_of_birth`. Generated emails and URLs use the reserved
+`example.com`, `example.net` and `example.org` domains, phone numbers the
+fictional `555-01xx` range, and IP addresses the `192.0.2.0/24` documentation
+range, so the PII scan does not mistake them for real data.
+
+The faker, hash and format-preserving strategies work value by value: each
+distinct value of the column is read once and mapped in the Datadouble process,
+and the engine applies the mapping. Rules on primary or foreign key columns are
+refused for now (decision 52).
+
 ### Expressions
 
 Many anonymization needs are easiest to state as an expression over the row
@@ -101,3 +125,9 @@ verify:
 
 Allowed patterns are recorded in the manifest, and a value matching a detector
 that isn't covered by an allow pattern still fails verification.
+
+The scan reads every text column of the restored image and looks for emails
+outside the reserved example domains, card numbers that pass the Luhn check,
+US Social Security numbers in their valid ranges, and formatted phone numbers
+outside the fictional range. Its report gives counts per column and kind, never
+the values found (decision 55).

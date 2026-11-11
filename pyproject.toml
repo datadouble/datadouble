@@ -135,6 +135,7 @@ xfail_strict = true
 
 [tool.coverage.run]
 branch = true
+relative_files = true  # reports name files from the repository root, wherever they ran
 source = [
     "core/src/datadouble",
     "adapters/postgres/src/datadouble_postgres",

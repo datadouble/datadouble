@@ -144,18 +144,18 @@ Docker Compose profiles. Services without a profile start on plain
 
 | Group | Services | Notes |
 |---|---|---|
-| default | Test runner, PostgreSQL | Core and PostgreSQL tests |
+| default | Test runner, PostgreSQL with Pagila, S3 (SeaweedFS) | Core, PostgreSQL and S3 tests (decision 56) |
 | `mysql`, `mssql`, `oracle` | One engine each | SQL Server and Oracle images are amd64-only |
 | `mongodb`, `redis` | One engine each | |
 | `elasticsearch`, `opensearch` | Single-node clusters | |
-| `s3` | MinIO | Storage and export store |
+
 | `btrfs` | Privileged helper with a loop-mounted btrfs volume | Needs privileged Docker |
 | `k8s` | k3s in a container | k8s-pv, k8s-secret, Argo CD |
 | `ci-gitlab`, `ci-jenkins`, `ci-argocd` | CI systems for end-to-end tests | Heavy |
 
 ```
 docker compose up                                  # core + PostgreSQL
-docker compose --profile mysql --profile s3 up     # MySQL with an S3 export store
+docker compose --profile mysql up                  # MySQL as well
 docker compose --profile k8s --profile btrfs up    # replication back ends
 ```
 

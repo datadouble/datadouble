@@ -139,16 +139,29 @@ Every stage writes an artifact plus a manifest recording:
 Chaining is a single command:
 
 ```
-datadouble run plan,extract,load,transform,verify,package,store --spec prod.yml
+datadouble run plan,extract,load,transform,package,verify,store --spec prod.yml
 ```
 
-On a re-run, a stage whose input hashes match an existing artifact is skipped and
-its artifact reused. That gives resume-after-failure and cheap partial re-runs
-(for example, changing only the anonymization strategy re-runs from `transform`).
+A run belongs to a generation, and keeps its stages' artifacts and manifests
+under `<work>/<spec>/<generation>/`. Resuming a generation re-runs only the
+stages whose input hashes changed and skips the rest, reusing their artifacts.
+That gives resume-after-failure and cheap partial re-runs (for example, changing
+only the anonymization strategy re-runs from `transform`):
+
+```
+datadouble run plan,extract,load,transform,package,verify,store --spec prod.yml --resume 0193a7c21b4e9f30
+```
+
+The generation also fixes the run's anchor time (`as_of`, when the spec gives
+none) and its anonymization key, so a resumed run produces the same values.
+The work directory holds real personal data from `extract` on: it is production
+scratch space, like the working databases.
 
 Working space and storage are separate concerns. Live database files are only
 ever written to scratch space suited to them (local disk or strongly consistent
-volumes). Storage adapters only handle finished, immutable artifacts.
+volumes). Working databases are throwaway servers the engine adapter starts there,
+one per image group (decision 49). Storage adapters only handle finished,
+immutable artifacts.
 
 ## Interfaces
 
