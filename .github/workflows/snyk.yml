@@ -50,11 +50,12 @@ jobs:
         with:
           python-version: "3.13"
 
-      # Snyk reads a requirements file and the environment it describes.
+      # Snyk reads a requirements file and inspects the environment it
+      # describes with pip, which uv only puts in a virtualenv when seeded.
       - name: Export and install the locked dependencies
         run: |
           uv export --frozen --all-packages --no-hashes --no-emit-workspace --format requirements-txt -o requirements.txt
-          uv venv .snyk-venv
+          uv venv --seed .snyk-venv
           uv pip install --python .snyk-venv -r requirements.txt
 
       - name: Install Snyk
