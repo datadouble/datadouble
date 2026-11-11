@@ -28,7 +28,7 @@ dev = [
     "datadouble-conformance",
     "datadouble-postgres",
     "datadouble-s3",
-    "boto3-stubs[s3]>=1.40",
+    "boto3-stubs[s3]>=1.43.126",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
