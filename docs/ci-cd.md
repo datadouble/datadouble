@@ -81,8 +81,10 @@ that GitLab `allow_failure: exit_codes` recognizes).
 
 ### Image identity, channels and sidecars
 
-An image is identified by spec name, engine, target engine version and a
-**generation** (a unique ID assigned at build). Consumers usually select by
+An image is identified by spec name, image group (see
+[golden images](architecture.md#golden-images)), engine, target engine version
+and a **generation** (a unique ID assigned at build, shared by every image from
+that build). Consumers usually select by
 engine and engine version, since a copy must be started by a compatible server.
 
 Every store holds, next to each image, a small **sidecar manifest** that can be

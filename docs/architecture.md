@@ -13,9 +13,9 @@ plus three operations on existing images and copies: `release`, `prune` and
 |---|---|---|
 | plan | Subset spec (native or Jailer `.jm`), live catalog, catalog lock | Execution plan: per-table extraction queries, resolved excludes, strict-mode result, size estimate |
 | extract | Plan | Raw extract artifacts, all read from one consistent snapshot |
-| load | Extract artifacts | Populated working database (scratch space, never shared storage); `before_load` hooks run first |
+| load | Extract artifacts | One working database per image group (scratch space, never shared storage); `before_load` hooks run first |
 | transform | Working database | Anonymized working database; `after_transform` hooks run last |
-| package | Anonymized working database | Golden image: logical dump and/or physical data directory, plus manifest |
+| package | Anonymized working databases | One golden image per group and engine, in each requested format, plus manifests |
 | verify | Golden image, restored to scratch space | Verification report; a failing report stops the pipeline |
 | store | Verified golden image | Image and sidecar manifest written to one or more storage backends |
 | promote | Stored golden image | The image copied to the export store and a channel advanced; refused unless verification passed |
@@ -33,6 +33,73 @@ Not every run uses every stage. Stages group into jobs (build, promote, fetch,
 provision, release, prune, activate) that run in different places: everything up
 to `store` runs inside production, and only a verified golden image leaves it.
 See [CI/CD integration](ci-cd.md).
+
+## Golden images
+
+### Formats
+
+A golden image comes in one or both of two formats:
+
+- **physical:** the engine's own on-disk form, fastest to clone and start, but
+  tied to the server version
+- **logical:** a portable export, restorable into other server versions
+
+```yaml
+package:
+  formats: [physical, logical]   # at least one
+```
+
+The CLI can override it for one run (`--format logical`), which sets the same
+field in the JSON request. The field is part of the build's input hash and is
+recorded in the manifest. When the spec leaves it out, each engine produces
+every format it supports. Listing a format an engine can't produce fails the
+plan and names the formats that engine supports; there is no silent fallback.
+
+| Engine | physical | logical |
+|---|---|---|
+| PostgreSQL, MySQL, SQL Server, Oracle | Data directory | Native dump |
+| MongoDB | WiredTiger data directory | `mongodump` |
+| Redis | RDB file | Not offered |
+| Elasticsearch, OpenSearch | Snapshot repository | NDJSON export |
+| Salesforce | Not offered | Records and metadata |
+| Filesystem | The file tree | Not offered |
+
+### Several images from one build
+
+A spec can split its output into named groups, each becoming its own image:
+
+```yaml
+images:
+  all:     { include: ["*"] }                  # a combined image
+  billing: { include: ["billing", "billing_audit"] }
+  content: { include: ["cms.*"], requires: [billing] }
+```
+
+With no `images:` section there is one group containing everything.
+
+1. **One extract.** The plan, the consistent snapshot and the extract are
+   shared by every group, so the source is read once however many images come
+   out.
+2. **One working database per group.** `load` builds each group's working
+   database from the shared extract; `transform`, `package` and `verify` then
+   run per group.
+3. **Images that agree.** Anonymization is seeded once per run, so a value gets
+   the same replacement in every group, and all images from one build share a
+   generation. Consumers that need several groups together take the same
+   generation of each, or a group that already contains them; images are never
+   merged after the fact.
+4. **References between groups are checked at plan time.** A reference from
+   one group into another fails the plan unless the edge has a fallback (`null`
+   or `stub`) or the group declares `requires:` the other, in which case
+   `replicate` provisions the required images alongside it.
+5. **Independent life cycles.** Each image has its own manifest, identity and
+   channels, so it can be promoted, fetched, rolled back and pruned on its own.
+
+Groups match on whatever namespace an engine has: databases and schemas for
+relational engines and MongoDB, database numbers or key prefixes for Redis,
+index patterns for Elasticsearch and OpenSearch, object sets for Salesforce, and
+top-level directories for the filesystem adapter. A spec with several sources
+produces one image per engine per group, all sharing the generation.
 
 ## Adapters
 
