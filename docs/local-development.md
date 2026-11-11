@@ -34,10 +34,10 @@ Salesforce cannot run in a container. Three layers cover it:
    Bulk API export and load. This is a proven pattern in the Salesforce ecosystem
    (CumulusCI's test suite works this way with pytest-vcr and simple-salesforce).
    Requirements:
-   - Scrub OAuth tokens, session IDs, instance URLs and org IDs before committing.
-   - Support Bulk API 2.0's asynchronous polling, where the same request repeats
-     with different responses, through ordered, repeatable matching.
-   - Never assert on record IDs or timestamps; they differ per org.
+    - Scrub OAuth tokens, session IDs, instance URLs and org IDs before committing.
+    - Support Bulk API 2.0's asynchronous polling, where the same request repeats
+      with different responses, through ordered, repeatable matching.
+    - Never assert on record IDs or timestamps; they differ per org.
 2. **An in-memory fake behind a narrow interface.** The adapter's contact with
    Salesforce is limited to `describe`, `query`, `bulk_export` and `bulk_load`. A
    SQLite-backed fake implements those, with schemas from recorded `describe`
