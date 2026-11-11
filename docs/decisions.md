@@ -46,6 +46,7 @@
 | 40 | Golden image formats `physical` and `logical` are chosen in the spec (`package.formats`, CLI-overridable); omitted means every format the engine supports; an unsupported format fails the plan | Builds stay reproducible from spec and manifest, and no engine silently falls back |
 | 41 | One build can produce several images through named groups in the spec; the extract is shared, each group gets its own working database, and all images from a build share a generation; image identity includes the group | Small images that are easy to reason about, plus combined ones, from one snapshot and without merging images later |
 | 42 | Jenkins integration is a shared library in v1; a Jenkins plugin is a possible later addition | Avoids a Java plugin build and hosting process until users ask for it |
+| 43 | The documentation site is generated from `docs/*.md`, with Design and Project sections live from M0 and Using Datadouble added in M10 | The docs stay the single source of truth, and the public site shows the design before there is software to document |
 
 ## Open
 
