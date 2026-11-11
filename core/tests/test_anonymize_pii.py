@@ -49,7 +49,7 @@ def test_fake_values_look_right() -> None:
 
 def test_hash() -> None:
     a = Anonymizer(KEY)
-    assert a.hash("x", 12, ColumnKind.TEXT) == a.hash("x", 12, ColumnKind.TEXT)
+    assert a.hash("x", 12, ColumnKind.TEXT) == Anonymizer(KEY).hash("x", 12, ColumnKind.TEXT)
     assert len(a.hash("x", 12, ColumnKind.TEXT)) == 12
     number = int(a.hash("x", 12, ColumnKind.INTEGER))
     assert 0 <= number < 2**31
@@ -106,8 +106,9 @@ def test_mapping_fails_when_values_run_out() -> None:
 
 
 def test_new_key() -> None:
-    assert len(new_key()) == 32
-    assert new_key() != new_key()
+    first, second = new_key(), new_key()
+    assert len(first) == 32
+    assert first != second
 
 
 @pytest.mark.parametrize(

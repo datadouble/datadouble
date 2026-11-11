@@ -32,7 +32,6 @@ class Reference:
 
 
 _ARROW = re.compile(r"\s*->\s*")
-_COLUMN_LIST = re.compile(r"^(?P<table>.+)\.\((?P<columns>[^()]+)\)$")
 
 
 class Resolver:
@@ -104,10 +103,10 @@ class Resolver:
     def _side(self, text: str) -> tuple[Table, tuple[ColumnName, ...] | None]:
         """A table, or a table with columns: ``t``, ``t.c`` or ``t.(c1, c2)``."""
         text = text.strip()
-        listed = _COLUMN_LIST.match(text)
-        if listed:
-            table = self.table(listed["table"])
-            names = tuple(self.column_of(table, part).name for part in listed["columns"].split(","))
+        table_text, opened, listed = text.rpartition(".(")
+        if opened and table_text and listed.endswith(")") and "(" not in listed[:-1]:
+            table = self.table(table_text)
+            names = tuple(self.column_of(table, part).name for part in listed[:-1].split(","))
             return table, names
         whole = self._find(text)
         if whole is not None:
