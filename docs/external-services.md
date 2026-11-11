@@ -126,11 +126,30 @@ request lists them, and they need pending publishers before the first release.
 
 ## Snyk
 
+Snyk tokens belong to a user, not an organization, and CI scans run under that
+user's default organization, so no Snyk organization needs creating.
+
 1. Sign in at `app.snyk.io` with GitHub.
-2. Create an organization named `datadouble` (or use your personal one).
-3. Copy an API token: an organization service account token where your plan
-   offers one, otherwise your personal API token from account settings.
-4. Save it as `SNYK_TOKEN`.
+2. Open your personal **account settings** and create a personal access token
+   with an expiry date. Note the expiry.
+3. Save it as `SNYK_TOKEN`.
+
+Snyk allows three personal access tokens per user. A maintainer who already
+uses all three for other repositories can share one token across them: set the
+same value in each repository's `SNYK_TOKEN`, confirm each repository's Snyk
+workflow still authenticates (re-running its latest run uses the new value),
+then revoke the old tokens. Rotating the shared token later is the same loop:
+
+```bash
+read -rs -p "Snyk token: " T; echo
+for r in datadouble/datadouble OTHER/REPO; do
+  printf %s "$T" | gh secret set SNYK_TOKEN -R "$r" && echo "set: $r"
+done
+unset T
+```
+
+A red Snyk check can mean either findings or a rejected token, so read the log
+before assuming which.
 
 CI runs Snyk itself, so the Snyk GitHub integration is optional.
 
