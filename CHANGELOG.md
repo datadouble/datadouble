@@ -18,3 +18,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keyless signing and published with SBOM and build provenance attestations.
 - **A documentation site** at <https://datadouble.tightlinesoftware.com/>,
   generated from the design documents.
+- **Python support:** 3.13 or later, tested on 3.13, 3.14 and 3.15. The
+  container image runs Python 3.15.

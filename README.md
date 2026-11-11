@@ -73,7 +73,7 @@ version 1).
 Requires uv, Docker with Compose, GNU make and actionlint.
 
 ```
-uv sync            # Python 3.13 and every development tool
+uv sync            # Python and every development tool
 make check         # lint, types and unit tests
 make test-integration
 make docs

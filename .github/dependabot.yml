@@ -39,6 +39,11 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    ignore:
+      # Moving the images to a new CPython release is a decision (see
+      # docs/decisions.md), made together with the compatibility matrix in CI.
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
 
   - package-ecosystem: docker-compose
     directory: /
