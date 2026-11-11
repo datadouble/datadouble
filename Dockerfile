@@ -30,9 +30,10 @@ RUN uv sync --no-dev --package datadouble --no-editable
 
 FROM postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42 AS postgres
 # pgvector because Pagila uses it: working databases need the source's
-# extensions. git for the source checker's tests.
+# extensions. git for the source checker's tests, btrfs-progs for the btrfs
+# replicate adapter.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends git postgresql-18-pgvector \
+    && apt-get install --yes --no-install-recommends btrfs-progs git postgresql-18-pgvector \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=uv /uv /uvx /usr/local/bin/
 ENV UV_COMPILE_BYTECODE=1 \
@@ -45,6 +46,19 @@ RUN uv python install 3.15
 WORKDIR /src
 
 FROM postgres AS test
+# The docker command (static) for the Docker replicate adapter, cosign for
+# signing images and kubectl for the Kubernetes adapters, all pinned.
+COPY --from=docker:29-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d \
+    /usr/local/bin/docker /usr/local/bin/docker
+ADD --chmod=0755 \
+    --checksum=sha256:424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa \
+    https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 \
+    /usr/local/bin/cosign
+ADD --chmod=0755 \
+    --checksum=sha256:c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4 \
+    https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl \
+    /usr/local/bin/kubectl
+
 # initdb refuses to run as root, so the suite runs as an ordinary user.
 RUN useradd --uid 10001 --user-group --create-home --shell /usr/sbin/nologin tester \
     && install --directory --owner tester --group tester /src /reports
@@ -52,8 +66,12 @@ USER tester
 COPY --chown=tester:tester pyproject.toml uv.lock ./
 COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
 COPY --chown=tester:tester core/src/datadouble/__init__.py core/src/datadouble/
+COPY --chown=tester:tester adapters/btrfs/pyproject.toml adapters/btrfs/README.md adapters/btrfs/LICENSE adapters/btrfs/
+COPY --chown=tester:tester adapters/docker/pyproject.toml adapters/docker/README.md adapters/docker/LICENSE adapters/docker/
+COPY --chown=tester:tester adapters/kubernetes/pyproject.toml adapters/kubernetes/README.md adapters/kubernetes/LICENSE adapters/kubernetes/
 COPY --chown=tester:tester adapters/postgres/pyproject.toml adapters/postgres/README.md adapters/postgres/LICENSE adapters/postgres/
 COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
+COPY --chown=tester:tester adapters/vault/pyproject.toml adapters/vault/README.md adapters/vault/LICENSE adapters/vault/
 COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/
 RUN uv sync --no-install-workspace
 COPY --chown=tester:tester . .

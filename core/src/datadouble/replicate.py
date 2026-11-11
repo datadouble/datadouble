@@ -57,6 +57,17 @@ class CopyKind(StrEnum):
     """A running server with an endpoint."""
 
 
+class ClaimState(StrEnum):
+    """What a replicate adapter can see of a copy's consumer."""
+
+    UNKNOWN = "unknown"
+    """The adapter cannot tell; ``claim`` records claims."""
+    FREE = "free"
+    CLAIMED = "claimed"
+    RETURNED = "returned"
+    """The consumer is done with it (a deleted Kubernetes claim): remove the copy."""
+
+
 class CopyState(StrEnum):
     """Whether a copy is finished."""
 
@@ -117,8 +128,8 @@ class Replicator(Protocol):
         """Remove a copy, complete or not; removing one that is gone is not an error."""
         ...
 
-    def claimed(self, copy: Copy, /) -> bool | None:
-        """Whether a consumer has taken the copy by the adapter's own means, if it knows."""
+    def claim_state(self, copy: Copy, /) -> ClaimState:
+        """Whether a consumer has taken the copy by the adapter's own means, if it can tell."""
         ...
 
 
@@ -257,12 +268,21 @@ class Replication:
         self.removed.append(copy)
 
     def tidy(self, line: Line) -> list[Copy]:
-        """Remove copies that never completed, and record claims the adapter observed."""
+        """Remove copies that never completed or were returned; record observed claims."""
         copies = line.load()
-        for copy in [c for c in copies if c.state is CopyState.CREATING]:
+        states = {
+            copy.id: self.replicator.claim_state(copy)
+            for copy in copies
+            if copy.state is CopyState.READY
+        }
+        for copy in [
+            c
+            for c in copies
+            if c.state is CopyState.CREATING or states.get(c.id) is ClaimState.RETURNED
+        ]:
             self.remove(line, copies, copy)
         for index, copy in enumerate(copies):
-            if not copy.claimed and self.replicator.claimed(copy):
+            if not copy.claimed and states.get(copy.id) is ClaimState.CLAIMED:
                 copies[index] = copy.model_copy(update={"claimed": True})
         line.save(copies)
         return copies
@@ -421,9 +441,9 @@ class FilesystemReplicator:
         for path in (self.root / copy.id, self.root / f".{copy.id}.partial"):
             shutil.rmtree(path, ignore_errors=True)
 
-    def claimed(self, _copy: Copy, /) -> bool | None:
+    def claim_state(self, _copy: Copy, /) -> ClaimState:
         """Claims are recorded by ``claim``; the filesystem cannot tell."""
-        return None
+        return ClaimState.UNKNOWN
 
 
 def filesystem_replicator(settings: Mapping[str, JsonValue]) -> Replicator:

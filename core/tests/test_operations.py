@@ -34,6 +34,7 @@ from datadouble.promote import PromoteError, promote
 from datadouble.prune import PruneError, PruneTarget, prune
 from datadouble.registry import Registry
 from datadouble.replicate import (
+    ClaimState,
     Copy,
     CopyKind,
     FilesystemReplicateSettings,
@@ -460,20 +461,29 @@ def test_claims(tmp_path: Path, registry: Registry) -> None:
 class Observed(FilesystemReplicator):
     """An adapter that sees claims itself, as Kubernetes does through bound volumes."""
 
-    def claimed(self, _copy: Copy, /) -> bool | None:
-        return True
+    def __init__(self, settings: FilesystemReplicateSettings, states: list[ClaimState]) -> None:
+        super().__init__(settings)
+        self.states = states
+
+    def claim_state(self, _copy: Copy, /) -> ClaimState:
+        return self.states.pop(0) if self.states else ClaimState.FREE
 
 
 def test_claims_the_adapter_observes(tmp_path: Path, registry: Registry) -> None:
-    spec = staged(tmp_path, registry, "0000000000010001", size=1)
+    spec = staged(tmp_path, registry, "0000000000010001", size=2)
     replicate(spec, registry, Options())
-    observed = Observed(FilesystemReplicateSettings(path=tmp_path / "copies"))
+    observed = Observed(
+        FilesystemReplicateSettings(path=tmp_path / "copies"),
+        [ClaimState.CLAIMED, ClaimState.RETURNED],
+    )
     wired = Registry(
         engines={}, stores=registry.stores, replicators={"filesystem": lambda _s: observed}
     )
     result = replicate(spec, wired, Options())
+    # One copy was claimed and the other returned: two fresh copies refill the pool.
     assert sum(c.claimed for c in result.copies) == 1
-    assert len(result.created) == 1
+    assert len(result.removed) == 1
+    assert len(result.created) == 2
 
 
 def test_replicate_errors(tmp_path: Path, registry: Registry) -> None:

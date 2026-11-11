@@ -103,7 +103,8 @@ export-store/shop/billing/postgres-18/
 
 `fetch` reads the channel and the image summary to decide whether anything newer
 exists, so running it every few minutes is cheap; it downloads an image only
-when there is one, then checks it against the summary's hashes.
+when there is one, then checks its signature (decision 58) and the summary's
+hashes.
 
 Images are addressed through **channels**: named, movable pointers such as
 `latest`. `promote` advances a channel in the export store; `fetch` advances one
@@ -142,6 +143,17 @@ produces:
 - **Instance:** a running server with an endpoint (host, port, database, and a
   reference to credentials).
 
+| Replicate adapter | Copies | Claims |
+|---|---|---|
+| filesystem | A directory, with shared blocks where the filesystem allows | `datadouble claim` |
+| btrfs | A subvolume of reflinked files (decision 63) | `datadouble claim` |
+| docker-volume | A Docker volume, or a container running the engine's server on one (decision 62) | `datadouble claim` |
+| k8s-pv | A directory and a PersistentVolume for it | A bound claim; a released volume is removed and replaced |
+
+In pool mode, consumers outside Kubernetes take a copy with `datadouble claim
+--owner NAME` and give it back with `datadouble release --owner NAME`
+(decision 60).
+
 ### announce
 
 `announce` lets consumers know where database clones can be accessed, either as volumes or as connection parameters. It never writes data: `replicate` has already made the
@@ -156,26 +168,29 @@ provenance (image ID, generation, build time).
 
 | Announce adapter | Writes | For |
 |---|---|---|
-| k8s-pv | A PersistentVolume per volume copy, with labels consumers match in a PersistentVolumeClaim selector | Pool mode on Kubernetes |
-| k8s-secret | A Secret (and optionally a Service) per instance copy | Instance copies on Kubernetes |
-| ci-outputs | Job outputs of the running CI system, through its CI/CD adapter | On-demand copies in CI |
-| vault | A Vault KV entry per copy | Any |
-| dotenv | A dotenv file | Local and simple CI use |
+| k8s-secret | A Secret per copy, with its location and, for instances, credentials | Instance copies on Kubernetes |
+| ci-outputs | Job outputs of the running CI system: `GITHUB_OUTPUT`, a GitLab dotenv report, or a JSON file | On-demand copies in CI |
+| vault | A Vault (or OpenBao) KV v2 secret per copy | Any |
+| dotenv | A dotenv file, readable only by its owner | Local and simple CI use |
+
+On Kubernetes, a `k8s-pv` copy's PersistentVolume, labelled with the copy's
+spec, group, engine version and generation, is itself the announcement
+consumers match in a PersistentVolumeClaim selector (decision 61).
 
 A clone's credentials go only to secret-capable targets (`k8s-secret`,
-`vault`, the CI system's masked variables). `ci-outputs` announces the endpoint
-and a reference to the credentials, because job outputs on most systems are not
-secret.
+`vault`, `dotenv`). `ci-outputs` announces the endpoint without them, because
+job outputs on most systems are not secret.
 
 ### release
 
 - **On-demand copies** are released by copy ID or owner (the normal teardown
   path), or by `--expired` for a scheduled sweep of copies whose teardown never
   ran.
-- **Pool copies** are recycled by generation. When a newer generation is
-  active, unclaimed copies of older generations are replaced one for one as new
-  copies are made, so the pool never empties. An all-at-once mode exists for
-  urgent replacement. Claimed copies belong to their consumer (for Kubernetes,
+- **Pool copies** are recycled by generation. When another generation becomes
+  active (a newer one, or an older one after `activate`), unclaimed copies of
+  other generations are replaced one for one as new copies are made, so the
+  pool never empties. An all-at-once mode (`--all-at-once`) exists for urgent
+  replacement. Claimed copies belong to their consumer (for Kubernetes,
   a `Delete` reclaim policy removes the volume when the claim is deleted).
 - Incomplete copies are always removed.
 

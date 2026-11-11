@@ -131,10 +131,11 @@ jobs:
         with:
           egress-policy: block
           # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
-          # PostgreSQL, Python and SeaweedFS images, GHCR for the uv image,
-          # Debian and the PostgreSQL apt repository for git and pgvector,
-          # GitHub release assets for uv's Python builds, raw GitHub for the
-          # pinned Pagila files, PyPI for the workspace, Codecov for the upload.
+          # PostgreSQL, Python, SeaweedFS, Docker and OpenBao images, GHCR for
+          # the uv image, Debian and the PostgreSQL apt repository for git,
+          # btrfs-progs and pgvector, GitHub release assets for uv's Python
+          # builds and cosign, dl.k8s.io for kubectl, raw GitHub for the pinned
+          # Pagila files, PyPI for the workspace, Codecov for the upload.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -143,6 +144,8 @@ jobs:
             objects.githubusercontent.com:443
             apt.postgresql.org:80
             apt.postgresql.org:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -183,6 +186,53 @@ jobs:
           files: ./.reports/coverage.xml
           token: ${{ env.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  privileged:
+    # The opt-in Compose groups that need privileged containers: k3s for the
+    # Kubernetes adapters, and a loop-mounted btrfs filesystem.
+    name: ${{ matrix.group }} adapters (privileged)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [k8s, btrfs]
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # As the integration job, which builds the same test image; the k3s
+          # image also comes from Docker Hub.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            apt.postgresql.org:80
+            apt.postgresql.org:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            deb.debian.org:80
+            deb.debian.org:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the group
+        env:
+          GROUP: ${{ matrix.group }}
+        run: make "test-${GROUP}"
 
   docs:
     name: Documentation site

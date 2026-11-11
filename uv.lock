@@ -9,9 +9,13 @@ resolution-markers = [
 [manifest]
 members = [
     "datadouble",
+    "datadouble-btrfs",
     "datadouble-conformance",
+    "datadouble-docker",
+    "datadouble-kubernetes",
     "datadouble-postgres",
     "datadouble-s3",
+    "datadouble-vault",
     "datadouble-workspace",
 ]
 
@@ -275,6 +279,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-btrfs"
+version = "0.0.0"
+source = { editable = "adapters/btrfs" }
+dependencies = [
+    { name = "datadouble" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "datadouble", editable = "core" }]
+
+[[package]]
 name = "datadouble-conformance"
 version = "0.0.0"
 source = { editable = "conformance" }
@@ -288,6 +303,28 @@ requires-dist = [
     { name = "datadouble", editable = "core" },
     { name = "pytest", specifier = ">=8.4" },
 ]
+
+[[package]]
+name = "datadouble-docker"
+version = "0.0.0"
+source = { editable = "adapters/docker" }
+dependencies = [
+    { name = "datadouble" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "datadouble", editable = "core" }]
+
+[[package]]
+name = "datadouble-kubernetes"
+version = "0.0.0"
+source = { editable = "adapters/kubernetes" }
+dependencies = [
+    { name = "datadouble" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "datadouble", editable = "core" }]
 
 [[package]]
 name = "datadouble-postgres"
@@ -320,6 +357,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-vault"
+version = "0.0.0"
+source = { editable = "adapters/vault" }
+dependencies = [
+    { name = "datadouble" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "datadouble", editable = "core" }]
+
+[[package]]
 name = "datadouble-workspace"
 version = "0.0.0"
 source = { virtual = "." }
@@ -328,9 +376,13 @@ source = { virtual = "." }
 dev = [
     { name = "boto3-stubs", extra = ["s3"] },
     { name = "datadouble" },
+    { name = "datadouble-btrfs" },
     { name = "datadouble-conformance" },
+    { name = "datadouble-docker" },
+    { name = "datadouble-kubernetes" },
     { name = "datadouble-postgres" },
     { name = "datadouble-s3" },
+    { name = "datadouble-vault" },
     { name = "mypy" },
     { name = "pyright", extra = ["nodejs"] },
     { name = "pytest" },
@@ -348,9 +400,13 @@ docs = [
 dev = [
     { name = "boto3-stubs", extras = ["s3"], specifier = ">=1.43.126" },
     { name = "datadouble", editable = "core" },
+    { name = "datadouble-btrfs", editable = "adapters/btrfs" },
     { name = "datadouble-conformance", editable = "conformance" },
+    { name = "datadouble-docker", editable = "adapters/docker" },
+    { name = "datadouble-kubernetes", editable = "adapters/kubernetes" },
     { name = "datadouble-postgres", editable = "adapters/postgres" },
     { name = "datadouble-s3", editable = "adapters/s3" },
+    { name = "datadouble-vault", editable = "adapters/vault" },
     { name = "mypy", specifier = ">=1.18" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=8.4" },

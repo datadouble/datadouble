@@ -171,6 +171,26 @@ class WorkingDatabases(Protocol):
         ...
 
 
+class ServerPlan(_Model):
+    """How to run a server on a copy of a physical image, in a container.
+
+    The copy is mounted at ``mount``, owned by ``owner``; ``command`` runs as
+    that owner, with the copy's password in the environment variable
+    ``DATADOUBLE_PASSWORD``, and must leave a server listening on ``port``
+    that accepts ``user`` with that password over the network. ``ready``
+    exits successfully once it does.
+    """
+
+    image: str
+    mount: str
+    owner: str
+    command: tuple[str, ...]
+    ready: tuple[str, ...]
+    port: int
+    database: str
+    user: str
+
+
 class EngineAdapter(Protocol):
     """An engine: its capabilities, the source side and the scratch side."""
 
@@ -189,4 +209,11 @@ class EngineAdapter(Protocol):
 
     def working(self, scratch: Path) -> WorkingDatabases:
         """Working databases under ``scratch``, which only holds files this run owns."""
+        ...
+
+    def server(self, image: Path, server_image: str | None) -> ServerPlan:
+        """How to serve a copy of the unpacked physical image ``image``.
+
+        ``server_image`` overrides the container image the engine would choose.
+        """
         ...

@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-k8s test-btrfs docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -33,6 +33,19 @@ test-integration:
 	status=$$?; \
 	docker compose cp test:/reports/coverage.xml .reports/coverage.xml || true; \
 	docker compose down --volumes; \
+	exit $$status
+
+# Opt-in groups that need privileged containers: k3s, and a loop-mounted btrfs.
+test-k8s:
+	docker compose --profile k8s up --build --abort-on-container-exit --exit-code-from test-k8s k3s test-k8s; \
+	status=$$?; \
+	docker compose --profile k8s down --volumes; \
+	exit $$status
+
+test-btrfs:
+	docker compose --profile btrfs up --build --abort-on-container-exit --exit-code-from test-btrfs test-btrfs; \
+	status=$$?; \
+	docker compose --profile btrfs down --volumes; \
 	exit $$status
 
 docs:

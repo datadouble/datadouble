@@ -25,6 +25,7 @@ from datadouble.engine import (
     EngineError,
     ExtractResult,
     RestoredImage,
+    ServerPlan,
     Snapshot,
     SourceSession,
     TableCount,
@@ -277,6 +278,18 @@ class FakeEngine:
 
     def working(self, scratch: Path) -> WorkingDatabases:
         return FakeWorking(self, scratch)
+
+    def server(self, image: Path, server_image: str | None) -> ServerPlan:
+        return ServerPlan(
+            image=server_image or "fake-server",
+            mount="/data",
+            owner="1:1",
+            command=("serve",),
+            ready=("true",),
+            port=1,
+            database=image.name,
+            user="fake",
+        )
 
 
 def check_protocols(engine: FakeEngine) -> EngineAdapter:
