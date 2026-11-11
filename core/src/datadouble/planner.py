@@ -253,6 +253,7 @@ class _Planner:
                     parent_columns=parent_columns,
                     when=virtual.when,
                     virtual=True,
+                    parent_unique=parent_columns == reference.parent.primary_key,
                 )
             )
         return edges
@@ -319,6 +320,11 @@ class _Planner:
                 )
         if edge.mode is EdgeMode.STUB:
             self.check_stub(edge, parent_keeps_rows=parent_keeps_rows)
+        if edge.mode is EdgeMode.DROP and edge.when is not None:
+            self.problems.append(
+                f"{edge.name}: on_missing drop is not supported on a reference with `when`; "
+                "use on_missing null"
+            )
 
     def check_stub(self, edge: Edge, *, parent_keeps_rows: bool) -> None:
         parent = self.catalog.table(edge.parent)

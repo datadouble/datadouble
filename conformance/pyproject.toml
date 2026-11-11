@@ -1,0 +1,21 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+[project]
+name = "datadouble-conformance"
+# All packages share one version until 1.0 (decision 38).
+version = "0.0.0"
+description = "Conformance suites that every Datadouble adapter must pass"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tight Line LLC" }]
+requires-python = ">=3.13"
+dependencies = ["datadouble", "pytest>=8.4"]
+
+[build-system]
+requires = ["hatchling>=1.33.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datadouble_conformance"]

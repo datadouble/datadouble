@@ -66,6 +66,8 @@ class Edge:
     when: str | None = None
     """For virtual references: only child rows matching this native predicate refer."""
     virtual: bool = False
+    parent_unique: bool = True
+    """Whether ``parent_columns`` identify one parent row (a key), as declared ones do."""
 
 
 class TableRule(_Model):
@@ -218,6 +220,11 @@ class Graph:
         return True
 
 
+def _when(edge: Edge, condition: Condition) -> Condition:
+    """Restrict a child-side condition to the rows a conditional reference applies to."""
+    return all_of([Predicate(edge.when), condition]) if edge.when else condition
+
+
 # Strategy A
 #
 # A followed child edge parent -> child also lets the child pull in parents
@@ -226,7 +233,7 @@ class Graph:
 # parent only needs the child rows chosen some other way: that partial
 # condition is inlined instead of referring to the child's whole selection.
 # This holds when the referenced columns identify one parent row, as declared
-# foreign keys do; virtual references keep the plain dependency.
+# foreign keys and virtual references to a primary key do.
 
 
 def _nested(graph: Graph, table: TableName, skip: Edge | None, stack: frozenset[Edge]) -> Condition:
@@ -237,9 +244,11 @@ def _nested(graph: Graph, table: TableName, skip: Edge | None, stack: frozenset[
         return AllRows()
     down, up, drop = graph.incoming(table)
     sources: list[Condition] = [Predicate(rule.seed)] if rule.seed else []
-    sources.extend(SelectedBy(e.columns, e.parent, e.parent_columns) for e in down if e != skip)
+    sources.extend(
+        _when(e, SelectedBy(e.columns, e.parent, e.parent_columns)) for e in down if e != skip
+    )
     for e in up:
-        inline = e.down and not e.virtual and e not in stack
+        inline = e.down and e.parent_unique and e not in stack
         partial = _nested(graph, e.child, e, stack | {e}) if inline else None
         sources.append(SelectedBy(e.parent_columns, e.child, e.columns, e.when, partial))
     return all_of(
@@ -321,7 +330,9 @@ class _KeyState:
             return AllRows()
         down, up, drop = graph.incoming(table)
         sources: list[Condition] = [Predicate(rule.seed)] if rule.seed else []
-        sources.extend(ValuesIn(e.columns, frozenset(self.values.get(e, ()))) for e in down)
+        sources.extend(
+            _when(e, ValuesIn(e.columns, frozenset(self.values.get(e, ())))) for e in down
+        )
         sources.extend(ValuesIn(e.parent_columns, frozenset(self.values.get(e, ()))) for e in up)
         return all_of(
             [

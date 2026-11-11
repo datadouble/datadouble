@@ -52,6 +52,37 @@ ORDER BY 1, 2
 """
 
 
+_FOREIGN_KEYS = """
+SELECT n.nspname, c.relname, con.conname,
+       rn.nspname, rc.relname, tn.nspname, tc.relname
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_class rc
+  ON rc.oid = coalesce(pg_catalog.pg_partition_root(con.conrelid), con.conrelid)
+JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace
+JOIN pg_catalog.pg_class tc
+  ON tc.oid = coalesce(pg_catalog.pg_partition_root(con.confrelid), con.confrelid)
+JOIN pg_catalog.pg_namespace tn ON tn.oid = tc.relnamespace
+WHERE con.contype = 'f'
+ORDER BY 1, 2, 3
+"""
+
+
+class Constraint(BaseModel):
+    """A foreign-key constraint as ``pg_dump`` writes it, on a table or a partition."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    namespace: str
+    table: str
+    name: str
+    child: TableName
+    """The table it belongs to, or that table's partitioned root."""
+    parent: TableName
+    """The table it refers to, or that table's partitioned root."""
+
+
 class ExtractedTable(BaseModel):
     """One table's data file in an extract."""
 
@@ -74,6 +105,8 @@ class ExtractIndex(BaseModel):
     """Partitioned tables, read without ``ONLY``."""
     omitted_views: tuple[TableName, ...]
     """Views that depend on excluded tables, left out of every working database."""
+    constraints: tuple[Constraint, ...]
+    """Every foreign-key constraint, including those declared only on partitions."""
 
     def table(self, name: TableName) -> ExtractedTable | None:
         """The extracted table called ``name``."""
@@ -144,11 +177,13 @@ class PostgresSnapshot:
             rows = self._copy_out(table, query.text, query.params, directory / file)
             tables.append(ExtractedTable(table=table, file=file, columns=names, rows=rows))
         omitted = self._dependent_views(excluded)
+        constraints = self._constraints()
         index_file = ExtractIndex(
             database=self.session.database,
             tables=tuple(tables),
             partitioned=tuple(sorted(physical.partitioned)),
             omitted_views=omitted,
+            constraints=constraints,
         )
         (directory / "index.json").write_text(index_file.model_dump_json(indent=2), "utf-8")
         version = str(self.connection.info.parameter_status("server_version") or "")
@@ -171,6 +206,20 @@ class PostgresSnapshot:
                 return cursor.rowcount
         except psycopg.Error as error:
             raise database_error(error, f"extracting {table}") from None
+
+    def _constraints(self) -> tuple[Constraint, ...]:
+        with self.connection.cursor() as cursor:
+            cursor.execute(_FOREIGN_KEYS)
+            return tuple(
+                Constraint(
+                    namespace=str(row[0]),
+                    table=str(row[1]),
+                    name=str(row[2]),
+                    child=TableName.of(str(row[3]), str(row[4])),
+                    parent=TableName.of(str(row[5]), str(row[6])),
+                )
+                for row in cursor.fetchall()
+            )
 
     def _dependent_views(self, excluded: frozenset[TableName]) -> tuple[TableName, ...]:
         if not excluded:

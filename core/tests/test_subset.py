@@ -164,6 +164,33 @@ def test_virtual_reference_pulls_parents_only_where_it_applies(blog: FakeSource)
     assert both(graph, blog) == {"users": [2, 5], "posts": [12, 13], "events": [200, 201, 202]}
 
 
+def test_followed_virtual_references_apply_their_condition(blog: FakeSource) -> None:
+    virtual = edge("events", "subject_id", "posts", when="subject_type = 'Post'", down=True)
+    graph = Graph(rules("posts", "events", seeds={"posts": "id >= 12"}), (virtual,))
+    # Event 201 has subject_id 6, but it refers to a user, not post 6.
+    assert both(graph, blog) == {"posts": [12, 13], "events": [200, 202]}
+
+
+def test_references_to_non_keys_are_not_inlined(blog: FakeSource) -> None:
+    keyed = edge("events", "subject_id", "posts", when="subject_type = 'Post'", down=True)
+    loose = Edge(
+        name=keyed.name,
+        child=keyed.child,
+        columns=keyed.columns,
+        parent=keyed.parent,
+        parent_columns=keyed.parent_columns,
+        down=True,
+        when=keyed.when,
+        virtual=True,
+        parent_unique=False,
+    )
+    assert Graph(rules("posts", "events", seeds={"posts": "id = 12"}), (keyed,)).is_acyclic()
+    assert not Graph(rules("posts", "events", seeds={"posts": "id = 12"}), (loose,)).is_acyclic()
+    assert key_conditions(
+        Graph(rules("posts", "events", seeds={"posts": "id = 12"}), (loose,)), blog
+    )
+
+
 def test_follow_all_takes_the_whole_parent(blog: FakeSource) -> None:
     graph = Graph(
         rules("categories", "posts", seeds={"posts": "id = 12"}),

@@ -27,7 +27,7 @@ from datadouble.engine import EngineError
 from datadouble_postgres.errors import tool_error
 
 SUPERUSER = "postgres"
-_VERSION = re.compile(r"(\d+)(?:\.(\d+))?")
+_VERSION = re.compile(r"\(PostgreSQL\) (\d+(?:\.\d+)?)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,36 +56,33 @@ class Binaries:
     def version(self) -> str:
         """The full server version, such as ``18.1``."""
         output = self.run("postgres", ["--version"])
-        match = _VERSION.search(output.rsplit(")", 1)[-1])
+        match = _VERSION.search(output)
         if match is None:
             message = f"cannot read the PostgreSQL version from {output.strip()!r}"
             raise EngineError(message)
-        return match.group(0)
+        return match.group(1)
 
 
-def find_binaries(configured: Path | None = None) -> Binaries:
-    """The configured binaries, or the newest version installed in the usual places."""
+def _major(bindir: Path) -> int:
+    """The major version in ``.../postgresql/<major>/bin``, or 0."""
+    name = bindir.parent.name
+    return int(name) if name.isdigit() else 0
+
+
+def find_binaries(installed: Path = Path("/usr/lib/postgresql")) -> Binaries:
+    """``DATADOUBLE_POSTGRES_BINDIR``, else the newest under ``installed``, else ``PATH``."""
     candidates: list[Path] = []
-    if configured is not None:
-        candidates.append(configured)
-    elif env := os.environ.get("DATADOUBLE_POSTGRES_BINDIR"):
-        candidates.append(Path(env))
+    if configured := os.environ.get("DATADOUBLE_POSTGRES_BINDIR"):
+        candidates.append(Path(configured))
     else:
-        installed = sorted(
-            Path("/usr/lib/postgresql").glob("*/bin"),
-            key=lambda path: int(path.parent.name) if path.parent.name.isdigit() else 0,
-            reverse=True,
-        )
-        candidates.extend(installed)
-        on_path = shutil.which("initdb")
-        if on_path:
+        candidates.extend(sorted(installed.glob("*/bin"), key=_major, reverse=True))
+        if on_path := shutil.which("initdb"):
             candidates.append(Path(on_path).parent)
     for candidate in candidates:
         if (candidate / "initdb").is_file() and (candidate / "pg_dump").is_file():
             return Binaries(candidate)
     message = (
-        "PostgreSQL server binaries were not found; install them, or set "
-        "DATADOUBLE_POSTGRES_BINDIR or the connection's `binaries` setting"
+        "PostgreSQL server binaries were not found; install them or set DATADOUBLE_POSTGRES_BINDIR"
     )
     raise EngineError(message)
 

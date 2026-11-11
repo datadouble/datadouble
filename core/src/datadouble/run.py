@@ -248,6 +248,19 @@ class Run:
             raise RunError(message)
         return found
 
+    def _discard(self, directory: Path) -> None:
+        """Clear an earlier attempt's directory.
+
+        It is moved aside first: a process the interrupted attempt started may
+        still be writing into it, and must not get in the way of the new attempt.
+        """
+        if self._working is not None:
+            self._working.release(directory)
+        stale = self.root / ".stale" / f"{directory.name}-{time.time_ns()}"
+        stale.parent.mkdir(exist_ok=True)
+        directory.rename(stale)
+        shutil.rmtree(stale, ignore_errors=True)
+
     def _wanted(self, stage: Stage) -> bool:
         return stage in self.options.stages
 
@@ -274,9 +287,7 @@ class Run:
             raise RunError(message)
         directory = self._dir(stage, group)
         if directory.exists():
-            if self._working is not None:
-                self._working.release(directory)
-            shutil.rmtree(directory)
+            self._discard(directory)
         directory.mkdir(parents=True)
         started = time.monotonic()
         outputs = work(directory)

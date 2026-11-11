@@ -14,15 +14,17 @@ requires-python = ">=3.13"
 package = false
 
 [tool.uv.workspace]
-members = ["core", "adapters/postgres"]
+members = ["core", "adapters/postgres", "conformance"]
 
 [tool.uv.sources]
 datadouble = { workspace = true }
 datadouble-postgres = { workspace = true }
+datadouble-conformance = { workspace = true }
 
 [dependency-groups]
 dev = [
     "datadouble",
+    "datadouble-conformance",
     "datadouble-postgres",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
@@ -48,6 +50,11 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["INP001"]  # standalone scripts, not a package
+"conformance/**" = [
+    "PLR0913",  # test builders take many keyword arguments with defaults
+    "PLR2004",  # literal values are the point of a test
+    "S101",     # pytest uses assert
+]
 "**/tests/**" = [
     "INP001",   # test directories are not packages
     "ARG002",   # test doubles ignore inputs they don't need
@@ -63,7 +70,16 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["datadouble", "datadouble_postgres", "check_source", "make_tag", "fakes", "fake_engine"]
+known-first-party = [
+    "datadouble",
+    "datadouble_conformance",
+    "datadouble_postgres",
+    "check_source",
+    "make_tag",
+    "fakes",
+    "fake_engine",
+    "test_conformance",
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -72,15 +88,31 @@ convention = "google"
 python_version = "3.13"
 strict = true
 warn_unreachable = true
-files = ["core/src", "core/tests", "adapters/postgres/src", "adapters/postgres/tests", "scripts", "tests"]
-mypy_path = "core/src:core/tests:adapters/postgres/src:scripts"
+files = [
+    "core/src",
+    "core/tests",
+    "adapters/postgres/src",
+    "adapters/postgres/tests",
+    "conformance/src",
+    "scripts",
+    "tests",
+]
+mypy_path = "core/src:core/tests:adapters/postgres/src:adapters/postgres/tests:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["core/src", "core/tests", "adapters/postgres/src", "adapters/postgres/tests", "scripts", "tests"]
-extraPaths = ["scripts", "core/tests"]
+include = [
+    "core/src",
+    "core/tests",
+    "adapters/postgres/src",
+    "adapters/postgres/tests",
+    "conformance/src",
+    "scripts",
+    "tests",
+]
+extraPaths = ["scripts", "core/tests", "adapters/postgres/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -95,7 +127,11 @@ xfail_strict = true
 
 [tool.coverage.run]
 branch = true
-source = ["core/src/datadouble", "scripts"]
+source = [
+    "core/src/datadouble",
+    "adapters/postgres/src/datadouble_postgres",
+    "scripts",
+]
 
 [tool.coverage.report]
 fail_under = 100

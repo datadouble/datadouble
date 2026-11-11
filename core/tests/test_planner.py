@@ -252,13 +252,15 @@ subset:
   virtual_fks:
     events.subject_id -> posts: {}
     events.(id, subject_id) -> film_actor: {}
+    events.id -> users.created: {}
   follow: {down: ["posts -> events"]}
 """
     )
     virtual = [e for e in result.edges if e.virtual]
-    assert [(e.parent_columns, e.down) for e in virtual] == [
-        (("id",), True),
-        (("film_id", "actor_id"), False),
+    assert [(e.parent_columns, e.down, e.parent_unique) for e in virtual] == [
+        (("id",), True, True),
+        (("film_id", "actor_id"), False, True),
+        (("created",), False, False),
     ]
     reasons = problems(
         """
@@ -272,6 +274,17 @@ subset:
     assert "virtual reference 'events -> posts' must name the child columns" in reasons
     assert any("has 1 child column(s) and 2 parent column(s)" in p for p in reasons)
     assert any("'nope.x' is not a table" in p or "'nope'" in p for p in reasons)
+
+
+def test_drop_needs_an_unconditional_reference() -> None:
+    reasons = problems(
+        """
+subset:
+  virtual_fks: {events.subject_id -> posts: {when: "subject_type = 'Post'"}}
+  edges: {events.subject_id -> posts: {on_missing: drop}}
+"""
+    )
+    assert any("on_missing drop is not supported on a reference with `when`" in p for p in reasons)
 
 
 def test_seeds() -> None:

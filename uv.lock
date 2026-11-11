@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "datadouble",
+    "datadouble-conformance",
     "datadouble-postgres",
     "datadouble-workspace",
 ]
@@ -218,6 +219,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-conformance"
+version = "0.0.0"
+source = { editable = "conformance" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "pytest", specifier = ">=8.4" },
+]
+
+[[package]]
 name = "datadouble-postgres"
 version = "0.0.0"
 source = { editable = "adapters/postgres" }
@@ -240,6 +256,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "datadouble" },
+    { name = "datadouble-conformance" },
     { name = "datadouble-postgres" },
     { name = "mypy" },
     { name = "pyright", extra = ["nodejs"] },
@@ -257,6 +274,7 @@ docs = [
 [package.metadata.requires-dev]
 dev = [
     { name = "datadouble", editable = "core" },
+    { name = "datadouble-conformance", editable = "conformance" },
     { name = "datadouble-postgres", editable = "adapters/postgres" },
     { name = "mypy", specifier = ">=1.18" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.414" },

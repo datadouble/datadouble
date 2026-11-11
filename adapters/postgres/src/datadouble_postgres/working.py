@@ -240,10 +240,12 @@ class PostgresWorking:
             for view in index.omitted_views
             for kind in ("VIEW", "MATERIALIZED VIEW", "MATERIALIZED VIEW DATA")
         )
+        # A constraint whose table is in the group but whose target is not (in
+        # another group, or excluded) would fail on the rows: leave it out.
         foreign = frozenset(
-            ("FK CONSTRAINT", edge.child.namespace, f"{edge.child.name} {edge.name}")
-            for edge in plan.edges
-            if not edge.virtual and edge.child in members and edge.parent not in members
+            ("FK CONSTRAINT", constraint.namespace, f"{constraint.table} {constraint.name}")
+            for constraint in index.constraints
+            if constraint.child in members and constraint.parent not in members
         )
         with cluster.running():
             cluster.create_database(index.database)
@@ -351,17 +353,18 @@ class PostgresWorking:
     def _stub(
         plan: Plan, index: ExtractIndex, edge: Edge, child: sql.Composable, where: sql.Composable
     ) -> Statement:
+        # The planner only allows stubs into tables the image has; if one is
+        # missing anyway, the INSERT fails and the database says why.
         parent = plan.catalog.table(edge.parent)
         extracted = index.table(edge.parent)
-        if parent is None or extracted is None:
-            message = f"cannot stub {edge.parent}: it is not in the image"
-            raise EngineError(message)
+        columns = parent.columns if parent else ()
+        copied = extracted.columns if extracted else ()
         fillers = [
             (column.name, placeholder(edge.parent, column))
-            for column in parent.columns
+            for column in columns
             if column.name not in edge.parent_columns
             and not column.nullable
-            and column.name in extracted.columns
+            and column.name in copied
         ]
         return sql.SQL("INSERT INTO {} ({}) SELECT DISTINCT {} FROM {} c WHERE {}").format(
             _qualified(edge.parent),
@@ -428,8 +431,10 @@ class PostgresWorking:
                 by_table: dict[TableName, list[PlannedRule]] = {}
                 for rule in transformation.rules:
                     by_table.setdefault(rule.column.table, []).append(rule)
-                for table, rules in by_table.items():
-                    self._anonymize(connection, table, rules, transformation, partitioned)
+                for position, (table, rules) in enumerate(by_table.items()):
+                    self._anonymize(
+                        connection, (position, table), rules, transformation, partitioned
+                    )
                 for hook in transformation.hooks:
                     _execute(connection, "an after_transform hook", trusted(hook.sql))
             counts = PostgresRestored(connection, partitioned).counts(group.tables)
@@ -438,12 +443,13 @@ class PostgresWorking:
     def _anonymize(
         self,
         connection: Connection,
-        table: TableName,
+        numbered: tuple[int, TableName],
         rules: list[PlannedRule],
         transformation: Transformation,
         partitioned: frozenset[TableName],
     ) -> None:
         """Apply every rule for one table in a single UPDATE."""
+        position, table = numbered
         assignments: list[sql.Composable] = []
         for number, rule in enumerate(rules):
             column = sql.Identifier(rule.column.column)
@@ -458,7 +464,7 @@ class PostgresWorking:
                         )
                     assignments.append(sql.SQL("{} = {}").format(column, value))
                 case _:
-                    name = sql.Identifier(f"dd_map_{number}")
+                    name = sql.Identifier(f"dd_map_{position}_{number}")
                     self._replacements(connection, name, rule, transformation, partitioned)
                     assignments.append(
                         sql.SQL(

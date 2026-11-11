@@ -4,8 +4,9 @@
 """Reading a PostgreSQL catalog into Datadouble's engine-neutral model.
 
 Tables are ordinary and partitioned tables outside the system schemas;
-partitions are represented by their partitioned parent, and tables owned by
-extensions are left out. Types are spelled with ``format_type`` under an
+partitions are represented by their partitioned root (a reference to a
+partition becomes a reference to its root), and tables owned by extensions are
+left out. Types are spelled with ``format_type`` under an
 empty search path, so user-defined types come out schema-qualified.
 """
 
@@ -46,15 +47,18 @@ ORDER BY a.attrelid, a.attnum
 """
 
 _KEYS = """
-SELECT con.conrelid, con.contype, con.conname, con.confrelid,
+SELECT con.conrelid, con.contype, con.conname, tn.nspname, tc.relname,
        array_agg(a.attname ORDER BY k.ord), array_agg(fa.attname ORDER BY k.ord)
 FROM pg_catalog.pg_constraint con
+LEFT JOIN pg_catalog.pg_class tc
+  ON tc.oid = coalesce(pg_catalog.pg_partition_root(con.confrelid)::oid, con.confrelid)
+LEFT JOIN pg_catalog.pg_namespace tn ON tn.oid = tc.relnamespace
 CROSS JOIN LATERAL unnest(con.conkey, coalesce(con.confkey, con.conkey))
     WITH ORDINALITY AS k(attnum, fattnum, ord)
 JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
 LEFT JOIN pg_catalog.pg_attribute fa ON fa.attrelid = con.confrelid AND fa.attnum = k.fattnum
 WHERE con.conrelid = ANY(%s) AND con.contype IN ('p', 'f') AND con.conparentid = 0
-GROUP BY con.conrelid, con.contype, con.conname, con.confrelid
+GROUP BY con.conrelid, con.contype, con.conname, tn.nspname, tc.relname
 ORDER BY con.conrelid, con.conname
 """
 
@@ -130,16 +134,18 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
         primary: dict[int, tuple[ColumnName, ...]] = {}
         foreign: defaultdict[int, list[ForeignKey]] = defaultdict(list)
         cursor.execute(_KEYS, [oids])
-        for relid, contype, name, target, names, target_names in cursor.fetchall():
+        # A reference to a table outside the catalog (one an extension owns,
+        # say) keeps its real target, so the planner asks for a fallback.
+        for relid, contype, name, namespace, target, names, target_names in cursor.fetchall():
             own = tuple(ColumnName(str(n)) for n in _strings(names))
             if contype == "p":
                 primary[int(str(relid))] = own
-            elif int(str(target)) in tables:
+            else:
                 foreign[int(str(relid))].append(
                     ForeignKey(
                         name=str(name),
                         columns=own,
-                        target=tables[int(str(target))][0],
+                        target=TableName.of(str(namespace), str(target)),
                         target_columns=tuple(ColumnName(str(n)) for n in _strings(target_names)),
                     )
                 )
