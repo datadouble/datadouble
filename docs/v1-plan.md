@@ -32,9 +32,10 @@ moves on only when they pass.
 12. Tier 1 CI/CD libraries: GitHub Actions, GitLab CI, Jenkins, Argo CD.
 13. All agent skills, including filesystem help, and the Claude Code plugin.
 14. A GitHub Pages documentation site at
-    `https://datadouble.tightlinesoftware.com/` and a public example repository,
-    `datadouble/example-pipeline`, covering the production and non-production
-    sides.
+    `https://datadouble.tightlinesoftware.com/`, built from the Markdown in
+    `docs/` (see [documentation site](#documentation-site)), and a public example
+    repository, `datadouble/example-pipeline`, covering the production and
+    non-production sides.
 
 ### Not in version 1
 
@@ -115,6 +116,26 @@ files:
 Every dataset includes the awkward cases listed in
 [local development](local-development.md).
 
+## Documentation site
+
+The site is built from the Markdown in `docs/`, the single source of truth; no
+page is maintained as a separate copy.
+
+| Section | Contents | Milestone |
+|---|---|---|
+| Home | The production-boundary diagram, overview and design principles | M0 |
+| Design | Every design document, rendered as is, in reading order | M0 |
+| Using Datadouble | Quickstart, spec reference generated from the JSON Schema, CLI reference generated from the CLI, CI/CD libraries, agent skills, the example repository | M10 |
+| Project | Decisions, the v1 plan, external services, changelog, contributing | M0 |
+
+- **Generator:** a Markdown static site generator, chosen at the start of M0
+  after checking which options are actively maintained, and recorded as a
+  decision.
+- **Theme:** the colors, type and light and dark modes of the design book, with
+  its production-boundary diagram as the home page figure.
+- **Publishing:** a workflow builds the site on every pull request (broken links
+  fail the build) and deploys it to GitHub Pages on merges to `main`.
+
 ## Test environment
 
 Docker Compose profiles. Services without a profile start on plain
@@ -158,7 +179,7 @@ differently shaped engine, before breadth.
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, and the release script with its changelog gate | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request |
+| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, the release script with its changelog gate, and the documentation site with its Design section | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request; the site builds with no broken links and is live on its domain |
 | M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
 | M2 | **Non-production side.** Promote, export store, sidecars, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), publish adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
 | M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |
@@ -168,7 +189,7 @@ differently shaped engine, before breadth.
 | M7 | **Salesforce against the fake**, plus cassette recording, scrubbing and replay tooling | Conformance passes offline; the scrubber removes tokens, session IDs, instance URLs and org IDs from a synthetic recording |
 | M8 | **CI/CD libraries** | The CI/CD conformance suite passes for all four systems, locally and in the nightly hosted runs |
 | M9 | **Agent skills and plugin** | `claude plugin validate` passes and every skill scenario holds, including the refusal cases |
-| M10 | **Documentation site and example repository** | The example repository's pipelines run green from a fresh clone, on both sides of the boundary |
+| M10 | **Using Datadouble documentation and example repository.** Quickstart, generated spec and CLI references, CI/CD library and agent skill guides, added to the existing site | The example repository's pipelines run green from a fresh clone, on both sides of the boundary; every spec field and CLI command appears in the generated references |
 
 ## How the run works
 
