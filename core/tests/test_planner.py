@@ -392,6 +392,25 @@ hooks:
     )
 
 
+def test_verify_settings() -> None:
+    result = planned(
+        """
+verify:
+  pii_scan: {allow: {users.email: ["%@company.com"]}}
+  assertions: [{name: none, sql: "SELECT 1 WHERE false"}]
+exclude: ["dba_*"]
+"""
+    )
+    assert [(str(a.column), a.patterns) for a in result.pii_allow] == [
+        ("public.users.email", ("%@company.com",))
+    ]
+    assert [a.name for a in result.assertions] == ["none"]
+    assert TableName.of("public", "dba_maint_runs") not in result.catalog.names()
+    assert problems("verify: {pii_scan: {allow: {users.nope: []}}}") == (
+        "column 'nope' is not in table public.users",
+    )
+
+
 def test_plan_error_message() -> None:
     error = PlanError(("one",))
     assert str(error) == "the plan has 1 problem"

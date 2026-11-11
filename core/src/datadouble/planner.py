@@ -20,6 +20,7 @@ from datadouble.catalog import Catalog, CatalogLock, Column, ColumnKind, Foreign
 from datadouble.names import ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
+    Assertion,
     EdgePolicy,
     ExpressionRule,
     FakerKind,
@@ -100,6 +101,13 @@ class PlannedGroup(_Model):
     fixups: tuple[Fixup, ...]
 
 
+class PiiAllow(_Model):
+    """Values the PII scan accepts in one column, as ``LIKE`` patterns."""
+
+    column: ColumnRef
+    patterns: tuple[str, ...]
+
+
 class Plan(_Model):
     """Everything the later stages need, recorded in the plan's manifest."""
 
@@ -116,6 +124,10 @@ class Plan(_Model):
     formats: tuple[ImageFormat, ...]
     anonymization: tuple[PlannedRule, ...]
     rewrites: tuple[ColumnRef, ...]
+    pii_allow: tuple[PiiAllow, ...]
+    assertions: tuple[Assertion, ...]
+    catalog: Catalog
+    """The live catalog minus excluded tables."""
     warnings: tuple[str, ...]
 
     def graph(self) -> Graph:
@@ -540,6 +552,11 @@ class _Planner:
             for text in hook.rewrites
             if (ref := self.attempt(self.resolver.column, text)) is not None
         )
+        pii_allow = tuple(
+            PiiAllow(column=ref, patterns=patterns)
+            for text, patterns in self.spec.verify.pii_scan.allow.items()
+            if (ref := self.attempt(self.resolver.column, text)) is not None
+        )
         formats = self.formats()
         strategy = self.strategy(graph)
         if self.problems:
@@ -560,6 +577,9 @@ class _Planner:
             formats=formats,
             anonymization=anonymization,
             rewrites=rewrites,
+            pii_allow=pii_allow,
+            assertions=self.spec.verify.assertions,
+            catalog=self.catalog.without(excluded),
             warnings=tuple(self.warnings),
         )
 
