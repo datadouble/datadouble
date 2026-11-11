@@ -59,7 +59,7 @@ One skill per job, one for the spec, and one for a whole pipeline:
 | `datadouble-build` | The `build` job on a production runner, with its scratch work directory and storage | `ci init --job build` |
 | `datadouble-promote` | The export store and the `promote` job, with its verification and strict-mode requirements | `ci init --job promote` |
 | `datadouble-fetch` | Non-production staging and the `fetch` job | `ci init --job fetch` |
-| `datadouble-provision` | `replicate` and `publish`: pool or on-demand mode, copy kind, publish targets | `ci init --job provision` |
+| `datadouble-provision` | `replicate` and `announce`: pool or on-demand mode, clone kind, announce targets | `ci init --job provision` |
 | `datadouble-release` | Teardown hooks for on-demand copies, the expiry sweep, pool recycling | `ci init --job release` |
 | `datadouble-prune` | Retention for stores and staging | `ci init --job prune`, `prune --dry-run` |
 | `datadouble-activate` | The rollback job, and how to use it | `ci init --job activate` |

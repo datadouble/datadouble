@@ -19,7 +19,7 @@
 | 13 | ~~Repository private during planning~~ (superseded by 31) | Publish when ready |
 | 14 | Licence: MIT | Maximum ease of adoption |
 | 15 | CI/CD adapters, Tier 1: GitHub Actions, GitLab CI, Jenkins, Argo CD; each tested end to end | Datadouble mostly runs inside other teams' pipelines |
-| 16 | Lifecycle split into jobs: build, promote, fetch, provision, release, prune, activate; stages `promote`, `fetch`, `publish`; operations `release`, `prune`, `activate` | Jobs run in different environments, on different schedules, with different credentials |
+| 16 | Lifecycle split into jobs: build, promote, fetch, provision, release, prune, activate; stages `promote`, `fetch`, `announce` (named `publish` until decision 44); operations `release`, `prune`, `activate` | Jobs run in different environments, on different schedules, with different credentials |
 | 17 | Everything up to `verify` runs where `extract` runs; `promote` into an export store is the only production crossing and refuses unverified images; non-production pulls from the export store only | Raw extracts and working databases contain real personal data |
 | 18 | CI/CD adapters contain no pipeline logic and never put data artifacts in CI artifact storage | Same reason as the thin CLI; CI storage is often outside production |
 | 19 | `build` refuses to generate or run on vendor-hosted runners | Prevents production data being pulled onto a vendor's machines |
@@ -47,6 +47,7 @@
 | 41 | One build can produce several images through named groups in the spec; the extract is shared, each group gets its own working database, and all images from a build share a generation; image identity includes the group | Small images that are easy to reason about, plus combined ones, from one snapshot and without merging images later |
 | 42 | Jenkins integration is a shared library in v1; a Jenkins plugin is a possible later addition | Avoids a Java plugin build and hosting process until users ask for it |
 | 43 | The documentation site is generated from `docs/*.md`, with Design and Project sections live from M0 and Using Datadouble added in M10 | The docs stay the single source of truth, and the public site shows the design before there is software to document |
+| 44 | The stage that tells consumers where clones can be accessed, as volumes or connection parameters, is named `announce` (was `publish`), and its adapters are announce adapters | It never writes data, and "publish" read as writing database dumps into targets such as Secrets or Vault |
 
 ## Open
 

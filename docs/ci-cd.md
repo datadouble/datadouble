@@ -14,12 +14,12 @@ operations, runs in a known place, and is usually triggered on its own schedule:
 | **build** | plan → extract → load → transform → package → verify → store | Production | Schedule (e.g. weekly) |
 | **promote** | promote | Production | After a successful build |
 | **fetch** | fetch | Non-production | Schedule (cheap: polls a sidecar manifest) |
-| **provision** | replicate → publish | Non-production | Schedule (pool mode) or a request such as a pull request (on-demand mode) |
+| **provision** | replicate → announce | Non-production | Schedule (pool mode) or a request such as a pull request (on-demand mode) |
 | **release** | release | Non-production | Pull request closed, environment stopped, or schedule |
 | **prune** | prune | Each environment | Schedule |
 | **activate** | activate | Non-production | Manual (rollback) |
 
-`replicate` and `publish` are separate stages because publication targets vary
+`replicate` and `announce` are separate stages because announce targets vary
 independently of replication, but they normally run as one job.
 
 ### The production boundary
@@ -48,7 +48,7 @@ gate is the same.
 The CI/CD work extends the [architecture](architecture.md) pipeline to:
 
 ```
-plan → extract → load → transform → package → verify → store → promote → fetch → replicate → publish
+plan → extract → load → transform → package → verify → store → promote → fetch → replicate → announce
 ```
 
 plus three operations that act on existing images and copies: `release`,
@@ -128,13 +128,19 @@ produces:
 - **Instance:** a running server with an endpoint (host, port, database, and a
   reference to credentials).
 
-### publish
+### announce
 
-`publish` makes copies discoverable. Every copy carries labels (spec, engine,
-engine version, channel, owner) and provenance (image ID, generation, build
-time).
+`announce` lets consumers know where database clones can be accessed, either as volumes or as connection parameters. It never writes data: `replicate` has already made the
+clone, and `announce` only records where it is and how to reach it. Every clone
+carries labels (spec, image group, engine, engine version, channel, owner) and
+provenance (image ID, generation, build time).
 
-| Publish adapter | Writes | For |
+- **Volume clones** are announced as a volume consumers can claim and start
+  their own server on.
+- **Instance clones** (a running server) are announced as connection
+  parameters: host, port, database, and the clone's own credentials.
+
+| Announce adapter | Writes | For |
 |---|---|---|
 | k8s-pv | A PersistentVolume per volume copy, with labels consumers match in a PersistentVolumeClaim selector | Pool mode on Kubernetes |
 | k8s-secret | A Secret (and optionally a Service) per instance copy | Instance copies on Kubernetes |
@@ -142,9 +148,10 @@ time).
 | vault | A Vault KV entry per copy | Any |
 | dotenv | A dotenv file | Local and simple CI use |
 
-Copy credentials go only to secret-capable targets. `ci-outputs` publishes the
-endpoint and a credentials reference, because job outputs on most systems are
-not secret.
+A clone's credentials go only to secret-capable targets (`k8s-secret`,
+`vault`, the CI system's masked variables). `ci-outputs` announces the endpoint
+and a reference to the credentials, because job outputs on most systems are not
+secret.
 
 ### release
 

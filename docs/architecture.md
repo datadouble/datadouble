@@ -3,7 +3,7 @@
 ## Pipeline
 
 ```
-plan → extract → load → transform → package → verify → store → promote → fetch → replicate → publish
+plan → extract → load → transform → package → verify → store → promote → fetch → replicate → announce
 ```
 
 plus three operations on existing images and copies: `release`, `prune` and
@@ -21,7 +21,7 @@ plus three operations on existing images and copies: `release`, `prune` and
 | promote | Stored golden image | The image copied to the export store and a channel advanced; refused unless verification passed |
 | fetch | Image in the export store | The image unpacked into non-production staging and a staging channel advanced; skipped if nothing newer |
 | replicate | Staged image | Copies, as volumes or running instances, in pool or on-demand mode |
-| publish | Copy descriptions | Copies registered where consumers find them |
+| announce | Copy descriptions | Consumers told where each clone can be accessed: a volume, or connection parameters |
 
 | Operation | Effect |
 |---|---|
@@ -114,7 +114,7 @@ engine-specific logic; engine quirks stay inside the adapter.
 | Verify | Check a restored golden image | fk-integrity, row-counts, pii-scan |
 | Storage | Read and write immutable artifacts | local, s3, gcs, artifact repository, nfs |
 | Replicate | Turn a staged image into copies (volumes or instances), and destroy them | docker-volume, nfs-copy, csi-snapshot, zfs, plain-restore |
-| Publish | Register copies where consumers find them | k8s-pv, k8s-secret, ci-outputs, vault, dotenv |
+| Announce | Let consumers know where clones can be accessed, as volumes or connection parameters; never writes data | k8s-pv, k8s-secret, ci-outputs, vault, dotenv |
 | CI/CD | Package, generate and bridge jobs for a CI/CD system; no pipeline logic | github-actions, gitlab, jenkins, argocd |
 
 Adapters declare their capabilities (supported formats, tool versions, whether

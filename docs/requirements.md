@@ -41,7 +41,7 @@
     Jenkins, Argo CD), each tested end to end. Given a spec, a team can quickly
     wire up any of: building the golden image inside production, promoting it
     to an export store, fetching it into non-production, provisioning copies
-    (as a ready pool or on demand), publishing them where consumers find them,
+    (as a ready pool or on demand), announcing where they can be accessed,
     releasing them, pruning old images, and rolling back to an earlier image.
     See [CI/CD integration](ci-cd.md).
 11. **Agent skills** for setting up each part of a pipeline, or a whole pipeline
