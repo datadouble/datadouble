@@ -121,7 +121,7 @@ anonymized values.
 | CI | Integration tests (Docker Compose) | `make test-integration`, then uploads coverage to Codecov |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |
-| SonarQube Cloud | sonar | `make test-integration` for coverage, then the scan |
+| SonarQube Cloud | sonar | `make test-integration` for coverage, `scripts/check_coverage.py` to check the report names every analysed file exactly once, then the scan, which waits for the quality gate and fails the job if it fails |
 | CodeQL, Dependency Review, Snyk Security, Scorecard | | Static analysis and dependency scanning |
 
 Every job runs on a hardened runner that blocks outbound traffic except to the

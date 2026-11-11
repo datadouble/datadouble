@@ -74,6 +74,7 @@
 | 68 | Engines declare in their capabilities whether they run hooks; MongoDB runs neither hooks nor the nested strategy (A), so it builds with the keys strategy (B) and plans with hooks fail | MongoDB cannot evaluate another collection's selection inside a query, and a script language for hooks would be a second, unverified anonymizer |
 | 69 | The test image runs MongoDB's own Debian 13 server and database-tools tarballs, pinned by version and SHA-256; the Compose `mongodb` service is a one-member replica set seeded with a generated cinema database | MongoDB's apt repository lags new releases; the tarballs run on older x86-64 CPUs where the packaged tools do not; generating the data keeps its licence clear |
 | 70 | A hash replacement that the PII scan would flag (a hex digest can hold a Luhn-valid digit run) is retried with the next attempt | A hash must never fail its own image's verification |
+| 71 | The SonarCloud quality gate is enforced by the required `sonar` job: the scan waits for the gate (`sonar.qualitygate.wait`) and fails the job when the gate fails. Coverage roots are `src` directories, and `scripts/check_coverage.py` fails the job if the report names any analysed file more than once or not at all | A red gate must block a merge; Dependabot pull requests run without the Sonar token, so requiring the SonarCloud app's own check would block them; a report keyed by package-relative names (`__init__.py`) silently merged files and scored them as uncovered |
 
 ## Open
 

@@ -23,7 +23,7 @@ typecheck:
 # Unit tests on the host, with the 100% coverage gate over the code they can
 # reach. Adapter code that needs a database is covered by test-integration.
 test:
-	uv run pytest -m "not integration" --cov=core/src/datadouble --cov=scripts
+	uv run pytest -m "not integration" --cov=core/src --cov=scripts
 
 # The whole suite, including integration tests, inside the default Compose group.
 # Reports are copied out of the stopped container rather than bind-mounted.

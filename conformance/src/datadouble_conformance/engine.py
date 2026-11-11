@@ -158,7 +158,8 @@ def _extract_counts(result: RunResult) -> list[tuple[str, int]]:
     return sorted((str(count.table), count.rows) for count in extracted.counts)
 
 
-def _wait_for_stage(root: Path, stage: str, process: subprocess.Popen[bytes]) -> Path:
+def wait_for_stage(root: Path, stage: str, process: subprocess.Popen[bytes]) -> Path:
+    """The generation under ``root`` that reaches ``stage`` while ``process`` runs."""
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline and process.poll() is None:
         for generation in root.glob("*"):
@@ -324,7 +325,7 @@ class EngineConformance:
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ.copy()
         )
         try:
-            generation = _wait_for_stage(work / spec.name, "transform", process)
+            generation = wait_for_stage(work / spec.name, "transform", process)
         finally:
             process.send_signal(signal.SIGKILL)
             process.wait()
