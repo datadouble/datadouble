@@ -111,7 +111,7 @@ files:
 | MySQL | Sakila (also the Jailer conformance test) |
 | SQL Server | AdventureWorks |
 | Oracle | HR / SH sample schemas |
-| MongoDB | `sample_mflix`, or generated if its licence is unclear |
+| MongoDB | Generated cinema database (`sample_mflix`'s licence is unclear) |
 | Redis | Generated keyspace with every data type and key-encoded references |
 | Elasticsearch, OpenSearch | Generated indices derived from Pagila, with join keys across indices |
 | Filesystem | Generated upload tree keyed by Pagila customer IDs, with EXIF metadata and text files containing fake personal data |

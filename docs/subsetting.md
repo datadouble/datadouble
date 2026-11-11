@@ -102,7 +102,10 @@ Every read in a run sees the same point in time.
   extract runs single-connection.
 - **SQL Server / Oracle:** snapshot isolation and flashback/SCN-based reads
   respectively; details to be designed per adapter.
-- **MongoDB:** read concern `snapshot` / cluster time; details per adapter.
+- **MongoDB:** a snapshot session (read concern `snapshot`, pinned to one cluster
+  time), which needs a replica set or sharded cluster. Collection and index
+  listings are not allowed inside it, so they run first and the catalog
+  fingerprint is checked again inside the session.
 - **Redis and Salesforce** have no transactional snapshot. Their adapters document
   the consistency they can offer.
 
@@ -125,7 +128,15 @@ strategy B.
 ## Non-relational sources
 
 - **MongoDB:** the same model applies, with references between collections
-  declared as virtual foreign keys (`ObjectId` fields, embedded IDs).
+  declared as virtual foreign keys (`ObjectId` fields, embedded IDs, dotted
+  paths into subdocuments). An array of references counts every element as a
+  reference. Seeds and `when` clauses are query filters in Extended JSON, with
+  `":as_of"` for the plan's anchor time:
+  `'{"created": {"$lte": ":as_of"}}'`. MongoDB cannot evaluate another
+  collection's selection inside a query, so only strategy B is available.
+  Columns are field paths found by sampling documents (`sample`, default 1000)
+  and from any `$jsonSchema` validator, so strict mode still notices new
+  fields.
 - **Salesforce:** objects and lookup/master-detail relationships form a natural
   graph; filters are SOQL.
 - **Redis:** subsetting is by key pattern and type; there is no relational

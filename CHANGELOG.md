@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`datadouble-postgres`**, the PostgreSQL engine adapter: one exported
   snapshot for keys, rows and schema; working databases as throwaway local
   clusters; physical (data directory) and logical (`pg_dump`) images.
+- **`datadouble-mongodb`**, the MongoDB engine adapter: collections and dotted
+  field paths as tables and columns, from sampling and `$jsonSchema`
+  validators; extract in one snapshot session with the keys strategy; seeds,
+  conditions and assertions in MongoDB's own query and aggregation language;
+  physical (data directory) and logical (`mongodump` archive) images.
 - **Stores:** a filesystem store in the core package, and **`datadouble-s3`**
   for S3 and S3-compatible services.
 - **`datadouble-conformance`**, the suite every engine adapter must pass.
