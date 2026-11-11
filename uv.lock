@@ -236,7 +236,7 @@ dev = [
     { name = "datadouble", editable = "core" },
     { name = "mypy", specifier = ">=1.18" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
-    { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.405" },
+    { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-cov", specifier = ">=7.0" },
     { name = "ruff", specifier = ">=0.13" },

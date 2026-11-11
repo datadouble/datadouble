@@ -23,7 +23,7 @@ datadouble = { workspace = true }
 dev = [
     "datadouble",
     "mypy>=1.18",
-    "pyright[nodejs]>=1.1.405",
+    "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "ruff>=0.13",
