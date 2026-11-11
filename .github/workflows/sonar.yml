@@ -45,6 +45,7 @@ jobs:
             apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            fastdl.mongodb.org:443
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443

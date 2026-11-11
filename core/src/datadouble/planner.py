@@ -56,6 +56,8 @@ class Capabilities(BaseModel):
     """Whether the expression strategy is available (an engine-native language)."""
     nested: bool
     """Whether strategy A is available (the engine evaluates nested selections)."""
+    hooks: bool = True
+    """Whether ``before_load`` and ``after_transform`` hooks can run."""
 
 
 class PlanError(Exception):
@@ -567,6 +569,10 @@ class _Planner:
             for text, patterns in self.spec.verify.pii_scan.allow.items()
             if (ref := self.attempt(self.resolver.column, text)) is not None
         )
+        if not self.capabilities.hooks and (
+            self.spec.hooks.before_load or self.spec.hooks.after_transform
+        ):
+            self.problems.append(f"the {self.catalog.engine} adapter does not run hooks")
         formats = self.formats()
         strategy = self.strategy(graph)
         if self.problems:

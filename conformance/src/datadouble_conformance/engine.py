@@ -76,8 +76,8 @@ class EngineHarness:
     sample_spec: str
     """A spec over the sample dataset; ``STORE`` stands for a store directory.
 
-    It must plan with the nested strategy, produce both formats, anonymize
-    ``sample_column`` and verify cleanly.
+    It must plan with the nested strategy if the engine offers it, produce both
+    formats, anonymize ``sample_column`` and verify cleanly.
     """
     sample_column: ColumnRef
     """A column the sample spec anonymizes."""
@@ -245,10 +245,20 @@ class EngineConformance:
     def test_both_strategies_choose_the_same_rows(
         self, harness: EngineHarness, tmp_path: Path
     ) -> None:
-        """Strategies A and B produce identical row sets on the sample data."""
+        """Strategies A and B produce identical row sets on the sample data.
+
+        An engine without strategy A runs strategy B alone, which must verify.
+        """
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
         lock = builds.lock(spec.source.connection)
+        if not harness.engine.capabilities().nested:
+            only = builds.run(
+                spec, lock, "keys", stages=_BUILD, options=PlanOptions(strategy=Strategy.KEYS)
+            )
+            assert not only.failed(), only.verification
+            assert any(rows for _, rows in _extract_counts(only))
+            return
         results = {
             strategy: builds.run(
                 spec, lock, str(strategy), stages=_BUILD, options=PlanOptions(strategy=strategy)

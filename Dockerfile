@@ -31,9 +31,10 @@ RUN uv sync --no-dev --package datadouble --no-editable
 FROM postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42 AS postgres
 # pgvector because Pagila uses it: working databases need the source's
 # extensions. git for the source checker's tests, btrfs-progs for the btrfs
-# replicate adapter.
+# replicate adapter, and the libraries MongoDB's binaries need.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends btrfs-progs git postgresql-18-pgvector \
+    && apt-get install --yes --no-install-recommends \
+        btrfs-progs git libcurl4t64 libgssapi-krb5-2 postgresql-18-pgvector \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=uv /uv /uvx /usr/local/bin/
 ENV UV_COMPILE_BYTECODE=1 \
@@ -54,6 +55,18 @@ ADD --chmod=0755 \
     --checksum=sha256:424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa \
     https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 \
     /usr/local/bin/cosign
+# MongoDB's server and database tools, from MongoDB's release tarballs.
+ADD --checksum=sha256:667faae2f310eabb79846507a15bcb8a2888f6a1324bd77eea8b85ddfe7692a5 \
+    https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-debian13-9.0.8.tgz /tmp/mongodb.tgz
+ADD --checksum=sha256:5a74b5bebfe1421f338a25ecd80f8e6173f6d47241ea243564b0a1c9f2278b3b \
+    https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian13-x86_64-100.20.1.tgz \
+    /tmp/mongodb-tools.tgz
+RUN mkdir -p /opt/mongodb/bin \
+    && tar -xzf /tmp/mongodb.tgz -C /opt/mongodb/bin --strip-components=2 --wildcards '*/bin/mongod' \
+    && tar -xzf /tmp/mongodb-tools.tgz -C /opt/mongodb/bin --strip-components=2 \
+        --wildcards '*/bin/mongodump' '*/bin/mongorestore' \
+    && rm /tmp/mongodb.tgz /tmp/mongodb-tools.tgz
+ENV PATH=/opt/mongodb/bin:$PATH
 ADD --chmod=0755 \
     --checksum=sha256:c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4 \
     https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl \
@@ -68,6 +81,7 @@ COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
 COPY --chown=tester:tester core/src/datadouble/__init__.py core/src/datadouble/
 COPY --chown=tester:tester adapters/btrfs/pyproject.toml adapters/btrfs/README.md adapters/btrfs/LICENSE adapters/btrfs/
 COPY --chown=tester:tester adapters/docker/pyproject.toml adapters/docker/README.md adapters/docker/LICENSE adapters/docker/
+COPY --chown=tester:tester adapters/mongodb/pyproject.toml adapters/mongodb/README.md adapters/mongodb/LICENSE adapters/mongodb/
 COPY --chown=tester:tester adapters/kubernetes/pyproject.toml adapters/kubernetes/README.md adapters/kubernetes/LICENSE adapters/kubernetes/
 COPY --chown=tester:tester adapters/postgres/pyproject.toml adapters/postgres/README.md adapters/postgres/LICENSE adapters/postgres/
 COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
