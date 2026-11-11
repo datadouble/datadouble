@@ -62,7 +62,7 @@ moves on only when they pass.
 - **Sample data licences** are checked before a dataset is committed; data is
   generated where a licence is unclear.
 - **Copyright and licence:** every source file starts with SPDX headers (see
-  [AGENTS.md](../AGENTS.md)).
+  [AGENTS.md](https://github.com/datadouble/datadouble/blob/main/AGENTS.md)).
 
 ## New adapters
 
@@ -130,9 +130,7 @@ page is maintained as a separate copy.
 | Using Datadouble | Quickstart, spec reference generated from the JSON Schema, CLI reference generated from the CLI, CI/CD libraries, agent skills, the example repository | M10 |
 | Project | Decisions, the v1 plan, external services, changelog, contributing | M0 |
 
-- **Generator:** a Markdown static site generator, chosen at the start of M0
-  after checking which options are actively maintained, and recorded as a
-  decision.
+- **Generator:** Zensical, pinned to an exact version (decision 46).
 - **Theme:** the colors, type and light and dark modes of the design book, with
   its production-boundary diagram as the home page figure.
 - **Publishing:** a workflow builds the site on every pull request (broken links
@@ -181,7 +179,7 @@ differently shaped engine, before breadth.
 
 | # | Milestone | Done when |
 |---|---|---|
-| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, the release script with its changelog gate, and the documentation site with its Design section | `docker compose up` passes a smoke test; typing and lint pass with no suppressions; CI publishes a signed, attested image for the pull request; the site builds with no broken links and is live on its domain |
+| M0 | **Foundations.** Package scaffolding with strict typing, Compose default group, CI with the supply-chain controls, `TESTING.md`, the release script with its changelog gate, and the documentation site with its Design section | `docker compose up` passes a smoke test; typing and lint pass, with every suppression explained and counted; CI publishes a signed, attested image for the pull request; the site builds with no broken links and is live on its domain |
 | M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
 | M2 | **Non-production side.** Promote, export store, image summaries, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), announce adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
 | M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |

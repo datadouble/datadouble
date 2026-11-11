@@ -49,6 +49,8 @@
 | 43 | The documentation site is generated from `docs/*.md`, with Design and Project sections live from M0 and Using Datadouble added in M10 | The docs stay the single source of truth, and the public site shows the design before there is software to document |
 | 44 | The stage that tells consumers where clones can be accessed, as volumes or connection parameters, is named `announce` (was `publish`), and its adapters are announce adapters | It never writes data, and "publish" read as writing database dumps into targets such as Secrets or Vault |
 | 45 | The small file stored next to each image, read by `fetch` without downloading the image, is the **image summary** (was "sidecar manifest") | "Sidecar" suggested a Kubernetes sidecar container |
+| 46 | The documentation site is built with Zensical, pinned to an exact version | Material for MkDocs reached end of life on 5 November 2026; Zensical is its MIT-licensed successor from the same team, Python-based, and actively maintained, but still before 1.0 |
+| 47 | Development tasks run through `make`; Python tooling runs through `uv`; tests and lint configuration live in the root `pyproject.toml` | One entry point that CI and people share |
 
 ## Open
 

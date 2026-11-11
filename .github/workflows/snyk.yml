@@ -1,0 +1,77 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+name: Snyk Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  snyk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # upload the Snyk SARIF to code scanning
+    env:
+      # Empty on Dependabot and fork runs, which get no secrets. Those still get
+      # the dependency review check.
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            api.snyk.io:443
+            static.snyk.io:443
+            downloads.snyk.io:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+
+      # Snyk reads a requirements file and inspects the environment it
+      # describes with pip, which uv only puts in a virtualenv when seeded.
+      - name: Export and install the locked dependencies
+        run: |
+          uv export --frozen --all-packages --no-hashes --no-emit-workspace --format requirements-txt -o requirements.txt
+          uv venv --seed .snyk-venv
+          uv pip install --python .snyk-venv -r requirements.txt
+
+      - name: Install Snyk
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04 # v1.0.0
+
+      - name: Scan dependencies
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: >
+          snyk test --file=requirements.txt --package-manager=pip
+          --command=.snyk-venv/bin/python --severity-threshold=high
+          --sarif-file-output=snyk.sarif
+
+      - name: Upload results to code scanning
+        if: ${{ always() && hashFiles('snyk.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: snyk.sarif
+        continue-on-error: true
