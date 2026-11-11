@@ -195,6 +195,7 @@ class Run:
         self.records: list[StageRecord] = []
         self.warnings: list[str] = []
         self._session: SourceSession | None = None
+        self._working: WorkingDatabases | None = None
         self._exits = ExitStack()
 
     # The generation
@@ -273,6 +274,8 @@ class Run:
             raise RunError(message)
         directory = self._dir(stage, group)
         if directory.exists():
+            if self._working is not None:
+                self._working.release(directory)
             shutil.rmtree(directory)
         directory.mkdir(parents=True)
         started = time.monotonic()
@@ -341,7 +344,7 @@ class Run:
 
         def work(directory: Path) -> dict[str, JsonValue]:
             graph = planned.graph()
-            with self.session().snapshot() as snapshot:
+            with self.session().snapshot(planned.as_of) as snapshot:
                 selections = (
                     nested_conditions(graph)
                     if planned.strategy == "nested"
@@ -566,8 +569,9 @@ class Run:
             planned = self.plan()
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
+                self._working = self.engine.working(self.root / "scratch")
                 context = _Context(
-                    working=self.engine.working(self.root / "scratch"),
+                    working=self._working,
                     planned=planned,
                     extract=self.extract(planned),
                     key=self.key() if self._needs(Stage.TRANSFORM) else b"",

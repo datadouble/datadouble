@@ -14,21 +14,22 @@ requires-python = ">=3.13"
 package = false
 
 [tool.uv.workspace]
-members = ["core"]
+members = ["core", "adapters/postgres"]
 
 [tool.uv.sources]
 datadouble = { workspace = true }
+datadouble-postgres = { workspace = true }
 
 [dependency-groups]
 dev = [
     "datadouble",
+    "datadouble-postgres",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "ruff>=0.13",
     "types-pyyaml>=6.0.12",
-    "psycopg[binary]>=3.3.8",
 ]
 docs = ["zensical==0.1.1"]
 
@@ -62,7 +63,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["datadouble", "check_source", "make_tag", "fakes"]
+known-first-party = ["datadouble", "datadouble_postgres", "check_source", "make_tag", "fakes", "fake_engine"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -71,20 +72,20 @@ convention = "google"
 python_version = "3.13"
 strict = true
 warn_unreachable = true
-files = ["core/src", "core/tests", "scripts", "tests"]
-mypy_path = "core/src:core/tests:scripts"
+files = ["core/src", "core/tests", "adapters/postgres/src", "adapters/postgres/tests", "scripts", "tests"]
+mypy_path = "core/src:core/tests:adapters/postgres/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-include = ["core/src", "core/tests", "scripts", "tests"]
+include = ["core/src", "core/tests", "adapters/postgres/src", "adapters/postgres/tests", "scripts", "tests"]
 extraPaths = ["scripts", "core/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
 [tool.pytest.ini_options]
-testpaths = ["core/tests", "tests"]
+testpaths = ["core/tests", "adapters/postgres/tests", "tests"]
 pythonpath = ["scripts"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 markers = [

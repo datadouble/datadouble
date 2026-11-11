@@ -9,6 +9,7 @@ assertions use a tiny language: ``delete TABLE where PREDICATE`` and
 name.
 """
 
+import datetime as dt
 import json
 import shutil
 from collections.abc import Generator, Hashable, Iterable, Mapping
@@ -100,7 +101,7 @@ class FakeSession:
         return self.engine.catalog
 
     @contextmanager
-    def snapshot(self) -> Generator[Snapshot]:
+    def snapshot(self, as_of: dt.datetime) -> Generator[Snapshot]:
         self.engine.snapshots += 1
         yield FakeSnapshot(self.engine.source, [])
 
@@ -170,6 +171,9 @@ class FakeWorking:
 
     def server_version(self) -> str:
         return "1.0"
+
+    def release(self, directory: Path) -> None:
+        self.engine.released.append(directory.name)
 
     def load(
         self,
@@ -255,6 +259,7 @@ class FakeEngine:
         default_factory=list[Mapping[str, JsonValue]]
     )
     hooks: list[str] = field(default_factory=list[str])
+    released: list[str] = field(default_factory=list[str])
     snapshots: int = 0
     transforms: int = 0
 

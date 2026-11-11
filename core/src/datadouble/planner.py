@@ -78,6 +78,8 @@ class PlannedRule(_Model):
 
     column: ColumnRef
     kind: ColumnKind
+    type: str
+    """The column's type as the engine spells it."""
     rule: Rule
 
 
@@ -436,7 +438,9 @@ class _Planner:
                     continue
                 ref = ColumnRef(table=table.name, column=column.name)
                 self.check_rule(ref, column, rule, key_columns)
-                planned.append(PlannedRule(column=ref, kind=column.kind, rule=rule))
+                planned.append(
+                    PlannedRule(column=ref, kind=column.kind, type=column.type, rule=rule)
+                )
         return tuple(planned)
 
     def check_rule(

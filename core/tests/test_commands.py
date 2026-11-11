@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 
 import pytest
-from fake_engine import FakeEngine, check_protocols
 from test_run import SPEC, dataset
 
 from datadouble import api, cli
@@ -19,6 +18,7 @@ from datadouble.registry import Registry, RegistryError, installed
 from datadouble.run import Run, RunError, RunOptions, Stage
 from datadouble.spec import parse_spec
 from datadouble.storage import StoreError, filesystem_store
+from fake_engine import FakeEngine, check_protocols
 from fakes import catalog, shop, table
 
 

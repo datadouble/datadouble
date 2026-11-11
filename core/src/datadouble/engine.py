@@ -14,6 +14,7 @@ entry point names a zero-argument callable that returns an
 :class:`EngineAdapter`.
 """
 
+import datetime as dt
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -86,8 +87,11 @@ class SourceSession(Protocol):
         """Introspect the tables, columns and keys."""
         ...
 
-    def snapshot(self) -> AbstractContextManager[Snapshot]:
-        """Open a consistent snapshot; every read inside it sees the same data."""
+    def snapshot(self, as_of: dt.datetime) -> AbstractContextManager[Snapshot]:
+        """Open a consistent snapshot; every read inside it sees the same data.
+
+        ``as_of`` is the plan's anchor time, bound wherever spec SQL says ``:as_of``.
+        """
         ...
 
 
@@ -116,6 +120,13 @@ class WorkingDatabases(Protocol):
 
     def server_version(self) -> str:
         """The version of the server that builds and restores images."""
+        ...
+
+    def release(self, directory: Path) -> None:
+        """Stop anything still running under ``directory`` from an interrupted attempt.
+
+        Called before a stage's directory is cleared to run the stage again.
+        """
         ...
 
     def load(

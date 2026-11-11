@@ -22,14 +22,17 @@ services:
     # network mounts the Docker daemon cannot read them. Reports are copied out
     # of the stopped container instead (see `make test-integration`).
 
+  # PostgreSQL 18 with Pagila (dev/postgres).
   postgres:
-    image: postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    build:
+      context: dev/postgres
     environment:
       POSTGRES_USER: datadouble
       POSTGRES_PASSWORD: datadouble
       POSTGRES_DB: datadouble
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U datadouble -d datadouble"]
+      # Ready only once the init scripts (Pagila) have finished.
+      test: ["CMD-SHELL", "psql -U datadouble -d datadouble -tAc 'SELECT count(*) FROM public.audit_event' | grep -q 100"]
       interval: 2s
       timeout: 5s
-      retries: 30
+      retries: 90

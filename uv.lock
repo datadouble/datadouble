@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "datadouble",
+    "datadouble-postgres",
     "datadouble-workspace",
 ]
 
@@ -217,6 +218,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-postgres"
+version = "0.0.0"
+source = { editable = "adapters/postgres" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "psycopg", extra = ["binary"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
+]
+
+[[package]]
 name = "datadouble-workspace"
 version = "0.0.0"
 source = { virtual = "." }
@@ -224,8 +240,8 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "datadouble" },
+    { name = "datadouble-postgres" },
     { name = "mypy" },
-    { name = "psycopg", extra = ["binary"] },
     { name = "pyright", extra = ["nodejs"] },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -241,8 +257,8 @@ docs = [
 [package.metadata.requires-dev]
 dev = [
     { name = "datadouble", editable = "core" },
+    { name = "datadouble-postgres", editable = "adapters/postgres" },
     { name = "mypy", specifier = ">=1.18" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-cov", specifier = ">=7.0" },

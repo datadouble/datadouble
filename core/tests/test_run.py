@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from fake_engine import FakeEngine, check_protocols
 
 from datadouble.anonymize import Anonymizer
 from datadouble.catalog import CatalogLock, ColumnKind
@@ -28,6 +27,7 @@ from datadouble.spec import (
 )
 from datadouble.storage import FilesystemStore, filesystem_store
 from datadouble.verify import CheckKind
+from fake_engine import FakeEngine, check_protocols
 from fakes import FakeSource, shop
 
 ALL = tuple(Stage)
@@ -202,6 +202,7 @@ def test_resume_after_a_failure(tmp_path: Path, registry: Registry, engine: Fake
     assert statuses(resumed)["plan"] == "reused"
     assert statuses(resumed)["extract"] == "reused"
     assert statuses(resumed)["load/all"] == "ran"
+    assert engine.released == ["all"]
     assert engine.snapshots == 1
     assert not resumed.failed()
 
@@ -355,9 +356,13 @@ def test_the_anonymization_key(
 def test_value_rules_only_reach_the_mapper() -> None:
     mapper = value_mapper(Anonymizer(b"k" * 32))
     column = ColumnRef(table=T("public", "users"), column=ColumnName("note"))
-    hashed = PlannedRule(column=column, kind=ColumnKind.TEXT, rule=HashRule(hash=HashOptions()))
+    hashed = PlannedRule(
+        column=column, kind=ColumnKind.TEXT, type="text", rule=HashRule(hash=HashOptions())
+    )
     assert set(mapper(hashed, ["a", "b"])) == {"a", "b"}
-    nulled = PlannedRule(column=column, kind=ColumnKind.TEXT, rule=NullRule(null=NullOptions()))
+    nulled = PlannedRule(
+        column=column, kind=ColumnKind.TEXT, type="text", rule=NullRule(null=NullOptions())
+    )
     with pytest.raises(RunError, match="NullRule is applied by the engine"):
         mapper(nulled, ["x"])
 
