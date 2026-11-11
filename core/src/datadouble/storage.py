@@ -64,6 +64,10 @@ class Store(Protocol):
         """Keys starting with ``prefix``, sorted."""
         ...
 
+    def delete(self, key: str) -> None:
+        """Remove ``key``; removing a key that does not exist is not an error."""
+        ...
+
 
 class FilesystemSettings(BaseModel):
     """Settings for the filesystem store."""
@@ -119,6 +123,10 @@ class FilesystemStore:
             return False
         shutil.copyfile(path, destination)
         return True
+
+    def delete(self, key: str) -> None:
+        """Remove a key."""
+        self._path(key).unlink(missing_ok=True)
 
     def list(self, prefix: str) -> list[str]:
         """Keys under the store root starting with ``prefix``."""

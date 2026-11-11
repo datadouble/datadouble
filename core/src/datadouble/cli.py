@@ -17,6 +17,8 @@ from typing import TextIO, assert_never
 from pydantic import JsonValue
 
 from datadouble import api
+from datadouble.prune import PruneTarget
+from datadouble.replicate import Copy
 from datadouble.run import Stage
 from datadouble.spec import ImageFormat, Strategy, StrictLevel
 
@@ -35,6 +37,15 @@ class _Arguments(argparse.Namespace):
     stages: list[str]
     work: str | None
     resume: str | None
+    groups: list[str] | None
+    generation: str | None
+    owner: str | None
+    all_at_once: bool
+    no_announce: bool
+    copy_ids: list[str]
+    expired: bool
+    target: str
+    report_only: bool
 
 
 def _stages(text: str) -> list[str]:
@@ -76,6 +87,64 @@ def _override_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _group_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    parser.add_argument(
+        "--group",
+        dest="groups",
+        action="append",
+        help="an image group to work on (repeatable); every group by default",
+    )
+
+
+def _operation_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
+    promote = add(api.Command.PROMOTE, help="copy verified, signed images to the export stores")
+    _group_arguments(promote)
+    promote.add_argument("--generation", help="the generation to promote (default: newest)")
+    fetch = add(api.Command.FETCH, help="bring new promoted images into staging")
+    _group_arguments(fetch)
+    activate = add(api.Command.ACTIVATE, help="point the staging channel at a staged generation")
+    activate.add_argument("generation", help="the generation to activate")
+    _group_arguments(activate)
+    replicate = add(
+        api.Command.REPLICATE, help="fill the pool, or make on-demand copies, and announce them"
+    )
+    _group_arguments(replicate)
+    replicate.add_argument("--owner", help="who on-demand copies are for")
+    replicate.add_argument(
+        "--all-at-once", action="store_true", help="replace stale pool copies before refilling"
+    )
+    replicate.add_argument("--no-announce", action="store_true", help="make copies only")
+    claim = add(api.Command.CLAIM, help="take an unclaimed pool copy")
+    _group_arguments(claim)
+    claim.add_argument("--owner", required=True, help="who is taking the copy")
+    claim.add_argument("--no-announce", action="store_true", help="claim only")
+    release = add(api.Command.RELEASE, help="destroy copies by ID, owner or expiry")
+    release.add_argument("copy_ids", nargs="*", metavar="COPY_ID", help="copies to release")
+    _group_arguments(release)
+    release.add_argument("--owner", help="release every copy this owner has")
+    release.add_argument("--expired", action="store_true", help="release expired copies")
+    announce = add(api.Command.ANNOUNCE, help="announce existing copies again")
+    _group_arguments(announce)
+    announce.add_argument("--owner", help="announce this owner's copies (default: the pool)")
+    copies = add(api.Command.COPIES, help="list copies")
+    _group_arguments(copies)
+    prune = add(api.Command.PRUNE, help="apply retention")
+    prune.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    prune.add_argument(
+        "--target",
+        required=True,
+        choices=[target.value for target in PruneTarget],
+        help="the build's stores, the export stores, or staging",
+    )
+    prune.add_argument(
+        "--dry-run",
+        dest="report_only",
+        action="store_true",
+        help="report what would be removed, and the space recovered",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
@@ -106,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     _override_arguments(run)
     run.add_argument("--work", help="the work directory (default: .datadouble)")
     run.add_argument("--resume", metavar="GENERATION", help="resume this generation")
+    _operation_parsers(commands.add_parser)
     commands.add_parser("api", help="read a JSON request from standard input")
     return parser
 
@@ -138,12 +208,74 @@ def _run_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     return fields
 
 
+def _group_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    fields: dict[str, JsonValue] = {"spec": arguments.spec}
+    if arguments.groups:
+        fields["groups"] = list(arguments.groups)
+    return fields
+
+
+def _set(fields: dict[str, JsonValue], arguments: _Arguments, *names: str) -> dict[str, JsonValue]:
+    """Copy the named arguments that were given into the request."""
+    for name in names:
+        value: JsonValue = getattr(arguments, name, None)
+        if value:
+            fields[name] = list(value) if isinstance(value, list) else value
+    return fields
+
+
+def _promote_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    return _set(_group_fields(arguments), arguments, "generation")
+
+
+def _activate_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    return _set(_group_fields(arguments), arguments, "generation")
+
+
+def _replicate_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    fields = _set(_group_fields(arguments), arguments, "owner", "all_at_once")
+    if arguments.no_announce:
+        fields["announce"] = False
+    return fields
+
+
+def _claim_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    fields = _set(_group_fields(arguments), arguments, "owner")
+    if arguments.no_announce:
+        fields["announce"] = False
+    return fields
+
+
+def _release_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    return _set(_group_fields(arguments), arguments, "copy_ids", "owner", "expired")
+
+
+def _announce_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    return _set(_group_fields(arguments), arguments, "owner")
+
+
+def _prune_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    fields: dict[str, JsonValue] = {"spec": arguments.spec, "target": arguments.target}
+    if arguments.report_only:
+        fields["dry_run"] = True
+    return fields
+
+
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.VERSION: lambda _: {},
     api.Command.SCHEMA: lambda _: {},
     api.Command.LOCK: _spec_fields,
     api.Command.PLAN: _override_fields,
     api.Command.RUN: _run_fields,
+    api.Command.PROMOTE: _promote_fields,
+    api.Command.FETCH: _group_fields,
+    api.Command.ACTIVATE: _activate_fields,
+    api.Command.REPLICATE: _replicate_fields,
+    api.Command.CLAIM: _claim_fields,
+    api.Command.RELEASE: _release_fields,
+    api.Command.ANNOUNCE: _announce_fields,
+    api.Command.COPIES: _group_fields,
+    api.Command.PRUNE: _prune_fields,
 }
 
 
@@ -199,8 +331,55 @@ def _run_lines(response: api.RunResponse) -> list[str]:
     return lines
 
 
-def summarize(response: api.Response) -> str:
-    """Describe a response for people, the default output without ``--json``."""
+def _copy_line(copy: Copy, verb: str) -> str:
+    where = ", ".join(f"{k}={v}" for k, v in copy.location.items())
+    owner = f" for {copy.owner}" if copy.owner else ""
+    return f"  {verb} {copy.id} ({copy.kind}, {copy.generation}{owner}) {where}".rstrip()
+
+
+def _operation_lines(
+    response: api.PromoteResponse
+    | api.FetchResponse
+    | api.ActivateResponse
+    | api.CopiesResponse
+    | api.PruneResponse,
+) -> list[str]:
+    match response:
+        case api.PromoteResponse():
+            return [
+                f"promoted {p.summary.identity.prefix()}/{p.summary.identity.generation} "
+                f"to channel {p.channel} in {', '.join(p.stores)}"
+                for p in response.promoted
+            ]
+        case api.FetchResponse():
+            return [f"{f.prefix}: {f.status} {f.generation}" for f in response.fetched]
+        case api.ActivateResponse():
+            return [f"channel {c.name} now points at {c.generation}" for c in response.channels]
+        case api.CopiesResponse():
+            result = response.result
+            made = "claimed" if response.command is api.Command.CLAIM else "made"
+            lines = [_copy_line(c, made) for c in result.created]
+            lines.extend(_copy_line(c, "removed") for c in result.removed)
+            if response.command in {api.Command.COPIES, api.Command.ANNOUNCE}:
+                lines.extend(
+                    _copy_line(c, "claimed" if c.claimed else "ready") for c in result.copies
+                )
+            lines.extend(f"  announced to {target}" for target in response.announced)
+            lines.extend(f"  withdrew {target}" for target in response.withdrawn)
+            return [f"{response.command}: {len(result.copies)} copies recorded", *lines]
+        case api.PruneResponse():
+            verb = "would remove" if response.result.dry_run else "removed"
+            lines = [
+                f"  {verb} {p.prefix}/{p.generation} from {p.location} ({p.bytes} bytes)"
+                for p in response.result.removed
+            ]
+            lines.extend(f"  {verb} copy {c}" for c in response.result.copies_removed)
+            return [f"prune: {verb} {response.bytes} bytes", *lines]
+        case _:
+            assert_never(response)
+
+
+def _simple(response: api.VersionResponse | api.SchemaResponse | api.LockResponse) -> str:
     match response:
         case api.VersionResponse():
             return f"datadouble {response.version} (Python {response.python})"
@@ -208,12 +387,29 @@ def summarize(response: api.Response) -> str:
             return json.dumps(response.schema_, indent=2)
         case api.LockResponse():
             return f"wrote {response.lock}: {response.tables} tables ({response.fingerprint})"
+        case _:
+            assert_never(response)
+
+
+def summarize(response: api.Response) -> str:
+    """Describe a response for people, the default output without ``--json``."""
+    match response:
+        case api.VersionResponse() | api.SchemaResponse() | api.LockResponse():
+            return _simple(response)
         case api.PlanResponse():
             return "\n".join(_plan_lines(response))
         case api.RunResponse():
             return "\n".join(_run_lines(response))
         case api.ErrorResponse():
             return "\n".join(_error_lines(response))
+        case (
+            api.PromoteResponse()
+            | api.FetchResponse()
+            | api.ActivateResponse()
+            | api.CopiesResponse()
+            | api.PruneResponse()
+        ):
+            return "\n".join(_operation_lines(response))
         case _:
             assert_never(response)
 

@@ -3,18 +3,21 @@
 
 """Finding installed adapters through entry points.
 
-Engines register under ``datadouble.engines`` and stores under
-``datadouble.stores``, so third-party adapters installed from anywhere are
-found the same way as Datadouble's own.
+Engines register under ``datadouble.engines``, stores under
+``datadouble.stores``, replicate adapters under ``datadouble.replicators`` and
+announce adapters under ``datadouble.announcers``, so third-party adapters
+installed from anywhere are found the same way as Datadouble's own.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 
 from pydantic import JsonValue
 
+from datadouble.announce import AnnouncerFactory
 from datadouble.engine import EngineAdapter
+from datadouble.replicate import ReplicatorFactory
 from datadouble.storage import Store
 
 type EngineFactory = Callable[[], EngineAdapter]
@@ -31,6 +34,10 @@ class Registry:
 
     engines: Mapping[str, EngineFactory]
     stores: Mapping[str, StoreFactory]
+    replicators: Mapping[str, ReplicatorFactory] = field(
+        default_factory=dict[str, ReplicatorFactory]
+    )
+    announcers: Mapping[str, AnnouncerFactory] = field(default_factory=dict[str, AnnouncerFactory])
 
     def engine(self, name: str) -> EngineAdapter:
         """The engine adapter registered as ``name``."""
@@ -62,4 +69,10 @@ def installed() -> Registry:
     stores: dict[str, StoreFactory] = {
         point.name: point.load() for point in entry_points(group="datadouble.stores")
     }
-    return Registry(engines=engines, stores=stores)
+    replicators: dict[str, ReplicatorFactory] = {
+        point.name: point.load() for point in entry_points(group="datadouble.replicators")
+    }
+    announcers: dict[str, AnnouncerFactory] = {
+        point.name: point.load() for point in entry_points(group="datadouble.announcers")
+    }
+    return Registry(engines=engines, stores=stores, replicators=replicators, announcers=announcers)

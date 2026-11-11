@@ -38,6 +38,13 @@ datadouble = "datadouble.cli:main"
 [project.entry-points."datadouble.stores"]
 filesystem = "datadouble.storage:filesystem_store"
 
+[project.entry-points."datadouble.replicators"]
+filesystem = "datadouble.replicate:filesystem_replicator"
+
+[project.entry-points."datadouble.announcers"]
+dotenv = "datadouble.announce:dotenv_announcer"
+ci-outputs = "datadouble.announce:ci_outputs_announcer"
+
 [build-system]
 requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"
