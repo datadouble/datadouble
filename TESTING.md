@@ -5,7 +5,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 
 ## Requirements
 
-- [uv](https://docs.astral.sh/uv/) (it installs Python 3.13 and every tool)
+- [uv](https://docs.astral.sh/uv/) (it installs Python and every tool)
 - Docker Engine with the Compose and Buildx plugins
 - GNU `make`
 - [actionlint](https://github.com/rhysd/actionlint), for `make lint-workflows`
@@ -35,6 +35,24 @@ example `DATADOUBLE_TEST_POSTGRES_DSN`). `make test` deselects them.
 
 **Conformance suites** under `conformance/` arrive with the adapters (M1 on):
 every engine, CI/CD and agent skill adapter must pass its suite.
+
+## Supported Python versions
+
+Datadouble supports Python 3.13 and every later release. Lint, type checks and
+the unit tests run on 3.13, the minimum, and the type checkers target it, so
+code never uses a newer feature by accident. The unit tests also run on each
+later release:
+
+| Python | Role |
+|---|---|
+| 3.13 | Minimum; lint, type checks and unit tests |
+| 3.14 | Unit tests |
+| 3.15 | Unit tests; the version in the container images |
+
+**When a new CPython release comes out,** add it to the `compatibility` matrix
+in `.github/workflows/ci.yml` and to this table, then add its
+`Unit tests (Python 3.x)` check to the required checks on `main`. Moving the
+container images to it is a separate decision; Dependabot does not propose it.
 
 ## Docker Compose groups
 
@@ -67,7 +85,8 @@ The full list of planned groups is in the [v1 plan](docs/v1-plan.md#test-environ
 
 | Workflow | Job | Runs |
 |---|---|---|
-| CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test` |
+| CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test`, on Python 3.13 |
+| CI | Unit tests (Python 3.x) | `make test` on each later supported version |
 | CI | Integration tests (Docker Compose) | `make test-integration`, then uploads coverage to Codecov |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |

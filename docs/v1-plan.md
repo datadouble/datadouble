@@ -49,7 +49,8 @@ moves on only when they pass.
 
 ## Choices made for the run
 
-- **Python 3.13** as the minimum version.
+- **Python 3.13** as the minimum version, with every later release tested in
+  CI; the container images run Python 3.15 (decision 48).
 - **Typing** per [architecture](architecture.md#typing): `mypy --strict`,
   `pyright` strict and `ruff`, with no unexplained suppressions.
 - **Anonymization runs inside the working database.** Faker generates seeded

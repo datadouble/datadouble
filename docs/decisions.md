@@ -51,6 +51,7 @@
 | 45 | The small file stored next to each image, read by `fetch` without downloading the image, is the **image summary** (was "sidecar manifest") | "Sidecar" suggested a Kubernetes sidecar container |
 | 46 | The documentation site is built with Zensical, pinned to an exact version | Material for MkDocs reached end of life on 5 November 2026; Zensical is its MIT-licensed successor from the same team, Python-based, and actively maintained, but still before 1.0 |
 | 47 | Development tasks run through `make`; Python tooling runs through `uv`; tests and lint configuration live in the root `pyproject.toml` | One entry point that CI and people share |
+| 48 | Python 3.13 is the minimum supported version and the type-checking target; CI runs the unit tests on every later release (3.14 and 3.15 now, new ones added as they come out); the container images run 3.15, and moving them to a new release is a deliberate change, not a Dependabot update | Installs from PyPI work on older CI runners and workstations, the images get the newest interpreter, and the matrix shows which dependencies lag a new release |
 
 ## Open
 

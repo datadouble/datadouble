@@ -40,7 +40,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up uv and Python
+      - name: Set up uv and Python (the minimum supported version)
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.13"
@@ -69,6 +69,48 @@ jobs:
 
       - name: Type checks
         run: make typecheck
+
+      - name: Unit tests (100% coverage gate)
+        run: make test
+
+  compatibility:
+    # Unit tests on every supported Python. The checks job above covers the
+    # minimum version with lint and type checks. When a new CPython release
+    # comes out, add it here, to TESTING.md and to the required checks on main.
+    name: Unit tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.14", "3.15"]
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # setup-uv downloads uv and CPython from GitHub release assets; uv
+          # resolves packages from PyPI.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install the workspace
+        run: uv sync --frozen
 
       - name: Unit tests (100% coverage gate)
         run: make test
