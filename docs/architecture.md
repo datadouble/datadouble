@@ -17,7 +17,7 @@ plus three operations on existing images and copies: `release`, `prune` and
 | transform | Working database | Anonymized working database; `after_transform` hooks run last |
 | package | Anonymized working databases | One golden image per group and engine, in each requested format, plus manifests |
 | verify | Golden image, restored to scratch space | Verification report; a failing report stops the pipeline |
-| store | Verified golden image | Image and sidecar manifest written to one or more storage backends |
+| store | Verified golden image | Image and its image summary written to one or more storage backends |
 | promote | Stored golden image | The image copied to the export store and a channel advanced; refused unless verification passed |
 | fetch | Image in the export store | The image unpacked into non-production staging and a staging channel advanced; skipped if nothing newer |
 | replicate | Staged image | Copies, as volumes or running instances, in pool or on-demand mode |

@@ -25,7 +25,7 @@
 | 19 | `build` refuses to generate or run on vendor-hosted runners | Prevents production data being pulled onto a vendor's machines |
 | 20 | `verify` runs after `package`, against a scratch restore of the image | Verifies the artifact that ships, including that it restores |
 | 21 | Run outcomes: success, warning, failure; anything that could leak personal data is a failure; no continue-on-error switch | Operators need "fix this soon" without weakening fail-loudly |
-| 22 | Images identified by spec, engine, target engine version and generation; addressed through channels; sidecar manifests readable without download | Cheap change detection, rollback, and test channels that can't replace live images |
+| 22 | Images identified by spec, engine, target engine version and generation; addressed through channels; image summaries (called sidecar manifests until decision 45) readable without download | Cheap change detection, rollback, and test channels that can't replace live images |
 | 23 | `replicate` supports pool mode (N unclaimed copies, recycled by generation) and on-demand mode; copies are volumes or instances | Large images copy slower than people will wait; small ones suit per-request copies |
 | 24 | Agent skills (Agent Skills format) for each job, the spec, and a whole pipeline; shipped in this repository as a Claude Code plugin and plain skill directories | Agents increasingly do pipeline setup; skills make it repeatable |
 | 25 | Skills contain no logic: all files come from `datadouble` commands, and skills never weaken safety settings or handle secrets | Same reason as the thin CLI; an agent must not trade safety for a passing run |
@@ -48,6 +48,7 @@
 | 42 | Jenkins integration is a shared library in v1; a Jenkins plugin is a possible later addition | Avoids a Java plugin build and hosting process until users ask for it |
 | 43 | The documentation site is generated from `docs/*.md`, with Design and Project sections live from M0 and Using Datadouble added in M10 | The docs stay the single source of truth, and the public site shows the design before there is software to document |
 | 44 | The stage that tells consumers where clones can be accessed, as volumes or connection parameters, is named `announce` (was `publish`), and its adapters are announce adapters | It never writes data, and "publish" read as writing database dumps into targets such as Secrets or Vault |
+| 45 | The small file stored next to each image, read by `fetch` without downloading the image, is the **image summary** (was "sidecar manifest") | "Sidecar" suggested a Kubernetes sidecar container |
 
 ## Open
 
