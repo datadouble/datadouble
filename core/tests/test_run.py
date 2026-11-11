@@ -348,8 +348,9 @@ def test_signed_images(tmp_path: Path, registry: Registry) -> None:
     data = stored.get_bytes(summary.identity.summary_key())
     assert data is not None
     on_disk = ImageSummary.model_validate_json(data)
-    assert on_disk.signature == summary.identity.summary_key().replace("summary", "sigstore")
-    assert stored.get_bytes(on_disk.signature) is not None
+    signature = summary.identity.summary_key().replace("summary", "sigstore")
+    assert on_disk.signature == signature
+    assert stored.get_bytes(signature) is not None
 
 
 def test_the_anonymization_key(
