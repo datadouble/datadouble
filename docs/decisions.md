@@ -42,12 +42,11 @@
 | 36 | Salesforce in version 1 works against the in-memory fake; cassettes are recorded later, outside the run, against a development org | The run never holds org credentials |
 | 37 | `CHANGELOG.md` in Keep a Changelog format with an `[Unreleased]` section; every user-visible change and every security fix gets an entry; the release script refuses to tag with an empty `[Unreleased]` | Users learn what an upgrade changes, and security-only releases are possible and explained |
 | 38 | Until 1.0, all packages are versioned and released together, with one changelog | One release gate and one changelog while the adapter interface is still changing; independent versions can follow once it is stable |
+| 39 | Specs are accepted as YAML or JSON, both validated against one JSON Schema generated from the typed models | YAML for people editing by hand, JSON for programs; one schema keeps them identical |
+| 40 | Golden image formats `physical` and `logical` are chosen in the spec (`package.formats`, CLI-overridable); omitted means every format the engine supports; an unsupported format fails the plan | Builds stay reproducible from spec and manifest, and no engine silently falls back |
+| 41 | One build can produce several images through named groups in the spec; the extract is shared, each group gets its own working database, and all images from a build share a generation; image identity includes the group | Small images that are easy to reason about, plus combined ones, from one snapshot and without merging images later |
+| 42 | Jenkins integration is a shared library in v1; a Jenkins plugin is a possible later addition | Avoids a Java plugin build and hosting process until users ask for it |
 
 ## Open
 
-| Question | Notes |
-|---|---|
-| Spec format details | YAML and JSON both, or JSON Schema-defined YAML only |
-| Golden image formats | Logical dump, physical data directory, or both per engine |
-| Jenkins packaging | Shared library only, or a plugin too |
-| Several images from one spec | One combined image, one per database, or both from one build |
+None at present.
