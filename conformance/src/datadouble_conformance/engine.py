@@ -311,7 +311,13 @@ class EngineConformance:
             strategy: builds.restored_values(result, result.images[0], compared, str(strategy))
             for strategy, result in results.items()
         }
-        assert restored[Strategy.NESTED] == restored[Strategy.KEYS]
+        nested, keys = restored[Strategy.NESTED], restored[Strategy.KEYS]
+        differing = {
+            name: (sorted(nested[name] - keys[name])[:3], sorted(keys[name] - nested[name])[:3])
+            for name in nested
+            if nested[name] != keys.get(name)
+        }
+        assert not differing, differing
 
     def test_whole_build(self, harness: EngineHarness, tmp_path: Path) -> None:
         """The sample spec runs plan through store, verifies, and stores both formats."""

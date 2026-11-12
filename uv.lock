@@ -14,6 +14,7 @@ members = [
     "datadouble-docker",
     "datadouble-kubernetes",
     "datadouble-mongodb",
+    "datadouble-mysql",
     "datadouble-postgres",
     "datadouble-s3",
     "datadouble-vault",
@@ -343,6 +344,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-mysql"
+version = "0.0.0"
+source = { editable = "adapters/mysql" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "pymysql" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "pymysql", specifier = ">=1.1.2" },
+]
+
+[[package]]
 name = "datadouble-postgres"
 version = "0.0.0"
 source = { editable = "adapters/postgres" }
@@ -397,6 +413,7 @@ dev = [
     { name = "datadouble-docker" },
     { name = "datadouble-kubernetes" },
     { name = "datadouble-mongodb" },
+    { name = "datadouble-mysql" },
     { name = "datadouble-postgres" },
     { name = "datadouble-s3" },
     { name = "datadouble-vault" },
@@ -405,6 +422,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-pymysql" },
     { name = "types-pyyaml" },
 ]
 docs = [
@@ -422,6 +440,7 @@ dev = [
     { name = "datadouble-docker", editable = "adapters/docker" },
     { name = "datadouble-kubernetes", editable = "adapters/kubernetes" },
     { name = "datadouble-mongodb", editable = "adapters/mongodb" },
+    { name = "datadouble-mysql", editable = "adapters/mysql" },
     { name = "datadouble-postgres", editable = "adapters/postgres" },
     { name = "datadouble-s3", editable = "adapters/s3" },
     { name = "datadouble-vault", editable = "adapters/vault" },
@@ -430,6 +449,7 @@ dev = [
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-cov", specifier = ">=7.0" },
     { name = "ruff", specifier = ">=0.13" },
+    { name = "types-pymysql", specifier = ">=1.1.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
 docs = [{ name = "zensical", specifier = "==0.1.1" }]
@@ -1042,6 +1062,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pymysql"
+version = "1.2.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/69/808dc3d9bcc7d2841cdc2909b978c64eb1c450b7cd7b42d5907f7de7567d/pymysql-1.2.4.tar.gz", hash = "sha256:491558165b8e11f3644c5f9cfb30cc9c9111ffd54e53d3aa91b9a0a20be2294f", size = 51598, upload-time = "2026-11-09T09:37:09.356Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/60/acffa1e7261fdc68fadf6f196b66058e03dcb3df239f2c0acbfd11165845/pymysql-1.2.4-py3-none-any.whl", hash = "sha256:e169bed906168fffd0088925f45b3df024c2775c6fd128da0df773d47c458840", size = 46892, upload-time = "2026-11-09T09:37:07.987Z" },
+]
+
+[[package]]
 name = "pyright"
 version = "1.1.414"
 source = { registry = "https://pypi.org/simple" }
@@ -1235,6 +1264,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1c/b8/63a75cfb27a17c38550e44025d3a6e7be64516fd8608a3b75703bf37d81b/tomli-2.5.0-cp315-cp315t-win_amd64.whl", hash = "sha256:f3fcbc57b1791fa6cbe5d8434179d51de12be1a4811469529f47f6e7487a2571", size = 117281, upload-time = "2026-10-07T12:23:34.648Z" },
     { url = "https://files.pythonhosted.org/packages/72/01/e8c1debb2173973372934c68fc8e46170ab60ef23ed4592dff4dec6e8993/tomli-2.5.0-cp315-cp315t-win_arm64.whl", hash = "sha256:d2ba24db8a9376921b5e87b4762b9adb0f3f1deaea68f2b8b0bb2c11efb9c3e7", size = 115069, upload-time = "2026-10-07T12:23:35.77Z" },
     { url = "https://files.pythonhosted.org/packages/60/3f/3e3f8fd0919249b0200c80fbc4f9a1e70be19f9883da71dfb7f8b9ab8aca/tomli-2.5.0-py3-none-any.whl", hash = "sha256:32a7b79ac57a2e83670ce329ccf675798bc5a2094783a63676866b70503f2e2b", size = 14765, upload-time = "2026-10-07T12:23:36.875Z" },
+]
+
+[[package]]
+name = "types-pymysql"
+version = "1.2.4.20261111"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/6e/7b4c4a89106c15db935db34d61a980384914c4c82937228e811ad4b05579/types_pymysql-1.2.4.20261111.tar.gz", hash = "sha256:d1049db232c533a22dbcc11aab2685673cdf52f1051249b88e2fc93840851026", size = 22927, upload-time = "2026-11-11T08:32:39.098Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/c9/4c715f733f01bc21afb7439a5ef99c8d3adceec4fcea16068560286efcd7/types_pymysql-1.2.4.20261111-py3-none-any.whl", hash = "sha256:9d5ec6aba675e283a58b9f8144583c8d2ecaf8b372a36a64cb66eb80915eabfa", size = 23392, upload-time = "2026-11-11T08:32:38.273Z" },
 ]
 
 [[package]]
