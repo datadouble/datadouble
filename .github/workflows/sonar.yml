@@ -63,6 +63,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 0  # full history for blame and new-code detection
 
+      # The runner image ships MySQL with an AppArmor profile for
+      # /usr/sbin/mysqld. Containers that Docker-in-Docker starts run without
+      # a profile of their own, so the host's attaches to their mysqld by path
+      # and stops it writing working databases under /work. The runner is
+      # throwaway and its MySQL is never used; see TESTING.md to remove this.
+      - name: Unload the runner's MySQL AppArmor profile
+        run: |
+          if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then
+            sudo apparmor_parser --remove /etc/apparmor.d/usr.sbin.mysqld
+          fi
+
       # Adapter code is only reachable with databases running, so coverage
       # comes from the whole suite in the Compose default group. The report
       # must name every analysed file exactly once, or the scanner counts it

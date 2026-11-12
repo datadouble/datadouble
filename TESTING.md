@@ -87,6 +87,16 @@ those containers, so the PostgreSQL tests connect to the source by address.
 The suite runs as an unprivileged user, as Datadouble should, and containers
 run as that user too.
 
+GitHub's Ubuntu runners ship MySQL with an AppArmor profile for
+`/usr/sbin/mysqld`. Containers that Docker-in-Docker starts run without a
+profile of their own (it cannot apply one), so the host's profile attaches to
+their `mysqld` by path and refuses to let it write working databases under
+`/work`. The integration and SonarQube Cloud jobs therefore unload that
+profile first (`apparmor_parser --remove`): the runner is throwaway and its
+MySQL is never started. Remove those steps if the runner image stops shipping
+the profile, or if the suite moves off Docker-in-Docker. Anyone running the
+suite on a host with the same profile has to unload it too.
+
 Pagila is fetched when `dev/postgres` is built, at a pinned commit and checked
 against its SHA-256. It uses pgvector, so `dev/postgres` is built on the pinned
 `pgvector/pgvector` image and the conformance spec names the same image in
