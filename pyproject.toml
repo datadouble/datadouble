@@ -111,6 +111,7 @@ known-first-party = [
     "check_source",
     "make_tag",
     "check_coverage",
+    "sakila_bulk",
     "fakes",
     "fake_engine",
     "test_conformance",
