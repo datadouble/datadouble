@@ -16,6 +16,7 @@ from typing import assert_never
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
+from datadouble import jailer
 from datadouble.catalog import Catalog, CatalogLock, Column, ColumnKind, ForeignKey, Table
 from datadouble.names import ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
@@ -619,5 +620,27 @@ def plan(
     capabilities: Capabilities,
     options: PlanOptions | None = None,
 ) -> Plan:
-    """Plan a build; raises :class:`PlanError` listing every problem found."""
-    return _Planner(spec, catalog, lock, capabilities, options or PlanOptions()).plan()
+    """Plan a build; raises :class:`PlanError` listing every problem found.
+
+    A subset from Jailer is translated against ``catalog`` first; its excluded
+    tables join the spec's.
+    """
+    warnings: tuple[str, ...] = ()
+    if spec.subset.jailer is not None:
+        try:
+            translated = jailer.load(
+                spec.subset.jailer.model,
+                spec.subset.jailer.datamodel,
+                catalog,
+                case_sensitive=spec.case_sensitive,
+            )
+        except jailer.JailerError as error:
+            raise PlanError((f"the Jailer subset: {error}",)) from None
+        subset = translated.subset.model_copy(
+            update={"as_of": spec.subset.as_of, "strategy": spec.subset.strategy}
+        )
+        exclude = tuple(dict.fromkeys((*spec.exclude, *translated.exclude)))
+        spec = spec.model_copy(update={"subset": subset, "exclude": exclude})
+        warnings = tuple(f"Jailer subset: {line}" for line in translated.report)
+    planned = _Planner(spec, catalog, lock, capabilities, options or PlanOptions()).plan()
+    return planned.model_copy(update={"warnings": (*warnings, *planned.warnings)})

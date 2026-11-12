@@ -43,6 +43,9 @@ class _Arguments(argparse.Namespace):
     all_at_once: bool
     no_announce: bool
     copy_ids: list[str]
+    model: str
+    datamodel: str
+    output: str
     expired: bool
     target: str
     report_only: bool
@@ -166,6 +169,16 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser(api.Command.SCHEMA, help="print the spec JSON Schema")
     lock = commands.add_parser(api.Command.LOCK, help="write the catalog lock for a spec")
     _spec_arguments(lock)
+    importing = commands.add_parser(
+        api.Command.IMPORT_JAILER,
+        help="translate a Jailer subset into native spec settings, and lock the catalog",
+    )
+    _spec_arguments(importing)
+    importing.add_argument("--model", required=True, help="the Jailer extraction model (.jm)")
+    importing.add_argument("--datamodel", required=True, help="the Jailer data model folder")
+    importing.add_argument(
+        "--output", required=True, help="where to write the native subset settings (YAML)"
+    )
     planning = commands.add_parser(api.Command.PLAN, help="plan a build without extracting")
     _spec_arguments(planning)
     _override_arguments(planning)
@@ -265,6 +278,12 @@ _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.VERSION: lambda _: {},
     api.Command.SCHEMA: lambda _: {},
     api.Command.LOCK: _spec_fields,
+    api.Command.IMPORT_JAILER: lambda arguments: {
+        **_spec_fields(arguments),
+        "model": arguments.model,
+        "datamodel": arguments.datamodel,
+        "output": arguments.output,
+    },
     api.Command.PLAN: _override_fields,
     api.Command.RUN: _run_fields,
     api.Command.PROMOTE: _promote_fields,
@@ -396,6 +415,10 @@ def summarize(response: api.Response) -> str:
     match response:
         case api.VersionResponse() | api.SchemaResponse() | api.LockResponse():
             return _simple(response)
+        case api.ImportJailerResponse():
+            lines = [f"wrote {response.output} and {response.lock}"]
+            lines.extend(f"  {line}" for line in response.report)
+            return "\n".join(lines)
         case api.PlanResponse():
             return "\n".join(_plan_lines(response))
         case api.RunResponse():

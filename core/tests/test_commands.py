@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
+from test_jailer import MODEL, model_files
 from test_run import SPEC, dataset
 
 from datadouble import api, cli
@@ -330,3 +332,24 @@ def test_required_stage(tmp_path: Path, adapters: Registry) -> None:
     run = Run(parse_spec(SPEC), None, adapters, RunOptions(stages=(Stage.PLAN,), work=tmp_path))
     with pytest.raises(RunError, match="stage verify has not completed"):
         run.required(Stage.VERIFY, None)
+
+
+def test_import_jailer(spec_file: Path, tmp_path: Path) -> None:
+    jm, datamodel = model_files(tmp_path / "jailer")
+    output = tmp_path / "subset.yml"
+    arguments = ["--model", str(jm), "--datamodel", str(datamodel), "--output", str(output)]
+    code, out = cli_run("import-jailer", "--spec", str(spec_file), *arguments)
+    assert code == ExitCode.WARNING
+    assert out.splitlines()[0] == f"wrote {output} and {tmp_path / 'catalog.lock'}"
+    assert "  ignored the layout block, which does not choose rows" in out.splitlines()
+    written = yaml.safe_load(output.read_text("utf-8"))
+    assert written["exclude"] == ["public.categories"]
+    assert written["subset"]["seeds"]["public.users"].startswith("(id <= 2")
+    plain = MODEL.split("#! block filters")[0]
+    jm.write_text(plain, "utf-8")
+    code, out = cli_run("import-jailer", "--spec", str(spec_file), *arguments)
+    assert code == ExitCode.SUCCESS
+    jm.write_text(plain.replace("T.id = 9; ;", "T.id = 9; 5;"), "utf-8")
+    code, out = cli_run("--json", "import-jailer", "--spec", str(spec_file), *arguments)
+    assert code == ExitCode.FAILURE
+    assert json.loads(out)["error"] == ErrorCode.INVALID_SUBSET

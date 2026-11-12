@@ -13,15 +13,17 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from datadouble import __version__
+from datadouble import __version__, jailer
 from datadouble.announce import AnnounceError, announce, withdraw
 from datadouble.anonymize import AnonymizeError
 from datadouble.catalog import CatalogError, CatalogLock, read_lock, write_lock
 from datadouble.channels import Channel
 from datadouble.engine import EngineError
 from datadouble.images import ImageError
+from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
 from datadouble.planner import Plan, PlanError, PlanOptions, plan
 from datadouble.promote import Promoted, PromoteError, promote
@@ -62,6 +64,7 @@ class Command(StrEnum):
     VERSION = "version"
     SCHEMA = "schema"
     LOCK = "lock"
+    IMPORT_JAILER = "import-jailer"
     PLAN = "plan"
     RUN = "run"
     PROMOTE = "promote"
@@ -107,6 +110,7 @@ class ErrorCode(StrEnum):
     ADAPTER_MISSING = "adapter_missing"
     UNRESOLVED_REFERENCE = "unresolved_reference"
     ENGINE_FAILED = "engine_failed"
+    INVALID_SUBSET = "invalid_subset"
     CONTAINER_FAILED = "container_failed"
     ANONYMIZATION_FAILED = "anonymization_failed"
     STORE_FAILED = "store_failed"
@@ -153,6 +157,18 @@ class LockRequest(_SpecRequest):
     """Introspect the source and write its catalog lock."""
 
     command: Literal[Command.LOCK]
+
+
+class ImportJailerRequest(_SpecRequest):
+    """Translate a Jailer subset into native spec settings, and lock the catalog."""
+
+    command: Literal[Command.IMPORT_JAILER]
+    model: Path
+    """The extraction model (``.jm``)."""
+    datamodel: Path
+    """The data model folder."""
+    output: Path
+    """Where the native ``subset`` and ``exclude`` settings are written, as YAML."""
 
 
 class _Overrides(_SpecRequest):
@@ -258,6 +274,7 @@ type Request = (
     VersionRequest
     | SchemaRequest
     | LockRequest
+    | ImportJailerRequest
     | PlanRequest
     | RunRequest
     | PromoteRequest
@@ -276,6 +293,7 @@ _REQUEST: TypeAdapter[Request] = TypeAdapter(
         VersionRequest
         | SchemaRequest
         | LockRequest
+        | ImportJailerRequest
         | PlanRequest
         | RunRequest
         | PromoteRequest
@@ -322,6 +340,16 @@ class LockResponse(_Message):
     lock: str
     fingerprint: str
     tables: int
+
+
+class ImportJailerResponse(_Message):
+    """Where the translated settings and the lock were written, and what was ignored."""
+
+    command: Literal[Command.IMPORT_JAILER] = Command.IMPORT_JAILER
+    outcome: Outcome
+    output: str
+    lock: str
+    report: tuple[str, ...]
 
 
 class PlanResponse(_Message):
@@ -407,6 +435,7 @@ type Response = (
     VersionResponse
     | SchemaResponse
     | LockResponse
+    | ImportJailerResponse
     | PlanResponse
     | RunResponse
     | PromoteResponse
@@ -426,6 +455,7 @@ _ERRORS: tuple[tuple[type[Exception], ErrorCode], ...] = (
     (RegistryError, ErrorCode.ADAPTER_MISSING),
     (SecretError, ErrorCode.UNRESOLVED_REFERENCE),
     (EngineError, ErrorCode.ENGINE_FAILED),
+    (JailerError, ErrorCode.INVALID_SUBSET),
     (ImageError, ErrorCode.ENGINE_FAILED),
     (ContainerError, ErrorCode.CONTAINER_FAILED),
     (AnonymizeError, ErrorCode.ANONYMIZATION_FAILED),
@@ -485,6 +515,29 @@ def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
     write_lock(lock, path)
     return LockResponse(
         lock=str(path), fingerprint=lock.fingerprint, tables=len(lock.catalog.tables)
+    )
+
+
+def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJailerResponse:
+    spec = load_spec(request.spec)
+    engine = registry.engine(spec.source.engine)
+    with engine.connect(spec.source.connection) as session:
+        catalog = session.catalog()
+    translated = jailer.load(
+        request.model, request.datamodel, catalog, case_sensitive=spec.case_sensitive
+    )
+    settings = {
+        "exclude": list(translated.exclude),
+        "subset": translated.subset.model_dump(mode="json", exclude_defaults=True),
+    }
+    request.output.write_text(yaml.safe_dump(settings, sort_keys=False), "utf-8")
+    lock = CatalogLock.of(catalog)
+    write_lock(lock, request.lock_path())
+    return ImportJailerResponse(
+        outcome=Outcome.WARNING if translated.report else Outcome.SUCCESS,
+        output=str(request.output),
+        lock=str(request.lock_path()),
+        report=translated.report,
     )
 
 
@@ -597,10 +650,14 @@ def _operate(request: Request, registry: Registry) -> Response:
             raise RunError(message)
 
 
-def _build(request: LockRequest | PlanRequest | RunRequest, registry: Registry) -> Response:
+def _build(
+    request: LockRequest | ImportJailerRequest | PlanRequest | RunRequest, registry: Registry
+) -> Response:
     match request:
         case LockRequest():
             return _write_lock(request, registry)
+        case ImportJailerRequest():
+            return _import_jailer(request, registry)
         case PlanRequest():
             return _plan(request, registry)
         case RunRequest():
@@ -617,7 +674,7 @@ def handle(request: Request, registry: Registry | None = None) -> Response:
                 return VersionResponse(version=__version__, python=platform.python_version())
             case SchemaRequest():
                 return SchemaResponse(schema=spec_schema())
-            case LockRequest() | PlanRequest() | RunRequest():
+            case LockRequest() | ImportJailerRequest() | PlanRequest() | RunRequest():
                 return _build(request, registry or installed())
             case (
                 PromoteRequest()

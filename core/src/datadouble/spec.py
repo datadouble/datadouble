@@ -162,6 +162,15 @@ class VirtualForeignKey(_Model):
     when: str | None = None
 
 
+class JailerSubset(_Model):
+    """A subset designed in Jailer, read on every run (see :mod:`datadouble.jailer`)."""
+
+    model: Path
+    """The extraction model, a ``.jm`` file."""
+    datamodel: Path
+    """The data model folder it was designed against."""
+
+
 class Subset(_Model):
     """Starting filters and the policy for deriving everything else."""
 
@@ -171,6 +180,20 @@ class Subset(_Model):
     follow: Follow = Follow()
     edges: dict[str, EdgePolicy] = Field(default_factory=dict[str, EdgePolicy])
     virtual_fks: dict[str, VirtualForeignKey] = Field(default_factory=dict[str, VirtualForeignKey])
+    jailer: JailerSubset | None = None
+    """A Jailer subset instead of seeds, follow, edges and virtual_fks."""
+
+    @model_validator(mode="after")
+    def _one_source(self) -> "Subset":
+        if self.jailer is not None and (
+            self.seeds or self.follow.down or self.edges or self.virtual_fks
+        ):
+            message = (
+                "a subset from Jailer cannot also have seeds, follow, edges or virtual_fks; "
+                "change the Jailer model, or import it (datadouble import-jailer) and edit that"
+            )
+            raise ValueError(message)
+        return self
 
 
 class FakerRule(_Model):
