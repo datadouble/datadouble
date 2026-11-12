@@ -57,10 +57,9 @@ moves on only when they pass.
 - **Anonymization runs inside the working database.** Faker generates seeded
   value tables in the Datadouble process; the engine applies them in native
   updates. There is no separate anonymization service.
-- **Per-engine container images.** One runtime image holding every engine's
-  native tools would be very large, so images are built per engine (plus a
-  core image). Redistribution terms for Oracle's and Microsoft's client tools
-  are checked before images containing them are published.
+- **One Datadouble image, no engine software in it.** Engine servers and tools
+  run in the vendors' own images through a container runtime (decision 72),
+  so Datadouble never redistributes Oracle's or Microsoft's software.
 - **Sample data licences** are checked before a dataset is committed; data is
   generated where a licence is unclear.
 - **Copyright and licence:** every source file starts with SPDX headers (see
@@ -109,8 +108,8 @@ files:
 |---|---|
 | PostgreSQL | Pagila |
 | MySQL | Sakila (also the Jailer conformance test) |
-| SQL Server | AdventureWorks |
-| Oracle | HR / SH sample schemas |
+| SQL Server | Sakila (decision 78) |
+| Oracle | Sakila (decision 78) |
 | MongoDB | Generated cinema database (`sample_mflix`'s licence is unclear) |
 | Redis | Generated keyspace with every data type and key-encoded references |
 | Elasticsearch, OpenSearch | Generated indices derived from Pagila, with join keys across indices |
@@ -185,7 +184,8 @@ differently shaped engine, before breadth.
 | M1 | **Core and PostgreSQL, end to end.** Spec, lock, excludes, strict mode, both planner strategies, snapshot extract, load, anonymization, package, verify, store to filesystem and S3, manifests, resume, JSON API and CLI | Pagila runs plan through store and passes the engine conformance suite; a killed run resumes; both strategies produce identical row sets; strict-mode cases behave as specified |
 | M2 | **Non-production side.** Promote, export store, image summaries, channels, image signing, fetch, replicate (filesystem, btrfs, docker-volume, k8s-pv), announce adapters, pool and on-demand modes, release, prune, activate | Promote refuses unverified or unsigned images; fetch skips when nothing is newer; pool recycling never empties the pool; activate rolls back; prune never removes a channel's target |
 | M3 | **MongoDB** | Conformance passes with no engine-specific code in the core |
-| M4 | **MySQL, SQL Server, Oracle** | Each passes conformance; Jailer and Datadouble produce identical key sets on Sakila |
+| M4 | **MySQL, SQL Server, Oracle.** In five pull requests (decision 80): container runtimes, MySQL, the Jailer front end, SQL Server, Oracle | Each passes conformance; Jailer and Datadouble produce identical key sets on Sakila |
+| M4.5 | **Performance tuning.** Profile builds and the integration suite (`pytest --durations`); size working databases so empty engine space (MySQL's redo and undo logs, say) neither slows builds nor bloats physical images; run integration tests in parallel; keep pulled vendor images between Compose runs | Measured before and after; suite wall time and physical image sizes recorded in `TESTING.md` |
 | M5 | **Redis, Elasticsearch, OpenSearch** | Each passes conformance, including strict mode on keys or mapping fields |
 | M6 | **Filesystem** | Only files for subset rows are copied; an unmatched top-level directory fails the plan; a planted file of fake personal data fails verify |
 | M7 | **Salesforce against the fake**, plus cassette recording, scrubbing and replay tooling | Conformance passes offline; the scrubber removes tokens, session IDs, instance URLs and org IDs from a synthetic recording |

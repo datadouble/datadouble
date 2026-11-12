@@ -1,0 +1,15 @@
+language	6
+country	109
+city	600
+address	603
+actor	200
+staff	2
+store	2
+category	16
+film	1000
+inventory	4581
+film_actor	5462
+film_category	1000
+customer	599
+rental	16044
+payment	16049

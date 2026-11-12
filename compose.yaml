@@ -25,9 +25,12 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+      mysql:
+        condition: service_healthy
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
+      DATADOUBLE_TEST_MYSQL_URL: mysql://datadouble:datadouble@mysql:3306/sakila
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -63,6 +66,35 @@ services:
       interval: 2s
       timeout: 5s
       retries: 90
+
+  # The shared Sakila fixture (dev/sakila). Docker fills the empty fixtures
+  # volume from this image on first mount; database containers mount it
+  # read-only and bulk-load from it, so the data is in no other image.
+  fixtures:
+    build:
+      context: dev/sakila
+    volumes:
+      - fixtures:/fixtures
+
+  # MySQL 8.4 with Sakila (dev/mysql), bulk-loaded from the fixture at start.
+  mysql:
+    build:
+      context: dev/mysql
+    depends_on:
+      fixtures:
+        condition: service_completed_successfully
+    environment:
+      MYSQL_ROOT_PASSWORD: datadouble
+      MYSQL_USER: datadouble
+      MYSQL_PASSWORD: datadouble
+    volumes:
+      - fixtures:/fixtures:ro
+    healthcheck:
+      # Ready only once the init scripts (Sakila) have finished.
+      test: ["CMD-SHELL", "mysql -udatadouble -pdatadouble -N -e 'SELECT count(*) FROM sakila.audit_event' 2>/dev/null | grep -q 100"]
+      interval: 2s
+      timeout: 5s
+      retries: 120
 
   # An S3-compatible object store (SeaweedFS) for the S3 storage adapter.
   s3:
@@ -180,6 +212,7 @@ services:
         'DATADOUBLE_TEST_BTRFS=/mnt/btrfs uv run pytest -m btrfs adapters/btrfs'
 
 volumes:
+  fixtures:
   work:
   k8s-work:
   k3s-config:

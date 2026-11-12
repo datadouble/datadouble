@@ -97,9 +97,10 @@ Every read in a run sees the same point in time.
   Parallel workers can attach with `SET TRANSACTION SNAPSHOT`. The catalog is
   read again inside the snapshot, and the extract fails if it changed since
   planning.
-- **MySQL:** `START TRANSACTION WITH CONSISTENT SNAPSHOT` covers one connection.
-  Parallel workers on one snapshot need a brief global lock at start, or the
-  extract runs single-connection.
+- **MySQL:** `START TRANSACTION WITH CONSISTENT SNAPSHOT` on one connection,
+  which reads every key and row; the extract runs single-connection. MySQL's
+  catalog is not versioned with the data, so `mysqldump` writes the schema
+  separately and the catalog fingerprint is checked again inside the snapshot.
 - **SQL Server / Oracle:** snapshot isolation and flashback/SCN-based reads
   respectively; details to be designed per adapter.
 - **MongoDB:** a snapshot session (read concern `snapshot`, pinned to one cluster

@@ -25,6 +25,7 @@ members = [
     "adapters/docker",
     "adapters/kubernetes",
     "adapters/mongodb",
+    "adapters/mysql",
     "adapters/postgres",
     "adapters/s3",
     "adapters/vault",
@@ -33,6 +34,7 @@ members = [
 
 [tool.uv.sources]
 datadouble = { workspace = true }
+datadouble-mysql = { workspace = true }
 datadouble-postgres = { workspace = true }
 datadouble-conformance = { workspace = true }
 datadouble-s3 = { workspace = true }
@@ -50,6 +52,7 @@ dev = [
     "datadouble-docker",
     "datadouble-kubernetes",
     "datadouble-mongodb",
+    "datadouble-mysql",
     "datadouble-postgres",
     "datadouble-s3",
     "datadouble-vault",
@@ -59,6 +62,7 @@ dev = [
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "ruff>=0.13",
+    "types-pymysql>=1.1.0",
     "types-pyyaml>=6.0.12",
 ]
 docs = ["zensical==0.1.1"]
@@ -105,16 +109,19 @@ known-first-party = [
     "datadouble_docker",
     "datadouble_kubernetes",
     "datadouble_mongodb",
+    "datadouble_mysql",
     "datadouble_postgres",
     "datadouble_s3",
     "datadouble_vault",
     "check_source",
     "make_tag",
     "check_coverage",
+    "sakila_bulk",
     "fakes",
     "fake_engine",
     "test_conformance",
     "test_mongodb_conformance",
+    "test_mysql_conformance",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -135,6 +142,8 @@ files = [
     "adapters/kubernetes/tests",
     "adapters/mongodb/src",
     "adapters/mongodb/tests",
+    "adapters/mysql/src",
+    "adapters/mysql/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
@@ -146,7 +155,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mysql/src:adapters/mysql/tests:adapters/postgres/src:adapters/postgres/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -163,6 +172,8 @@ include = [
     "adapters/kubernetes/tests",
     "adapters/mongodb/src",
     "adapters/mongodb/tests",
+    "adapters/mysql/src",
+    "adapters/mysql/tests",
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/s3/src",
@@ -174,7 +185,7 @@ include = [
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/postgres/tests"]
+extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mysql/tests", "adapters/postgres/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -185,6 +196,7 @@ testpaths = [
     "adapters/docker/tests",
     "adapters/kubernetes/tests",
     "adapters/mongodb/tests",
+    "adapters/mysql/tests",
     "adapters/postgres/tests",
     "adapters/s3/tests",
     "adapters/vault/tests",
@@ -211,6 +223,7 @@ source = [
     "adapters/docker/src",
     "adapters/kubernetes/src",
     "adapters/mongodb/src",
+    "adapters/mysql/src",
     "adapters/postgres/src",
     "adapters/s3/src",
     "adapters/vault/src",
