@@ -14,7 +14,12 @@ from pydantic import JsonValue
 from pymongo import MongoClient
 
 from datadouble.names import ColumnName, ColumnRef, TableName
-from datadouble_conformance.engine import EngineConformance, EngineHarness, ScratchSource
+from datadouble_conformance.engine import (
+    EngineConformance,
+    EngineHarness,
+    ScratchSource,
+    runtime_for_tests,
+)
 from datadouble_mongodb import MongoEngine
 
 pytestmark = pytest.mark.integration
@@ -29,6 +34,7 @@ name: cinema
 source:
   engine: mongodb
   connection: {uri: {env: DATADOUBLE_TEST_MONGODB_URI}, database: cinema}
+  image: mongo:9.0.8@sha256:bdcd178c7ef0c0afca7f345e413f6e8960b20f65662c2db45f8380221f32338e
 exclude: ["maintenance_runs"]
 subset:
   seeds:
@@ -126,6 +132,7 @@ def harness() -> EngineHarness:
         sample_spec=SAMPLE_SPEC,
         sample_column=ColumnRef(table=TableName.of("cinema", "users"), column=ColumnName("email")),
         scratch=scratch,
+        runtime=runtime_for_tests(),
     )
 
 

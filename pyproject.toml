@@ -13,6 +13,11 @@ requires-python = ">=3.13"
 [tool.uv]
 package = false
 
+# The number of checker suppressions allowed in the repository; see
+# scripts/check_source.py. Raising it needs a reason in the pull request.
+[tool.datadouble]
+suppressions = 23
+
 [tool.uv.workspace]
 members = [
     "core",

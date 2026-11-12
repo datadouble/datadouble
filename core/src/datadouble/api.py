@@ -38,6 +38,7 @@ from datadouble.replicate import (
     replicate,
 )
 from datadouble.run import Run, RunError, RunOptions, RunResult, Stage
+from datadouble.runtime import ContainerError
 from datadouble.secrets import SecretError
 from datadouble.settings import SettingsError
 from datadouble.signing import SigningError
@@ -106,6 +107,7 @@ class ErrorCode(StrEnum):
     ADAPTER_MISSING = "adapter_missing"
     UNRESOLVED_REFERENCE = "unresolved_reference"
     ENGINE_FAILED = "engine_failed"
+    CONTAINER_FAILED = "container_failed"
     ANONYMIZATION_FAILED = "anonymization_failed"
     STORE_FAILED = "store_failed"
     RUN_FAILED = "run_failed"
@@ -425,6 +427,7 @@ _ERRORS: tuple[tuple[type[Exception], ErrorCode], ...] = (
     (SecretError, ErrorCode.UNRESOLVED_REFERENCE),
     (EngineError, ErrorCode.ENGINE_FAILED),
     (ImageError, ErrorCode.ENGINE_FAILED),
+    (ContainerError, ErrorCode.CONTAINER_FAILED),
     (AnonymizeError, ErrorCode.ANONYMIZATION_FAILED),
     (StoreError, ErrorCode.STORE_FAILED),
     (RunError, ErrorCode.RUN_FAILED),

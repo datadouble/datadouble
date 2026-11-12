@@ -4,6 +4,7 @@
 """The engine conformance suite against Pagila, in the Compose postgres service."""
 
 import os
+import socket
 import uuid
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
@@ -16,12 +17,38 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import JsonValue
 
 from datadouble.names import ColumnName, ColumnRef, TableName
-from datadouble_conformance.engine import EngineConformance, EngineHarness, ScratchSource
+from datadouble_conformance.engine import (
+    EngineConformance,
+    EngineHarness,
+    ScratchSource,
+    runtime_for_tests,
+)
 from datadouble_postgres import PostgresEngine
 
 pytestmark = pytest.mark.integration
 
 DSN_VARIABLE = "DATADOUBLE_TEST_POSTGRES_DSN"
+
+
+def by_address(conninfo: str) -> str:
+    """``conninfo`` with its host name replaced by the address it resolves to.
+
+    ``pg_dump`` runs in containers on the Docker-in-Docker daemon, where the
+    Compose service names do not resolve.
+    """
+    params = conninfo_to_dict(conninfo)
+    params["host"] = socket.gethostbyname(str(params["host"]))
+    return make_conninfo(**{k: str(v) for k, v in params.items()})
+
+
+if DSN_VARIABLE in os.environ:
+    os.environ[DSN_VARIABLE] = by_address(os.environ[DSN_VARIABLE])
+
+# Pagila's film_embedding table needs pgvector, which the plain image lacks.
+PGVECTOR = (
+    "pgvector/pgvector:0.8.2-pg18-trixie"
+    "@sha256:b7337db8fe39d12fe8ecb0003c72680f24479813a744b43154eee6f2eab5a5f3"
+)
 
 # Customers 1-40 with their rentals, those rentals' payments, referrals and
 # notes, and everything they refer to. Pagila declares payment's references
@@ -34,6 +61,7 @@ name: pagila
 source:
   engine: postgres
   connection: {dsn: {env: DATADOUBLE_TEST_POSTGRES_DSN}}
+  image: PGVECTOR
 exclude: ["dba.*"]
 subset:
   seeds:
@@ -150,11 +178,12 @@ def harness() -> EngineHarness:
     """The PostgreSQL harness."""
     return EngineHarness(
         engine=PostgresEngine(),
-        sample_spec=SAMPLE_SPEC,
+        sample_spec=SAMPLE_SPEC.replace("PGVECTOR", PGVECTOR),
         sample_column=ColumnRef(
             table=TableName.of("public", "customer"), column=ColumnName("email")
         ),
         scratch=scratch,
+        runtime=runtime_for_tests(),
     )
 
 

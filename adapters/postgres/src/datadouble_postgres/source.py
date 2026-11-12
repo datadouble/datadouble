@@ -20,11 +20,11 @@ from psycopg import sql
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Catalog
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
-from datadouble_postgres.cluster import Binaries
+from datadouble_postgres.cluster import Tools, default_image
 from datadouble_postgres.errors import database_error
 from datadouble_postgres.introspect import Physical, introspect
 from datadouble_postgres.render import Renderer, Statement
@@ -155,7 +155,11 @@ class PostgresSnapshot:
             raise database_error(error, f"reading keys of {table}") from None
 
     def extract(
-        self, plan: Plan, selections: Mapping[TableName, Condition], directory: Path
+        self,
+        plan: Plan,
+        selections: Mapping[TableName, Condition],
+        directory: Path,
+        tooling: Tooling,
     ) -> ExtractResult:
         """Write the schema and every extracted table's chosen rows."""
         directory.mkdir(parents=True, exist_ok=True)
@@ -167,7 +171,11 @@ class PostgresSnapshot:
             )
             raise EngineError(message)
         excluded = plan.excludes.excluded()
-        self.session.dump_schema(self.snapshot, excluded, directory / "schema.dump")
+        version = self.session.server_version()
+        tools = Tools(
+            tooling.runtime, tooling.image or default_image(version), directory.parent / "tools"
+        )
+        self.session.dump_schema(tools, self.snapshot, excluded, directory)
         tables: list[ExtractedTable] = []
         for index, table in enumerate(plan.extracted()):
             names = copied_columns(catalog, physical, table)
@@ -186,9 +194,8 @@ class PostgresSnapshot:
             constraints=constraints,
         )
         (directory / "index.json").write_text(index_file.model_dump_json(indent=2), "utf-8")
-        version = str(self.connection.info.parameter_status("server_version") or "")
         return ExtractResult(
-            server_version=version.split(" ", maxsplit=1)[0],
+            server_version=version,
             snapshot=self.snapshot,
             snapshot_seconds=round(time.monotonic() - self.opened, 3),
             counts=tuple(TableCount(table=t.table, rows=t.rows) for t in tables),
@@ -240,15 +247,17 @@ def _pattern(table: TableName) -> str:
 class PostgresSession:
     """An open connection to the source database."""
 
-    def __init__(
-        self, connection: Connection, conninfo: str, password: str | None, binaries: Binaries
-    ) -> None:
+    def __init__(self, connection: Connection, conninfo: str, password: str | None) -> None:
         """Wrap a connection; ``conninfo`` and ``password`` are for ``pg_dump``."""
         self.connection = connection
         self.conninfo = conninfo
         self.password = password
-        self.binaries = binaries
         self.database = str(connection.info.dbname)
+
+    def server_version(self) -> str:
+        """The source's version, such as ``18.1``."""
+        version = str(self.connection.info.parameter_status("server_version") or "")
+        return version.split(" ", maxsplit=1)[0]
 
     def catalog(self) -> Catalog:
         """Introspect the source."""
@@ -257,18 +266,24 @@ class PostgresSession:
         except psycopg.Error as error:
             raise database_error(error, "reading the catalog") from None
 
-    def dump_schema(self, snapshot: str, excluded: frozenset[TableName], path: Path) -> None:
-        """``pg_dump --schema-only`` from the exported snapshot."""
+    def dump_schema(
+        self, tools: Tools, snapshot: str, excluded: frozenset[TableName], directory: Path
+    ) -> None:
+        """``pg_dump --schema-only`` from the exported snapshot, into ``directory``.
+
+        The source must be reachable from the runtime's containers at the
+        address in its connection string.
+        """
         arguments = [
             "--schema-only",
             "--format=custom",
             f"--snapshot={snapshot}",
-            f"--file={path}",
+            f"--file={directory / 'schema.dump'}",
             f"--dbname={self.conninfo}",
         ]
         arguments.extend(f"--exclude-table={_pattern(t)}" for t in sorted(excluded))
-        env = {"PGPASSWORD": self.password} if self.password else {}
-        self.binaries.run("pg_dump", arguments, env)
+        secrets = {"PGPASSWORD": self.password} if self.password else {}
+        tools.run("pg_dump", arguments, directory.parent, [directory], secrets)
 
     @contextmanager
     def snapshot(self, as_of: dt.datetime) -> Generator[Snapshot]:

@@ -124,6 +124,9 @@ class Source(_Model):
 
     engine: EngineName
     connection: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    image: str | None = None
+    """The vendor image working databases and engine tools run in; by default
+    the engine adapter picks the official image of the source's version."""
 
 
 class Follow(_Model):
@@ -443,6 +446,8 @@ class Spec(_Model):
     )
     package: Package = Package()
     verify: Verify = Verify()
+    runtime: AdapterSettings | None = None
+    """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     signing: Signing | None = None
     trust: Trust | None = None
@@ -452,6 +457,11 @@ class Spec(_Model):
     announce: tuple[AdapterSettings, ...] = ()
     prune: Retention = Retention()
     secrets: Secrets = Secrets()
+
+    @field_validator("runtime")
+    @classmethod
+    def _runtime(cls, value: AdapterSettings | None) -> AdapterSettings | None:
+        return None if value is None else _one_adapter(value)
 
     @field_validator("announce")
     @classmethod

@@ -39,6 +39,7 @@ from datadouble.engine import (
     Mapper,
     SourceSession,
     TableCount,
+    Tooling,
     Transformation,
     WorkingDatabases,
 )
@@ -192,11 +193,11 @@ class Run:
         self.clock = clock
         self.engine: EngineAdapter = registry.engine(spec.source.engine)
         self.record = self._record()
-        self.root = options.work / spec.name / self.record.generation
+        self.root = (options.work / spec.name / self.record.generation).resolve()
         self.records: list[StageRecord] = []
         self.warnings: list[str] = []
         self._session: SourceSession | None = None
-        self._working: WorkingDatabases | None = None
+        self._tooling: Tooling | None = None
         self._exits = ExitStack()
 
     # The generation
@@ -255,8 +256,8 @@ class Run:
         It is moved aside first: a process the interrupted attempt started may
         still be writing into it, and must not get in the way of the new attempt.
         """
-        if self._working is not None:
-            self._working.release(directory)
+        if self._tooling is not None:
+            self._tooling.runtime.release(directory)
         stale = self.root / ".stale" / f"{directory.name}-{time.time_ns()}"
         stale.parent.mkdir(exist_ok=True)
         directory.rename(stale)
@@ -308,6 +309,21 @@ class Run:
         return manifest
 
     # Stages
+
+    def tooling(self) -> Tooling:
+        """The container runtime engine software runs in, built on first use."""
+        if self._tooling is None:
+            if self.spec.runtime is None:
+                message = (
+                    "the spec has no `runtime`; extract and the stages after it run engine "
+                    "software in containers (`runtime: {docker: {}}` or `{kubernetes: ...}`)"
+                )
+                raise RunError(message)
+            ((kind, settings),) = self.spec.runtime.items()
+            self._tooling = Tooling(
+                runtime=self.registry.runtime(kind, settings), image=self.spec.source.image
+            )
+        return self._tooling
 
     def session(self) -> SourceSession:
         """The source connection, opened on first use."""
@@ -362,7 +378,7 @@ class Run:
                     if planned.strategy == "nested"
                     else key_conditions(graph, snapshot)
                 )
-                result = snapshot.extract(planned, selections, directory / "data")
+                result = snapshot.extract(planned, selections, directory / "data", self.tooling())
             return {"result": _JSON.validate_python(result.model_dump(mode="json"))}
 
         manifest = self._stage(Stage.EXTRACT, None, inputs, work)
@@ -590,11 +606,14 @@ class Run:
             planned = self.plan()
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
-                self._working = self.engine.working(self.root / "scratch")
+                extracted = self.extract(planned)
+                working = self.engine.working(
+                    self.root / "scratch", self.tooling(), extracted.server_version
+                )
                 context = _Context(
-                    working=self._working,
+                    working=working,
                     planned=planned,
-                    extract=self.extract(planned),
+                    extract=extracted,
                     key=self.key() if self._needs(Stage.TRANSFORM) else b"",
                 )
                 for group in planned.groups:

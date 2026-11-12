@@ -8,18 +8,24 @@
 2. Each suppression of a checker states why. Directive comments (``noqa``,
    ``type: ignore``, ``pyright: ignore``, ``pragma: no cover``) need a reason
    after `` - ``, and every use of the typing escape hatches (the "any" type
-   and the cast function) needs a ``# why:`` comment on the same line. The
-   total is reported so it stays visible as it grows.
+   and the cast function) needs a ``# why:`` comment on the same line.
+3. Checking the whole repository, the number of suppressions must equal the
+   budget in ``pyproject.toml`` (``[tool.datadouble] suppressions``). Adding
+   one means raising the budget in the same change, where review sees it and
+   the pull request says why; removing one means lowering it, so the budget
+   only ever ratchets down on its own.
 """
 
 import io
 import re
-import subprocess
 import sys
 import tokenize
+import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from datadouble.programs import run_program
 
 COPYRIGHT = "Copyright (c) 2026- Tight Line LLC"
 SPDX = "SPDX-License-Identifier: MIT"
@@ -125,19 +131,45 @@ def check_files(paths: Iterable[Path], root: Path | None = None) -> tuple[list[P
 
 def tracked_files() -> list[Path]:
     """Files git tracks or would track (not ignored)."""
-    listing = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],  # noqa: S607 - git comes from PATH by design
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    listing = run_program("git", ["ls-files", "--cached", "--others", "--exclude-standard"])
+    if listing.status != 0:
+        message = f"git ls-files failed: {listing.last_error()}"
+        raise RuntimeError(message)
     return [Path(name) for name in listing.stdout.splitlines()]
 
 
+def budget(pyproject: Path) -> int | None:
+    """The suppression budget in ``pyproject``, if it sets one."""
+    if not pyproject.is_file():
+        return None
+    settings = tomllib.loads(pyproject.read_text("utf-8")).get("tool", {}).get("datadouble", {})
+    allowed = settings.get("suppressions")
+    return allowed if isinstance(allowed, int) else None
+
+
+def over_budget(suppressions: int, pyproject: Path) -> Problem | None:
+    """A problem if the count differs from the budget in ``pyproject``."""
+    allowed = budget(pyproject)
+    if allowed is None or suppressions == allowed:
+        return None
+    lines = pyproject.read_text("utf-8").splitlines()
+    line = next((n for n, text in enumerate(lines, 1) if text.startswith("suppressions")), 1)
+    if suppressions > allowed:
+        message = (
+            f"{suppressions} suppressions, over the budget of {allowed}: remove the new ones, "
+            "or raise the budget here and say why in the pull request"
+        )
+    else:
+        message = f"{suppressions} suppressions, under the budget of {allowed}: lower it to match"
+    return Problem(pyproject, line, message)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Check the given files, or every tracked file, and report."""
+    """Check the given files, or every tracked file and the suppression budget, and report."""
     paths = [Path(arg) for arg in argv] if argv else tracked_files()
     problems, suppressions = check_files(paths)
+    if not argv and (problem := over_budget(suppressions, Path("pyproject.toml"))):
+        problems.append(problem)
     for problem in problems:
         sys.stdout.write(f"{problem}\n")
     sys.stdout.write(f"{len(problems)} problem(s); {suppressions} suppression(s) in Python code\n")

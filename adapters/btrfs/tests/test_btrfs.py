@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+import datadouble_btrfs
+from datadouble.files import Reflink, copy_tree
 from datadouble.images import ImageIdentity, ImageSummary, Verification
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.registry import installed
@@ -69,11 +71,12 @@ def fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     script.write_text(FAKE_BTRFS, encoding="utf-8")
     script.chmod(0o755)
     monkeypatch.setenv("DATADOUBLE_BTRFS", str(script))
-    # Most test filesystems cannot reflink; this cp copies without sharing blocks.
-    cp = script.with_name("cp")
-    cp.write_text('#!/bin/sh\nshift 2\nexec /bin/cp -a "$@"\n', encoding="utf-8")
-    cp.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{script.parent}:{os.environ['PATH']}")
+
+    # Most test filesystems cannot reflink; copy without sharing blocks instead.
+    def plain(source: Path, destination: Path, _reflink: Reflink, *, contents: bool) -> str | None:
+        return copy_tree(source, destination, contents=contents)
+
+    monkeypatch.setattr(datadouble_btrfs, "copy_tree", plain)
     return script
 
 

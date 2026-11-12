@@ -29,7 +29,7 @@ from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
-from datadouble_postgres.cluster import Binaries, Cluster
+from datadouble_postgres.cluster import Cluster, Tools
 from datadouble_postgres.errors import database_error
 from datadouble_postgres.render import Statement, columns, trusted
 from datadouble_postgres.source import ExtractIndex
@@ -203,19 +203,17 @@ class PostgresRestored:
 class PostgresWorking:
     """Working databases and images under one scratch directory."""
 
-    def __init__(self, binaries: Binaries, scratch: Path) -> None:
-        """Use ``binaries`` for every cluster under ``scratch``."""
-        self.binaries = binaries
+    def __init__(self, tools: Tools, scratch: Path) -> None:
+        """Use ``tools`` for every cluster under ``scratch``."""
+        self.tools = tools
         self.scratch = scratch
+        self._version: str | None = None
 
     def server_version(self) -> str:
-        """The version of the local binaries, which images are built for."""
-        return self.binaries.version()
-
-    def release(self, directory: Path) -> None:
-        """Stop servers an interrupted attempt left running under ``directory``."""
-        for pid_file in directory.rglob("postmaster.pid"):
-            Cluster(self.binaries, pid_file.parent).stop_abandoned()
+        """The version of the image's server, which images are built for."""
+        if self._version is None:
+            self._version = self.tools.version()
+        return self._version
 
     # load
 
@@ -231,10 +229,10 @@ class PostgresWorking:
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         partitioned = frozenset(index.partitioned)
         members = frozenset(group.tables)
-        cluster = Cluster(self.binaries, directory / _DATADIR)
+        cluster = Cluster(self.tools, directory / _DATADIR, directory, [extract])
         cluster.initialize()
         dump = extract / "schema.dump"
-        listing = self.binaries.run("pg_restore", ["--list", str(dump)])
+        listing = self.tools.run("pg_restore", ["--list", str(dump)], directory, [extract])
         views = frozenset(
             (kind, view.namespace, view.name)
             for view in index.omitted_views
@@ -277,7 +275,7 @@ class PostgresWorking:
                 counts = PostgresRestored(connection, partitioned).counts(group.tables)
         info = DatabaseInfo(
             database=index.database,
-            server_version=self.binaries.version(),
+            server_version=self.server_version(),
             partitioned=index.partitioned,
         )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
@@ -287,7 +285,7 @@ class PostgresWorking:
         listing = cluster.datadir.parent / f"{section}.list"
         listing.write_text(toc, "utf-8")
         try:
-            self.binaries.run(
+            cluster.execute(
                 "pg_restore",
                 [
                     f"--section={section}",
@@ -295,7 +293,7 @@ class PostgresWorking:
                     "--no-owner",
                     "--no-privileges",
                     "--exit-on-error",
-                    f"--dbname={cluster.conninfo(database)}",
+                    f"--dbname={cluster.local_conninfo(database)}",
                     str(dump),
                 ],
             )
@@ -424,7 +422,7 @@ class PostgresWorking:
         _copy_tree(source, directory)
         info = DatabaseInfo.model_validate_json((directory / _INFO).read_bytes())
         partitioned = frozenset(info.partitioned)
-        cluster = Cluster(self.binaries, directory / _DATADIR)
+        cluster = Cluster(self.tools, directory / _DATADIR, directory)
         with cluster.running(), cluster.connect(info.database) as connection:
             with connection.transaction():
                 connection.execute("SET LOCAL session_replication_role = replica")
@@ -512,16 +510,16 @@ class PostgresWorking:
         if image_format is ImageFormat.PHYSICAL:
             _copy_tree(source / _DATADIR, directory / _DATADIR)
             return
-        cluster = Cluster(self.binaries, source / _DATADIR)
+        cluster = Cluster(self.tools, source / _DATADIR, directory, [directory])
         with cluster.running():
-            self.binaries.run(
+            cluster.execute(
                 "pg_dump",
                 [
                     "--format=custom",
                     "--no-owner",
                     "--no-privileges",
                     f"--file={directory / _DUMP}",
-                    f"--dbname={cluster.conninfo(info.database)}",
+                    f"--dbname={cluster.local_conninfo(info.database)}",
                 ],
             )
 
@@ -533,7 +531,7 @@ class PostgresWorking:
         info = DatabaseInfo.model_validate_json((image / _INFO).read_bytes())
         datadir = directory / _DATADIR
         directory.mkdir(parents=True, exist_ok=True)
-        cluster = Cluster(self.binaries, datadir)
+        cluster = Cluster(self.tools, datadir, directory, [image])
         if image_format is ImageFormat.PHYSICAL:
             _copy_tree(image / _DATADIR, datadir)
             datadir.chmod(0o700)
@@ -542,13 +540,13 @@ class PostgresWorking:
         with cluster.running():
             if image_format is ImageFormat.LOGICAL:
                 cluster.create_database(info.database)
-                self.binaries.run(
+                cluster.execute(
                     "pg_restore",
                     [
                         "--no-owner",
                         "--no-privileges",
                         "--exit-on-error",
-                        f"--dbname={cluster.conninfo(info.database)}",
+                        f"--dbname={cluster.local_conninfo(info.database)}",
                         str(image / _DUMP),
                     ],
                 )

@@ -3,7 +3,7 @@
 
 """The scratch side: working databases, anonymization, images and restores.
 
-``load`` restores the group's collections from the extract into a fresh local
+``load`` restores the group's collections from the extract into a fresh
 ``mongod`` with ``mongorestore`` (which also builds the indexes) and applies
 the fallbacks for missing parents. ``transform`` copies the stopped data
 directory and anonymizes the copy, so an interrupted transform leaves the
@@ -29,7 +29,7 @@ from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
 from datadouble_mongodb.filters import Document, as_document, as_list, parse
-from datadouble_mongodb.server import Server, Tools
+from datadouble_mongodb.server import MongoServer, Tools
 from datadouble_mongodb.source import ExtractIndex, failure
 
 _DBPATH = "db"
@@ -148,16 +148,13 @@ class MongoWorking:
         """Use ``tools`` for every server under ``scratch``."""
         self.tools = tools
         self.scratch = scratch
+        self._version: str | None = None
 
     def server_version(self) -> str:
-        """The version of the local ``mongod``."""
-        return self.tools.version()
-
-    def release(self, directory: Path) -> None:
-        """Stop servers an interrupted attempt left running under ``directory``."""
-        for lock in directory.rglob("mongod.lock"):
-            if lock.stat().st_size:
-                Server(self.tools, lock.parent).stop_abandoned()
+        """The version of the image's ``mongod``."""
+        if self._version is None:
+            self._version = self.tools.version(self.scratch)
+        return self._version
 
     def load(
         self,
@@ -173,7 +170,7 @@ class MongoWorking:
             raise EngineError(message)
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         members = set(group.tables)
-        server = Server(self.tools, directory / _DBPATH)
+        server = MongoServer(self.tools, directory / _DBPATH, directory, [extract])
         with server.running(), server.client() as client:
             includes = [
                 f"--nsInclude={index.database}.{c.table.name}"
@@ -181,15 +178,12 @@ class MongoWorking:
                 if c.table in members
             ]
             if includes:
-                self.tools.run(
-                    "mongorestore",
-                    [f"--uri={server.uri()}", "--quiet", *includes, str(extract)],
-                )
+                server.tool("mongorestore", [*includes, str(extract)])
             database = client[index.database]
             for fixup in group.fixups:
                 apply_fixup(database, fixup)
             counts = MongoRestored(database).counts(group.tables)
-        info = DatabaseInfo(database=index.database, server_version=self.tools.version())
+        info = DatabaseInfo(database=index.database, server_version=self.server_version())
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
@@ -207,7 +201,7 @@ class MongoWorking:
         directory.parent.mkdir(parents=True, exist_ok=True)
         _copy_tree(source, directory)
         info = DatabaseInfo.model_validate_json((directory / _INFO).read_bytes())
-        server = Server(self.tools, directory / _DBPATH)
+        server = MongoServer(self.tools, directory / _DBPATH, directory)
         with server.running(), server.client() as client:
             database = client[info.database]
             for rule in transformation.rules:
@@ -257,17 +251,11 @@ class MongoWorking:
             _copy_tree(source / _DBPATH, directory / _DBPATH)
             return
         info = DatabaseInfo.model_validate_json((source / _INFO).read_bytes())
-        server = Server(self.tools, source / _DBPATH)
+        server = MongoServer(self.tools, source / _DBPATH, directory, [directory])
         with server.running():
-            self.tools.run(
+            server.tool(
                 "mongodump",
-                [
-                    f"--uri={server.uri()}",
-                    f"--db={info.database}",
-                    f"--archive={directory / _ARCHIVE}",
-                    "--gzip",
-                    "--quiet",
-                ],
+                [f"--db={info.database}", f"--archive={directory / _ARCHIVE}", "--gzip"],
             )
 
     @contextmanager
@@ -279,13 +267,10 @@ class MongoWorking:
         directory.mkdir(parents=True, exist_ok=True)
         if image_format is ImageFormat.PHYSICAL:
             _copy_tree(image / _DBPATH, directory / _DBPATH)
-        server = Server(self.tools, directory / _DBPATH)
+        server = MongoServer(self.tools, directory / _DBPATH, directory, [image])
         with server.running(), server.client() as client:
             if image_format is ImageFormat.LOGICAL:
-                self.tools.run(
-                    "mongorestore",
-                    [f"--uri={server.uri()}", f"--archive={image / _ARCHIVE}", "--gzip", "--quiet"],
-                )
+                server.tool("mongorestore", [f"--archive={image / _ARCHIVE}", "--gzip"])
             yield MongoRestored(client[info.database])
 
 

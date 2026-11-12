@@ -30,6 +30,9 @@ Source = "https://github.com/datadouble/datadouble"
 [project.entry-points."datadouble.replicators"]
 docker-volume = "datadouble_docker:docker_replicator"
 
+[project.entry-points."datadouble.runtimes"]
+docker = "datadouble_docker.runtime:docker_runtime"
+
 [build-system]
 requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"

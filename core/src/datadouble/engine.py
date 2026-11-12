@@ -9,6 +9,10 @@ scratch space, applying anonymization in native updates, packaging golden
 images and restoring them for verification. The core drives these through the
 protocols below and never contains engine-specific logic.
 
+Engine software (servers and tools) runs in the vendor's container images
+through a :class:`~datadouble.runtime.ContainerRuntime`; see
+:mod:`datadouble.runtime`.
+
 Adapters register under the ``datadouble.engines`` entry point group; the
 entry point names a zero-argument callable that returns an
 :class:`EngineAdapter`.
@@ -26,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from datadouble.catalog import Catalog
 from datadouble.names import ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup, PlannedRule
+from datadouble.runtime import ContainerRuntime
 from datadouble.spec import Hook, ImageFormat, TransformHook
 from datadouble.subset import Condition, Edge, KeyReader
 
@@ -56,6 +61,15 @@ class ExtractResult(_Model):
     counts: tuple[TableCount, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class Tooling:
+    """Where engine software runs: the runtime, and the spec's image override."""
+
+    runtime: ContainerRuntime
+    image: str | None = None
+    """``source.image``; when None the adapter picks the vendor image itself."""
+
+
 type Mapper = Callable[[PlannedRule, Iterable[str]], Mapping[str, str]]
 """Turns a rule and the distinct values of its column into replacements."""
 
@@ -74,7 +88,11 @@ class Snapshot(KeyReader, Protocol):
     """One consistent point-in-time view of the source."""
 
     def extract(
-        self, plan: Plan, selections: Mapping[TableName, Condition], directory: Path
+        self,
+        plan: Plan,
+        selections: Mapping[TableName, Condition],
+        directory: Path,
+        tooling: Tooling,
     ) -> ExtractResult:
         """Write every extracted table's definition and chosen rows under ``directory``."""
         ...
@@ -120,13 +138,6 @@ class WorkingDatabases(Protocol):
 
     def server_version(self) -> str:
         """The version of the server that builds and restores images."""
-        ...
-
-    def release(self, directory: Path) -> None:
-        """Stop anything still running under ``directory`` from an interrupted attempt.
-
-        Called before a stage's directory is cleared to run the stage again.
-        """
         ...
 
     def load(
@@ -207,8 +218,12 @@ class EngineAdapter(Protocol):
         """Open the source described by the spec's ``source.connection``."""
         ...
 
-    def working(self, scratch: Path) -> WorkingDatabases:
-        """Working databases under ``scratch``, which only holds files this run owns."""
+    def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
+        """Working databases under ``scratch``, which only holds files this run owns.
+
+        They run in ``tooling.image``, or by default the vendor's image for
+        ``source_version``, the version of the source the extract was read from.
+        """
         ...
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:

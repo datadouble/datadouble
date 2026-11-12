@@ -1,17 +1,15 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-# PostgreSQL 18 with the Pagila sample database and the awkward cases the
+# PostgreSQL 18.4 with the Pagila sample database and the awkward cases the
 # subset planner must handle. Pagila is fetched at a pinned commit and checked
 # against its SHA-256; see PAGILA-LICENSE.txt for its licence.
 
-FROM postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
-
-# Pagila's film_embedding table uses pgvector, from the PGDG repository the
-# official image already configures.
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends postgresql-18-pgvector \
-    && rm -rf /var/lib/apt/lists/*
+# Pagila's film_embedding table uses pgvector. The pgvector project's image is
+# the official PostgreSQL image with the extension added, so the source is
+# exactly the server the conformance spec's working image runs; installing the
+# extension from apt would upgrade PostgreSQL past it.
+FROM pgvector/pgvector:0.8.2-pg18-trixie@sha256:b7337db8fe39d12fe8ecb0003c72680f24479813a744b43154eee6f2eab5a5f3
 
 COPY --chmod=0644 roles.sql /docker-entrypoint-initdb.d/05-roles.sql
 ADD --chmod=0644 \

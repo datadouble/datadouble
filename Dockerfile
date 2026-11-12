@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: MIT
 
 # Stages:
-#   builder    the core package, installed for the runtime image
-#   postgres   PostgreSQL 18 server binaries with pgvector, and Python from uv,
-#              for anything that builds or restores PostgreSQL working databases
-#   test       the workspace with its development tools on top of postgres;
-#              runs the test suite as an unprivileged user (docker compose)
-#   runtime    the published image: the core package and nothing else
+#   builder    Datadouble and every first-party adapter, for the runtime image
+#   tools      the programs Datadouble drives: the docker command and kubectl
+#              (container runtimes and Kubernetes adapters) and cosign (signing)
+#   test       the workspace with its development tools on top of tools; runs
+#              the test suite as an unprivileged user (docker compose)
+#   runtime    the published image: Datadouble, its adapters and those tools
 #
+# Engine software (servers, dump and restore tools) is not installed anywhere:
+# it runs in the engine vendor's own images, through a container runtime.
 # Base images are pinned by digest; Dependabot keeps them current.
 
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
@@ -26,55 +28,34 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/datadouble
 COPY pyproject.toml uv.lock ./
 COPY core/ core/
 COPY adapters/ adapters/
-RUN uv sync --no-dev --package datadouble --no-editable
+COPY conformance/ conformance/
+RUN uv sync --no-dev --no-editable --package datadouble \
+        --package datadouble-btrfs --package datadouble-docker --package datadouble-kubernetes \
+        --package datadouble-mongodb --package datadouble-postgres --package datadouble-s3 \
+        --package datadouble-vault
 
-FROM postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42 AS postgres
-# pgvector because Pagila uses it: working databases need the source's
-# extensions. git for the source checker's tests, btrfs-progs for the btrfs
-# replicate adapter, and the libraries MongoDB's binaries need.
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends \
-        btrfs-progs git libcurl4t64 libgssapi-krb5-2 postgresql-18-pgvector \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=uv /uv /uvx /usr/local/bin/
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_FROZEN=1 \
-    UV_PYTHON=3.15 \
-    UV_PYTHON_INSTALL_DIR=/opt/python \
-    UV_PYTHON_PREFERENCE=only-managed
-RUN uv python install 3.15
-WORKDIR /src
-
-FROM postgres AS test
-# The docker command (static) for the Docker replicate adapter, cosign for
-# signing images and kubectl for the Kubernetes adapters, all pinned.
+FROM base AS tools
+# The docker command (static), kubectl and cosign, all pinned.
 COPY --from=docker:29-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d \
     /usr/local/bin/docker /usr/local/bin/docker
-ADD --chmod=0755 \
-    --checksum=sha256:424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa \
-    https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 \
-    /usr/local/bin/cosign
-# MongoDB's server and database tools, from MongoDB's release tarballs.
-ADD --checksum=sha256:667faae2f310eabb79846507a15bcb8a2888f6a1324bd77eea8b85ddfe7692a5 \
-    https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-debian13-9.0.8.tgz /tmp/mongodb.tgz
-ADD --checksum=sha256:5a74b5bebfe1421f338a25ecd80f8e6173f6d47241ea243564b0a1c9f2278b3b \
-    https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian13-x86_64-100.20.1.tgz \
-    /tmp/mongodb-tools.tgz
-RUN mkdir -p /opt/mongodb/bin \
-    && tar -xzf /tmp/mongodb.tgz -C /opt/mongodb/bin --strip-components=2 --wildcards '*/bin/mongod' \
-    && tar -xzf /tmp/mongodb-tools.tgz -C /opt/mongodb/bin --strip-components=2 \
-        --wildcards '*/bin/mongodump' '*/bin/mongorestore' \
-    && rm /tmp/mongodb.tgz /tmp/mongodb-tools.tgz
-ENV PATH=/opt/mongodb/bin:$PATH
 ADD --chmod=0755 \
     --checksum=sha256:c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4 \
     https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl \
     /usr/local/bin/kubectl
+ADD --chmod=0755 \
+    --checksum=sha256:424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa \
+    https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 \
+    /usr/local/bin/cosign
 
-# initdb refuses to run as root, so the suite runs as an ordinary user.
+FROM tools AS test
+# git for the source checker's tests, btrfs-progs for the btrfs replicate adapter.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends btrfs-progs git \
+    && rm -rf /var/lib/apt/lists/*
+# The suite runs as an ordinary user, as Datadouble should. /work is where the
+# Compose file mounts the volume shared with the Docker-in-Docker daemon.
 RUN useradd --uid 10001 --user-group --create-home --shell /usr/sbin/nologin tester \
-    && install --directory --owner tester --group tester /src /reports
+    && install --directory --owner tester --group tester /src /reports /work
 USER tester
 COPY --chown=tester:tester pyproject.toml uv.lock ./
 COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
@@ -92,7 +73,7 @@ COPY --chown=tester:tester . .
 RUN uv sync
 CMD ["uv", "run", "pytest", "--cov", "--cov-report=term-missing", "--cov-report=xml:/reports/coverage.xml"]
 
-FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
+FROM tools AS runtime
 LABEL org.opencontainers.image.source=https://github.com/datadouble/datadouble \
       org.opencontainers.image.description="Realistic, safe copies of production data for development and testing" \
       org.opencontainers.image.licenses=MIT

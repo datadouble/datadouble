@@ -33,6 +33,9 @@ k8s-pv = "datadouble_kubernetes:pv_replicator"
 [project.entry-points."datadouble.announcers"]
 k8s-secret = "datadouble_kubernetes:secret_announcer"
 
+[project.entry-points."datadouble.runtimes"]
+kubernetes = "datadouble_kubernetes.runtime:kubernetes_runtime"
+
 [build-system]
 requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"

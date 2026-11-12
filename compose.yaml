@@ -37,11 +37,17 @@ services:
       # never to the host's.
       DOCKER_HOST: tcp://docker:2375
       DATADOUBLE_TEST_DOCKER_ADDRESS: docker
+      DATADOUBLE_TEST_RUNTIME: '{"docker": {"publish": "0.0.0.0", "address": "docker"}}'
+      # Engine containers bind-mount work directories at the same path on the
+      # daemon's host, so temporary files live on a volume both share.
+      TMPDIR: /work
       DATADOUBLE_TEST_VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: datadouble-test
     # No bind mounts from the repository: on hosts whose home directories are
     # network mounts the Docker daemon cannot read them. Reports are copied out
     # of the stopped container instead (see `make test-integration`).
+    volumes:
+      - work:/work
 
   # PostgreSQL 18 with Pagila (dev/postgres).
   postgres:
@@ -75,6 +81,11 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
+    # The work volume is shared with the test runner, which writes as its own
+    # user, as do the containers it starts.
+    volumes:
+      - work:/work
+    entrypoint: ["sh", "-c", "chmod 1777 /work && exec dockerd-entrypoint.sh \"$$@\"", "--"]
     command: ["--host=tcp://0.0.0.0:2375"]
     healthcheck:
       test: ["CMD", "docker", "--host=tcp://127.0.0.1:2375", "info"]
@@ -112,11 +123,15 @@ services:
     image: rancher/k3s:v1.37.2-k3s1@sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332
     hostname: k3s
     privileged: true
+    # The work volume is shared with the test runner and reaches pods through
+    # a hostPath PersistentVolume, as a work claim reaches Datadouble's pods.
+    entrypoint: ["sh", "-c", "chmod 1777 /work && exec /bin/k3s \"$$@\"", "--"]
     command: ["server", "--disable=traefik,metrics-server", "--tls-san=k3s", "--write-kubeconfig-mode=644"]
     environment:
       K3S_KUBECONFIG_OUTPUT: /output/kubeconfig.yaml
     volumes:
       - k3s-config:/output
+      - k8s-work:/work
     healthcheck:
       test: ["CMD", "kubectl", "get", "--raw=/readyz"]
       interval: 3s
@@ -131,8 +146,11 @@ services:
     depends_on:
       k3s:
         condition: service_healthy
+    environment:
+      TMPDIR: /work
     volumes:
       - k3s-config:/k3s:ro
+      - k8s-work:/work
     command:
       - sh
       - -c
@@ -162,4 +180,6 @@ services:
         'DATADOUBLE_TEST_BTRFS=/mnt/btrfs uv run pytest -m btrfs adapters/btrfs'
 
 volumes:
+  work:
+  k8s-work:
   k3s-config:

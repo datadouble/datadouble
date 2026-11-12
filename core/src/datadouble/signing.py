@@ -11,14 +11,12 @@ material.
 """
 
 import json
-import os
-import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import assert_never
 
 from datadouble.images import ImageSummary
+from datadouble.programs import locate, run_program
 from datadouble.spec import CosignSigning, CosignTrust, EnvSecret, FileSecret, SecretRef
 
 
@@ -49,7 +47,7 @@ def _key(ref: SecretRef) -> str:
 
 def cosign_binary() -> str:
     """``DATADOUBLE_COSIGN``, or ``cosign`` on ``PATH``."""
-    found = os.environ.get("DATADOUBLE_COSIGN") or shutil.which("cosign")
+    found = locate("cosign", "DATADOUBLE_COSIGN")
     if not found:
         message = "cosign was not found; install it or set DATADOUBLE_COSIGN"
         raise SigningError(message)
@@ -57,13 +55,9 @@ def cosign_binary() -> str:
 
 
 def _cosign(arguments: list[str], action: str) -> None:
-    result = subprocess.run(  # noqa: S603 - cosign, with arguments built here
-        [cosign_binary(), *arguments], capture_output=True, text=True, check=False
-    )
-    if result.returncode != 0:
-        lines = [line for line in result.stderr.splitlines() if line.strip()]
-        detail = lines[-1] if lines else f"status {result.returncode}"
-        message = f"{action} failed: {detail}"
+    done = run_program(cosign_binary(), arguments)
+    if done.status != 0:
+        message = f"{action} failed: {done.last_error()}"
         raise SigningError(message)
 
 

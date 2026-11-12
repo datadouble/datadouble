@@ -36,7 +36,7 @@ from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
 from datadouble.catalog import Catalog, Column, ColumnKind, Table
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
@@ -206,7 +206,11 @@ class MongoSnapshot:
         return found
 
     def extract(
-        self, plan: Plan, selections: Mapping[TableName, Condition], directory: Path
+        self,
+        plan: Plan,
+        selections: Mapping[TableName, Condition],
+        directory: Path,
+        tooling: Tooling,  # noqa: ARG002 - extract reads through the driver, without tools
     ) -> ExtractResult:
         """Write the chosen documents, options and indexes in mongodump's layout."""
         database = self.source.database

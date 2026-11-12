@@ -104,6 +104,8 @@ class FakeSource:
 
     rows: dict[TableName, list[Row]]
     reads: list[TableName] = field(default_factory=list[TableName])
+    toolings: list[object] = field(default_factory=list[object])
+    """The engine tooling each extract and working-database set was given."""
 
     def matches(
         self,
