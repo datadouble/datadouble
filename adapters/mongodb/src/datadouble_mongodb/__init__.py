@@ -14,8 +14,8 @@ Spec settings::
 
 The source must be a replica set or sharded cluster: snapshot reads need one.
 Extract reads through the driver. Working databases, restores, ``mongodump``
-and ``mongorestore`` run in the official MongoDB image of the source's release
-series (``mongo:<major>.<minor>``), or in ``source.image``, through the spec's
+and ``mongorestore`` run in the official MongoDB image of the source's exact
+version (``mongo:<version>``), or in ``source.image``, through the spec's
 container runtime.
 """
 
@@ -87,7 +87,7 @@ class MongoEngine:
         return MongoWorking(Tools(tooling.runtime, image), scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:
-        """The official MongoDB image of the image's release series, on the copy.
+        """The official MongoDB image of the image's version, on the copy.
 
         At start the user ``datadouble`` is created on the copy, or its
         password reset, to the copy's password, and the server then runs with

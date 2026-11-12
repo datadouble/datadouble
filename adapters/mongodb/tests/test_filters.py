@@ -158,7 +158,7 @@ def test_tools(tmp_path: Path) -> None:
         tools(status=6).version(tmp_path)
     with pytest.raises(EngineError, match="not running"):
         _ = MongoServer(tools(), tmp_path / "db", tmp_path).server
-    assert default_image("9.0.8") == "mongo:9.0"
+    assert default_image("9.0.8") == "mongo:9.0.8"
     assert "updateUser('x'" in upsert_user("x")
     assert "createUser({user: 'x'" in upsert_user("x")
 
@@ -177,7 +177,7 @@ def test_engine(tmp_path: Path) -> None:
     )
     plan = engine.server(tmp_path, None)
     assert (plan.image, plan.port, plan.database, plan.user) == (
-        "mongo:9.0",
+        "mongo:9.0.8",
         27017,
         "cinema",
         "datadouble",

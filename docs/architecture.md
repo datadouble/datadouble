@@ -167,7 +167,10 @@ one per image group. Storage adapters only handle finished, immutable artifacts.
 Datadouble installs no engine software (decision 72). Working databases,
 restores for verification, and tools such as `pg_dump` or `mongorestore` run
 in containers from the engine vendor's official image: by default the image of
-the source's version, so a PostgreSQL 16 source is built with `postgres:16`.
+exactly the source's version, so a PostgreSQL 16.4 source is built with
+`postgres:16.4-trixie`: a dump from a newer minor release can hold what an
+older server rejects. A source running a release whose image is not published
+yet fails to pull, and names an image in `source.image`.
 `source.image` names another, for example one with the extensions the source
 uses, or a copy in a private registry.
 

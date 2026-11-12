@@ -104,8 +104,7 @@ def test_clusters(tmp_path: Path) -> None:
 
 
 def test_images() -> None:
-    assert default_image("16.4") == "postgres:16-trixie"
-    assert default_image("18") == "postgres:18-trixie"
+    assert default_image("16.4") == "postgres:16.4-trixie"
 
 
 def test_database_errors_without_details() -> None:

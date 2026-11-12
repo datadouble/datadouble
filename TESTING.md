@@ -88,8 +88,10 @@ The suite runs as an unprivileged user, as Datadouble should, and containers
 run as that user too.
 
 Pagila is fetched when `dev/postgres` is built, at a pinned commit and checked
-against its SHA-256; it uses pgvector, so its conformance spec names the
-`pgvector/pgvector` image in `source.image`. The cinema database is generated
+against its SHA-256. It uses pgvector, so `dev/postgres` is built on the pinned
+`pgvector/pgvector` image and the conformance spec names the same image in
+`source.image`: the source and its working databases run exactly the same
+server. The cinema database is generated
 by `dev/mongodb/seed.js` when the service first starts.
 
 ## Conformance suites

@@ -94,7 +94,7 @@ def registry() -> Registry:
 
 def tools() -> Tools:
     ((kind, settings),) = runtime_for_tests().items()
-    return Tools(installed().runtime(kind, settings), default_image("9.0"))
+    return Tools(installed().runtime(kind, settings), default_image("9.0.8"))
 
 
 def build(

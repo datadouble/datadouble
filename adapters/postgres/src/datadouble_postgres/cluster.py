@@ -38,8 +38,12 @@ _LOGIN_ENV = "DATADOUBLE_PASSWORD"
 
 
 def default_image(server_version: str) -> str:
-    """The official image of a server version's major release."""
-    return f"postgres:{server_version.split('.', maxsplit=1)[0]}-trixie"
+    """The official image of exactly ``server_version``, such as ``postgres:18.4-trixie``.
+
+    The working server matches the source's minor version: a dump from a newer
+    minor release can hold what an older server rejects.
+    """
+    return f"postgres:{server_version}-trixie"
 
 
 @dataclass(frozen=True, slots=True)

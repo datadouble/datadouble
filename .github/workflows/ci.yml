@@ -131,19 +131,16 @@ jobs:
         with:
           egress-policy: block
           # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
-          # PostgreSQL, Python, SeaweedFS, Docker and OpenBao images, GHCR for
-          # the uv image, Debian and the PostgreSQL apt repository for git,
-          # btrfs-progs and pgvector, GitHub release assets for uv's Python
-          # builds and cosign, dl.k8s.io for kubectl, raw GitHub for the pinned
-          # Pagila files, PyPI for the workspace, Codecov for the upload.
+          # engine, Python, SeaweedFS, Docker and OpenBao images, GHCR for the
+          # uv image, Debian for git and btrfs-progs, GitHub release assets for
+          # cosign, dl.k8s.io for kubectl, raw GitHub for the pinned Pagila
+          # files, PyPI for the workspace, Codecov for the upload.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
-            apt.postgresql.org:80
-            apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
             registry-1.docker.io:443
@@ -209,8 +206,6 @@ jobs:
             raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
-            apt.postgresql.org:80
-            apt.postgresql.org:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
             registry-1.docker.io:443

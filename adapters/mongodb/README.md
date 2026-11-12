@@ -7,7 +7,7 @@ snapshot session, writes the chosen documents in `mongodump`'s format, and
 builds working databases as throwaway `mongod` servers. Golden images are a
 data directory (`physical`) or a `mongodump` archive (`logical`). Servers,
 `mongodump` and `mongorestore` run in the official MongoDB image of the
-source's release series, through the spec's container runtime.
+source's exact version, through the spec's container runtime.
 
 ```yaml
 source:

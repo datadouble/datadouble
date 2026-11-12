@@ -31,12 +31,13 @@ USER = "datadouble-build"
 _VERSION = re.compile(r"db version v(\d+\.\d+(?:\.\d+)?)")
 _PORT = 27017
 _LOGIN_ENV = "DATADOUBLE_PASSWORD"
-_READY = "/tmp/datadouble-ready"  # noqa: S108 - inside the container, private to it
+_PRIVATE = "/tmp"  # noqa: S108 - inside the container, private to it
+_READY = f"{_PRIVATE}/datadouble-ready"
 
 
 def default_image(server_version: str) -> str:
-    """The official image of a server version's release series, such as ``mongo:9.0``."""
-    return "mongo:" + ".".join(server_version.split(".")[:2])
+    """The official image of exactly ``server_version``, such as ``mongo:9.0.8``."""
+    return f"mongo:{server_version}"
 
 
 def upsert_user(user: str) -> str:
@@ -80,7 +81,7 @@ class Tools:
             command=tuple(command),
             owner=owner,
             mounts=tuple(mounts),
-            env={"HOME": "/tmp"},  # noqa: S108 - inside the container, private to it
+            env={"HOME": _PRIVATE},
         )
 
     def version(self, owner: Path) -> str:
@@ -178,19 +179,20 @@ class MongoServer:
     def tool(self, name: str, arguments: Sequence[str]) -> str:
         """Run ``mongodump`` or ``mongorestore`` inside the server's container.
 
-        The connection and password go in a configuration file beside the data
-        directory, readable only by Datadouble's user, removed afterwards.
+        The container already holds the build user's password in its
+        environment; the tool reads it from a configuration file written there,
+        in the container's own temporary directory, so the password never
+        reaches a command line or the shared work directory.
         """
-        config = self.dbpath.parent / f".{name}-{secrets.token_hex(4)}.yaml"
-        config.touch(mode=0o600)
-        try:
-            config.write_text(
-                f"uri: mongodb://{USER}@127.0.0.1:{_PORT}/?authSource=admin\n"
-                f"password: {self._password}\n",
-                "utf-8",
-            )
-            return _checked(
-                name, self.server.execute([name, f"--config={config}", "--quiet", *arguments])
-            )
-        finally:
-            config.unlink(missing_ok=True)
+        config = f"{_PRIVATE}/datadouble-{name}.yaml"
+        write = (
+            f"umask 077 && printf 'uri: mongodb://{USER}@127.0.0.1:{_PORT}/?authSource=admin\\n"
+            f'password: %s\\n\' "${_LOGIN_ENV}" > {config}'
+            ' && exec "$0" "$@"'
+        )
+        return _checked(
+            name,
+            self.server.execute(
+                ["sh", "-c", write, name, f"--config={config}", "--quiet", *arguments]
+            ),
+        )

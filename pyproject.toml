@@ -16,7 +16,7 @@ package = false
 # The number of checker suppressions allowed in the repository; see
 # scripts/check_source.py. Raising it needs a reason in the pull request.
 [tool.datadouble]
-suppressions = 26
+suppressions = 25
 
 [tool.uv.workspace]
 members = [
