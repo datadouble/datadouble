@@ -14,6 +14,7 @@ the password from a private configuration file, never a command line.
 
 import re
 import secrets
+import shutil
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -31,8 +32,6 @@ USER = "datadouble-build"
 _VERSION = re.compile(r"db version v(\d+\.\d+(?:\.\d+)?)")
 _PORT = 27017
 _LOGIN_ENV = "DATADOUBLE_PASSWORD"
-_PRIVATE = "/tmp"  # noqa: S108 - inside the container, private to it
-_READY = f"{_PRIVATE}/datadouble-ready"
 
 
 def default_image(server_version: str) -> str:
@@ -74,14 +73,16 @@ class Tools:
     runtime: ContainerRuntime
     image: str
 
-    def container(self, command: Sequence[str], owner: Path, mounts: Sequence[Path]) -> Container:
-        """A container running ``command`` with ``mounts``; mongosh needs a writable home."""
+    def container(
+        self, command: Sequence[str], owner: Path, mounts: Sequence[Path], home: Path | None = None
+    ) -> Container:
+        """A container running ``command`` with ``mounts``; mongosh needs a writable ``home``."""
         return Container(
             image=self.image,
             command=tuple(command),
             owner=owner,
             mounts=tuple(mounts),
-            env={"HOME": _PRIVATE},
+            env={"HOME": str(home)} if home else {},
         )
 
     def version(self, owner: Path) -> str:
@@ -128,22 +129,26 @@ class MongoServer:
         self.dbpath.mkdir(parents=True, exist_ok=True)
         data = str(self.dbpath)
         password = secrets.token_hex(16)
+        # Files for this start only, beside the data directory and never in it.
+        private = self.dbpath.parent / f".mongod-{secrets.token_hex(4)}"
+        private.mkdir(mode=0o700)
+        setup_log, ready = private / "setup.log", private / "ready"
         start = (
             f"mongod --dbpath {data} --bind_ip 127.0.0.1 --port {_PORT} --fork"
-            " --logpath /tmp/setup.log > /dev/null"
-            f' && mongosh --quiet --eval "{upsert_user(USER)}" > /dev/null'
+            f" --logpath {setup_log} > /dev/null || {{ tail -n 3 {setup_log}; exit 1; }}"
+            f'; mongosh --quiet --eval "{upsert_user(USER)}" > /dev/null'
             f" && mongod --dbpath {data} --shutdown > /dev/null"
-            f" && touch {_READY}"
+            f" && touch {ready}"
             f" && exec mongod --dbpath {data} --auth --bind_ip_all --port {_PORT}"
         )
         container = replace(
-            self.tools.container(["sh", "-c", start], self.owner, self.mounts),
+            self.tools.container(["sh", "-c", start], self.owner, self.mounts, private),
             secrets={_LOGIN_ENV: password},
             port=_PORT,
             ready=(
                 "sh",
                 "-c",
-                f"test -f {_READY} && mongosh --quiet --eval 'db.adminCommand(\"ping\")'",
+                f"test -f {ready} && mongosh --quiet --eval 'db.adminCommand(\"ping\")'",
             ),
         )
         with self.tools.runtime.serve(container) as server:
@@ -153,6 +158,7 @@ class MongoServer:
                 self._drop_build_user()
             finally:
                 self._server, self._password = None, ""
+                shutil.rmtree(private, ignore_errors=True)
 
     def _drop_build_user(self) -> None:
         with self.client() as client:
@@ -180,19 +186,15 @@ class MongoServer:
         """Run ``mongodump`` or ``mongorestore`` inside the server's container.
 
         The container already holds the build user's password in its
-        environment; the tool reads it from a configuration file written there,
-        in the container's own temporary directory, so the password never
-        reaches a command line or the shared work directory.
+        environment; the tool reads its connection and password as a
+        configuration file on standard input, so the password is never written
+        to a file or a command line.
         """
-        config = f"{_PRIVATE}/datadouble-{name}.yaml"
-        write = (
-            f"umask 077 && printf 'uri: mongodb://{USER}@127.0.0.1:{_PORT}/?authSource=admin\\n"
-            f'password: %s\\n\' "${_LOGIN_ENV}" > {config}'
-            ' && exec "$0" "$@"'
+        config = (
+            f"printf 'uri: mongodb://{USER}@127.0.0.1:{_PORT}/?authSource=admin\\n"
+            f'password: %s\\n\' "${_LOGIN_ENV}"'
+            ' | exec "$0" --config=/dev/stdin "$@"'
         )
         return _checked(
-            name,
-            self.server.execute(
-                ["sh", "-c", write, name, f"--config={config}", "--quiet", *arguments]
-            ),
+            name, self.server.execute(["sh", "-c", config, name, "--quiet", *arguments])
         )

@@ -8,8 +8,9 @@ with the paths it needs mounted at the same absolute path. The image's
 ``nss_wrapper`` gives that user a name, which ``initdb`` and the server
 insist on. Each working database is its own cluster in scratch space; while
 it runs, it accepts the superuser over the network with a password generated
-for that start, and over its local socket inside the container without one,
-which is how ``pg_restore`` and ``pg_dump`` reach it. Server logs and the
+for that start, and over the loopback address without one, which only
+programs inside its own container (``pg_restore``, ``pg_dump``) can use. It
+has no Unix socket. Server logs and the
 authentication file stay outside the data directory, so a physical image does
 not carry them.
 """
@@ -31,8 +32,8 @@ from datadouble.runtime import Completed, Container, ContainerRuntime, Server
 from datadouble_postgres.errors import tool_error
 
 SUPERUSER = "postgres"
-SOCKETS = "/tmp"  # noqa: S108 - inside the container, private to it
-"""Where servers put their socket, inside their own container."""
+LOOPBACK = "127.0.0.1"
+"""How programs inside a server's container reach it: trusted, since only they can."""
 _VERSION = re.compile(r"\(PostgreSQL\) (\d+(?:\.\d+)?)")
 _LOGIN_ENV = "DATADOUBLE_PASSWORD"
 
@@ -66,7 +67,7 @@ class Tools:
             passwd.write_text(f"datadouble:x:{uid}:{gid}::/tmp:/bin/sh\n", "utf-8")
             (self.home / "group").write_text(f"datadouble:x:{gid}:\n", "utf-8")
             (self.home / "pg_hba.conf").write_text(
-                "local all all trust\nhost all all all scram-sha-256\n", "utf-8"
+                f"host all all {LOOPBACK}/32 trust\nhost all all all scram-sha-256\n", "utf-8"
             )
         return {
             "LD_PRELOAD": "libnss_wrapper.so",
@@ -178,7 +179,7 @@ class Cluster:
             f'printf "ALTER ROLE {SUPERUSER} PASSWORD \'%s\'\\n" "${_LOGIN_ENV}"'
             f" | postgres --single -D {data} postgres > /dev/null"
             f" && exec postgres -D {data} -c listen_addresses='*'"
-            f" -c unix_socket_directories={SOCKETS} -c hba_file={self.tools.home}/pg_hba.conf"
+            f" -c unix_socket_directories='' -c hba_file={self.tools.home}/pg_hba.conf"
             " -c fsync=off -c max_connections=20 -c logging_collector=off"
         )
         container = replace(
@@ -186,7 +187,7 @@ class Cluster:
                 ["sh", "-c", start], self.owner, self.mounts, {_LOGIN_ENV: password}
             ),
             port=5432,
-            ready=("pg_isready", f"--host={SOCKETS}", f"--username={SUPERUSER}"),
+            ready=("pg_isready", f"--host={LOOPBACK}", f"--username={SUPERUSER}"),
         )
         with self.tools.runtime.serve(container) as server:
             self._server, self._password = server, password
@@ -196,12 +197,12 @@ class Cluster:
                 self._server, self._password = None, ""
 
     def execute(self, name: str, arguments: Sequence[str]) -> str:
-        """Run a client program inside the server's container, over its socket."""
+        """Run a client program inside the server's container, over the loopback address."""
         return _checked(name, self.server.execute([name, *arguments]))
 
-    def socket_conninfo(self, dbname: str) -> str:
+    def local_conninfo(self, dbname: str) -> str:
         """A connection string for programs inside the server's container."""
-        return make_conninfo(host=SOCKETS, dbname=dbname, user=SUPERUSER)
+        return make_conninfo(host=LOOPBACK, dbname=dbname, user=SUPERUSER)
 
     def connect(self, dbname: str) -> psycopg.Connection[tuple[object, ...]]:
         """Connect to one database of the running cluster, over the network."""

@@ -68,7 +68,11 @@ def test_programs_run_as_the_wrapped_user(tmp_path: Path) -> None:
     assert container.env["LD_PRELOAD"] == "libnss_wrapper.so"
     passwd = Path(container.env["NSS_WRAPPER_PASSWD"]).read_text("utf-8")
     assert passwd.startswith("datadouble:x:")
-    assert (tmp_path / "home" / "pg_hba.conf").read_text("utf-8").startswith("local all all trust")
+    assert (
+        (tmp_path / "home" / "pg_hba.conf")
+        .read_text("utf-8")
+        .startswith("host all all 127.0.0.1/32 trust")
+    )
     assert container.mounts == (tmp_path / "home",)
 
 
@@ -92,7 +96,7 @@ def test_clusters(tmp_path: Path) -> None:
         _ = cluster.server
     with cluster.running():
         assert cluster.execute("pg_restore", ["x"]) == "done"
-        assert cluster.socket_conninfo("shop") == "host=/tmp dbname=shop user=postgres"
+        assert cluster.local_conninfo("shop") == "host=127.0.0.1 dbname=shop user=postgres"
         with pytest.raises(EngineError, match="connecting to the working database failed"):
             cluster.connect("shop")
     assert isinstance(made.runtime, ScriptedRuntime)

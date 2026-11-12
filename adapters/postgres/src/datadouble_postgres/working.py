@@ -293,7 +293,7 @@ class PostgresWorking:
                     "--no-owner",
                     "--no-privileges",
                     "--exit-on-error",
-                    f"--dbname={cluster.socket_conninfo(database)}",
+                    f"--dbname={cluster.local_conninfo(database)}",
                     str(dump),
                 ],
             )
@@ -519,7 +519,7 @@ class PostgresWorking:
                     "--no-owner",
                     "--no-privileges",
                     f"--file={directory / _DUMP}",
-                    f"--dbname={cluster.socket_conninfo(info.database)}",
+                    f"--dbname={cluster.local_conninfo(info.database)}",
                 ],
             )
 
@@ -546,7 +546,7 @@ class PostgresWorking:
                         "--no-owner",
                         "--no-privileges",
                         "--exit-on-error",
-                        f"--dbname={cluster.socket_conninfo(info.database)}",
+                        f"--dbname={cluster.local_conninfo(info.database)}",
                         str(image / _DUMP),
                     ],
                 )
