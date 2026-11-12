@@ -98,8 +98,11 @@ class MysqlEngine:
             )
         except pymysql.MySQLError as error:
             raise database_error(error, "connecting to the source") from None
-        with opened:
+        try:
             yield MysqlSession(opened, options, database)
+        finally:
+            if opened.open:
+                opened.close()
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Servers under ``scratch``, in the image for the source's version."""

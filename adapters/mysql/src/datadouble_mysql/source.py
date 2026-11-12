@@ -57,6 +57,8 @@ class ExtractedTable(BaseModel):
     table: TableName
     file: str
     columns: tuple[ColumnName, ...]
+    hex: tuple[ColumnName, ...] = ()
+    """Columns written as hexadecimal: their bytes need not be text."""
     rows: int
 
 
@@ -83,6 +85,38 @@ def field(value: object) -> bytes:
     if not any(byte in _ESCAPES for byte in raw):
         return raw
     return b"".join(_ESCAPES.get(byte, bytes((byte,))) for byte in raw)
+
+
+_RAW_TYPES = frozenset(
+    {
+        "binary",
+        "varbinary",
+        "tinyblob",
+        "blob",
+        "mediumblob",
+        "longblob",
+        "bit",
+        "geometry",
+        "point",
+        "linestring",
+        "polygon",
+        "multipoint",
+        "multilinestring",
+        "multipolygon",
+        "geometrycollection",
+        "geomcollection",
+    }
+)
+
+
+def raw_columns(catalog: Catalog, table: TableName) -> frozenset[ColumnName]:
+    """Columns that hold bytes rather than text: binary strings, bits and geometry."""
+    found = catalog.table(table)
+    return frozenset(
+        c.name
+        for c in (found.columns if found else ())
+        if c.type.split("(")[0].split(" ")[0].lower() in _RAW_TYPES
+    )
 
 
 def loaded_columns(
@@ -149,10 +183,15 @@ class MysqlSnapshot:
         tables: list[ExtractedTable] = []
         for index, table in enumerate(plan.extracted()):
             names = loaded_columns(self.catalog, self.physical, table)
+            raw = raw_columns(self.catalog, table)
+            hexed = tuple(n for n in names if n in raw)
             query = Renderer(self.as_of, selections).select(table, names, selections[table])
             file = f"{index:05d}.tsv"
-            rows = self._write(table, query.text, query.params, directory / file)
-            tables.append(ExtractedTable(table=table, file=file, columns=names, rows=rows))
+            positions = frozenset(i for i, n in enumerate(names) if n in raw)
+            rows = self._write(table, query.text, query.params, directory / file, positions)
+            tables.append(
+                ExtractedTable(table=table, file=file, columns=names, hex=hexed, rows=rows)
+            )
         (directory / "index.json").write_text(
             ExtractIndex(
                 database=self.session.database, tables=tuple(tables), omitted_views=omitted
@@ -166,13 +205,24 @@ class MysqlSnapshot:
             counts=tuple(TableCount(table=t.table, rows=t.rows) for t in tables),
         )
 
-    def _write(self, table: TableName, query: str, params: dict[str, object], path: Path) -> int:
+    def _write(
+        self,
+        table: TableName,
+        query: str,
+        params: dict[str, object],
+        path: Path,
+        hexed: frozenset[int],
+    ) -> int:
         rows = 0
         try:
             with self.connection.cursor(pymysql.cursors.SSCursor) as cursor, path.open("wb") as out:
                 cursor.execute(query, params)
                 for row in cursor:
-                    out.write(b"\t".join(field(value) for value in row) + b"\n")
+                    fields = (
+                        field(value.hex() if i in hexed and isinstance(value, bytes) else value)
+                        for i, value in enumerate(row)
+                    )
+                    out.write(b"\t".join(fields) + b"\n")
                     rows += 1
         except pymysql.MySQLError as error:
             raise database_error(error, f"extracting {table}") from None

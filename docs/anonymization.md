@@ -60,7 +60,13 @@ anonymize:
 
 Datadouble turns each table's rules into one native update in the working
 database (for SQL engines, a single `UPDATE` per table), so expressions run at
-the speed of the database, not of a client loop.
+the speed of the database, not of a client loop. An update changes only the
+columns its rules name: on MySQL, `ON UPDATE CURRENT_TIMESTAMP` columns keep
+their values, and triggers are set aside while the rules run. Hooks are SQL
+as written: on MySQL a hook's `UPDATE` stamps such columns unless it assigns
+them (`SET label = 'done', changed = changed`). MySQL applies a
+table's assignments in order, so an expression that reads another rule's
+column sees its new value; PostgreSQL's see the original.
 
 Expressions are column rules rather than free-form hooks because Datadouble then
 knows which columns each rule rewrites. That matters in three places:

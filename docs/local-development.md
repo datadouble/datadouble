@@ -12,14 +12,19 @@ sample dataset:
 |---|---|---|
 | PostgreSQL | official `postgres` | Pagila |
 | MySQL | official `mysql` | Sakila (also Jailer's Demo-Sakila model) |
-| SQL Server | Microsoft `mssql/server` | AdventureWorks |
-| Oracle | Oracle Database Free | HR / SH sample schemas |
+| SQL Server | Microsoft `mssql/server` | Sakila |
+| Oracle | Oracle Database Free | Sakila |
 | MongoDB | official `mongo`, as a one-member replica set | Generated cinema database (`dev/mongodb/seed.js`) |
 | Redis | official `redis` | Generated keyspace (strings, hashes, sets, streams) |
 | Salesforce | none (see below) | Recorded org metadata and records |
 
 Profiles can be started individually (`docker compose --profile postgres up`) so
 nobody has to run Oracle to work on the Redis adapter.
+
+The relational engines share one Sakila fixture: its rows are committed as
+bulk-load files in `dev/sakila`, a Compose `fixtures` service puts them in a
+volume, and each database container mounts it read-only and bulk-loads it at
+start (decision 78). Fixture data never changes underneath the tests.
 
 Sample datasets should include the awkward cases the subset planner must handle:
 cycles, self-references, composite keys, polymorphic references, and tables with

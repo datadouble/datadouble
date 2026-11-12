@@ -65,7 +65,7 @@ that milestones add and that combine freely, for example
 
 | Group | Services | Since |
 |---|---|---|
-| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3 |
+| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL in M4 |
 | `k8s` (`make test-k8s`) | k3s, and a test runner reading its kubeconfig, sharing a work volume that pods reach through a `hostPath` PersistentVolume | M2; the Kubernetes runtime in M4 |
 | `btrfs` (`make test-btrfs`) | A privileged test runner with a loop-mounted btrfs filesystem | M2 |
 
@@ -92,7 +92,11 @@ against its SHA-256. It uses pgvector, so `dev/postgres` is built on the pinned
 `pgvector/pgvector` image and the conformance spec names the same image in
 `source.image`: the source and its working databases run exactly the same
 server. The cinema database is generated
-by `dev/mongodb/seed.js` when the service first starts.
+by `dev/mongodb/seed.js` when the service first starts. Sakila's rows are
+committed as bulk-load files in `dev/sakila` (converted once from jOOQ's
+collection by `scripts/sakila_bulk.py`); the `fixtures` service copies them
+into a volume that `dev/mysql` mounts read-only and loads with `LOAD DATA` at
+start, so they are in no image and never change underneath the tests.
 
 ## Conformance suites
 

@@ -34,7 +34,7 @@ from datadouble.subset import Edge, EdgeMode
 from datadouble_mysql.errors import database_error
 from datadouble_mysql.render import columns, compose, qualified, quote
 from datadouble_mysql.server import MysqlServer, Tools
-from datadouble_mysql.source import ExtractIndex
+from datadouble_mysql.source import ExtractedTable, ExtractIndex
 
 _DATADIR = "mysql"
 _DUMP = "database.sql"
@@ -78,6 +78,26 @@ def placeholder(table: TableName, column: Column) -> str:
 def without_definers(script: str) -> str:
     """A dump with its ``DEFINER`` clauses removed, so objects belong to whoever loads them."""
     return _DEFINER.sub("", script)
+
+
+def load_statement(table: ExtractedTable) -> str:
+    """``LOAD DATA`` for one extracted table; hexadecimal columns pass through ``UNHEX``."""
+    targets = ", ".join(
+        compose("@{}", quote(f"dd_{i}")) if name in table.hex else quote(name)
+        for i, name in enumerate(table.columns)
+    )
+    assignments = [
+        compose("{} = UNHEX(@{})", quote(name), quote(f"dd_{i}"))
+        for i, name in enumerate(table.columns)
+        if name in table.hex
+    ]
+    tail = compose(" SET {}", ", ".join(assignments)) if assignments else ""
+    return compose(
+        "LOAD DATA INFILE %s INTO TABLE {} CHARACTER SET utf8mb4 ({}){}",
+        qualified(table.table),
+        targets,
+        tail,
+    )
 
 
 def _execute(
@@ -245,11 +265,7 @@ class MysqlWorking:
                         _execute(
                             connection,
                             f"loading {table.table}",
-                            compose(
-                                "LOAD DATA INFILE %s INTO TABLE {} CHARACTER SET utf8mb4 ({})",
-                                qualified(table.table),
-                                columns(table.columns),
-                            ),
+                            load_statement(table),
                             [str(extract / table.file)],
                         )
                 for fixup in group.fixups:

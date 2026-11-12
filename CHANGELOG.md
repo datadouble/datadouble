@@ -63,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validators; extract in one snapshot session with the keys strategy; seeds,
   conditions and assertions in MongoDB's own query and aggregation language;
   physical (data directory) and logical (`mongodump` archive) images.
+- **`datadouble-mysql`**, the MySQL engine adapter: one consistent-snapshot
+  transaction for keys and rows, the schema from `mysqldump`, working
+  databases as throwaway servers in the official MySQL image, and physical
+  (data directory) and logical (`mysqldump`) images.
 - **Stores:** a filesystem store in the core package, and **`datadouble-s3`**
   for S3 and S3-compatible services.
 - **`datadouble-conformance`**, the suite every engine adapter must pass.
