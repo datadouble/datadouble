@@ -13,7 +13,7 @@ import datetime as dt
 import json
 import shutil
 from collections.abc import Generator, Hashable, Iterable, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,11 +29,13 @@ from datadouble.engine import (
     Snapshot,
     SourceSession,
     TableCount,
+    Tooling,
     Transformation,
     WorkingDatabases,
 )
 from datadouble.names import ColumnName, ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup
+from datadouble.runtime import Completed, Container, Server
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Condition, Edge, EdgeMode, KeyTuple
 from fakes import FakeSource, evaluate_predicate
@@ -69,6 +71,22 @@ def _statement(text: str) -> tuple[str, str, str]:
 
 
 @dataclass
+class FakeRuntime:
+    """A container runtime for engines that never start containers."""
+
+    released: list[str] = field(default_factory=list[str])
+
+    def run(self, container: Container) -> Completed:
+        raise NotImplementedError
+
+    def serve(self, container: Container) -> AbstractContextManager[Server]:
+        raise NotImplementedError
+
+    def release(self, owner: Path) -> None:
+        self.released.append(owner.name)
+
+
+@dataclass
 class FakeSnapshot:
     source: FakeSource
     opened: list[str]
@@ -79,8 +97,13 @@ class FakeSnapshot:
         return self.source.project(table, condition, columns)
 
     def extract(
-        self, plan: Plan, selections: Mapping[TableName, Condition], directory: Path
+        self,
+        plan: Plan,
+        selections: Mapping[TableName, Condition],
+        directory: Path,
+        tooling: Tooling,
     ) -> ExtractResult:
+        self.source.toolings.append(tooling)
         rows: Rows = {
             _key(table): [dict(r) for r in self.source.select(table, selections)]
             for table in plan.extracted()
@@ -173,9 +196,6 @@ class FakeWorking:
     def server_version(self) -> str:
         return "1.0"
 
-    def release(self, directory: Path) -> None:
-        self.engine.released.append(directory.name)
-
     def load(
         self,
         plan: Plan,
@@ -260,7 +280,6 @@ class FakeEngine:
         default_factory=list[Mapping[str, JsonValue]]
     )
     hooks: list[str] = field(default_factory=list[str])
-    released: list[str] = field(default_factory=list[str])
     snapshots: int = 0
     transforms: int = 0
 
@@ -276,7 +295,9 @@ class FakeEngine:
         self.connections.append(connection)
         yield FakeSession(self)
 
-    def working(self, scratch: Path) -> WorkingDatabases:
+    def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
+        assert source_version == "1.2"
+        self.source.toolings.append(tooling)
         return FakeWorking(self, scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:

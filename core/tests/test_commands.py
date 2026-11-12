@@ -18,7 +18,7 @@ from datadouble.registry import Registry, RegistryError, installed
 from datadouble.run import Run, RunError, RunOptions, Stage
 from datadouble.spec import parse_spec
 from datadouble.storage import StoreError, filesystem_store
-from fake_engine import FakeEngine, check_protocols
+from fake_engine import FakeEngine, FakeRuntime, check_protocols
 from fakes import catalog, shop, table
 
 
@@ -37,7 +37,9 @@ def spec_file(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True)
 def adapters(engine: FakeEngine, monkeypatch: pytest.MonkeyPatch) -> Registry:
     registry = Registry(
-        engines={"fake": lambda: check_protocols(engine)}, stores={"filesystem": filesystem_store}
+        engines={"fake": lambda: check_protocols(engine)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
     )
     monkeypatch.setattr(api, "installed", lambda: registry)
     return registry

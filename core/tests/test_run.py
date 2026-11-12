@@ -9,7 +9,7 @@ import pytest
 
 from datadouble.anonymize import Anonymizer
 from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError
+from datadouble.engine import EngineError, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
 from datadouble.planner import PlannedRule, PlanOptions
@@ -27,7 +27,7 @@ from datadouble.spec import (
 )
 from datadouble.storage import FilesystemStore, filesystem_store
 from datadouble.verify import CheckKind
-from fake_engine import FakeEngine, check_protocols
+from fake_engine import FakeEngine, FakeRuntime, check_protocols
 from fakes import FakeSource, shop
 
 ALL = tuple(Stage)
@@ -69,7 +69,8 @@ def dataset() -> FakeSource:
 
 SPEC = """
 name: shop
-source: {engine: fake, connection: {where: here}}
+source: {engine: fake, connection: {where: here}, image: vendor/fake:1}
+runtime: {fake: {}}
 exclude: ["store", "staff", "dba_*", "audit.*", "events", "film_actor"]
 subset:
   seeds: {users: "id <= 2", comments: "id = 101"}
@@ -91,9 +92,16 @@ def engine() -> FakeEngine:
 
 
 @pytest.fixture
-def registry(engine: FakeEngine) -> Registry:
+def runtime() -> FakeRuntime:
+    return FakeRuntime()
+
+
+@pytest.fixture
+def registry(engine: FakeEngine, runtime: FakeRuntime) -> Registry:
     return Registry(
-        engines={"fake": lambda: check_protocols(engine)}, stores={"filesystem": filesystem_store}
+        engines={"fake": lambda: check_protocols(engine)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: runtime},
     )
 
 
@@ -191,7 +199,9 @@ def test_both_strategies_store_the_same_rows(tmp_path: Path, registry: Registry)
     }
 
 
-def test_resume_after_a_failure(tmp_path: Path, registry: Registry, engine: FakeEngine) -> None:
+def test_resume_after_a_failure(
+    tmp_path: Path, registry: Registry, engine: FakeEngine, runtime: FakeRuntime
+) -> None:
     engine.fail_load = True
     with pytest.raises(EngineError, match="told to fail"):
         run(tmp_path, registry)
@@ -202,7 +212,7 @@ def test_resume_after_a_failure(tmp_path: Path, registry: Registry, engine: Fake
     assert statuses(resumed)["plan"] == "reused"
     assert statuses(resumed)["extract"] == "reused"
     assert statuses(resumed)["load/all"] == "ran"
-    assert engine.released == ["all"]
+    assert runtime.released == ["all"]
     assert engine.snapshots == 1
     assert not resumed.failed()
 
@@ -383,3 +393,18 @@ def test_value_rules_only_reach_the_mapper() -> None:
 def test_fingerprint_is_canonical() -> None:
     assert fingerprint({"b": 1, "a": [T("x", "y")]}) == fingerprint({"a": [T("x", "y")], "b": 1})
     assert fingerprint({"a": 1}) != fingerprint({"a": 2})
+
+
+def test_runtime_is_required_from_extract(tmp_path: Path, registry: Registry) -> None:
+    bare = SPEC.replace("runtime: {fake: {}}\n", "")
+    planned = run(tmp_path, registry, spec=bare, stages=(Stage.PLAN,))
+    assert not planned.failed()
+    with pytest.raises(RunError, match="the spec has no `runtime`"):
+        run(tmp_path, registry, spec=bare, stages=(Stage.EXTRACT,), resume=planned.generation)
+
+
+def test_engines_get_the_runtime_and_image(
+    tmp_path: Path, registry: Registry, engine: FakeEngine, runtime: FakeRuntime
+) -> None:
+    run(tmp_path, registry, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD))
+    assert engine.source.toolings == [Tooling(runtime=runtime, image="vendor/fake:1")] * 2

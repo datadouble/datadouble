@@ -4,8 +4,9 @@
 """Finding installed adapters through entry points.
 
 Engines register under ``datadouble.engines``, stores under
-``datadouble.stores``, replicate adapters under ``datadouble.replicators`` and
-announce adapters under ``datadouble.announcers``, so third-party adapters
+``datadouble.stores``, container runtimes under ``datadouble.runtimes``,
+replicate adapters under ``datadouble.replicators`` and announce adapters
+under ``datadouble.announcers``, so third-party adapters
 installed from anywhere are found the same way as Datadouble's own.
 """
 
@@ -18,6 +19,7 @@ from pydantic import JsonValue
 from datadouble.announce import AnnouncerFactory
 from datadouble.engine import EngineAdapter
 from datadouble.replicate import ReplicatorFactory
+from datadouble.runtime import ContainerRuntime, RuntimeFactory
 from datadouble.storage import Store
 
 type EngineFactory = Callable[[], EngineAdapter]
@@ -38,6 +40,7 @@ class Registry:
         default_factory=dict[str, ReplicatorFactory]
     )
     announcers: Mapping[str, AnnouncerFactory] = field(default_factory=dict[str, AnnouncerFactory])
+    runtimes: Mapping[str, RuntimeFactory] = field(default_factory=dict[str, RuntimeFactory])
 
     def engine(self, name: str) -> EngineAdapter:
         """The engine adapter registered as ``name``."""
@@ -60,6 +63,15 @@ class Registry:
             raise RegistryError(message)
         return factory(settings)
 
+    def runtime(self, kind: str, settings: Mapping[str, JsonValue]) -> ContainerRuntime:
+        """A container runtime of ``kind`` built from its settings."""
+        factory = self.runtimes.get(kind)
+        if factory is None:
+            installed = ", ".join(sorted(self.runtimes)) or "none"
+            message = f"no container runtime named {kind!r} is installed (installed: {installed})"
+            raise RegistryError(message)
+        return factory(settings)
+
 
 def installed() -> Registry:
     """Every adapter installed in this environment."""
@@ -75,4 +87,13 @@ def installed() -> Registry:
     announcers: dict[str, AnnouncerFactory] = {
         point.name: point.load() for point in entry_points(group="datadouble.announcers")
     }
-    return Registry(engines=engines, stores=stores, replicators=replicators, announcers=announcers)
+    runtimes: dict[str, RuntimeFactory] = {
+        point.name: point.load() for point in entry_points(group="datadouble.runtimes")
+    }
+    return Registry(
+        engines=engines,
+        stores=stores,
+        replicators=replicators,
+        announcers=announcers,
+        runtimes=runtimes,
+    )

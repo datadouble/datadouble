@@ -37,11 +37,16 @@ services:
       # never to the host's.
       DOCKER_HOST: tcp://docker:2375
       DATADOUBLE_TEST_DOCKER_ADDRESS: docker
+      # Engine containers bind-mount work directories at the same path on the
+      # daemon's host, so temporary files live on a volume both share.
+      TMPDIR: /work
       DATADOUBLE_TEST_VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: datadouble-test
     # No bind mounts from the repository: on hosts whose home directories are
     # network mounts the Docker daemon cannot read them. Reports are copied out
     # of the stopped container instead (see `make test-integration`).
+    volumes:
+      - work:/work
 
   # PostgreSQL 18 with Pagila (dev/postgres).
   postgres:
@@ -75,6 +80,11 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
+    # The work volume is shared with the test runner, which writes as its own
+    # user, as do the containers it starts.
+    volumes:
+      - work:/work
+    entrypoint: ["sh", "-c", "chmod 1777 /work && exec dockerd-entrypoint.sh \"$$@\"", "--"]
     command: ["--host=tcp://0.0.0.0:2375"]
     healthcheck:
       test: ["CMD", "docker", "--host=tcp://127.0.0.1:2375", "info"]
@@ -162,4 +172,5 @@ services:
         'DATADOUBLE_TEST_BTRFS=/mnt/btrfs uv run pytest -m btrfs adapters/btrfs'
 
 volumes:
+  work:
   k3s-config:
