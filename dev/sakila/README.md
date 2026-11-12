@@ -8,7 +8,8 @@ engine's own schema comes from the same upstream collection.
 - **Source:** [jOOQ's Sakila collection](https://github.com/jOOQ/sakila) at
   commit `e089a5b1ec9af0df7a9c6a5d47d49fa1736a4e84`,
   `mysql-sakila-db/mysql-sakila-insert-data.sql`.
-- **Conversion:** `uv run scripts/sakila_bulk.py <insert script> dev/sakila/data`.
+- **Conversion:** `uv run scripts/sakila_bulk.py`, which downloads the insert
+  script at the pinned commit, checks its SHA-256 and rewrites `dev/sakila/data`.
   Each `data/<table>.tsv` has a header line of column names, then one row per
   line: tab-separated fields, `\N` for NULL, backslash escapes for backslash,
   tab, newline and carriage return. `data/tables.txt` lists the tables in load

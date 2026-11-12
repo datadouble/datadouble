@@ -6,7 +6,10 @@ r"""Convert jOOQ's Sakila insert script into one bulk-load file per table.
 Run once, when the fixture changes; the output is committed, so test data
 stays constant::
 
-    uv run scripts/sakila_bulk.py mysql-sakila-insert-data.sql dev/sakila/data
+    uv run scripts/sakila_bulk.py
+
+It downloads the insert script from jOOQ's collection at the pinned commit,
+checks its SHA-256, and writes into ``dev/sakila/data``.
 
 Each ``<table>.tsv`` starts with a header line of column names, then one row
 per line: fields separated by tabs, ``\\N`` for NULL, and backslash escapes
@@ -16,10 +19,15 @@ are pointed at it. ``tables.txt`` lists the tables in the order the script
 inserts them, with their row counts.
 """
 
+import hashlib
 import re
 import sys
-from collections.abc import Iterator, Sequence
+import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
+
+SOURCE_SHA256 = "353ef858e4d2d1a60549969283434da15b905aef3ca7099d82b649b75f8de99f"
+OUTPUT = Path(__file__).resolve().parent.parent / "dev" / "sakila" / "data"
 
 _STATEMENT = re.compile(
     r"Insert into (\w+)\s*\(([^)]*)\)\s*Values\s*\((.*?)\)\s*;\s*$",
@@ -88,13 +96,28 @@ def convert(script: str, output: Path) -> dict[str, int]:
     return counts
 
 
-def main(argv: Sequence[str]) -> int:
-    """Convert ``argv[0]`` (the insert script) into ``argv[1]``."""
-    script, output = argv
-    for table, count in convert(Path(script).read_text("utf-8"), Path(output)).items():
+def download() -> bytes:
+    """The MySQL Sakila insert script from jOOQ's collection, at the pinned commit."""
+    with urllib.request.urlopen(
+        "https://raw.githubusercontent.com/jOOQ/sakila/e089a5b1ec9af0df7a9c6a5d47d49fa1736a4e84/"
+        "mysql-sakila-db/mysql-sakila-insert-data.sql",
+        timeout=60,
+    ) as response:
+        data: bytes = response.read()
+    return data
+
+
+def main() -> int:
+    """Download, check and convert the pinned insert script into ``OUTPUT``."""
+    data = download()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != SOURCE_SHA256:
+        sys.stdout.write(f"the insert script's SHA-256 is {digest}, not {SOURCE_SHA256}\n")
+        return 1
+    for table, count in convert(data.decode("utf-8"), OUTPUT).items():
         sys.stdout.write(f"{table}: {count}\n")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())

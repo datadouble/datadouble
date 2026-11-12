@@ -1,6 +1,9 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
+import hashlib
+import io
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -24,10 +27,14 @@ Insert into film (`film_id`) Values ('7');
 """
 
 
-def test_convert(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    script = tmp_path / "insert.sql"
-    script.write_text(SCRIPT, "utf-8")
-    assert sakila_bulk.main([str(script), str(tmp_path / "out")]) == 0
+def test_convert(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = SCRIPT.encode()
+    monkeypatch.setattr(sakila_bulk, "download", lambda: data)
+    monkeypatch.setattr(sakila_bulk, "OUTPUT", tmp_path / "out")
+    monkeypatch.setattr(sakila_bulk, "SOURCE_SHA256", hashlib.sha256(data).hexdigest())
+    assert sakila_bulk.main() == 0
     assert capsys.readouterr().out == "actor: 2\nfilm: 1\n"
     actor = (tmp_path / "out" / "actor.tsv").read_text("utf-8").splitlines()
     assert actor == [
@@ -36,6 +43,9 @@ def test_convert(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         "2\tTab\\there\tback\\\\\\\\slash\\nnewline",
     ]
     assert (tmp_path / "out" / "tables.txt").read_text("utf-8") == "actor\t2\nfilm\t1\n"
+    monkeypatch.setattr(sakila_bulk, "SOURCE_SHA256", "0" * 64)
+    assert sakila_bulk.main() == 1
+    assert "not 000" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -56,3 +66,19 @@ def test_malformed_scripts(tmp_path: Path, script: str, message: str) -> None:
 
 def test_trailing_separators() -> None:
     assert list(sakila_bulk.values("'a', ")) == ["a"]
+
+
+def test_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[str] = []
+
+    class Response(io.BytesIO):
+        pass
+
+    def urlopen(url: str, timeout: int) -> Response:
+        opened.append(url)
+        assert timeout == 60
+        return Response(b"script")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert sakila_bulk.download() == b"script"
+    assert opened[0].startswith("https://raw.githubusercontent.com/jOOQ/sakila/e089a5b1")
