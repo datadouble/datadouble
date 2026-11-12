@@ -36,20 +36,23 @@ It can also hold column filters, `${param}` placeholders, and GUI/output setting
 
 ## Mapping
 
+What version 1 translates (decision 81):
+
 | Jailer | Datadouble |
 |---|---|
-| Subject + condition (`T.` alias) | Seed filter |
-| Limit and limit order | Seed `limit` / `order_by` |
-| Association, first-insert B, n:1 | Parent edge (always followed) |
-| `inverse-<name>` | Child edge |
-| Restriction `ignore` | `follow: false` |
-| Restriction SQL (`A.` / `B.` aliases) | Edge condition |
-| Virtual association, any join expression | Virtual foreign key with a join expression |
-| `${param}` | Plan-time parameter |
-| Column filters | Anonymization transforms, or a warning |
-| `exclude-tables.csv` | Excludes |
-| Data model `table.csv` / `column.csv` | Catalog lock for strict mode |
-| Layout, XML mapping, export mode | Ignored, listed in the report |
+| Subject + condition (`T.` alias), additional subjects | Seed filter; several subjects on one table are joined with `OR` |
+| Association with an equality join, `first-insert` side or `n:1` | A declared foreign key when the catalog has one with those columns, otherwise a virtual one |
+| Child direction (`inverse-<name>` of an `n:1` association), unrestricted | A followed child edge (Jailer follows every association unless restricted) |
+| Restriction `ignore` on a child direction | Not followed |
+| Restriction `ignore` on a parent direction, or an excluded association | `on_missing: null` (Jailer exports the row with the reference dangling; the key sets agree) |
+| `exclude-tables.csv` | Excludes, added to the spec's own |
+| Data model `table.csv` | Checked against the catalog: a primary key that differs fails the plan |
+| Layout, XML mapping, export mode, version and other display settings | Ignored, listed in the report |
+
+Not yet supported, and failing the plan by name rather than running a
+different subset: restriction conditions (`A.` / `B.` SQL), joins other than
+column equality, subject limits and orders, `${param}` placeholders and column
+filters. Each would need a native equivalent first.
 
 ## Design
 
@@ -72,8 +75,8 @@ Both formats compile to the same internal subset model.
 
 1. **Opposite defaults.** Jailer follows every association, including child
    edges, unless restricted. The native format follows child edges only when
-   asked. The Jailer front end sets `default_follow: all` so a model produces the
-   same subset in both tools.
+   asked. The Jailer front end lists every unrestricted child direction as a
+   followed edge, so a model produces the same subset in both tools.
 2. **Identical results.** Jailer executes by iteratively collecting keys in
    working tables, the same approach as Datadouble's collect-keys strategy. Any
    shortcut the planner takes must produce identical row sets.
@@ -87,8 +90,9 @@ Both formats compile to the same internal subset model.
 
 ## Conformance test
 
-Jailer ships a Demo-Sakila data model, and Sakila is the MySQL sample dataset in
-the local development setup. The conformance test runs the same `.jm` through
-Jailer's CLI and through Datadouble against the Sakila container, and compares the
-primary-key sets per table. They must be identical. Jailer's demo models can be
-included as test fixtures with attribution under its Apache-2.0 licence.
+The Compose `jailer` service (Jailer 17.3.1, pinned) builds Jailer's data
+model of the MySQL Sakila and exports `dev/jailer/sakila.jm` as JSON, unsorted
+(Sakila's reference cycles have no insert order) and with its key collection
+in an embedded database, so nothing is written to the source. The test runs
+the same model through Datadouble's front end with the keys strategy and
+compares the primary-key sets of every table; they are identical, 8,501 rows.

@@ -27,6 +27,8 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
+      jailer:
+        condition: service_completed_successfully
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
@@ -51,6 +53,7 @@ services:
     # of the stopped container instead (see `make test-integration`).
     volumes:
       - work:/work
+      - jailer:/jailer:ro
 
   # PostgreSQL 18 with Pagila (dev/postgres).
   postgres:
@@ -95,6 +98,17 @@ services:
       interval: 2s
       timeout: 5s
       retries: 120
+
+  # Jailer's export of dev/jailer/sakila.jm from the mysql service, for the
+  # test comparing its key sets with Datadouble's. It runs once and exits.
+  jailer:
+    build:
+      context: dev/jailer
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - jailer:/jailer-out
 
   # An S3-compatible object store (SeaweedFS) for the S3 storage adapter.
   s3:
@@ -212,6 +226,7 @@ services:
         'DATADOUBLE_TEST_BTRFS=/mnt/btrfs uv run pytest -m btrfs adapters/btrfs'
 
 volumes:
+  jailer:
   fixtures:
   work:
   k8s-work:

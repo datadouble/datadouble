@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transaction for keys and rows, the schema from `mysqldump`, working
   databases as throwaway servers in the official MySQL image, and physical
   (data directory) and logical (`mysqldump`) images.
+- **Jailer subsets:** a spec's `subset.jailer` names a Jailer extraction model
+  and data model, read and translated on every run; `datadouble import-jailer`
+  writes the translation as native settings. On Sakila, Jailer and Datadouble
+  choose the same rows.
 - **Stores:** a filesystem store in the core package, and **`datadouble-s3`**
   for S3 and S3-compatible services.
 - **`datadouble-conformance`**, the suite every engine adapter must pass.

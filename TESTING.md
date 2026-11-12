@@ -65,7 +65,7 @@ that milestones add and that combine freely, for example
 
 | Group | Services | Since |
 |---|---|---|
-| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL in M4 |
+| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`, run once by the `jailer` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL in M4 |
 | `k8s` (`make test-k8s`) | k3s, and a test runner reading its kubeconfig, sharing a work volume that pods reach through a `hostPath` PersistentVolume | M2; the Kubernetes runtime in M4 |
 | `btrfs` (`make test-btrfs`) | A privileged test runner with a loop-mounted btrfs filesystem | M2 |
 

@@ -1,0 +1,35 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+#
+# The first 40 customers, their rentals, payments and referrals, the actors
+# and categories of the films they rented, and everything those refer to.
+# Jailer follows every association in both directions unless told not to,
+# so every other inverse association is ignored.
+
+# subject; condition; limit; limit-order
+customer; T.customer_id <= 40; ;
+
+# association; ; restriction-condition
+inverse-fk_address_city; ; ignore
+inverse-fk_city_country; ; ignore
+inverse-fk_customer_address; ; ignore
+inverse-fk_customer_store; ; ignore
+inverse-fk_film_actor_actor; ; ignore
+inverse-fk_film_category_category; ; ignore
+inverse-fk_film_language; ; ignore
+inverse-fk_film_language_original; ; ignore
+inverse-fk_inventory_film; ; ignore
+inverse-fk_inventory_store; ; ignore
+inverse-fk_payment_staff; ; ignore
+inverse-fk_rental_inventory; ; ignore
+inverse-fk_rental_staff; ; ignore
+inverse-fk_staff_address; ; ignore
+inverse-fk_staff_store; ; ignore
+inverse-fk_store_address; ; ignore
+inverse-fk_store_staff; ; ignore
+
+#! block datamodelfolder
+sakila
+
+#! block version
+17.3.1
