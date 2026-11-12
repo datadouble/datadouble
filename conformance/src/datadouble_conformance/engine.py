@@ -24,14 +24,14 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from datadouble.catalog import CatalogLock, write_lock
-from datadouble.engine import EngineAdapter, ExtractResult
+from datadouble.engine import EngineAdapter, ExtractResult, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
 from datadouble.planner import Plan, PlanError, PlanOptions
-from datadouble.registry import Registry
+from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage, StageManifest, StageStatus
 from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, parse_spec
 from datadouble.storage import filesystem_store
@@ -83,6 +83,22 @@ class EngineHarness:
     """A column the sample spec anonymizes."""
     scratch: Callable[[], AbstractContextManager[ScratchSource]]
     """A fresh scratch source, removed afterwards."""
+    runtime: Mapping[str, Mapping[str, JsonValue]]
+    """The ``runtime`` every spec in the suite gets, such as ``{"docker": {}}``."""
+
+    def with_runtime(self, spec: str) -> str:
+        """``spec`` with the harness's runtime added."""
+        return f"{spec}\nruntime: {json.dumps(self.runtime)}\n"
+
+
+_RUNTIME: TypeAdapter[dict[str, dict[str, JsonValue]]] = TypeAdapter(
+    dict[str, dict[str, JsonValue]]
+)
+
+
+def runtime_for_tests() -> dict[str, dict[str, JsonValue]]:
+    """The runtime for test specs: ``DATADOUBLE_TEST_RUNTIME`` (JSON), or local Docker."""
+    return _RUNTIME.validate_json(os.environ.get("DATADOUBLE_TEST_RUNTIME", '{"docker": {}}'))
 
 
 class _Builds:
@@ -94,17 +110,20 @@ class _Builds:
         self.registry = Registry(
             engines={str(harness.engine.name): lambda: harness.engine},
             stores={"filesystem": filesystem_store},
+            runtimes=installed().runtimes,
         )
 
     def sample(self, extra: str = "") -> Spec:
         text = self.harness.sample_spec.replace("STORE", str(self.root / "store"))
-        return parse_spec(text + extra)
+        return parse_spec(self.harness.with_runtime(text + extra))
 
     def scratch_spec(self, source: ScratchSource, extra: str = "") -> Spec:
         settings = json.dumps(dict(source.connection))
         engine = self.harness.engine.name
         return parse_spec(
-            f"name: scratch\nsource: {{engine: {engine}, connection: {settings}}}\n{extra}"
+            self.harness.with_runtime(
+                f"name: scratch\nsource: {{engine: {engine}, connection: {settings}}}\n{extra}"
+            )
         )
 
     def lock(self, connection: Mapping[str, JsonValue]) -> CatalogLock:
@@ -135,7 +154,14 @@ class _Builds:
         file = Path(result.work) / "package" / group / archive.key.rsplit("/", 1)[1]
         scratch = self.root / f"restore-{tag}-{group}"
         image, _ = unpack(file, scratch / "archive")
-        working = self.harness.engine.working(scratch)
+        ((kind, settings),) = self.harness.runtime.items()
+        working = self.harness.engine.working(
+            scratch,
+            Tooling(
+                runtime=self.registry.runtime(kind, settings), image=self.sample().source.image
+            ),
+            summary.identity.engine_version,
+        )
         found: dict[str, set[str]] = {}
         with working.restore(image, ImageFormat.LOGICAL, scratch / "db") as restored:
             tables = sorted({column.table for column in columns})
@@ -306,7 +332,10 @@ class EngineConformance:
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
         spec_path = tmp_path / "sample.yml"
-        spec_path.write_text(harness.sample_spec.replace("STORE", str(tmp_path / "store")), "utf-8")
+        spec_path.write_text(
+            harness.with_runtime(harness.sample_spec.replace("STORE", str(tmp_path / "store"))),
+            "utf-8",
+        )
         lock = builds.lock(spec.source.connection)
         write_lock(lock, tmp_path / "catalog.lock")
         work = tmp_path / "work"

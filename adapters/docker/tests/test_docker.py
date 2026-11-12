@@ -29,6 +29,7 @@ from datadouble.images import ImageIdentity, ImageSummary, Verification
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.replicate import ClaimState, Copy, CopyKind, CopyState, ReplicateError
 from datadouble.spec import ReplicateMode, StrictLevel
+from datadouble_conformance.engine import runtime_for_tests
 from datadouble_docker import DockerReplicator, DockerSettings, docker_binary
 from datadouble_postgres import PostgresEngine
 from test_conformance import PostgresScratch, scratch
@@ -64,6 +65,7 @@ def write_spec(source: PostgresScratch, tmp_path: Path, keys: Path, kind: str) -
         "name": "scratch",
         "source": {"engine": "postgres", "connection": dict(source.connection)},
         "subset": {"seeds": {"items": "id > 0"}},
+        "runtime": runtime_for_tests(),
         "store": [{"filesystem": {"path": str(tmp_path / "build")}}],
         "signing": {
             "cosign": {"key": {"file": str(keys / "cosign.key")}, "transparency_log": False}

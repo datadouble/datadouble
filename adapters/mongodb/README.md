@@ -4,10 +4,10 @@ The MongoDB engine adapter for [Datadouble](https://datadouble.tightlinesoftware
 
 It reads one consistent snapshot of a replica set or sharded cluster through a
 snapshot session, writes the chosen documents in `mongodump`'s format, and
-builds working databases as throwaway local `mongod` servers. Golden images
-are a data directory (`physical`) or a `mongodump` archive (`logical`). The
-machine running it needs `mongod`, `mongodump` and `mongorestore` of the
-version images are built for.
+builds working databases as throwaway `mongod` servers. Golden images are a
+data directory (`physical`) or a `mongodump` archive (`logical`). Servers,
+`mongodump` and `mongorestore` run in the official MongoDB image of the
+source's release series, through the spec's container runtime.
 
 ```yaml
 source:

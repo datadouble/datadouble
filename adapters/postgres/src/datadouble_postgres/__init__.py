@@ -10,9 +10,11 @@ Spec settings::
       connection:
         dsn: {env: SHOP_DSN}      # a libpq connection string or URI, by reference
 
-The server binaries that build and restore images (``initdb``, ``pg_ctl``,
-``pg_dump``, ``pg_restore``) are found under ``/usr/lib/postgresql/<version>/bin``
-(newest first), on ``PATH``, or in ``DATADOUBLE_POSTGRES_BINDIR``.
+Working databases, restores and ``pg_dump`` run in the official PostgreSQL
+image of the source's major version (``postgres:<major>-trixie``), or in
+``source.image``, through the spec's container runtime. ``pg_dump`` connects to
+the source from a container, so the source must be reachable from there at the
+address in ``dsn``.
 """
 
 from collections.abc import Generator, Mapping
@@ -23,13 +25,13 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from datadouble.engine import ServerPlan, SourceSession, WorkingDatabases
+from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabases
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
 from datadouble.settings import parse_settings
 from datadouble.spec import ImageFormat, SecretRef
-from datadouble_postgres.cluster import SUPERUSER, find_binaries
+from datadouble_postgres.cluster import SUPERUSER, Tools, default_image
 from datadouble_postgres.errors import database_error
 from datadouble_postgres.introspect import ENGINE
 from datadouble_postgres.source import PostgresSession
@@ -73,13 +75,12 @@ class PostgresEngine:
         except psycopg.Error as error:
             raise database_error(error, "connecting to the source") from None
         with opened:
-            yield PostgresSession(
-                opened, conninfo, None if password is None else str(password), find_binaries()
-            )
+            yield PostgresSession(opened, conninfo, None if password is None else str(password))
 
-    def working(self, scratch: Path) -> WorkingDatabases:
-        """Local clusters under ``scratch``."""
-        return PostgresWorking(find_binaries(), scratch)
+    def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
+        """Clusters under ``scratch``, in the image for the source's version."""
+        image = tooling.image or default_image(source_version)
+        return PostgresWorking(Tools(tooling.runtime, image, scratch), scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:
         """The official PostgreSQL image of the image's major version, on the copy.
@@ -102,7 +103,7 @@ class PostgresEngine:
             f" -c hba_file={hba}"
         )
         return ServerPlan(
-            image=server_image or f"postgres:{major}-trixie",
+            image=server_image or default_image(major),
             mount=MOUNT,
             owner="999:999",
             command=("sh", "-c", start),

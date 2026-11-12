@@ -4,6 +4,8 @@
 """Filters, field sampling and the server plan, without a server."""
 
 import datetime as dt
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ from datadouble.catalog import ColumnKind
 from datadouble.engine import EngineError
 from datadouble.names import ColumnName, TableName
 from datadouble.registry import installed
+from datadouble.runtime import Completed, Container, Server
 from datadouble.subset import (
     AllOf,
     AllRows,
@@ -25,7 +28,7 @@ from datadouble.subset import (
 )
 from datadouble_mongodb import MongoEngine
 from datadouble_mongodb.filters import as_document, as_list, keys, lookup, parse, query
-from datadouble_mongodb.server import Server, Tools
+from datadouble_mongodb.server import MongoServer, Tools, default_image, upsert_user
 from datadouble_mongodb.source import sampled_columns, schema_columns
 from datadouble_mongodb.working import DatabaseInfo
 
@@ -125,25 +128,39 @@ def test_validator_fields() -> None:
     ]
 
 
-def test_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PATH", str(tmp_path))
-    with pytest.raises(EngineError, match="mongod was not found"):
-        Tools(None).tool("mongod")
-    with pytest.raises(EngineError, match="mongodump was not found"):
-        Tools(tmp_path).tool("mongodump")
-    fake = tmp_path / "mongod"
-    fake.write_text("#!/bin/sh\necho 'db version vX'\n", encoding="utf-8")
-    fake.chmod(0o755)
+@dataclass
+class ScriptedRuntime:
+    """Answers every container with ``reply``."""
+
+    reply: Completed
+
+    def run(self, container: Container) -> Completed:
+        return self.reply
+
+    def serve(self, container: Container) -> AbstractContextManager[Server]:
+        raise NotImplementedError
+
+    def release(self, owner: Path) -> None:
+        raise NotImplementedError
+
+
+def tools(stdout: str = "", stderr: str = "", status: int = 0) -> Tools:
+    return Tools(ScriptedRuntime(Completed(status, stdout, stderr)), "mongo:9.0")
+
+
+def test_tools(tmp_path: Path) -> None:
+    assert tools(stdout="db version v9.0.8\n").version(tmp_path) == "9.0.8"
     with pytest.raises(EngineError, match="cannot read the MongoDB version"):
-        Tools(tmp_path).version()
-    fake.write_text("#!/bin/sh\necho 'fatal: no' >&2\nexit 5\n", encoding="utf-8")
+        tools(stdout="db version vX").version(tmp_path)
     with pytest.raises(EngineError, match="mongod failed: fatal: no"):
-        Tools(tmp_path).run("mongod", [])
-    fake.write_text("#!/bin/sh\nexit 6\n", encoding="utf-8")
+        tools(stderr="fatal: no\n", status=5).version(tmp_path)
     with pytest.raises(EngineError, match="mongod failed: status 6"):
-        Tools(tmp_path).run("mongod", [])
+        tools(status=6).version(tmp_path)
     with pytest.raises(EngineError, match="not running"):
-        _ = Server(Tools(tmp_path), tmp_path / "db").socket
+        _ = MongoServer(tools(), tmp_path / "db", tmp_path).server
+    assert default_image("9.0.8") == "mongo:9.0"
+    assert "updateUser('x'" in upsert_user("x")
+    assert "createUser({user: 'x'" in upsert_user("x")
 
 
 def test_engine(tmp_path: Path) -> None:
@@ -160,7 +177,7 @@ def test_engine(tmp_path: Path) -> None:
     )
     plan = engine.server(tmp_path, None)
     assert (plan.image, plan.port, plan.database, plan.user) == (
-        "mongo:9",
+        "mongo:9.0",
         27017,
         "cinema",
         "datadouble",

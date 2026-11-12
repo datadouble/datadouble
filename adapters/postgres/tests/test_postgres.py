@@ -6,7 +6,6 @@
 import datetime as dt
 import json
 import os
-import shutil
 import uuid
 from collections.abc import Generator
 from pathlib import Path
@@ -14,21 +13,20 @@ from pathlib import Path
 import pytest
 
 from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError, Transformation
+from datadouble.engine import EngineError, Tooling, Transformation, WorkingDatabases
 from datadouble.images import unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
 from datadouble.planner import Plan, PlannedRule, PlanOptions
-from datadouble.registry import Registry
+from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.spec import HashOptions, HashRule, ImageFormat, Strategy, parse_spec
 from datadouble.storage import filesystem_store
 from datadouble.subset import AllRows, Predicate
-from datadouble_conformance.engine import ScratchSource
+from datadouble_conformance.engine import ScratchSource, runtime_for_tests
 from datadouble_postgres import PostgresEngine
-from datadouble_postgres.cluster import Cluster, find_binaries
+from datadouble_postgres.cluster import Cluster, Tools, default_image
 from datadouble_postgres.render import trusted
 from datadouble_postgres.source import PostgresSession
-from datadouble_postgres.working import PostgresWorking
 from datadouble_s3 import S3Store, s3_store
 from test_conformance import PostgresScratch, scratch
 
@@ -88,7 +86,17 @@ def registry() -> Registry:
     return Registry(
         engines={"postgres": PostgresEngine},
         stores={"filesystem": filesystem_store, "s3": s3_store},
+        runtimes=installed().runtimes,
     )
+
+
+def tooling() -> Tooling:
+    ((kind, settings),) = runtime_for_tests().items()
+    return Tooling(runtime=installed().runtime(kind, settings))
+
+
+def working_databases(scratch: Path) -> WorkingDatabases:
+    return PostgresEngine().working(scratch, tooling(), "18")
 
 
 def build(
@@ -104,6 +112,7 @@ def build(
         spec.replace("CONNECTION", json.dumps(dict(source.connection))).replace(
             "STORE", str(tmp_path / "store")
         )
+        + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
     )
     with PostgresEngine().connect(source.connection) as session:
         lock = CatalogLock.of(session.catalog())
@@ -122,7 +131,7 @@ def test_fallbacks_hooks_and_partition_references(source: PostgresScratch, tmp_p
     (summary,) = result.images
     archive = next(a for a in summary.archives if a.format is ImageFormat.LOGICAL)
     image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / "unpacked")
-    working = PostgresWorking(find_binaries(), tmp_path / "check")
+    working = working_databases(tmp_path / "check")
     with working.restore(image, ImageFormat.LOGICAL, tmp_path / "check" / "db") as restored:
         parents = TableName.of("public", "parent")
         children = TableName.of("public", "child")
@@ -256,11 +265,11 @@ def test_bad_connections(monkeypatch: pytest.MonkeyPatch) -> None:
         pass
 
 
-def test_working_failures_and_release(source: PostgresScratch, tmp_path: Path) -> None:
+def test_working_failures(source: PostgresScratch, tmp_path: Path) -> None:
     loaded = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD))
     work = tmp_path / "work" / "scratch" / loaded.generation
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
-    working = PostgresWorking(find_binaries(), work / "scratch")
+    working = working_databases(work / "scratch")
     missing = PlannedRule(
         column=ColumnRef(table=TableName.of("public", "child"), column=ColumnName("nope")),
         kind=ColumnKind.TEXT,
@@ -275,20 +284,10 @@ def test_working_failures_and_release(source: PostgresScratch, tmp_path: Path) -
             plan.groups[0], work / "load" / "all" / "db", tmp_path / "t2", transformation
         )
 
-    # A server left behind by a killed run is stopped before its directory is reused.
-    copied = tmp_path / "copy"
-    shutil.copytree(work / "load" / "all" / "db", copied / "db", symlinks=True)
-    abandoned = Cluster(find_binaries(), copied / "db" / "pgdata").running()
-    abandoned.__enter__()
-    assert (copied / "db" / "pgdata" / "postmaster.pid").exists()
-    working.release(copied)
-    assert not (copied / "db" / "pgdata" / "postmaster.pid").exists()
-    with pytest.raises(EngineError, match="pg_ctl exited"):
-        abandoned.__exit__(None, None, None)
-
 
 def test_clusters(tmp_path: Path) -> None:
-    cluster = Cluster(find_binaries(), tmp_path / "pgdata")
+    tools = Tools(tooling().runtime, default_image("18"), tmp_path / "home")
+    cluster = Cluster(tools, tmp_path / "db" / "pgdata", tmp_path / "db")
     cluster.initialize()
     with cluster.running():
         cluster.create_database("postgres")

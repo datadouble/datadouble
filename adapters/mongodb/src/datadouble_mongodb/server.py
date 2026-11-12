@@ -1,32 +1,55 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-"""Throwaway local ``mongod`` servers, and MongoDB's command-line tools.
+"""Throwaway ``mongod`` servers and MongoDB's tools, in the official MongoDB image.
 
-Each working database is its own ``mongod`` on a data directory in scratch
-space, listening only on a Unix socket in a private directory. Its log goes
-next to the socket, never into the data directory.
+Every program runs in a container from the image, as Datadouble's own user,
+with the paths it needs mounted at the same absolute path. Each working
+database is its own ``mongod`` on a data directory in scratch space, started
+with authentication: a build user gets a password generated for that start,
+and is dropped again before the server stops, so images do not carry it.
+``mongorestore`` and ``mongodump`` run inside the server's container and read
+the password from a private configuration file, never a command line.
 """
 
-import os
 import re
-import shutil
-import subprocess
-import tempfile
+import secrets
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from urllib.parse import quote
 
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 from datadouble.engine import EngineError
+from datadouble.runtime import Completed, Container, ContainerRuntime, Server
 
 type Client = MongoClient[dict[str, object]]
 
+USER = "datadouble-build"
 _VERSION = re.compile(r"db version v(\d+\.\d+(?:\.\d+)?)")
-_PORT = "27017"
+_PORT = 27017
+_LOGIN_ENV = "DATADOUBLE_PASSWORD"
+_READY = "/tmp/datadouble-ready"  # noqa: S108 - inside the container, private to it
+
+
+def default_image(server_version: str) -> str:
+    """The official image of a server version's release series, such as ``mongo:9.0``."""
+    return "mongo:" + ".".join(server_version.split(".")[:2])
+
+
+def upsert_user(user: str) -> str:
+    """Code for mongosh that creates ``user`` as root, or resets its password.
+
+    The password comes from the ``DATADOUBLE_PASSWORD`` environment variable.
+    """
+    password = f"process.env.{_LOGIN_ENV}"
+    return (
+        "const admin = db.getSiblingDB('admin');"
+        f" if (admin.getUser('{user}')) admin.updateUser('{user}', {{pwd: {password}}});"
+        f" else admin.createUser({{user: '{user}', pwd: {password}, roles: ['root']}});"
+    )
 
 
 def _last_line(text: str, fallback: str) -> str:
@@ -34,42 +57,37 @@ def _last_line(text: str, fallback: str) -> str:
     return lines[-1] if lines else fallback
 
 
+def _checked(name: str, done: Completed) -> str:
+    """MongoDB's tools report documents only by namespace, so their output is safe to quote."""
+    if done.status != 0:
+        detail = _last_line(done.stderr or done.stdout, f"status {done.status}")
+        message = f"{name} failed: {detail}"
+        raise EngineError(message)
+    return done.stdout
+
+
 @dataclass(frozen=True, slots=True)
 class Tools:
-    """Where ``mongod``, ``mongodump`` and ``mongorestore`` are."""
+    """MongoDB programs in containers from one image."""
 
-    bindir: Path | None
-    """A directory holding all three, or None to find them on ``PATH``."""
+    runtime: ContainerRuntime
+    image: str
 
-    def tool(self, name: str) -> str:
-        """The path of one program."""
-        found = str(self.bindir / name) if self.bindir else shutil.which(name)
-        if not found or not Path(found).is_file():
-            message = (
-                f"{name} was not found; install the MongoDB server and database tools, "
-                "or set DATADOUBLE_MONGODB_BINDIR"
-            )
-            raise EngineError(message)
-        return found
-
-    def run(self, name: str, arguments: Sequence[str]) -> str:
-        """Run a program; raise :class:`EngineError` if it fails.
-
-        MongoDB's tools report documents only by namespace, so their output is
-        safe to quote.
-        """
-        result = subprocess.run(  # noqa: S603 - a MongoDB program, with arguments built here
-            [self.tool(name), *arguments], capture_output=True, text=True, check=False
+    def container(self, command: Sequence[str], owner: Path, mounts: Sequence[Path]) -> Container:
+        """A container running ``command`` with ``mounts``; mongosh needs a writable home."""
+        return Container(
+            image=self.image,
+            command=tuple(command),
+            owner=owner,
+            mounts=tuple(mounts),
+            env={"HOME": "/tmp"},  # noqa: S108 - inside the container, private to it
         )
-        if result.returncode != 0:
-            detail = _last_line(result.stderr or result.stdout, f"status {result.returncode}")
-            message = f"{name} failed: {detail}"
-            raise EngineError(message)
-        return result.stdout
 
-    def version(self) -> str:
-        """The server version, such as ``9.0.8``."""
-        output = self.run("mongod", ["--version"])
+    def version(self, owner: Path) -> str:
+        """The server version in the image, such as ``9.0.8``."""
+        output = _checked(
+            "mongod", self.runtime.run(self.container(["mongod", "--version"], owner, ()))
+        )
         match = _VERSION.search(output)
         if match is None:
             message = f"cannot read the MongoDB version from {output.strip()[:80]!r}"
@@ -77,69 +95,102 @@ class Tools:
         return match.group(1)
 
 
-def find_tools() -> Tools:
-    """``DATADOUBLE_MONGODB_BINDIR``, or ``PATH``."""
-    configured = os.environ.get("DATADOUBLE_MONGODB_BINDIR")
-    return Tools(Path(configured) if configured else None)
+class MongoServer:
+    """One ``mongod``, identified by its data directory."""
 
+    def __init__(
+        self, tools: Tools, dbpath: Path, owner: Path, mounts: Sequence[Path] = ()
+    ) -> None:
+        """Manage the server on ``dbpath`` for the stage directory ``owner``.
 
-class Server:
-    """One local ``mongod``, identified by its data directory."""
-
-    def __init__(self, tools: Tools, dbpath: Path) -> None:
-        """Manage the server on ``dbpath``."""
+        ``mounts`` are further paths the server's container sees, for the
+        tools run inside it.
+        """
         self.tools = tools
         self.dbpath = dbpath
-        self._socket: Path | None = None
+        self.owner = owner
+        self.mounts = (dbpath.parent, *mounts)
+        self._server: Server | None = None
+        self._password = ""
 
     @property
-    def socket(self) -> Path:
-        """The socket while the server runs."""
-        if self._socket is None:
+    def server(self) -> Server:
+        """The running server's container."""
+        if self._server is None:
             message = "the server is not running"
             raise EngineError(message)
-        return self._socket
-
-    def uri(self) -> str:
-        """A connection URI for the running server."""
-        return f"mongodb://{quote(str(self.socket), safe='')}/?directConnection=true"
+        return self._server
 
     @contextmanager
-    def running(self) -> Generator["Server"]:
+    def running(self) -> Generator["MongoServer"]:
         """Start the server for the block, then shut it down cleanly."""
         self.dbpath.mkdir(parents=True, exist_ok=True)
-        runtime = Path(tempfile.mkdtemp(prefix="dd-mongo-"))
-        socket = runtime / "mongod.sock"
-        try:
-            self.tools.run(
-                "mongod",
-                [
-                    f"--dbpath={self.dbpath}",
-                    f"--bind_ip={socket}",
-                    f"--port={_PORT}",
-                    "--nounixsocket",
-                    "--fork",
-                    f"--logpath={runtime / 'mongod.log'}",
-                ],
-            )
-            self._socket = socket
+        data = str(self.dbpath)
+        password = secrets.token_hex(16)
+        start = (
+            f"mongod --dbpath {data} --bind_ip 127.0.0.1 --port {_PORT} --fork"
+            " --logpath /tmp/setup.log > /dev/null"
+            f' && mongosh --quiet --eval "{upsert_user(USER)}" > /dev/null'
+            f" && mongod --dbpath {data} --shutdown > /dev/null"
+            f" && touch {_READY}"
+            f" && exec mongod --dbpath {data} --auth --bind_ip_all --port {_PORT}"
+        )
+        container = replace(
+            self.tools.container(["sh", "-c", start], self.owner, self.mounts),
+            secrets={_LOGIN_ENV: password},
+            port=_PORT,
+            ready=(
+                "sh",
+                "-c",
+                f"test -f {_READY} && mongosh --quiet --eval 'db.adminCommand(\"ping\")'",
+            ),
+        )
+        with self.tools.runtime.serve(container) as server:
+            self._server, self._password = server, password
             try:
                 yield self
+                self._drop_build_user()
             finally:
-                self._socket = None
-                self.tools.run("mongod", [f"--dbpath={self.dbpath}", "--shutdown"])
-        finally:
-            shutil.rmtree(runtime, ignore_errors=True)
+                self._server, self._password = None, ""
+
+    def _drop_build_user(self) -> None:
+        with self.client() as client:
+            try:
+                client.admin.command("dropUser", USER)
+            except PyMongoError as error:
+                message = f"removing the build user failed: {type(error).__name__}"
+                raise EngineError(message) from None
 
     def client(self) -> Client:
-        """A client for the running server."""
-        client: Client = MongoClient(self.uri(), serverSelectionTimeoutMS=10000)
+        """A client for the running server, as the build user."""
+        endpoint = self.server.endpoint
+        client: Client = MongoClient(
+            host=endpoint.host,
+            port=endpoint.port,
+            username=USER,
+            password=self._password,
+            authSource="admin",
+            directConnection=True,
+            serverSelectionTimeoutMS=10000,
+        )
         return client
 
-    def stop_abandoned(self) -> None:
-        """Shut down a server left running by a killed process; ignore failures."""
-        subprocess.run(  # noqa: S603 - mongod, with arguments built here
-            [self.tools.tool("mongod"), f"--dbpath={self.dbpath}", "--shutdown"],
-            capture_output=True,
-            check=False,
-        )
+    def tool(self, name: str, arguments: Sequence[str]) -> str:
+        """Run ``mongodump`` or ``mongorestore`` inside the server's container.
+
+        The connection and password go in a configuration file beside the data
+        directory, readable only by Datadouble's user, removed afterwards.
+        """
+        config = self.dbpath.parent / f".{name}-{secrets.token_hex(4)}.yaml"
+        config.touch(mode=0o600)
+        try:
+            config.write_text(
+                f"uri: mongodb://{USER}@127.0.0.1:{_PORT}/?authSource=admin\n"
+                f"password: {self._password}\n",
+                "utf-8",
+            )
+            return _checked(
+                name, self.server.execute([name, f"--config={config}", "--quiet", *arguments])
+            )
+        finally:
+            config.unlink(missing_ok=True)

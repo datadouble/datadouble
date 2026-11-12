@@ -3,7 +3,6 @@
 
 """MongoDB behavior beyond the conformance suite: fallbacks, assertions and failures."""
 
-import contextlib
 import datetime as dt
 import json
 import shutil
@@ -15,10 +14,10 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError, Transformation
+from datadouble.engine import EngineError, Tooling, Transformation
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
 from datadouble.planner import Fixup, Plan, PlannedRule, PlanOptions
-from datadouble.registry import Registry
+from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.spec import (
     ExpressionRule,
@@ -32,8 +31,9 @@ from datadouble.spec import (
 )
 from datadouble.storage import filesystem_store
 from datadouble.subset import Edge, EdgeMode, Predicate
+from datadouble_conformance.engine import runtime_for_tests
 from datadouble_mongodb import MongoEngine
-from datadouble_mongodb.server import Server, find_tools
+from datadouble_mongodb.server import MongoServer, Tools, default_image
 from datadouble_mongodb.source import ExtractIndex, MongoSource
 from datadouble_mongodb.working import MongoRestored, MongoWorking, apply_fixup
 from test_mongodb_conformance import MongoScratch, scratch
@@ -85,7 +85,16 @@ def source() -> Generator[MongoScratch]:
 
 
 def registry() -> Registry:
-    return Registry(engines={"mongodb": MongoEngine}, stores={"filesystem": filesystem_store})
+    return Registry(
+        engines={"mongodb": MongoEngine},
+        stores={"filesystem": filesystem_store},
+        runtimes=installed().runtimes,
+    )
+
+
+def tools() -> Tools:
+    ((kind, settings),) = runtime_for_tests().items()
+    return Tools(installed().runtime(kind, settings), default_image("9.0"))
 
 
 def build(
@@ -100,6 +109,7 @@ def build(
         spec.replace("CONNECTION", json.dumps(dict(source.connection))).replace(
             "STORE", str(tmp_path / "store")
         )
+        + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
     )
     with MongoEngine().connect(source.connection) as session:
         lock = CatalogLock.of(session.catalog())
@@ -111,9 +121,9 @@ def test_fallbacks_rules_and_assertions(source: MongoScratch, tmp_path: Path) ->
     result = build(source, tmp_path)
     assert not result.failed(), result.verification
     work = Path(result.work)
-    working = MongoWorking(find_tools(), tmp_path / "check")
+    working = MongoWorking(tools(), tmp_path / "check")
     image = work / "transform" / "all" / "db"
-    server = Server(find_tools(), image / "db")
+    server = MongoServer(tools(), image / "db", tmp_path / "check")
     with server.running(), server.client() as client:
         database = client[source.database]
         parents = {d["_id"]: d.get("code") for d in database.parent.find()}
@@ -220,7 +230,7 @@ def test_bad_seeds_fail_extract(source: MongoScratch, tmp_path: Path) -> None:
     ):
         assert child in selections
         with pytest.raises(EngineError, match="extracting failed"):
-            snapshot.extract(plan, selections, tmp_path / "extract")
+            snapshot.extract(plan, selections, tmp_path / "extract", Tooling(tools().runtime))
 
 
 def test_working_failures(source: MongoScratch, tmp_path: Path) -> None:
@@ -228,7 +238,7 @@ def test_working_failures(source: MongoScratch, tmp_path: Path) -> None:
     work = Path(loaded.work)
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
     group = plan.groups[0]
-    working = MongoWorking(find_tools(), tmp_path / "scratch")
+    working = MongoWorking(tools(), tmp_path / "scratch")
     with pytest.raises(EngineError, match="does not run hooks"):
         working.load(plan, group, work / "extract" / "data", tmp_path / "x", (Hook(sql="x"),))
     # An extract without the group's collections restores nothing.
@@ -288,14 +298,3 @@ def test_fixup_failures(source: MongoScratch) -> None:
                 apply_fixup(
                     client[source.database], Fixup(edge=edge, mode=mode, parent_present=True)
                 )
-
-
-def test_abandoned_servers_stop(tmp_path: Path) -> None:
-    tools = find_tools()
-    server = Server(tools, tmp_path / "load" / "db")
-    running = server.running()
-    running.__enter__()
-    MongoWorking(tools, tmp_path).release(tmp_path / "load")
-    assert not (tmp_path / "load" / "db" / "mongod.lock").stat().st_size
-    with contextlib.suppress(EngineError):
-        running.__exit__(None, None, None)

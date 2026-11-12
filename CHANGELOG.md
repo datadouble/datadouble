@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same pattern, because the command line only builds JSON requests.
 - **A container image, `ghcr.io/datadouble/datadouble`,** signed with cosign
   keyless signing and published with SBOM and build provenance attestations.
+  It carries Datadouble, its adapters, the `docker` command, `kubectl` and
+  cosign, and no engine software.
 - **A documentation site** at <https://datadouble.tightlinesoftware.com/>,
   generated from the design documents.
 - **Python support:** 3.13 or later, tested on 3.13, 3.14 and 3.15. The
@@ -45,9 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references, a PII scan and the spec's assertions.
 - **Golden images** packed per format with their build manifest, stored with an
   image summary and the verification report.
+- **Engine software in the vendor's images.** Working databases, restores and
+  tools such as `pg_dump` run in containers from the engine vendor's official
+  image of the source's version, or the image in `source.image`, started by a
+  container runtime named in the spec's `runtime:`: `docker` for any
+  Docker-compatible daemon, or `kubernetes` for pods sharing the work
+  directory's PersistentVolumeClaim. Working servers accept only a password
+  generated for each start. Failures are reported as `container_failed`.
 - **`datadouble-postgres`**, the PostgreSQL engine adapter: one exported
-  snapshot for keys, rows and schema; working databases as throwaway local
-  clusters; physical (data directory) and logical (`pg_dump`) images.
+  snapshot for keys, rows and schema; working databases as throwaway clusters
+  in the official PostgreSQL image; physical (data directory) and logical
+  (`pg_dump`) images.
 - **`datadouble-mongodb`**, the MongoDB engine adapter: collections and dotted
   field paths as tables and columns, from sampling and `$jsonSchema`
   validators; extract in one snapshot session with the keys strategy; seeds,

@@ -160,8 +160,48 @@ scratch space, like the working databases.
 Working space and storage are separate concerns. Live database files are only
 ever written to scratch space suited to them (local disk or strongly consistent
 volumes). Working databases are throwaway servers the engine adapter starts there,
-one per image group (decision 49). Storage adapters only handle finished,
-immutable artifacts.
+one per image group. Storage adapters only handle finished, immutable artifacts.
+
+### Engine software runs in the vendor's images
+
+Datadouble installs no engine software (decision 72). Working databases,
+restores for verification, and tools such as `pg_dump` or `mongorestore` run
+in containers from the engine vendor's official image: by default the image of
+the source's version, so a PostgreSQL 16 source is built with `postgres:16`.
+`source.image` names another, for example one with the extensions the source
+uses, or a copy in a private registry.
+
+A **container runtime** adapter starts those containers, chosen by `runtime:`
+in the spec (decision 73):
+
+```yaml
+runtime:
+  docker: {}                     # any Docker-compatible daemon, through the docker command
+```
+
+```yaml
+runtime:
+  kubernetes:                    # pods, through kubectl
+    namespace: datadouble
+    claim: datadouble-work       # the PersistentVolumeClaim holding the work directory
+    mount: /work                 # where that claim is mounted in Datadouble's own pod
+```
+
+- **Shared paths.** Every container sees the paths it works on at the same
+  absolute path as Datadouble. With Docker they are bind-mounted, so the work
+  directory must exist at the same path on the daemon's host; on Kubernetes,
+  Datadouble runs as a pod with the work directory on a claim, and every
+  engine pod mounts the same claim at the same path.
+- **One user.** Containers run as Datadouble's own user and group, so either
+  side can read and remove the other's files.
+- **Credentials.** A working server accepts a password generated for that start,
+  passed through the runtime's secret channel (the docker command's
+  environment, or a Secret object) and never a command line. Tools that need
+  the server run inside its container. Credentials made for the build are
+  removed before an image is packaged (decision 74).
+- **Leftovers.** Containers are labelled with the stage directory they serve;
+  before a stage runs again the core removes what an interrupted attempt left
+  behind (decision 75).
 
 ## Interfaces
 
