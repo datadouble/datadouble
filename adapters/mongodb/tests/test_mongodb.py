@@ -33,7 +33,7 @@ from datadouble.storage import filesystem_store
 from datadouble.subset import Edge, EdgeMode, Predicate
 from datadouble_conformance.engine import runtime_for_tests
 from datadouble_mongodb import MongoEngine
-from datadouble_mongodb.server import MongoServer, Tools, default_image
+from datadouble_mongodb.server import USER, MongoServer, Tools, default_image
 from datadouble_mongodb.source import ExtractIndex, MongoSource
 from datadouble_mongodb.working import MongoRestored, MongoWorking, apply_fixup
 from test_mongodb_conformance import MongoScratch, scratch
@@ -298,3 +298,13 @@ def test_fixup_failures(source: MongoScratch) -> None:
                 apply_fixup(
                     client[source.database], Fixup(edge=edge, mode=mode, parent_present=True)
                 )
+
+
+def test_the_build_user_must_be_removable(tmp_path: Path) -> None:
+    server = MongoServer(tools(), tmp_path / "db" / "db", tmp_path / "db")
+    with (
+        pytest.raises(EngineError, match="removing the build user failed"),
+        server.running(),
+        server.client() as client,
+    ):
+        client.admin.command("dropUser", USER)
