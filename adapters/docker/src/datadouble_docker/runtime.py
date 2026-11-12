@@ -19,10 +19,7 @@ and contexts apply; secrets reach containers through the command's own
 environment, never its arguments.
 """
 
-import os
 import secrets
-import shutil
-import subprocess
 import time
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
@@ -30,6 +27,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from datadouble.programs import locate, run_program
 from datadouble.runtime import (
     Completed,
     Container,
@@ -61,18 +59,11 @@ class DockerRuntimeSettings(BaseModel):
 
 
 def _docker(arguments: Sequence[str], env: Mapping[str, str] | None = None) -> Completed:
-    binary = shutil.which("docker")
+    binary = locate("docker")
     if binary is None:
         message = "the docker command was not found"
         raise ContainerError(message)
-    result = subprocess.run(  # noqa: S603 - docker, with arguments built here
-        [binary, *arguments],
-        capture_output=True,
-        text=True,
-        check=False,
-        env={**os.environ, **(env or {})},
-    )
-    return Completed(status=result.returncode, stdout=result.stdout, stderr=result.stderr)
+    return run_program(binary, arguments, env=env)
 
 
 def _options(container: Container, network: str | None) -> list[str]:

@@ -31,6 +31,7 @@ from datadouble.engine import EngineAdapter, ExtractResult, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
 from datadouble.planner import Plan, PlanError, PlanOptions
+from datadouble.programs import start_program
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage, StageManifest, StageStatus
 from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, parse_spec
@@ -184,7 +185,7 @@ def _extract_counts(result: RunResult) -> list[tuple[str, int]]:
     return sorted((str(count.table), count.rows) for count in extracted.counts)
 
 
-def wait_for_stage(root: Path, stage: str, process: subprocess.Popen[bytes]) -> Path:
+def wait_for_stage(root: Path, stage: str, process: subprocess.Popen[str]) -> Path:
     """The generation under ``root`` that reaches ``stage`` while ``process`` runs."""
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline and process.poll() is None:
@@ -350,9 +351,7 @@ class EngineConformance:
             "--work",
             str(work),
         ]
-        process = subprocess.Popen(  # noqa: S603 - this interpreter running Datadouble's own CLI
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ.copy()
-        )
+        process = start_program(command[0], command[1:])
         try:
             generation = wait_for_stage(work / spec.name, "transform", process)
         finally:

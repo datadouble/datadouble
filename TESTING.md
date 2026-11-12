@@ -15,7 +15,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 | Command | What it runs | Where |
 |---|---|---|
 | `make check` | Everything below except the integration suite and the docs | Host |
-| `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons) | Host |
+| `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons and budget) | Host |
 | `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows` | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
@@ -116,7 +116,11 @@ anonymized values.
 - **Suppressions carry a reason.** A `noqa`, `type: ignore`, `pyright: ignore`
   or `pragma: no cover` comment needs a reason after ` - `, and every use of
   `Any` or `cast` needs a `# why:` comment. `scripts/check_source.py` enforces
-  this and prints the running total; prefer restructuring code to adding one.
+  this, and the total must equal the budget in `pyproject.toml`
+  (`[tool.datadouble] suppressions`): a change that adds one raises the budget
+  and its pull request says why, and a change that removes one lowers it.
+  Prefer restructuring code to adding one; external programs run only through
+  `datadouble.programs`, which holds the one subprocess suppression.
 
 ## In CI
 

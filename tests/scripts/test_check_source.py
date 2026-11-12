@@ -130,3 +130,25 @@ def test_main_checks_tracked_files_by_default(
 
     assert check_source.main([]) == 0
     assert "0 problem(s)" in capsys.readouterr().out
+    monkeypatch.chdir(tmp_path.parent)
+    with pytest.raises(RuntimeError, match="git ls-files failed"):
+        check_source.tracked_files()
+
+
+def test_the_suppression_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    write(tmp_path, "one.py", HEADER + "x = 1  # noqa: E501 - a long literal\n")
+    monkeypatch.chdir(tmp_path)
+    assert check_source.main([]) == 0
+    for allowed, code, says in (
+        (1, 0, "0 problem(s)"),
+        (0, 1, "over the budget of 0"),
+        (2, 1, "under the budget of 2"),
+    ):
+        write(tmp_path, "pyproject.toml", f"{HEADER}[tool.datadouble]\nsuppressions = {allowed}\n")
+        assert check_source.main([]) == code
+        assert says in capsys.readouterr().out
+    write(tmp_path, "pyproject.toml", f"{HEADER}[tool.other]\nx = 1\n")
+    assert check_source.budget(tmp_path / "pyproject.toml") is None

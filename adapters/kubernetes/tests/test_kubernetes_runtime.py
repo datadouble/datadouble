@@ -318,7 +318,7 @@ def test_kubectl_must_be_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.delenv("DATADOUBLE_KUBECTL", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(ContainerError, match="kubectl was not found"):
-        KubernetesRuntime(KubernetesRuntimeSettings(claim="w", mount=tmp_path)).binary()
+        KubernetesRuntime(KubernetesRuntimeSettings(claim="w", mount=tmp_path)).invoke(["version"])
 
 
 def test_unreadable_statuses() -> None:

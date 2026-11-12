@@ -17,9 +17,6 @@ consumers can snapshot or delete it like any subvolume. Uses the ``btrfs``
 command; staging and ``path`` must be on one btrfs filesystem.
 """
 
-import os
-import shutil
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -27,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.files import Reflink, copy_tree
 from datadouble.images import ImageSummary
+from datadouble.programs import locate, run_program
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.settings import parse_settings
 
@@ -40,18 +38,15 @@ class BtrfsSettings(BaseModel):
 
 
 def _run(arguments: list[str], action: str) -> None:
-    result = subprocess.run(  # noqa: S603 - btrfs or cp, with arguments built here
-        arguments, capture_output=True, text=True, check=False
-    )
-    if result.returncode != 0:
-        lines = result.stderr.strip().splitlines()
-        message = f"{action} failed: {lines[-1] if lines else f'status {result.returncode}'}"
+    done = run_program(arguments[0], arguments[1:])
+    if done.status != 0:
+        message = f"{action} failed: {done.last_error()}"
         raise ReplicateError(message)
 
 
 def btrfs_binary() -> str:
     """``DATADOUBLE_BTRFS``, or ``btrfs`` on ``PATH``."""
-    found = os.environ.get("DATADOUBLE_BTRFS") or shutil.which("btrfs")
+    found = locate("btrfs", "DATADOUBLE_BTRFS")
     if not found:
         message = "the btrfs command was not found; install btrfs-progs"
         raise ReplicateError(message)
@@ -78,9 +73,7 @@ class BtrfsReplicator:
         _run([btrfs, "subvolume", "create", str(partial)], "creating the subvolume")
         problem = copy_tree(image, partial, Reflink.ALWAYS, contents=True)
         if problem:
-            subprocess.run(  # noqa: S603 - btrfs, with arguments built here
-                [btrfs, "subvolume", "delete", str(partial)], capture_output=True, check=False
-            )
+            run_program(btrfs, ["subvolume", "delete", str(partial)])
             message = f"copying {summary.identity.generation} failed: {problem}"
             raise ReplicateError(message)
         final = self.root / copy_id

@@ -204,4 +204,6 @@ def test_failed_command_is_reported(repo: Path, capsys: pytest.CaptureFixture[st
 def test_default_runner_and_root(monkeypatch: pytest.MonkeyPatch, repo: Path) -> None:
     monkeypatch.chdir(repo)
     assert make_tag.run("echo", "hi") == "hi\n"
+    with pytest.raises(subprocess.CalledProcessError):
+        make_tag.run("false")
     assert make_tag.main(["tag", "9.9.9"], runner=FakeRunner()) == 1

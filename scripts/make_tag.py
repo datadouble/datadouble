@@ -27,6 +27,8 @@ from typing import Protocol
 
 from pydantic import TypeAdapter, ValidationError
 
+from datadouble.programs import run_program
+
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 _UNRELEASED = "## [Unreleased]"
 _PROJECT_VERSION = re.compile(r'^(version\s*=\s*)"[^"]*"', re.MULTILINE)
@@ -47,9 +49,10 @@ class Runner(Protocol):
 
 def run(*command: str) -> str:
     """Run a command in the current directory and return its standard output."""
-    return subprocess.run(  # noqa: S603 - every command is built from fixed strings in this script
-        command, check=True, capture_output=True, text=True
-    ).stdout
+    done = run_program(command[0], command[1:])
+    if done.status != 0:
+        raise subprocess.CalledProcessError(done.status, command, done.stdout, done.stderr)
+    return done.stdout
 
 
 def validate_version(version: str) -> str:

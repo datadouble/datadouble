@@ -27,8 +27,6 @@ import json
 import os
 import re
 import secrets
-import shutil
-import subprocess
 import time
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
@@ -37,6 +35,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
+from datadouble.programs import run_program, start_program
 from datadouble.runtime import (
     Completed,
     Container,
@@ -46,7 +45,7 @@ from datadouble.runtime import (
     absolute,
 )
 from datadouble.settings import parse_settings
-from datadouble_kubernetes import KubectlError, kubectl
+from datadouble_kubernetes import KubectlError, kubectl, kubectl_binary
 
 _OWNER = "datadouble.dev/owner"
 _RUNTIME_LABEL = "datadouble.dev/runtime"
@@ -83,6 +82,13 @@ class KubernetesRuntimeSettings(BaseModel):
     image_pull_secrets: tuple[str, ...] = ()
     ready_seconds: int = Field(default=300, ge=1)
     stop_seconds: int = Field(default=300, ge=1)
+
+
+def _binary() -> str:
+    try:
+        return kubectl_binary()
+    except KubectlError as error:
+        raise ContainerError(str(error)) from None
 
 
 def _kubectl(arguments: list[str], action: str, *, stdin: str | None = None) -> str:
@@ -131,21 +137,9 @@ class KubernetesRuntime:
         """Use ``settings`` for every pod."""
         self.settings = settings
 
-    @staticmethod
-    def binary() -> str:
-        """The ``kubectl`` command."""
-        found = os.environ.get("DATADOUBLE_KUBECTL") or shutil.which("kubectl")
-        if not found:
-            message = "kubectl was not found; install it or set DATADOUBLE_KUBECTL"
-            raise ContainerError(message)
-        return found
-
     def invoke(self, arguments: Sequence[str]) -> Completed:
         """Run ``kubectl`` and return what it did, whether or not it succeeded."""
-        result = subprocess.run(  # noqa: S603 - kubectl, with arguments built here
-            [self.binary(), *arguments], capture_output=True, text=True, check=False
-        )
-        return Completed(status=result.returncode, stdout=result.stdout, stderr=result.stderr)
+        return run_program(_binary(), arguments)
 
     # Pods
 
@@ -331,17 +325,14 @@ class KubernetesRuntime:
         if self.settings.access is Access.POD_IP:
             yield Endpoint(host=str(status.get("podIP")), port=port)
             return
-        forward = subprocess.Popen(  # noqa: S603 - kubectl, with arguments built here
+        forward = start_program(
+            _binary(),
             [
-                self.binary(),
                 "port-forward",
                 f"--namespace={self.settings.namespace}",
                 f"pod/{name}",
                 f":{port}",
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
         )
         try:
             line = forward.stdout.readline() if forward.stdout else ""

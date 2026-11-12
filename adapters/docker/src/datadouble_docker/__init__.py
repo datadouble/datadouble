@@ -21,10 +21,7 @@ with the ``docker`` command, so ``DOCKER_HOST`` and contexts apply.
 """
 
 import io
-import os
 import secrets
-import shutil
-import subprocess
 import tarfile
 import time
 from collections.abc import Callable, Mapping
@@ -35,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.engine import ServerPlan
 from datadouble.images import ImageSummary
+from datadouble.programs import locate, run_program
 from datadouble.registry import installed
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.settings import parse_settings
@@ -57,7 +55,7 @@ class DockerSettings(BaseModel):
 
 def docker_binary() -> str:
     """The ``docker`` command."""
-    found = shutil.which("docker")
+    found = locate("docker")
     if found is None:
         message = "the docker command was not found"
         raise ReplicateError(message)
@@ -71,18 +69,11 @@ def _docker(
     stdin: bytes | None = None,
     env: Mapping[str, str] | None = None,
 ) -> str:
-    result = subprocess.run(  # noqa: S603 - docker, with arguments built here
-        [docker_binary(), *arguments],
-        input=stdin,
-        capture_output=True,
-        check=False,
-        env={**os.environ, **(env or {})},
-    )
-    if result.returncode != 0:
-        lines = result.stderr.decode(errors="replace").strip().splitlines()
-        message = f"{action} failed: {lines[-1] if lines else f'status {result.returncode}'}"
+    done = run_program(docker_binary(), arguments, stdin=stdin, env=env)
+    if done.status != 0:
+        message = f"{action} failed: {done.last_error()}"
         raise ReplicateError(message)
-    return result.stdout.decode()
+    return done.stdout
 
 
 def _archive(image: Path) -> bytes:
@@ -210,33 +201,19 @@ class DockerReplicator:
         """Whether the server answers; raises if its container has stopped."""
         running = _docker(["inspect", "--format", "{{.State.Running}}", name], "inspecting")
         if running.strip() != "true":
-            logs = subprocess.run(  # noqa: S603 - docker, with arguments built here
-                [docker_binary(), "logs", "--tail", "5", name],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            logs = run_program(docker_binary(), ["logs", "--tail", "5", name])
             lines = (logs.stdout + logs.stderr).strip().splitlines()
             last = lines[-1] if lines else "no output"
             message = f"the server in {name} stopped: {last}"
             raise ReplicateError(message)
-        check = subprocess.run(  # noqa: S603 - docker, with arguments built here
-            [docker_binary(), "exec", name, *plan.ready], capture_output=True, check=False
-        )
-        return check.returncode == 0
+        return run_program(docker_binary(), ["exec", name, *plan.ready]).status == 0
 
     def destroy(self, copy: Copy) -> None:
         """Remove the container, if any, and the volume."""
         name = f"datadouble-{copy.id}"
         if self.settings.kind is CopyKind.INSTANCE:
-            subprocess.run(  # noqa: S603 - docker, with arguments built here
-                [docker_binary(), "rm", "--force", "--volumes", name],
-                capture_output=True,
-                check=False,
-            )
-        subprocess.run(  # noqa: S603 - docker, with arguments built here
-            [docker_binary(), "volume", "rm", "--force", name], capture_output=True, check=False
-        )
+            run_program(docker_binary(), ["rm", "--force", "--volumes", name])
+        run_program(docker_binary(), ["volume", "rm", "--force", name])
 
     def claim_state(self, _copy: Copy, /) -> ClaimState:
         """Claims are recorded by ``claim``."""

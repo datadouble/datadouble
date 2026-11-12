@@ -28,6 +28,21 @@ from typing import Protocol
 
 from pydantic import JsonValue
 
+from datadouble.programs import Completed
+
+__all__ = [
+    "Completed",
+    "Container",
+    "ContainerError",
+    "ContainerRuntime",
+    "Endpoint",
+    "RuntimeFactory",
+    "Server",
+    "absolute",
+    "check",
+    "identity",
+]
+
 
 class ContainerError(Exception):
     """A container that could not be run; the message is safe to show and log."""
@@ -52,15 +67,6 @@ class Container:
     secrets: Mapping[str, str] = field(default_factory=dict[str, str])
     port: int | None = None
     ready: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class Completed:
-    """A finished command: its status and output."""
-
-    status: int
-    stdout: str
-    stderr: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,8 +126,7 @@ def check(completed: Completed, what: str) -> Completed:
     """
     if completed.status == 0:
         return completed
-    lines = completed.stderr.strip().splitlines()
-    message = f"{what} failed: {lines[-1] if lines else f'status {completed.status}'}"
+    message = f"{what} failed: {completed.last_error()}"
     raise ContainerError(message)
 
 

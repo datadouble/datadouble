@@ -15,9 +15,7 @@ copies, its credentials. Both drive ``kubectl``.
 """
 
 import json
-import os
 import shutil
-import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Self
@@ -27,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from datadouble.announce import Announced, AnnounceError, Announcer
 from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
+from datadouble.programs import locate, run_program
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.settings import parse_settings
 
@@ -44,20 +43,22 @@ class KubectlError(Exception):
     """A ``kubectl`` command that failed."""
 
 
-def kubectl(arguments: list[str], *, stdin: str | None = None) -> str:
-    """Run ``kubectl``; raise :class:`KubectlError` with its last error line."""
-    binary = os.environ.get("DATADOUBLE_KUBECTL") or shutil.which("kubectl")
+def kubectl_binary() -> str:
+    """``DATADOUBLE_KUBECTL``, or ``kubectl`` on ``PATH``."""
+    binary = locate("kubectl", "DATADOUBLE_KUBECTL")
     if not binary:
         message = "kubectl was not found; install it or set DATADOUBLE_KUBECTL"
         raise KubectlError(message)
-    result = subprocess.run(  # noqa: S603 - kubectl, with arguments built here
-        [binary, *arguments], input=stdin, capture_output=True, text=True, check=False
-    )
-    if result.returncode != 0:
-        lines = result.stderr.strip().splitlines()
-        message = f"kubectl {arguments[0]} failed: {lines[-1] if lines else result.returncode}"
+    return binary
+
+
+def kubectl(arguments: list[str], *, stdin: str | None = None) -> str:
+    """Run ``kubectl``; raise :class:`KubectlError` with its last error line."""
+    done = run_program(kubectl_binary(), arguments, stdin=stdin)
+    if done.status != 0:
+        message = f"kubectl {arguments[0]} failed: {done.last_error()}"
         raise KubectlError(message)
-    return result.stdout
+    return done.stdout
 
 
 def _labels(values: Mapping[str, str]) -> dict[str, str]:

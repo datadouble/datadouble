@@ -3,9 +3,10 @@
 
 """Copying directory trees, sharing blocks where the filesystem allows."""
 
-import subprocess
 from enum import StrEnum
 from pathlib import Path
+
+from datadouble.programs import locate, run_program
 
 
 class Reflink(StrEnum):
@@ -30,10 +31,7 @@ def copy_tree(
     ``destination`` rather than ``source`` itself becoming it.
     """
     origin = f"{source}/." if contents else str(source)
-    result = subprocess.run(  # noqa: S603 - coreutils cp, with paths from Datadouble
-        ["cp", "-a", f"--reflink={reflink}", origin, str(destination)],  # noqa: S607 - cp from PATH
-        capture_output=True,
-        text=True,
-        check=False,
+    done = run_program(
+        locate("cp") or "cp", ["-a", f"--reflink={reflink}", origin, str(destination)]
     )
-    return result.stderr.strip() or f"status {result.returncode}" if result.returncode else None
+    return done.stderr.strip() or f"status {done.status}" if done.status else None
