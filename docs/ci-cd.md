@@ -308,6 +308,10 @@ cluster in production.
   vendor-hosted runner such as `ubuntu-latest`.
 - At run time, `build` fails if the CI/CD adapter can identify a vendor-hosted
   runner (for example, GitHub's `RUNNER_ENVIRONMENT=github-hosted`).
+- `build` runs engine software in containers (decision 72), so its runner
+  needs the spec's container runtime: a Docker-compatible daemon that sees
+  the work directory at the same path, or, for `kubernetes`, a pod whose work
+  directory is on the PersistentVolumeClaim the engine pods share.
 
 Non-production jobs get separate generated configuration and separate secrets.
 Generation never puts production credentials into a non-production job.
