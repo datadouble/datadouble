@@ -26,12 +26,14 @@ jobs:
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
-          # setup-uv downloads uv and CPython from GitHub release assets; uv
+          # setup-uv downloads uv from Astral's mirror (releases.astral.sh),
+          # falling back to GitHub release assets, and CPython from GitHub; uv
           # resolves packages from PyPI.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
+            releases.astral.sh:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             pypi.org:443
@@ -90,12 +92,14 @@ jobs:
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
-          # setup-uv downloads uv and CPython from GitHub release assets; uv
+          # setup-uv downloads uv from Astral's mirror (releases.astral.sh),
+          # falling back to GitHub release assets, and CPython from GitHub; uv
           # resolves packages from PyPI.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
+            releases.astral.sh:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             pypi.org:443
@@ -222,13 +226,14 @@ jobs:
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
-          # GitHub for the checkout and artifacts, uv's version manifest (raw
-          # GitHub) and release assets, PyPI for coverage, Codecov for the
+          # GitHub for the checkout and artifacts, Astral's mirror and GitHub
+          # for uv and its version list, PyPI for coverage, Codecov for the
           # upload.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
+            releases.astral.sh:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             results-receiver.actions.githubusercontent.com:443
@@ -404,6 +409,7 @@ jobs:
             github.com:443
             api.github.com:443
             raw.githubusercontent.com:443
+            releases.astral.sh:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
             pypi.org:443
