@@ -413,8 +413,9 @@ def test_engines_get_the_runtime_and_image(
 def test_builds_run_as_the_serving_user(
     tmp_path: Path, registry: Registry, engine: FakeEngine
 ) -> None:
-    engine.owner_ = "999:999"
-    with pytest.raises(EngineError, match=r"fake images are served as 999:999.*--user 999:999"):
+    # A user nobody runs the tests as.
+    engine.owner_ = "12345:12345"
+    with pytest.raises(EngineError, match=r"fake images are served as 12345:12345.*--user 12345"):
         run(tmp_path, registry)
     # Planning alone touches no engine files.
     assert run(tmp_path, registry, stages=(Stage.PLAN,)).stages
