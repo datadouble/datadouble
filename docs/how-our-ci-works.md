@@ -57,6 +57,7 @@ test directory belongs to exactly one.
 | `core` | The core, the conformance harness, the scripts, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL, S3, Vault | 999:999 | 1 |
 | `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
 | `mongodb` | The MongoDB adapter | MongoDB | 999:999 | 1 |
+| `redis` | The Redis adapter | Redis | 999:999 | 1 |
 | `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server | 10001:10001 | 2 |
 | `oracle` | The Oracle adapter | Oracle | 54321:54321 | 6 |

@@ -93,6 +93,7 @@ the shards less even, never skip or repeat a test.
 | `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao | 999:999 | 1 |
 | `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
 | `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 | 1 |
+| `redis` | The Redis adapter | Redis 8.10 with a generated keyspace of every data type (`dev/redis`), seeded at every start | 999:999 | 1 |
 | `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 | 2 |
 | `oracle` | The Oracle adapter | Oracle Database Free 23.26 with Sakila (`dev/oracle`), loaded through external tables | 54321:54321 | 6 |

@@ -140,6 +140,15 @@ strategy B.
   fields.
 - **Salesforce:** objects and lookup/master-detail relationships form a natural
   graph; filters are SOQL.
-- **Redis:** subsetting is by key pattern and type; there is no relational
-  closure unless the application encodes references in keys, which can be
-  declared.
+- **Redis:** each key pattern is a table. ID-like segments of a key (numbers,
+  UUIDs, long hex strings) become `{}`, so `user:42` belongs to `user:{}` and
+  `user:42:sessions` to `user:{}:sessions`; patterns the inference gets wrong
+  are declared in `source.connection.patterns`. A table's key is `_key`, the
+  values its `{}` stand for (`42`), and its other columns are what its keys
+  hold: `value` for strings, the fields of hashes and stream entries (sampled,
+  as for MongoDB), `members` for lists, sets and sorted sets, and `scores` for
+  sorted sets. References in key names are then ordinary references,
+  `user:{}:sessions._key -> user:{}`, and so are references in values,
+  `order:{}.user_id -> user:{}`. Seeds and `when` clauses are globs over
+  `_key` (`{where: "1*"}`). The planner's conditions are evaluated by
+  Datadouble against each key it reads, so only strategy B is available.
