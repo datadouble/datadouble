@@ -195,31 +195,47 @@ def test_fallbacks_schema_and_odd_values(source: OracleScratch, tmp_path: Path) 
                 # Loading and anonymizing fired no trigger; each is back as it was.
                 "SELECT 1 FROM child_log",
                 (
-                    "SELECT 1 FROM user_triggers WHERE trigger_name = 'CHILD_CHANGED'"
+                    "SELECT 1 FROM all_triggers"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND trigger_name = 'CHILD_CHANGED'"
                     " AND status <> 'ENABLED'"
                 ),
                 (
-                    "SELECT 1 FROM user_triggers WHERE trigger_name = 'CHILD_QUIET'"
+                    "SELECT 1 FROM all_triggers"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND trigger_name = 'CHILD_QUIET'"
                     " AND status <> 'DISABLED'"
                 ),
                 # Constraints, indexes, views and PL/SQL came across.
                 (
-                    "SELECT 1 FROM user_constraints WHERE constraint_name = 'FK_FILES_CHILD'"
+                    "SELECT 1 FROM all_constraints"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND constraint_name = 'FK_FILES_CHILD'"
                     " AND status <> 'DISABLED'"
                 ),
                 (
                     "SELECT 1 FROM dual WHERE NOT EXISTS"
-                    " (SELECT 1 FROM user_indexes WHERE index_name = 'IX_CHILD_LABEL')"
+                    " (SELECT 1 FROM all_indexes"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND index_name = 'IX_CHILD_LABEL')"
                 ),
                 (
                     "SELECT 1 FROM dual WHERE NOT EXISTS"
-                    " (SELECT 1 FROM user_views WHERE view_name = 'CHILD_IDS_AGAIN')"
+                    " (SELECT 1 FROM all_views"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND view_name = 'CHILD_IDS_AGAIN')"
                 ),
                 "SELECT 1 FROM dual WHERE twice(2) <> 4",
-                "SELECT 1 FROM user_objects WHERE status <> 'VALID'",
+                (
+                    "SELECT 1 FROM all_objects"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND status <> 'VALID'"
+                ),
                 # The identity column goes on after the stub rows.
                 (
-                    "SELECT 1 FROM user_tab_identity_cols WHERE table_name = 'PARENT'"
+                    "SELECT 1 FROM all_tab_identity_cols"
+                    " WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')"
+                    " AND table_name = 'PARENT'"
                     " AND generation_type <> 'ALWAYS'"
                 ),
             }

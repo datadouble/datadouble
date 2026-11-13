@@ -120,6 +120,7 @@ def test_quoting_and_errors() -> None:
     )
     assert redact(message) == (
         "ORA-00001: unique constraint (SHOP.PK) violated on table SHOP.T columns (EMAIL)"
+        " (also ORA-03301)"
     )
     assert redact("ORA-12899: value too large: 'secret'") == "ORA-12899: value too large: '…'"
     assert redact("ORA-1: insert values (1, 'x')") == "ORA-1: insert values (…)"
@@ -205,9 +206,7 @@ def test_urls_settings_and_images() -> None:
     for bad in ("mysql://h/db", "oracle:///db", "oracle://h/"):
         with pytest.raises(EngineError, match="oracle url must look like"):
             parse_url(bad)
-    assert (
-        default_image("23.26.3.0.0") == "container-registry.oracle.com/database/free:23.26.3.0-lite"
-    )
+    assert default_image("23.26.3.0.0") == "container-registry.oracle.com/database/free:23.26.3.0"
     with pytest.raises(EngineError, match=r"no Oracle image is known for version 19c"):
         default_image("19c")
 
@@ -241,7 +240,7 @@ def test_engine(tmp_path: Path) -> None:
     assert (capabilities.nested, capabilities.hooks, capabilities.expressions) == (True, True, True)
     working = engine.working(tmp_path, Tooling(IdleRuntime()), "23.26.3.0.0")
     assert isinstance(working, OracleWorking)
-    assert working.tools.image.endswith("free:23.26.3.0-lite")
+    assert working.tools.image.endswith("free:23.26.3.0")
     with pytest.raises(SettingsError, match="edition"):
         engine.working(tmp_path, Tooling(IdleRuntime(), server={"edition": "x"}), "23.26.3.0.0")
     server = OracleServer(Tools(IdleRuntime(), "image"), tmp_path / "db", tmp_path)
@@ -256,7 +255,7 @@ def test_engine(tmp_path: Path) -> None:
     )
     plan = engine.server(tmp_path, None)
     assert (plan.image, plan.port, plan.database, plan.user, plan.owner) == (
-        "container-registry.oracle.com/database/free:23.26.3.0-lite",
+        "container-registry.oracle.com/database/free:23.26.3.0",
         1521,
         "DATADOUBLE",
         "datadouble",

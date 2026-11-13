@@ -420,6 +420,8 @@ class OracleWorking:
             unplugged = server.unplug()
         info = DatabaseInfo(schemas=index.schemas, server_version=version, unplugged_from=unplugged)
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
+        # The logical image is this schema and the rows; transform copies it along.
+        shutil.copyfile(extract / "schema.json", directory / "schema.json")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod

@@ -38,18 +38,35 @@ _TAG_PARTS = 4
 """Image tags name a version's first four parts."""
 _SEED = "/opt/oracle/oradata/FREE/pdbseed/"
 _SYS_VARIABLE = "ORACLE_PWD"
-# The image's own check that the database is open.
-_READY = ("bash", "-c", '"$ORACLE_BASE/$CHECK_DB_FILE"')
+# The image's own start; on SIGTERM its script shuts the database down but goes
+# on waiting for its log, so this one shuts down and exits itself. Working
+# databases are unplugged before the container stops.
+_START = """
+"$ORACLE_BASE/$RUN_FILE" &
+trap 'printf "SHUTDOWN IMMEDIATE\\nEXIT\\n" | sqlplus -s / as sysdba > /dev/null; exit 0' TERM
+wait
+"""
+# Ready once SYS logs in with this start's password, which the image sets only
+# after the database opens; silent SQL*Plus reports a login by the query's
+# answer alone. The password reaches SQL*Plus through a builtin.
+_READY = (
+    "bash",
+    "-c",
+    (
+        'printf \'connect sys/"%s"@localhost:1521/FREE as sysdba\\n'
+        'SELECT 4242 + 1 FROM dual;\\nexit\\n\' "$ORACLE_PWD"'
+        " | sqlplus -s -L /nolog | grep -q 4243"
+    ),
+)
 
 
 def default_image(server_version: str) -> str:
     """Oracle's Database Free image of a version such as ``23.26.3.0.0``.
 
-    Tags name the first four parts (``23.26.3.0``). Working databases use the
-    ``-lite`` image, a fifth the size: the schema is scripted from the source,
-    so they need none of what lite leaves out (XML DB, Text, Spatial), unless
-    the source's objects do, which then fail to load by name and need the
-    full image in ``source.image``.
+    Tags name the first four parts (``23.26.3.0``). The full image, not
+    ``-lite``: lite compresses its pre-built database and expands it on every
+    start, which doubles a start's time (78 s against 38 s), and it leaves out
+    components a source may use.
     """
     parts = server_version.split(".")
     if len(parts) < _TAG_PARTS or not all(part.isdigit() for part in parts):
@@ -58,7 +75,7 @@ def default_image(server_version: str) -> str:
             " an Oracle Database Free image of that version"
         )
         raise EngineError(message)
-    return f"container-registry.oracle.com/database/free:{'.'.join(parts[:_TAG_PARTS])}-lite"
+    return f"container-registry.oracle.com/database/free:{'.'.join(parts[:_TAG_PARTS])}"
 
 
 def literal(text: str) -> str:
@@ -109,7 +126,7 @@ class OracleServer:
         password = f"Dd{secrets.token_hex(12)}_1"
         container = Container(
             image=self.tools.image,
-            command=("/bin/bash", "-c", '"$ORACLE_BASE/$RUN_FILE"'),
+            command=("/bin/bash", "-c", _START),
             owner=self.owner,
             mounts=self.mounts,
             secrets={_SYS_VARIABLE: password},

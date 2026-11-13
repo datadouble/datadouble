@@ -51,8 +51,7 @@ MOUNT = "/var/lib/datadouble"
 _SERVE = """
 set -eu
 "$ORACLE_BASE/$RUN_FILE" &
-server=$!
-trap 'kill -TERM "$server"; wait "$server"' TERM INT
+trap 'printf "SHUTDOWN IMMEDIATE\\nEXIT\\n" | sqlplus -s / as sysdba > /dev/null; exit 0' TERM INT
 until "$ORACLE_BASE/$CHECK_DB_FILE" > /dev/null 2>&1; do sleep 2; done
 password=$(printf %s "$DATADOUBLE_PASSWORD" | tr -d '"')
 sqlplus -s / as sysdba > /dev/null <<EOF
@@ -64,7 +63,7 @@ GRANT DBA TO datadouble;
 EXIT
 EOF
 touch @READY@
-wait "$server"
+wait
 """
 
 
