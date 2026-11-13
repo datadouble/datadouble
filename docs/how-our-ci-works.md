@@ -67,9 +67,17 @@ up, and a failure tells you at once which engine it was.
 ### Shards: one group, several jobs
 
 A slow group is split into **shards**, each its own job running at the same
-time: **Integration (mysql 1/2)** runs the first, third, fifth… MySQL tests,
-and **Integration (mysql 2/2)** the second, fourth, sixth…. Together they run
-every test exactly once.
+time: **Integration (mysql 1/2)** runs about half the MySQL tests and
+**Integration (mysql 2/2)** the rest. Together they run every test exactly
+once.
+
+The shards are balanced by how long each test took in earlier CI runs, which
+`tests/integration-durations.json` records. Some tests take much longer than
+others (an Oracle test that runs two whole builds takes several minutes), so
+splitting by count alone would give one shard all the slow ones. Every
+**Integration coverage** job saves the latest timings as the
+`integration-durations` artifact; when the shards' times drift apart,
+download it from a recent run on `main` and commit it in place of the file.
 
 Each extra job pays about two minutes of setup again (building the test
 image, downloading the database image, starting the source database), so

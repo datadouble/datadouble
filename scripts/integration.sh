@@ -8,7 +8,8 @@
 #   integration.sh jobs               CI's jobs, one per shard, as a JSON matrix
 #   integration.sh services RUN...    the Compose services the runs need
 #   integration.sh test RUN...        run the tests (in the test container, as root)
-#   integration.sh report             combine the runs' coverage; fail under 100%
+#   integration.sh report             combine the runs' coverage, failing under 100%,
+#                                     and their test durations
 #
 # A RUN is a group (all its tests) or GROUP/K, the Kth of its shards.
 #
@@ -16,12 +17,16 @@
 # so the test container starts as root only to run each group as its user,
 # with the Docker socket's group too when the tests drive the host's daemon.
 # Each run writes its own coverage data to /reports/.coverage.GROUP (or
-# .coverage.GROUP-K for a shard), which `report` combines, here or in CI after
-# every job.
+# .coverage.GROUP-K for a shard) and its tests' durations to
+# /reports/durations.GROUP.json, which `report` combines, here or in CI after
+# every job. Committed to tests/integration-durations.json, CI's durations
+# balance the shards.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 table=tests/integration-groups.txt
+# Seconds each test took in CI, which balance the shards (scripts/shard.py).
+durations=tests/integration-durations.json
 
 rows() {
     grep -v '^#' "$table" | grep -v '^[[:space:]]*$'
@@ -54,15 +59,19 @@ run_tests() {
     uid=${who%:*} gid=${who#*:}
     if [ "$run" != "$group" ]; then
         shard=(--shard "${run#*/}/$(field "$group" 3)")
+        if [ -f "$durations" ]; then
+            shard+=(--shard-durations "$durations")
+        fi
     fi
     if [ -S /var/run/docker.sock ]; then
         groups="--groups=$(stat -c %g /var/run/docker.sock)"
     fi
     install -d -o "$uid" -g "$gid" "/tmp/home-$name"
-    rm -f "/reports/.coverage.$name"
+    rm -f "/reports/.coverage.$name" "/reports/durations.$name.json"
     setpriv --reuid="$uid" --regid="$gid" "$groups" \
         env HOME="/tmp/home-$name" USER="test-$group" COVERAGE_FILE="/reports/.coverage.$name" \
         /src/.venv/bin/pytest -p no:cacheprovider --cov --cov-report= --cov-fail-under=0 \
+        --durations=15 --durations-min=5 --record-durations "/reports/durations.$name.json" \
         "${shard[@]}" $(field "$group" 5)
 }
 
@@ -105,9 +114,11 @@ case "${1:-}" in
         # file names (relative_files) let either combine the runs' data.
         reports=${REPORTS:-/reports}
         coverage=${COVERAGE:-/src/.venv/bin/coverage}
+        python=${PYTHON:-/src/.venv/bin/python}
         # The gate is the report's, which lists the lines no test ran; the
         # XML report is written whatever the total.
-        $coverage combine --keep --data-file="$reports/.coverage" "$reports"/.coverage.* \
+        $python scripts/shard.py merge "$reports/integration-durations.json" "$reports"/durations.*.json \
+            && $coverage combine --keep --data-file="$reports/.coverage" "$reports"/.coverage.* \
             && $coverage xml --data-file="$reports/.coverage" -o "$reports/coverage.xml" --fail-under=0 \
             && $coverage report --data-file="$reports/.coverage"
         ;;

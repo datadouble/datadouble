@@ -71,11 +71,22 @@ test-integration` runs every group in turn and combines their coverage.
 
 In CI each shard of a group is its own job: shard K of N (`make test-group
 GROUP=<name>/K`, which passes `--shard K/N` to pytest, `scripts/shard.py`)
-takes every Nth test in collection order, starting with the Kth, so the
-shards together run each test once. A group gets more shards when its job
-becomes the slowest; each shard pays the job's setup again (about two
-minutes: the test image, the engine images, the source database), so a group
-whose tests take a few minutes keeps one. Locally a group runs whole.
+runs its share of the group's tests, and the shards together run each test
+once. The shares are balanced by the seconds each test took in CI, kept in
+`tests/integration-durations.json`: the longest test first, each to the
+shard with the least time so far, and a test the file does not list counts
+as the average. Without the file, shard K takes every Nth test in collection
+order. A group gets more shards when its job becomes the slowest; each shard
+pays the job's setup again (two minutes for most engines, five for Oracle's
+large image), so a group whose tests take a few minutes keeps one. Locally a
+group runs whole.
+
+Every integration job records its tests' durations and prints the slowest;
+the **Integration coverage** job merges them into the
+`integration-durations` artifact. When shards drift apart (tests added,
+renamed or slower), download that artifact from a recent run on `main` and
+commit it as `tests/integration-durations.json`. Stale durations only make
+the shards less even, never skip or repeat a test.
 
 | Group | Tests | Services | User | Shards |
 |---|---|---|---|---|
