@@ -21,6 +21,7 @@ services:
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
       DATADOUBLE_TEST_MYSQL_URL: mysql://datadouble:datadouble@mysql:3306/sakila
       DATADOUBLE_TEST_MSSQL_URL: mssql://datadouble:Datadouble-1@mssql:1433/sakila
+      DATADOUBLE_TEST_ORACLE_URL: oracle://datadouble:Datadouble-1@oracle:1521/FREEPDB1
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -106,6 +107,25 @@ services:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U datadouble -P Datadouble-1 -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM sakila.dbo.audit_event' 2>/dev/null | grep -q '^100$$'"]
       interval: 2s
       timeout: 5s
+      retries: 120
+
+  # Oracle Database Free 23.26 with Sakila in FREEPDB1 (dev/oracle), loaded
+  # from the fixture at first start. The full image, which DBMS_METADATA needs.
+  oracle:
+    build:
+      context: dev/oracle
+    depends_on:
+      fixtures:
+        condition: service_completed_successfully
+    environment:
+      ORACLE_PWD: Datadouble-sys1
+    volumes:
+      - fixtures:/fixtures:ro
+    healthcheck:
+      # Ready only once Sakila and the awkward cases have loaded.
+      test: ["CMD-SHELL", "echo 'SELECT COUNT(*) FROM sakila.audit_event;' | sqlplus -s datadouble/Datadouble-1@localhost:1521/FREEPDB1 | grep -q 100"]
+      interval: 5s
+      timeout: 10s
       retries: 120
 
   # Jailer's export of dev/jailer/sakila.jm from the mysql service, for the

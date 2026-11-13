@@ -7,7 +7,9 @@
 # handle. The schema is jOOQ's port, fetched at a pinned commit and checked
 # against its SHA-256; see dev/sakila/LICENSE.txt.
 
-FROM container-registry.oracle.com/database/free:23.26.3.0-lite@sha256:cf540c3fa190d7cffad08c491652ac07fc70314e510f6b87890449517d565e94
+# The full image, not lite: lite leaves out XML DB, which DBMS_METADATA needs
+# to script a schema, and the working databases use the same image.
+FROM container-registry.oracle.com/database/free:23.26.3.0@sha256:f988b0c04c4c386cd306a2a914c0d7a9702d83acc31b064a28ad8eb6278a8fba
 
 ADD --chown=oracle:oinstall --chmod=0644 \
     --checksum=sha256:6d8943ba87103fcf50356e63727fd2b5be009b2061cfcec1a22db4054d809aa0 \

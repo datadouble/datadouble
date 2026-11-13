@@ -73,7 +73,8 @@ SELECT inventory_id,
        FROM_TZ(TIMESTAMP '2022-03-01 09:00:00', '-05:00') + NUMTODSINTERVAL(MOD(inventory_id, 30), 'DAY'),
        NUMTODSINTERVAL(inventory_id, 'MINUTE'),
        HEXTORAW(LPAD(TO_CHAR(inventory_id, 'FMXXXX'), 8, '0')),
-       CASE WHEN MOD(inventory_id, 2) = 0 THEN N'Région nord' ELSE N'東京' END
+       -- Escaped, so the text does not depend on SQL*Plus's client character set.
+       CASE WHEN MOD(inventory_id, 2) = 0 THEN UNISTR('R\00E9gion nord') ELSE UNISTR('\6771\4EAC') END
 FROM inventory
 WHERE inventory_id <= 50;
 
