@@ -1,15 +1,17 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 #
-# The integration suite's groups: each runs in its own CI job, as the user an
-# engine's copies are served as (decision 86), with only the Compose services
-# it needs. `make test-integration` runs them all, one after another;
-# `make test-group GROUP=<name>` runs one. tests/scripts/test_integration_groups.py
+# The integration suite's groups: each runs as the user an engine's copies are
+# served as (decision 86), with only the Compose services it needs, split into
+# as many CI jobs (shards) as its run time calls for, each taking every Nth
+# test (scripts/shard.py). `make test-integration` runs every group whole, one
+# after another; `make test-group GROUP=<name>` runs one, and
+# `GROUP=<name>/<k>` one of its shards. tests/scripts/test_integration_groups.py
 # checks that every test path in pyproject.toml belongs to exactly one group.
 #
-# group | user:group | Compose services | test paths
-core | 999:999 | postgres s3 vault | core/tests conformance/tests tests adapters/btrfs/tests adapters/docker/tests adapters/kubernetes/tests adapters/s3/tests adapters/vault/tests
-postgres | 999:999 | postgres s3 | adapters/postgres/tests
-mongodb | 999:999 | mongodb | adapters/mongodb/tests
-mysql | 999:999 | mysql jailer | adapters/mysql/tests
-mssql | 10001:10001 | mssql | adapters/mssql/tests
+# group | user:group | shards | Compose services | test paths
+core | 999:999 | 1 | postgres s3 vault | core/tests conformance/tests tests adapters/btrfs/tests adapters/docker/tests adapters/kubernetes/tests adapters/s3/tests adapters/vault/tests
+postgres | 999:999 | 1 | postgres s3 | adapters/postgres/tests
+mongodb | 999:999 | 1 | mongodb | adapters/mongodb/tests
+mysql | 999:999 | 2 | mysql jailer | adapters/mysql/tests
+mssql | 10001:10001 | 2 | mssql | adapters/mssql/tests

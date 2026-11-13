@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration test-group integration test-k8s test-btrfs docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -35,7 +35,7 @@ test:
 # adds Compose files, such as CI's build cache (compose.cache.yaml). Reports
 # are copied out of the stopped test container rather than bind-mounted.
 DOCKER ?= dind
-HOST_WORK ?= /tmp/datadouble-work
+HOST_WORK ?= /var/tmp/datadouble-work
 EXTRA_COMPOSE ?=
 COMPOSE := docker compose -f compose.yaml$(if $(filter host,$(DOCKER)), -f compose.host.yaml)$(foreach file,$(EXTRA_COMPOSE), -f $(file))
 DAEMON := $(if $(filter host,$(DOCKER)),,docker)
@@ -51,6 +51,7 @@ integration:
 	mkdir -p .reports
 	$(if $(filter host,$(DOCKER)),install -d -m 1777 $(HOST_WORK))
 	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) build test
+	$(if $(filter host,$(DOCKER)),$(MAKE) --no-print-directory clean-work)
 	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) up -d --wait $(DAEMON) $$(scripts/integration.sh services $(RUN_GROUPS)); \
 	status=$$?; \
 	if [ $$status -eq 0 ]; then \
@@ -63,6 +64,15 @@ integration:
 	fi; \
 	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) down --volumes; \
 	exit $$status
+
+# Empty HOST_WORK, where DOCKER=host runs keep temporary files. A failed
+# test's directory stays there to be read, until this or the next run; its
+# files belong to the engines' users, so the test container removes them as
+# root. (Docker-in-Docker runs keep theirs in a volume each run removes.)
+clean-work:
+	@test ! -d $(HOST_WORK) || DATADOUBLE_HOST_WORK=$(HOST_WORK) \
+		docker compose -f compose.yaml -f compose.host.yaml run --rm --no-deps test \
+		find $(HOST_WORK) -mindepth 1 -delete
 
 # Opt-in groups that need privileged containers: k3s, and a loop-mounted btrfs.
 test-k8s:

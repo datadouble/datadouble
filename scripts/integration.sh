@@ -5,15 +5,19 @@
 # The integration suite's groups (tests/integration-groups.txt).
 #
 #   integration.sh groups             the group names, in order
-#   integration.sh services GROUP...  the Compose services the groups need
-#   integration.sh test GROUP...      run the groups' tests (in the test container, as root)
-#   integration.sh report             combine the groups' coverage; fail under 100%
+#   integration.sh jobs               CI's jobs, one per shard, as a JSON matrix
+#   integration.sh services RUN...    the Compose services the runs need
+#   integration.sh test RUN...        run the tests (in the test container, as root)
+#   integration.sh report             combine the runs' coverage; fail under 100%
+#
+# A RUN is a group (all its tests) or GROUP/K, the Kth of its shards.
 #
 # Datadouble runs as the user an engine's copies are served as (decision 86),
 # so the test container starts as root only to run each group as its user,
 # with the Docker socket's group too when the tests drive the host's daemon.
-# Each group writes its own coverage data to /reports/.coverage.GROUP, which
-# `report` combines, here or in CI after every group's job.
+# Each run writes its own coverage data to /reports/.coverage.GROUP (or
+# .coverage.GROUP-K for a shard), which `report` combines, here or in CI after
+# every job.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,7 +28,7 @@ rows() {
 }
 
 field() {
-    # The FIELD-th column (1-4) of GROUP's row, trimmed.
+    # The FIELD-th column (1-5) of GROUP's row, trimmed.
     rows | awk -F'|' -v group="$1" -v column="$2" '
         { name = $1; gsub(/^ +| +$/, "", name) }
         name == group { value = $column; gsub(/^ +| +$/, "", value); print value; found = 1 }
@@ -32,50 +36,73 @@ field() {
 }
 
 known() {
-    field "$1" 1 > /dev/null || { echo "no integration group named $1" >&2; exit 2; }
+    # Check a RUN: a group, or GROUP/K with K one of its shards.
+    local group=${1%%/*} shard
+    field "$group" 1 > /dev/null || { echo "no integration group named $group" >&2; exit 2; }
+    if [ "$1" != "$group" ]; then
+        shard=${1#*/}
+        if ! [[ $shard =~ ^[1-9][0-9]*$ ]] || [ "$shard" -gt "$(field "$group" 3)" ]; then
+            echo "group $group has no shard $shard" >&2
+            exit 2
+        fi
+    fi
 }
 
-run_group() {
-    local group=$1 who uid gid groups=--clear-groups
-    known "$group"
+run_tests() {
+    local run=$1 group=${1%%/*} name=${1/\//-} who uid gid groups=--clear-groups shard=()
     who=$(field "$group" 2)
     uid=${who%:*} gid=${who#*:}
+    if [ "$run" != "$group" ]; then
+        shard=(--shard "${run#*/}/$(field "$group" 3)")
+    fi
     if [ -S /var/run/docker.sock ]; then
         groups="--groups=$(stat -c %g /var/run/docker.sock)"
     fi
-    install -d -o "$uid" -g "$gid" "/tmp/home-$group"
+    install -d -o "$uid" -g "$gid" "/tmp/home-$name"
+    rm -f "/reports/.coverage.$name"
     setpriv --reuid="$uid" --regid="$gid" "$groups" \
-        env HOME="/tmp/home-$group" USER="test-$group" COVERAGE_FILE="/reports/.coverage.$group" \
+        env HOME="/tmp/home-$name" USER="test-$group" COVERAGE_FILE="/reports/.coverage.$name" \
         /src/.venv/bin/pytest -p no:cacheprovider --cov --cov-report= --cov-fail-under=0 \
-        $(field "$group" 4)
+        "${shard[@]}" $(field "$group" 5)
 }
 
 case "${1:-}" in
     groups)
         rows | awk -F'|' '{ name = $1; gsub(/^ +| +$/, "", name); print name }'
         ;;
+    jobs)
+        # {"include": [{"name": "mysql 1/2", "run": "mysql/1", "slug": "mysql-1"}, ...]};
+        # a group of one shard is one job named for the group.
+        rows | awk -F'|' '
+            { name = $1; gsub(/^ +| +$/, "", name); count = $3 + 0
+              for (k = 1; k <= count; k++) {
+                  if (count == 1) job = sprintf("{\"name\": \"%s\", \"run\": \"%s\", \"slug\": \"%s\"}", name, name, name)
+                  else job = sprintf("{\"name\": \"%s %d/%d\", \"run\": \"%s/%d\", \"slug\": \"%s-%d\"}", name, k, count, name, k, name, k)
+                  jobs = jobs (jobs == "" ? "" : ", ") job
+              } }
+            END { printf "{\"include\": [%s]}\n", jobs }'
+        ;;
     services)
         shift
-        for group in "$@"; do known "$group"; done
-        for group in "$@"; do
-            field "$group" 3 | tr ' ' '\n'
+        for run in "$@"; do known "$run"; done
+        for run in "$@"; do
+            field "${run%%/*}" 4 | tr ' ' '\n'
         done | awk 'NF && !seen[$0]++' | tr '\n' ' '
         echo
         ;;
     test)
         shift
-        for group in "$@"; do known "$group"; done
+        for run in "$@"; do known "$run"; done
         install -d -m 1777 /reports
         status=0
-        for group in "$@"; do
-            rm -f "/reports/.coverage.$group"
-            run_group "$group" || status=1
+        for run in "$@"; do
+            run_tests "$run" || status=1
         done
         exit $status
         ;;
     report)
         # Run from the repository on the host or in the container: relative
-        # file names (relative_files) let either combine the groups' data.
+        # file names (relative_files) let either combine the runs' data.
         reports=${REPORTS:-/reports}
         coverage=${COVERAGE:-/src/.venv/bin/coverage}
         # The gate is the report's, which lists the lines no test ran; the

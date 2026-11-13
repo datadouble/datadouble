@@ -121,19 +121,44 @@ jobs:
       - name: Unit tests (100% coverage gate)
         run: make test
 
+  integration-jobs:
+    # CI's integration jobs, one per shard of each group, from
+    # tests/integration-groups.txt, which sets how many shards each has.
+    name: Integration jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.jobs.outputs.matrix }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: List the jobs
+        id: jobs
+        run: echo "matrix=$(scripts/integration.sh jobs)" >> "$GITHUB_OUTPUT"
+
   integration-group:
-    # One job per integration group (tests/integration-groups.txt), in
-    # parallel, each starting only the Compose services its tests need and
-    # running them as the user its engine's copies are served as. The tests
-    # drive the runner's own Docker daemon (compose.host.yaml): the runner is
-    # throwaway, and one daemon means one copy of each engine's image.
-    name: Integration (${{ matrix.group }})
+    # One job per shard of each integration group, in parallel, each starting
+    # only the Compose services its tests need and running them as the user
+    # its engine's copies are served as. The tests drive the runner's own
+    # Docker daemon (compose.host.yaml): the runner is throwaway, and one
+    # daemon means one copy of each engine's image.
+    name: Integration (${{ matrix.name }})
+    needs: integration-jobs
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        group: [core, postgres, mongodb, mysql, mssql]
+      matrix: ${{ fromJSON(needs.integration-jobs.outputs.matrix) }}
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -185,8 +210,8 @@ jobs:
 
       - name: Run the group
         env:
-          GROUP: ${{ matrix.group }}
-        run: make test-group GROUP="$GROUP" DOCKER=host EXTRA_COMPOSE=compose.cache.yaml
+          RUN: ${{ matrix.run }}
+        run: make test-group GROUP="$RUN" DOCKER=host EXTRA_COMPOSE=compose.cache.yaml
 
       - name: Disk after
         if: ${{ always() }}
@@ -195,8 +220,8 @@ jobs:
       - name: Keep the group's coverage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage-${{ matrix.group }}
-          path: .reports/.coverage.${{ matrix.group }}
+          name: coverage-${{ matrix.slug }}
+          path: .reports/.coverage.${{ matrix.slug }}
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 3

@@ -63,20 +63,27 @@ container images to it is a separate decision; Dependabot does not propose it.
 ## Integration groups and Compose services
 
 The integration suite runs in groups, listed in `tests/integration-groups.txt`
-with each group's user, Compose services and test paths;
+with each group's user, number of shards, Compose services and test paths;
 `tests/scripts/test_integration_groups.py` checks that every test path belongs
 to exactly one. `make test-group GROUP=<name>` starts only that group's
 services, waits for them to be healthy, and runs its tests; `make
-test-integration` runs every group in turn and combines their coverage. Each
-group is its own CI job.
+test-integration` runs every group in turn and combines their coverage.
 
-| Group | Tests | Services | User |
-|---|---|---|---|
-| `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao | 999:999 |
-| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 |
-| `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 |
-| `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 |
-| `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 |
+In CI each shard of a group is its own job: shard K of N (`make test-group
+GROUP=<name>/K`, which passes `--shard K/N` to pytest, `scripts/shard.py`)
+takes every Nth test in collection order, starting with the Kth, so the
+shards together run each test once. A group gets more shards when its job
+becomes the slowest; each shard pays the job's setup again (about two
+minutes: the test image, the engine images, the source database), so a group
+whose tests take a few minutes keeps one. Locally a group runs whole.
+
+| Group | Tests | Services | User | Shards |
+|---|---|---|---|---|
+| `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao | 999:999 | 1 |
+| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
+| `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 | 1 |
+| `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 | 2 |
+| `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 | 2 |
 
 Sakila's rows come from the shared fixture (`dev/sakila`, through the
 `fixtures` service). Two more Compose groups are profiles that need
@@ -101,9 +108,11 @@ settings), on one of two daemons:
   address.
 - **The host's daemon** (`DOCKER=host`, in CI): `compose.host.yaml` mounts the
   Docker socket, mounts a host directory (`HOST_WORK`, by default
-  `/tmp/datadouble-work`) at the same path for temporary files, joins engine
-  containers to the Compose network, and reaches them through their published
-  ports on the host. One daemon means one copy of each engine image.
+  `/var/tmp/datadouble-work`, on disk where `/tmp` is often a small tmpfs in
+  memory) at the same path for temporary files, joins engine containers to the
+  Compose network, and reaches them through their published ports on the
+  host. One daemon means one copy of each engine image. pytest keeps only
+  failed tests' temporary directories, since working databases fill them.
 
 The tests run as unprivileged users, as Datadouble should, and containers run
 as the same user as the tests that start them. Datadouble runs as the user an
@@ -179,8 +188,9 @@ anonymized values.
 | CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test`, on Python 3.13 |
 | CI | Unit tests (Python 3.x) | `make test` on each later supported version |
 | CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs` |
-| CI | Integration (group) | One job per integration group, in parallel: `make test-group GROUP=<name> DOCKER=host`, with the test image's layers from GitHub's build cache (`compose.cache.yaml`); keeps the group's coverage data as an artifact |
-| CI | Integration coverage | Checks every group passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
+| CI | Integration jobs | Lists the integration jobs, one per shard of each group, from `tests/integration-groups.txt` |
+| CI | Integration (group, or group K/N) | One job per shard, in parallel: `make test-group GROUP=<name>[/K] DOCKER=host`, with the test image's layers from GitHub's build cache (`compose.cache.yaml`); keeps the shard's coverage data as an artifact |
+| CI | Integration coverage | Checks every shard passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
 | CI | sonar | `scripts/check_coverage.py` on the combined report (every analysed file named exactly once), then the scan, which waits for the quality gate and fails the job if it fails |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |
