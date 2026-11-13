@@ -14,22 +14,37 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 WORKFLOWS = Path(".github/workflows")
 
 
+class Job(BaseModel):
+    """The parts of a job this check reads."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    uses: str | None = None
+    timeout: JsonValue = Field(default=None, alias="timeout-minutes")
+
+
+class Workflow(BaseModel):
+    """The parts of a workflow this check reads."""
+
+    jobs: dict[str, Job] = Field(default_factory=dict[str, Job])
+
+
 def check_workflow(path: Path, text: str) -> list[str]:
     """Problems in one workflow file, as ``path: message``."""
-    document = yaml.safe_load(text)
-    jobs = document.get("jobs", {}) if isinstance(document, dict) else {}
-    problems: list[str] = []
-    for name, job in jobs.items() if isinstance(jobs, dict) else ():
-        if not isinstance(job, dict) or "uses" in job:
-            continue
-        limit = job.get("timeout-minutes")
-        if not isinstance(limit, int) or limit <= 0:
-            problems.append(f"{path}: job {name} has no timeout-minutes")
-    return problems
+    workflow = Workflow.model_validate(yaml.safe_load(text))
+    return [
+        f"{path}: job {name} has no timeout-minutes"
+        for name, job in workflow.jobs.items()
+        if job.uses is None
+        and not (
+            isinstance(job.timeout, int) and not isinstance(job.timeout, bool) and job.timeout > 0
+        )
+    ]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
