@@ -153,7 +153,7 @@ def scratch() -> Generator[ScratchSource]:
     )
     admin(
         "GRANT CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE TRIGGER, CREATE PROCEDURE,"
-        f" CREATE SEQUENCE, SELECT_CATALOG_ROLE TO {quote(schema)}"
+        f" CREATE SEQUENCE, CREATE MATERIALIZED VIEW, SELECT_CATALOG_ROLE TO {quote(schema)}"
     )
     source = OracleScratch(schema, variable)
     try:

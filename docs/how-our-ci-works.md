@@ -59,7 +59,7 @@ test directory belongs to exactly one.
 | `mongodb` | The MongoDB adapter | MongoDB | 999:999 | 1 |
 | `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server | 10001:10001 | 2 |
-| `oracle` | The Oracle adapter | Oracle | 54321:54321 | 4 |
+| `oracle` | The Oracle adapter | Oracle | 54321:54321 | 6 |
 
 Each group runs in its own CI jobs, so a slow engine does not hold the others
 up, and a failure tells you at once which engine it was.

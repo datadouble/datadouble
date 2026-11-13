@@ -255,9 +255,26 @@ def test_unsupported_tables_are_refused(source: OracleScratch, tmp_path: Path) -
     source.execute("CREATE TABLE odd (id NUMBER PRIMARY KEY, raw_row ROWID)")
     with pytest.raises(EngineError, match=r"ODD has column RAW_ROW of type ROWID"):
         build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
-    spec = SPEC.replace('exclude: ["items"]', 'exclude: ["items", "odd"]')
+    source.execute("DROP TABLE odd")
+    source.execute("CREATE MATERIALIZED VIEW kept AS SELECT id FROM parent")
+    with pytest.raises(EngineError, match=r"KEPT holds a materialized view"):
+        build(source, tmp_path / "view", stages=(Stage.PLAN, Stage.EXTRACT))
+    spec = SPEC.replace('exclude: ["items"]', 'exclude: ["items", "kept"]')
     extracted = build(source, tmp_path / "excluded", spec=spec, stages=(Stage.PLAN, Stage.EXTRACT))
     assert not extracted.failed()
+
+
+def test_excluded_parents_are_nulled(source: OracleScratch, tmp_path: Path) -> None:
+    spec = (
+        SPEC.replace('exclude: ["items"]', 'exclude: ["items", "parent"]')
+        .replace(
+            "child.parent_id -> parent: {on_missing: stub}",
+            "child.parent_id -> parent: {on_missing: null}",
+        )
+        .replace("  parent: {name: {faker: first_name}}\n", "")
+    )
+    result = build(source, tmp_path, spec=spec)
+    assert not result.failed(), result.verification
 
 
 def test_failing_hooks_name_objects_not_values(source: OracleScratch, tmp_path: Path) -> None:
@@ -359,6 +376,10 @@ def test_working_failures(source: OracleScratch, tmp_path: Path) -> None:
     long = Transformation((label,), lambda _rule, values: dict.fromkeys(values, "x" * 5000), ())
     with pytest.raises(EngineError, match="longer than 4000 bytes"):
         working.transform(plan.groups[0], work / "load" / "all" / "db", tmp_path / "t3", long)
+    # Oracle stores '' as NULL, which the replacements table's key refuses.
+    blank = Transformation((label,), lambda _rule, _values: {"": "x"}, ())
+    with pytest.raises(EngineError, match="preparing replacements failed: ORA-01400"):
+        working.transform(plan.groups[0], work / "load" / "all" / "db", tmp_path / "t4", blank)
 
 
 def test_working_images_must_match_the_source(source: OracleScratch, tmp_path: Path) -> None:

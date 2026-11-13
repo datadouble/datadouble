@@ -15,4 +15,4 @@ postgres | 999:999 | 1 | postgres s3 | adapters/postgres/tests
 mongodb | 999:999 | 1 | mongodb | adapters/mongodb/tests
 mysql | 999:999 | 2 | mysql jailer | adapters/mysql/tests
 mssql | 10001:10001 | 2 | mssql | adapters/mssql/tests
-oracle | 54321:54321 | 4 | oracle | adapters/oracle/tests
+oracle | 54321:54321 | 6 | oracle | adapters/oracle/tests

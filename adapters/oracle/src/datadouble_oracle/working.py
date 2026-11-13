@@ -21,6 +21,7 @@ import shutil
 import struct
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager
+from itertools import batched
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -309,19 +310,16 @@ def _load_table(connection: Connection, extract: Path, table: ExtractedTable) ->
     blobs = {i for i, family in enumerate(table.types) if family == "BLOB"}
     try:
         with connection.cursor() as cursor:
-            batch: list[list[Value]] = []
-            for row in read_rows(extract / table.file, len(table.columns)):
-                batch.append(
+            rows = read_rows(extract / table.file, len(table.columns))
+            for batch in batched(rows, _BATCH, strict=False):
+                values: list[list[Value]] = [
                     [
                         bytes.fromhex(value) if i in blobs and value is not None else value
                         for i, value in enumerate(row)
                     ]
-                )
-                if len(batch) == _BATCH:
-                    cursor.executemany(statement, batch)
-                    batch = []
-            if batch:
-                cursor.executemany(statement, batch)
+                    for row in batch
+                ]
+                cursor.executemany(statement, values)
     except Error as error:
         raise database_error(error, f"loading {table.table}") from None
 
