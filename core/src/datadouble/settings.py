@@ -11,11 +11,17 @@ into its own strict model.
 import json
 from collections.abc import Mapping
 
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 
 class SettingsError(Exception):
     """Adapter settings that do not validate."""
+
+
+class NoSettings(BaseModel):
+    """Settings an adapter does not take: any key is an error."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
 
 def parse_settings[M: BaseModel](model: type[M], settings: Mapping[str, JsonValue], what: str) -> M:

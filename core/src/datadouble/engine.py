@@ -21,7 +21,7 @@ entry point names a zero-argument callable that returns an
 import datetime as dt
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -63,11 +63,13 @@ class ExtractResult(_Model):
 
 @dataclass(frozen=True, slots=True)
 class Tooling:
-    """Where engine software runs: the runtime, and the spec's image override."""
+    """Where engine software runs: the runtime, the spec's image override and server settings."""
 
     runtime: ContainerRuntime
     image: str | None = None
     """``source.image``; when None the adapter picks the vendor image itself."""
+    server: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    """``source.server``, which the adapter parses."""
 
 
 type Mapper = Callable[[PlannedRule, Iterable[str]], Mapping[str, str]]

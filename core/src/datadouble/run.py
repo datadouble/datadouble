@@ -321,7 +321,9 @@ class Run:
                 raise RunError(message)
             ((kind, settings),) = self.spec.runtime.items()
             self._tooling = Tooling(
-                runtime=self.registry.runtime(kind, settings), image=self.spec.source.image
+                runtime=self.registry.runtime(kind, settings),
+                image=self.spec.source.image,
+                server=self.spec.source.server,
             )
         return self._tooling
 

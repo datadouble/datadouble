@@ -31,7 +31,7 @@ from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabas
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
-from datadouble.settings import parse_settings
+from datadouble.settings import NoSettings, parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_mongodb.server import Tools, default_image, upsert_user
 from datadouble_mongodb.source import ENGINE, Client, MongoSource, failure
@@ -83,6 +83,7 @@ class MongoEngine:
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """``mongod`` servers under ``scratch``, in the image for the source's version."""
+        parse_settings(NoSettings, tooling.server, "mongodb server")
         image = tooling.image or default_image(source_version)
         return MongoWorking(Tools(tooling.runtime, image), scratch)
 

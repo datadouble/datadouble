@@ -29,7 +29,7 @@ from datadouble.engine import EngineError, ServerPlan, SourceSession, Tooling, W
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
-from datadouble.settings import parse_settings
+from datadouble.settings import NoSettings, parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_mysql.errors import database_error
 from datadouble_mysql.introspect import ENGINE
@@ -106,6 +106,7 @@ class MysqlEngine:
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Servers under ``scratch``, in the image for the source's version."""
+        parse_settings(NoSettings, tooling.server, "mysql server")
         image = tooling.image or default_image(source_version)
         return MysqlWorking(Tools(tooling.runtime, image), scratch)
 

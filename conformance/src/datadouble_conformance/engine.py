@@ -120,10 +120,13 @@ class _Builds:
 
     def scratch_spec(self, source: ScratchSource, extra: str = "") -> Spec:
         settings = json.dumps(dict(source.connection))
+        # Working databases need the sample's server settings, such as a licence acceptance.
+        server = json.dumps(self.sample().source.server)
         engine = self.harness.engine.name
         return parse_spec(
             self.harness.with_runtime(
-                f"name: scratch\nsource: {{engine: {engine}, connection: {settings}}}\n{extra}"
+                f"name: scratch\nsource: {{engine: {engine}, connection: {settings},"
+                f" server: {server}}}\n{extra}"
             )
         )
 
@@ -159,7 +162,9 @@ class _Builds:
         working = self.harness.engine.working(
             scratch,
             Tooling(
-                runtime=self.registry.runtime(kind, settings), image=self.sample().source.image
+                runtime=self.registry.runtime(kind, settings),
+                image=self.sample().source.image,
+                server=self.sample().source.server,
             ),
             summary.identity.engine_version,
         )
