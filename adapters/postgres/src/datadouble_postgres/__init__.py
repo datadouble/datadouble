@@ -29,7 +29,7 @@ from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabas
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
-from datadouble.settings import parse_settings
+from datadouble.settings import NoSettings, parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_postgres.cluster import SUPERUSER, Tools, default_image
 from datadouble_postgres.errors import database_error
@@ -79,6 +79,7 @@ class PostgresEngine:
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Clusters under ``scratch``, in the image for the source's version."""
+        parse_settings(NoSettings, tooling.server, "postgres server")
         image = tooling.image or default_image(source_version)
         return PostgresWorking(Tools(tooling.runtime, image, scratch), scratch)
 

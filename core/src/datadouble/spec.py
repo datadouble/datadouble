@@ -127,6 +127,8 @@ class Source(_Model):
     image: str | None = None
     """The vendor image working databases and engine tools run in; by default
     the engine adapter picks the official image of the source's version."""
+    server: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    """Settings for the engine's working servers, checked by the engine adapter."""
 
 
 class Follow(_Model):

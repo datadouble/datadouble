@@ -57,7 +57,8 @@ plan and names the formats that engine supports; there is no silent fallback.
 
 | Engine | physical | logical |
 |---|---|---|
-| PostgreSQL, MySQL, SQL Server, Oracle | Data directory | Native dump |
+| PostgreSQL, MySQL, Oracle | Data directory | Native dump |
+| SQL Server | Detached data and log files | Scripted schema and bulk-load rows |
 | MongoDB | WiredTiger data directory | `mongodump` |
 | Redis | RDB file | Not offered |
 | Elasticsearch, OpenSearch | Snapshot repository | NDJSON export |
@@ -173,6 +174,16 @@ older server rejects. A source running a release whose image is not published
 yet fails to pull, and names an image in `source.image`.
 `source.image` names another, for example one with the extensions the source
 uses, or a copy in a private registry.
+`source.server` holds settings for the working servers, which the engine
+adapter checks; SQL Server's needs `accept_eula: true`, the operator's
+acceptance of Microsoft's licence, and takes an `edition` (decision 83).
+
+SQL Server is tagged by release and cumulative update rather than build
+(`mcr.microsoft.com/mssql/server:2022-CU28-ubuntu-22.04`), and its image runs
+the server only as uid and gid 10001, so Datadouble builds SQL Server images
+only when it runs as 10001:10001, as its own image does. Microsoft ships no
+schema tool in an image, so the adapter scripts the schema from the catalog
+views (decision 85).
 
 A **container runtime** adapter starts those containers, chosen by `runtime:`
 in the spec (decision 73):
