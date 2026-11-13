@@ -227,6 +227,7 @@ jobs:
           path: |
             .reports/.coverage.${{ matrix.slug }}
             .reports/durations.${{ matrix.slug }}.json
+            .reports/image-sizes.*.json
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
@@ -308,6 +309,17 @@ jobs:
         with:
           name: integration-durations
           path: .reports/integration-durations.json
+          if-no-files-found: error
+          retention-days: 30
+
+      # Each engine's golden image sizes, packed and unpacked, from its
+      # conformance build.
+      - name: Keep the image sizes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-sizes
+          path: .reports/image-sizes.*.json
           if-no-files-found: error
           retention-days: 30
 

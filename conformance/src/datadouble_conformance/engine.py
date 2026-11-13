@@ -16,6 +16,7 @@ import os
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
@@ -178,6 +179,13 @@ class _Builds:
             for column in columns:
                 found[str(column)] = set(restored.text_values(column))
         return found
+
+
+def _sizes(archive: Path) -> dict[str, int]:
+    """An archive's bytes as stored, and the bytes of the files in it."""
+    with tarfile.open(archive, "r:gz") as opened:
+        unpacked = sum(member.size for member in opened.getmembers())
+    return {"packed": archive.stat().st_size, "unpacked": unpacked}
 
 
 class _Built(BaseModel):
@@ -346,6 +354,22 @@ class EngineConformance:
                 ImageFormat.LOGICAL,
             }
             assert summary.verification.passed
+        # Each archive's size, packed and unpacked, where CI keeps its reports.
+        reports = Path(os.environ.get("DATADOUBLE_TEST_REPORTS", str(tmp_path)))
+        (reports / f"image-sizes.{harness.engine.name}.json").write_text(
+            json.dumps(
+                {
+                    f"{s.identity.group}/{a.format}": _sizes(
+                        Path(result.work) / "package" / s.identity.group / a.key.rsplit("/", 1)[1]
+                    )
+                    for s in result.images
+                    for a in s.archives
+                },
+                indent=1,
+                sort_keys=True,
+            ),
+            "utf-8",
+        )
 
     def test_killed_run_resumes(self, harness: EngineHarness, tmp_path: Path) -> None:
         """A run killed mid-way resumes from its last completed stage."""
