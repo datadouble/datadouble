@@ -22,6 +22,7 @@ services:
       DATADOUBLE_TEST_MYSQL_URL: mysql://datadouble:datadouble@mysql:3306/sakila
       DATADOUBLE_TEST_MSSQL_URL: mssql://datadouble:Datadouble-1@mssql:1433/sakila
       DATADOUBLE_TEST_ORACLE_URL: oracle://datadouble:Datadouble-1@oracle:1521/FREEPDB1
+      DATADOUBLE_TEST_REDIS_URL: redis://redis:6379
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -189,6 +190,16 @@ services:
       interval: 2s
       timeout: 5s
       retries: 90
+
+  # Redis 8.10 with a generated keyspace (dev/redis), seeded at every start.
+  redis:
+    build:
+      context: dev/redis
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
   # Opt-in groups. Both need privileged containers.
 

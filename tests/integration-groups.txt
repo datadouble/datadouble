@@ -16,3 +16,4 @@ mongodb | 999:999 | 1 | mongodb | adapters/mongodb/tests
 mysql | 999:999 | 2 | mysql jailer | adapters/mysql/tests
 mssql | 10001:10001 | 2 | mssql | adapters/mssql/tests
 oracle | 54321:54321 | 6 | oracle | adapters/oracle/tests
+redis | 999:999 | 1 | redis | adapters/redis/tests

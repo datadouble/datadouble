@@ -153,8 +153,8 @@ class _Builds:
     def restored_values(
         self, result: RunResult, summary: ImageSummary, columns: list[ColumnRef], tag: str
     ) -> dict[str, set[str]]:
-        """Distinct values of each column, and row counts, from the logical image."""
-        archive = next(a for a in summary.archives if a.format is ImageFormat.LOGICAL)
+        """Distinct values of each column, and row counts, from the logical image if any."""
+        archive = min(summary.archives, key=lambda a: a.format is not ImageFormat.LOGICAL)
         group = summary.identity.group
         file = Path(result.work) / "package" / group / archive.key.rsplit("/", 1)[1]
         scratch = self.root / f"restore-{tag}-{group}"
@@ -172,7 +172,7 @@ class _Builds:
             _Built.model_validate_json(manifest).working_server_version,
         )
         found: dict[str, set[str]] = {}
-        with working.restore(image, ImageFormat.LOGICAL, scratch / "db") as restored:
+        with working.restore(image, archive.format, scratch / "db") as restored:
             tables = sorted({column.table for column in columns})
             for table, rows in restored.counts(tables).items():
                 found[f"{table} rows"] = {str(rows)}
@@ -341,7 +341,7 @@ class EngineConformance:
         assert not differing, differing
 
     def test_whole_build(self, harness: EngineHarness, tmp_path: Path) -> None:
-        """The sample spec runs plan through store, verifies, and stores both formats."""
+        """The sample spec runs plan through store, verifies, and stores every format."""
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
         result = builds.run(spec, builds.lock(spec.source.connection), "work")
@@ -349,10 +349,8 @@ class EngineConformance:
         assert not failures, failures
         assert result.stored
         for summary in result.images:
-            assert {a.format for a in summary.archives} == {
-                ImageFormat.PHYSICAL,
-                ImageFormat.LOGICAL,
-            }
+            formats = harness.engine.capabilities().formats
+            assert {a.format for a in summary.archives} == set(formats)
             assert summary.verification.passed
         # Each archive's size, packed and unpacked, where CI keeps its reports.
         reports = Path(os.environ.get("DATADOUBLE_TEST_REPORTS", str(tmp_path)))

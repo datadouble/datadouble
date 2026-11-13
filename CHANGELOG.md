@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Redis:** an engine adapter (`datadouble-redis`). Each key pattern is a
+  table (`user:{}`, `user:{}:sessions`), with `_key` holding the values its
+  `{}` stand for, so references in key names and in values are declared like
+  any other. The extract reads only the chosen keys; images are the
+  `dump.rdb` a working server saves. Key segments that look like data fail
+  the catalog until a pattern is declared for them, so they never become
+  table names.
 - **The `datadouble` package and command.** `datadouble version` reports the
   installed version, `--json` prints the JSON response instead of a summary,
   `--dry-run` prints the JSON request without running it, and `datadouble api`
