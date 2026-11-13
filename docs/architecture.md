@@ -181,8 +181,8 @@ acceptance of Microsoft's licence, and takes an `edition` (decision 83).
 
 Datadouble runs as the `uid:gid` the engine's copies are served as (decision
 86): 999:999 for the official PostgreSQL, MySQL and MongoDB images,
-10001:10001 for SQL Server. A physical image's files
-then belong to the server that will open them, on every replicate adapter,
+10001:10001 for SQL Server and 54321:54321 for Oracle. A physical image's
+files then belong to the server that will open them, on every replicate adapter,
 and the engine's containers and Datadouble can read what the other writes.
 Datadouble's image runs under any uid (`docker run --user 999:999`, or a
 pod's `runAsUser` and `runAsGroup`); building, fetching and replicating as
