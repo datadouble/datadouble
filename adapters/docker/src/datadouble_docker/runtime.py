@@ -66,13 +66,21 @@ def _docker(arguments: Sequence[str], env: Mapping[str, str] | None = None) -> C
     return run_program(binary, arguments, env=env)
 
 
+def _field(key: str, value: Path) -> str:
+    """One field of a ``--mount`` value, quoted as CSV so a comma in a path stays in it."""
+    return '"{}"'.format(f"{key}={value}".replace('"', '""'))
+
+
 def _options(container: Container, network: str | None) -> list[str]:
     """``docker run`` options shared by jobs and servers."""
     options = ["--label", f"{_OWNER}={absolute([container.owner])[0]}", "--user", identity()]
     if network:
         options += ["--network", network]
+    # --mount refuses a directory that does not exist, where --volume would
+    # create it as root: a container that an interrupted run had already
+    # asked for cannot recreate a stage directory its resume just cleared.
     for path in absolute(container.mounts):
-        options += ["--volume", f"{path}:{path}"]
+        options += ["--mount", f"type=bind,{_field('source', path)},{_field('target', path)}"]
     for key, value in container.env.items():
         options += ["--env", f"{key}={value}"]
     for key in container.secrets:

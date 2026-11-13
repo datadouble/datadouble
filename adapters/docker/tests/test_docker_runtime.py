@@ -37,12 +37,12 @@ def server(tmp_path: Path, script: str = LOOP) -> Container:
 
 
 def test_jobs_share_files_and_receive_secrets(tmp_path: Path) -> None:
-    shared = tmp_path / "shared"
+    shared = tmp_path / "shared, with a comma"
     shared.mkdir()
     done = runtime(network="bridge").run(
         Container(
             image=IMAGE,
-            command=("sh", "-c", f'id -u; echo "$TOKEN $MODE" > {shared}/out'),
+            command=("sh", "-c", f'id -u; echo "$TOKEN $MODE" > "{shared}/out"'),
             owner=tmp_path / "stage",
             mounts=(shared,),
             env={"MODE": "plain"},
@@ -58,6 +58,16 @@ def test_jobs_share_files_and_receive_secrets(tmp_path: Path) -> None:
         Container(image=IMAGE, command=("sh", "-c", "echo no >&2; exit 3"), owner=tmp_path)
     )
     assert (failed.status, failed.stderr.strip()) == (3, "no")
+
+
+def test_missing_mounts_are_refused_not_created(tmp_path: Path) -> None:
+    missing = tmp_path / "cleared"
+    refused = runtime().run(
+        Container(image=IMAGE, command=("true",), owner=tmp_path, mounts=(missing,))
+    )
+    assert refused.status != 0
+    assert "does not exist" in refused.stderr
+    assert not missing.exists()
 
 
 def test_servers_publish_execute_and_stop(tmp_path: Path) -> None:

@@ -31,7 +31,7 @@ def test_run_program() -> None:
         ["-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"],
         stdin=b"\xff",
     )
-    assert raw.stdout == "�"
+    assert raw.stdout == "\ufffd"
 
 
 def test_last_error() -> None:
