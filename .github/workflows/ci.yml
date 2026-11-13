@@ -320,6 +320,8 @@ jobs:
         with:
           name: image-sizes
           path: .reports/image-sizes.*.json
+          # A pattern matches nothing under .reports, a hidden directory, without this.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
 
