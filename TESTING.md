@@ -84,12 +84,15 @@ gives the runtime settings). The runner and the daemon share the `work` volume
 at `/work`, where temporary files live (`TMPDIR`), because containers mount
 work directories at the same path. Compose service names do not resolve in
 those containers, so the PostgreSQL tests connect to the source by address.
-The suite runs as an unprivileged user, as Datadouble should, and containers
-run as that user too.
-That user is uid and gid 10001, because SQL Server in Microsoft's image runs
-only as 10001:10001 and the SQL Server adapter needs Datadouble to match
-(decision 83); its working-database tests therefore run only in Compose, while
-its plan and extract code also runs against a SQL Server on the host.
+The tests run as unprivileged users, as Datadouble should, and containers run
+as the same user as the tests that start them. Datadouble runs as the user an engine's copies are served as (decision 86), so
+`scripts/integration.sh` starts as root only to run each engine's tests as
+that engine's user and group: 999:999 for PostgreSQL, MySQL, MongoDB and
+everything that needs no engine, 10001:10001 for SQL Server, 54321:54321 for
+Oracle. Each group writes its own coverage data, and the combined report must
+reach 100%. Working-database tests for SQL Server and Oracle therefore run
+only in Compose; their plan and extract code also runs against a server on
+the host.
 
 GitHub's Ubuntu runners ship MySQL with an AppArmor profile for
 `/usr/sbin/mysqld`. Containers that Docker-in-Docker starts run without a

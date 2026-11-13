@@ -11,6 +11,7 @@ from datadouble.announce import ci_outputs_announcer, dotenv_announcer
 from datadouble.registry import Registry
 from datadouble.replicate import filesystem_replicator
 from datadouble.storage import filesystem_store
+from fake_engine import ENGINES
 
 FAKE_COSIGN = r"""#!/bin/sh
 # Stands in for cosign: a "signature" is the payload's SHA-256 and the key name.
@@ -44,7 +45,7 @@ def cosign(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyP
 @pytest.fixture
 def registry() -> Registry:
     return Registry(
-        engines={},
+        engines=ENGINES,
         stores={"filesystem": filesystem_store},
         replicators={"filesystem": filesystem_replicator},
         announcers={"dotenv": dotenv_announcer, "ci-outputs": ci_outputs_announcer},

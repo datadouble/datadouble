@@ -33,7 +33,7 @@ from datadouble_mssql.errors import database_error, redact, tool_error
 from datadouble_mssql.introspect import Physical, kind_of, table_problem, type_text
 from datadouble_mssql.render import Renderer, as_of_value, native, quote
 from datadouble_mssql.script import Phase, Schema, Statement
-from datadouble_mssql.server import MssqlServer, Tools, check_identity, default_image, literal
+from datadouble_mssql.server import MssqlServer, Tools, default_image, literal
 from datadouble_mssql.source import ExtractIndex, as_text, extracted_table, field, schema_for
 from datadouble_mssql.working import (
     DatabaseInfo,
@@ -240,18 +240,10 @@ class IdleRuntime:
         raise NotImplementedError
 
 
-def test_identity(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_working(tmp_path: Path) -> None:
     engine = MssqlEngine()
+    assert engine.owner == "10001:10001"
     tooling = Tooling(IdleRuntime(), server={"accept_eula": True})
-    monkeypatch.setattr("os.getuid", lambda: 1000)
-    monkeypatch.setattr("os.getgid", lambda: 1000)
-    with pytest.raises(EngineError, match=r"need Datadouble to run as 10001:10001.*1000:1000"):
-        check_identity()
-    with pytest.raises(EngineError, match="10001:10001"):
-        engine.working(tmp_path, tooling, "16.0.4325.4-CU28")
-    monkeypatch.setattr("os.getuid", lambda: 10001)
-    monkeypatch.setattr("os.getgid", lambda: 10001)
-    check_identity()
     working = engine.working(tmp_path, tooling, "16.0.4325.4-CU28")
     assert isinstance(working, MssqlWorking)
     assert working.tools.image == "mcr.microsoft.com/mssql/server:2022-CU28-ubuntu-22.04"

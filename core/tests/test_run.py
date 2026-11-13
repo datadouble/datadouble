@@ -408,3 +408,13 @@ def test_engines_get_the_runtime_and_image(
 ) -> None:
     run(tmp_path, registry, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD))
     assert engine.source.toolings == [Tooling(runtime=runtime, image="vendor/fake:1")] * 2
+
+
+def test_builds_run_as_the_serving_user(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    engine.owner_ = "999:999"
+    with pytest.raises(EngineError, match=r"fake images are served as 999:999.*--user 999:999"):
+        run(tmp_path, registry)
+    # Planning alone touches no engine files.
+    assert run(tmp_path, registry, stages=(Stage.PLAN,)).stages

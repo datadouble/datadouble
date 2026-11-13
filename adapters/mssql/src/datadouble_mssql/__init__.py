@@ -44,9 +44,7 @@ from datadouble_mssql.introspect import ENGINE
 from datadouble_mssql.render import compose, quote
 from datadouble_mssql.server import (
     DATA,
-    IDENTITY,
     Tools,
-    check_identity,
     configure,
     default_image,
     literal,
@@ -148,6 +146,11 @@ class MssqlEngine:
         """``mssql``."""
         return ENGINE
 
+    @property
+    def owner(self) -> str:
+        """``10001:10001``: SQL Server in Microsoft's image runs as no other user."""
+        return "10001:10001"
+
     def capabilities(self) -> Capabilities:
         """Both image formats, SQL expressions, the nested strategy and hooks."""
         return Capabilities(
@@ -180,7 +183,6 @@ class MssqlEngine:
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Instances under ``scratch``, in the image for the source's version."""
         settings = server_settings(tooling.server)
-        check_identity()
         image = tooling.image or default_image(source_version)
         return MssqlWorking(Tools(tooling.runtime, image, settings.edition), scratch)
 
@@ -210,7 +212,7 @@ class MssqlEngine:
         return ServerPlan(
             image=server_image or default_image(info.server_version),
             mount=MOUNT,
-            owner=IDENTITY,
+            owner=self.owner,
             command=("bash", "-c", start),
             ready=("test", "-f", f"{MOUNT}/instance/ready"),
             port=1433,

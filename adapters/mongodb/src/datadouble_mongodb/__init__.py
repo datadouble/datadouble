@@ -59,6 +59,11 @@ class MongoEngine:
         """``mongodb``."""
         return ENGINE
 
+    @property
+    def owner(self) -> str:
+        """``999:999``, the user the official MongoDB image serves as."""
+        return "999:999"
+
     def capabilities(self) -> Capabilities:
         """Both formats and aggregation expressions; no nested strategy or hooks."""
         return Capabilities(
@@ -107,7 +112,7 @@ class MongoEngine:
         return ServerPlan(
             image=server_image or default_image(info.server_version),
             mount=MOUNT,
-            owner="999:999",
+            owner=self.owner,
             command=("sh", "-c", start),
             ready=("mongosh", "--quiet", "--eval", "db.adminCommand('ping')"),
             port=27017,

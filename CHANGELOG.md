@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Datadouble running as uid and gid 10001.
 - **`source.server`:** settings for an engine's working servers, checked by
   its adapter.
+- **Engine users:** Datadouble runs as the `uid:gid` an engine's copies are
+  served as (999:999 for the official PostgreSQL, MySQL and MongoDB images,
+  10001:10001 for SQL Server), so physical images belong to their server on
+  every replicate adapter; builds, `fetch` and `replicate` refuse to run as
+  anyone else and say which user to run as.
 - **Jailer subsets:** a spec's `subset.jailer` names a Jailer extraction model
   and data model, read and translated on every run; `datadouble import-jailer`
   writes the translation as native settings. On Sakila, Jailer and Datadouble

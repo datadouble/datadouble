@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.channels import Channel, point_channel, read_channel
+from datadouble.engine import check_owner
 from datadouble.images import ImageSummary, digest, image_lines, read_summary, unpack
 from datadouble.names import Generation, GroupName
 from datadouble.promote import check_signature
@@ -178,6 +179,7 @@ def fetch(
     if spec.fetch is None or spec.trust is None:
         message = "the spec needs `fetch` and `trust` sections to fetch images"
         raise StagingError(message)
+    check_owner(registry.engine(spec.source.engine))
     settings = spec.fetch
     source = registry.store(*next(iter(settings.source.items())))
     staging = Staging(settings)

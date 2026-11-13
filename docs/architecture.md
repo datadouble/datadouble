@@ -178,10 +178,17 @@ uses, or a copy in a private registry.
 adapter checks; SQL Server's needs `accept_eula: true`, the operator's
 acceptance of Microsoft's licence, and takes an `edition` (decision 83).
 
+Datadouble runs as the `uid:gid` the engine's copies are served as (decision
+86): 999:999 for the official PostgreSQL, MySQL and MongoDB images,
+10001:10001 for SQL Server, 54321:54321 for Oracle. A physical image's files
+then belong to the server that will open them, on every replicate adapter,
+and the engine's containers and Datadouble can read what the other writes.
+Datadouble's image runs under any uid (`docker run --user 999:999`, or a
+pod's `runAsUser` and `runAsGroup`); building, fetching and replicating as
+anyone else fails with the user to run as.
+
 SQL Server is tagged by release and cumulative update rather than build
-(`mcr.microsoft.com/mssql/server:2022-CU28-ubuntu-22.04`), and its image runs
-the server only as uid and gid 10001, so Datadouble builds SQL Server images
-only when it runs as 10001:10001, as its own image does. Microsoft ships no
+(`mcr.microsoft.com/mssql/server:2022-CU28-ubuntu-22.04`). Microsoft ships no
 schema tool in an image, so the adapter scripts the schema from the catalog
 views (decision 85).
 

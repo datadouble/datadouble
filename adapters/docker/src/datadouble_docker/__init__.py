@@ -124,7 +124,9 @@ class DockerReplicator:
         name = f"datadouble-{copy_id}"
         labels = _labels(copy_id, summary)
         _docker(["volume", "create", *labels, name], "creating the volume")
-        fill = f"tar -x -C {plan.mount} && chown -R {plan.owner} {plan.mount}"
+        # The archive's files already belong to the serving user (decision 86),
+        # and extracting as root keeps that; only the new volume's root is root's.
+        fill = f"tar -x -C {plan.mount} && chown {plan.owner} {plan.mount}"
         _docker(
             [
                 "run",

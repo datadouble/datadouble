@@ -28,12 +28,10 @@ import pymssql
 from pymssql import Connection
 
 from datadouble.engine import EngineError
-from datadouble.runtime import Container, ContainerRuntime, Server, identity
+from datadouble.runtime import Container, ContainerRuntime, Server
 from datadouble_mssql.errors import database_error
 from datadouble_mssql.render import compose, quote
 
-IDENTITY = "10001:10001"
-"""The user and group SQL Server runs as in Microsoft's image."""
 DATA = "data"
 """The directory holding a working database's files."""
 _DATA_FILE = "database.mdf"
@@ -122,17 +120,6 @@ def product_version(connection: Connection) -> str:
         )
         ((build, level),) = cursor.fetchall()
     return f"{build!s}-{level!s}"
-
-
-def check_identity() -> None:
-    """Fail unless Datadouble runs as SQL Server's user and group."""
-    if identity() != IDENTITY:
-        message = (
-            f"SQL Server working databases need Datadouble to run as {IDENTITY}, the user and"
-            f" group Microsoft's SQL Server image runs as; it runs as {identity()}. Datadouble's"
-            " own image runs as 10001:10001."
-        )
-        raise EngineError(message)
 
 
 @dataclass(frozen=True, slots=True)

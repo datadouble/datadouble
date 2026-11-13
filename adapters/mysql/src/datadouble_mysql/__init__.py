@@ -75,6 +75,11 @@ class MysqlEngine:
         """``mysql``."""
         return ENGINE
 
+    @property
+    def owner(self) -> str:
+        """``999:999``, the user the official MySQL image serves as."""
+        return "999:999"
+
     def capabilities(self) -> Capabilities:
         """Both image formats, SQL expressions, the nested strategy and hooks."""
         return Capabilities(
@@ -132,7 +137,7 @@ class MysqlEngine:
         return ServerPlan(
             image=server_image or default_image(info.server_version),
             mount=MOUNT,
-            owner="999:999",
+            owner=self.owner,
             command=("sh", "-c", start),
             ready=("sh", "-c", f"test -f {ready} && mysqladmin -uroot ping"),
             port=3306,
