@@ -144,8 +144,7 @@ Docker Compose profiles. Services without a profile start on plain
 
 | Group | Services | Notes |
 |---|---|---|
-| default | Test runner, PostgreSQL with Pagila, MongoDB, MySQL and SQL Server with Sakila (and Jailer's export of it), S3 (SeaweedFS), Docker-in-Docker, OpenBao | Core, engine, S3, Docker and Vault tests (decisions 56, 64, 78); the SQL Server image is amd64-only |
-| `oracle` | Oracle Database Free with Sakila | amd64-only |
+| default | Test runner, PostgreSQL with Pagila, MongoDB, MySQL, SQL Server and Oracle Database Free with Sakila (and Jailer's export of it), S3 (SeaweedFS), Docker-in-Docker, OpenBao | Core, engine, S3, Docker and Vault tests (decisions 56, 64, 78); the SQL Server and Oracle images are amd64-only |
 | `redis` | One engine | |
 | `elasticsearch`, `opensearch` | Single-node clusters | |
 

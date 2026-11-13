@@ -57,8 +57,9 @@ plan and names the formats that engine supports; there is no silent fallback.
 
 | Engine | physical | logical |
 |---|---|---|
-| PostgreSQL, MySQL, Oracle | Data directory | Native dump |
+| PostgreSQL, MySQL | Data directory | Native dump |
 | SQL Server | Detached data and log files | Scripted schema and bulk-load rows |
+| Oracle | Unplugged pluggable database | `DBMS_METADATA` schema and bulk-load rows |
 | MongoDB | WiredTiger data directory | `mongodump` |
 | Redis | RDB file | Not offered |
 | Elasticsearch, OpenSearch | Snapshot repository | NDJSON export |
