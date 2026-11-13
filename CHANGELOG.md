@@ -75,9 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Datadouble running as uid and gid 10001.
 - **`source.server`:** settings for an engine's working servers, checked by
   its adapter.
+- **`datadouble-oracle`**, the Oracle engine adapter: one or more schemas
+  scripted with `DBMS_METADATA` and read in one read-only transaction,
+  working databases as pluggable databases in throwaway Oracle Database Free
+  containers, and physical (an unplugged pluggable database) and logical
+  (schema and rows) images. Datadouble runs as 54321:54321 for Oracle.
 - **Engine users:** Datadouble runs as the `uid:gid` an engine's copies are
   served as (999:999 for the official PostgreSQL, MySQL and MongoDB images,
-  10001:10001 for SQL Server), so physical images belong to their server on
+  10001:10001 for SQL Server, 54321:54321 for Oracle), so physical images belong to their server on
   every replicate adapter; builds, `fetch` and `replicate` refuse to run as
   anyone else and say which user to run as.
 - **Jailer subsets:** a spec's `subset.jailer` names a Jailer extraction model

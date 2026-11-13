@@ -166,7 +166,8 @@ jobs:
           egress-policy: block
           # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
           # engine, Python, SeaweedFS and OpenBao images, Microsoft's registry
-          # for SQL Server, GHCR for the uv image, Debian for git and
+          # for SQL Server, Oracle's (whose layers come from its object
+          # storage) for Oracle, GHCR for the uv image, Debian for git and
           # btrfs-progs, GitHub release assets for cosign, dl.k8s.io for
           # kubectl, raw GitHub for the pinned sample data, PyPI for the
           # workspace, and the Actions cache for the test image's layers.
@@ -183,6 +184,8 @@ jobs:
             production.cloudflare.docker.com:443
             production.cloudfront.docker.com:443
             mcr.microsoft.com:443
+            container-registry.oracle.com:443
+            *.compat.objectstorage.us-phoenix-1.oraclecloud.com:443
             *.data.mcr.microsoft.com:443
             *.r2.cloudflarestorage.com:443
             ghcr.io:443
@@ -253,7 +256,7 @@ jobs:
           egress-policy: block
           # GitHub for the checkout and artifacts, Astral's mirror and GitHub
           # for uv and its version list, PyPI for coverage, Codecov for the
-          # upload.
+          # upload, and Keybase for the key that verifies Codecov's uploader.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -266,6 +269,7 @@ jobs:
             pypi.org:443
             files.pythonhosted.org:443
             cli.codecov.io:443
+            keybase.io:443
             ingest.codecov.io:443
             api.codecov.io:443
             *.ingest.us.sentry.io:443
@@ -302,8 +306,10 @@ jobs:
 
       # The gate is the step above; the upload is telemetry, so it never fails
       # the job.
+      # A blocked or stalled download shows as this step's timeout, not the job's.
       - name: Upload coverage (OpenID Connect)
         if: ${{ env.SAME_REPO == 'true' }}
+        timeout-minutes: 5
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml
@@ -312,6 +318,7 @@ jobs:
 
       - name: Upload coverage (token, for forks)
         if: ${{ env.SAME_REPO != 'true' && env.CODECOV_TOKEN != '' }}
+        timeout-minutes: 5
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml

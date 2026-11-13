@@ -26,9 +26,9 @@ has the reference details: every `make` target and every testing rule.
 This is the idea everything else follows from.
 
 1. **Source databases** are the pretend production databases the tests copy
-   *from*: PostgreSQL with Pagila, MySQL and SQL Server with Sakila, MongoDB
-   with a generated cinema database. They are services in `compose.yaml`,
-   started once per job, and they hold the sample data.
+   *from*: PostgreSQL with Pagila, MySQL, SQL Server and Oracle with Sakila,
+   MongoDB with a generated cinema database. They are services in
+   `compose.yaml`, started once per job, and they hold the sample data.
 2. **Working databases** are the containers *Datadouble itself* starts while it
    builds a golden image: one to load the subset, one to anonymize a copy, one
    to package it, and one per image format to restore and check it. They run
@@ -59,6 +59,7 @@ test directory belongs to exactly one.
 | `mongodb` | The MongoDB adapter | MongoDB | 999:999 | 1 |
 | `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server | 10001:10001 | 2 |
+| `oracle` | The Oracle adapter | Oracle | 54321:54321 | 6 |
 
 Each group runs in its own CI jobs, so a slow engine does not hold the others
 up, and a failure tells you at once which engine it was.
@@ -83,7 +84,7 @@ GROUP=mysql/2`.
 A physical golden image is the database's own files. When someone later
 serves a copy of it, the database server opens those files as its own user:
 user 999 in the official PostgreSQL, MySQL and MongoDB images, 10001 in SQL
-Server's. If the files belong to anyone else, the server refuses them.
+Server's, 54321 in Oracle's. If the files belong to anyone else, the server refuses them.
 
 So Datadouble always runs as the user the engine's server runs as (decision
 86), and the tests do the same: the test container starts as root only to

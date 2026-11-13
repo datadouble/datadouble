@@ -84,6 +84,7 @@ whose tests take a few minutes keeps one. Locally a group runs whole.
 | `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 | 1 |
 | `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 | 2 |
+| `oracle` | The Oracle adapter | Oracle Database Free 23.26 with Sakila (`dev/oracle`), loaded through external tables | 54321:54321 | 6 |
 
 Sakila's rows come from the shared fixture (`dev/sakila`, through the
 `fixtures` service). Two more Compose groups are profiles that need
