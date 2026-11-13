@@ -113,7 +113,7 @@ class RedisScratch:
 
     def add_column(self, column: str) -> None:
         """Give an item a new field."""
-        self.command("HSET", "items:999", "id", 999, column, "x")
+        self.command("HSET", "items:999", column, "x")
 
     def insert(self, item_id: int) -> None:
         """Insert an item."""
@@ -140,6 +140,7 @@ def harness() -> EngineHarness:
         sample_column=ColumnRef(table=TableName.of("db0", "user:{}"), column=ColumnName("email")),
         scratch=scratch,
         runtime=runtime_for_tests(),
+        snapshot=False,
     )
 
 

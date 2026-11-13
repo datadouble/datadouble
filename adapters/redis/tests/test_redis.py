@@ -4,6 +4,7 @@
 """Redis behavior beyond the conformance suite: fallbacks, rules, assertions and failures."""
 
 import dataclasses
+import datetime as dt
 import json
 import shutil
 from collections.abc import Generator
@@ -30,7 +31,7 @@ from datadouble.spec import (
     parse_spec,
 )
 from datadouble.storage import filesystem_store
-from datadouble.subset import Edge, EdgeMode
+from datadouble.subset import AllRows, Edge, EdgeMode
 from datadouble_conformance.engine import runtime_for_tests
 from datadouble_redis import RedisEngine
 from datadouble_redis.driver import Client, texts
@@ -55,6 +56,8 @@ subset:
     "queue:{}": "*"
     "rank:{}": "*"
     "note:{}": "*"
+    "ref:{}": "*"
+    "doc:{}": "*"
     "words:{}": "*"
     "names:{}": "*"
     "scores:{}": "*"
@@ -65,12 +68,14 @@ subset:
     "tags:{}.members -> parent:{}": {on_missing: null}
     "queue:{}.members -> parent:{}": {on_missing: null}
     "rank:{}.members -> parent:{}": {on_missing: null}
+    "ref:{}.value -> parent:{}": {on_missing: null}
   virtual_fks:
     "child:{}.parent_id -> parent:{}": {}
     "child:{}.lost_id -> gone:{}": {}
     "tags:{}.members -> parent:{}": {}
     "queue:{}.members -> parent:{}": {}
     "rank:{}.members -> parent:{}": {}
+    "ref:{}.value -> parent:{}": {when: "1"}
     "other:{}.code -> parent:{}": {when: "1"}
 anonymize:
   "parent:{}": {code: {hash: {}}}
@@ -103,7 +108,10 @@ def source() -> Generator[RedisScratch]:
             ("HSET", "child:3", "parent_id", "8", "label", "c"),
             ("HSET", "gone:9", "x", "1"),
             ("HSET", "other:1", "code", "2"),
-            ("SADD", "tags:1", "1", "7"),
+            ("SADD", "tags:1", "1", "7", "9"),
+            ("SET", "ref:1", "9"),
+            ("SET", "ref:2", "9"),
+            ("VADD", "doc:1", "VALUES", "2", "0.1", "0.2", "a"),
             ("RPUSH", "queue:1", "1", "9", "1"),
             ("ZADD", "rank:1", "10", "1", "20", "9"),
             ("SET", "note:1", "secret"),
@@ -158,7 +166,7 @@ def test_fallbacks_rules_and_assertions(source: RedisScratch, tmp_path: Path) ->
     result = build(source, tmp_path)
     assert not result.failed(), result.verification
     layout = Layout(databases=(source.database,), separator=":", patterns=("items:{}",))
-    data = Path(result.work) / "transform" / "all"
+    data = Path(result.work) / "transform" / "all" / "db"
     server = RedisServer(tools(), data / "data", tmp_path / "check", 16)
     with server.running():
         client = server.client(source.database)
@@ -169,7 +177,7 @@ def test_fallbacks_rules_and_assertions(source: RedisScratch, tmp_path: Path) ->
         queue = texts(client.command("LRANGE", "queue:1", "0", "-1"))
         rank = texts(client.command("ZRANGE", "rank:1", "0", "-1"))
         words = texts(client.command("SMEMBERS", "words:1"))
-        log = texts(client.command("XRANGE", "log", "-", "+"))
+        log = str(client.command("XRANGE", "log", "-", "+"))
         client.close()
     # Parent 2 comes from other:1; the parents of children 1 and 2 are not
     # followed and become stubs; references into gone:{} are removed, and so
@@ -180,6 +188,11 @@ def test_fallbacks_rules_and_assertions(source: RedisScratch, tmp_path: Path) ->
     assert queue == ["1", "1"]
     assert rank == ["1"]
     assert "child:3" not in keys
+    # The reference in ref:1 named a missing parent and the key went; ref:2's
+    # does not refer (its `when` glob does not match), so it stays.
+    assert "ref:1" not in keys
+    assert "ref:2" in keys
+    assert "doc:1" in keys
     assert not {"alpha", "beta"} & set(words)
     assert "192.0.2.1" not in log
     assert "1-1" in log
@@ -190,7 +203,9 @@ def test_fallbacks_rules_and_assertions(source: RedisScratch, tmp_path: Path) ->
 def test_restored_checks(source: RedisScratch, tmp_path: Path) -> None:
     result = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD))
     layout = Layout(databases=(source.database,), separator=":", patterns=())
-    server = RedisServer(tools(), Path(result.work) / "load" / "all" / "data", tmp_path / "c", 16)
+    server = RedisServer(
+        tools(), Path(result.work) / "load" / "all" / "db" / "data", tmp_path / "c", 16
+    )
     with server.running():
         restored = RedisRestored(Keyspace(server, layout))
         child, parent = table(source, "child:{}"), table(source, "parent:{}")
@@ -257,7 +272,7 @@ def test_working_failures(source: RedisScratch, tmp_path: Path) -> None:
     (broken / index.tables[0].file).write_bytes(b"\x00\x00\x00\x01\x00\x00\x00\x02xab")
     with pytest.raises(EngineError, match="loading failed"):
         working.load(plan, group, broken, tmp_path / "broken-db", ())
-    loaded_db = work / "load" / "all"
+    loaded_db = work / "load" / "all" / "db"
 
     def rule(name: str, column: str, chosen: Rule) -> PlannedRule:
         return PlannedRule(
@@ -307,7 +322,9 @@ def test_working_failures(source: RedisScratch, tmp_path: Path) -> None:
 def test_fixup_failures(source: RedisScratch, tmp_path: Path) -> None:
     result = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD))
     layout = Layout(databases=(source.database,), separator=":", patterns=())
-    server = RedisServer(tools(), Path(result.work) / "load" / "all" / "data", tmp_path / "c", 16)
+    server = RedisServer(
+        tools(), Path(result.work) / "load" / "all" / "db" / "data", tmp_path / "c", 16
+    )
     with server.running():
         database = Keyspace(server, layout)
         child, parent = table(source, "tags:{}"), table(source, "parent:{}")
@@ -345,3 +362,18 @@ def test_served_copies(tmp_path: Path) -> None:
     assert "--save" not in plan.command[-1]
     client = Client.at("127.0.0.1", 1, "x", 0)
     client.close()
+
+
+def test_large_keyspaces_scan_in_rounds(source: RedisScratch) -> None:
+    for start in range(0, 2500, 500):
+        client = Client.from_url(source.url, source.database)
+        client.commands([("SET", f"bulk:{n}", "x") for n in range(start, start + 500)])
+        client.close()
+    connection = {**source.connection, "sample": 3}
+    with RedisEngine().connect(connection) as session:
+        catalog = session.catalog()
+        bulk = table(source, "bulk:{}")
+        assert catalog.table(bulk) is not None
+        with session.snapshot(dt.datetime.now(tz=dt.UTC)) as snapshot:
+            keys = snapshot.project(bulk, AllRows(), (ColumnName("_key"),))
+            assert len(set(keys)) == 2500

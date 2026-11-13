@@ -87,6 +87,8 @@ class EngineHarness:
     """A fresh scratch source, removed afterwards."""
     runtime: Mapping[str, Mapping[str, JsonValue]]
     """The ``runtime`` every spec in the suite gets, such as ``{"docker": {}}``."""
+    snapshot: bool = True
+    """Whether the source has point-in-time snapshots; without, each read sees the data then."""
 
     def with_runtime(self, spec: str) -> str:
         """``spec`` with the harness's runtime added."""
@@ -237,17 +239,26 @@ class EngineConformance:
                 assert set(fk.target_columns) <= {c.name for c in target.columns}
 
     def test_snapshot_is_consistent(self, harness: EngineHarness) -> None:
-        """Rows committed after the snapshot opens are not seen through it."""
+        """Rows committed after the snapshot opens are not seen through it.
+
+        A source without snapshots documents that each read sees the data as
+        it is then, so it must see the later row.
+        """
         with harness.scratch() as source:
             source.insert(1)
             with (
                 harness.engine.connect(source.connection) as session,
                 session.snapshot(dt.datetime.now(tz=dt.UTC)) as snapshot,
             ):
-                before = set(snapshot.project(source.items, AllRows(), (_ID,)))
+                before = {
+                    tuple(map(str, r)) for r in snapshot.project(source.items, AllRows(), (_ID,))
+                }
                 source.insert(2)
-                after = set(snapshot.project(source.items, AllRows(), (_ID,)))
-            assert before == after == {(1,)}
+                after = {
+                    tuple(map(str, r)) for r in snapshot.project(source.items, AllRows(), (_ID,))
+                }
+            assert before == {("1",)}
+            assert after == ({("1",)} if harness.snapshot else {("1",), ("2",)})
 
     def test_strict_mode(self, harness: EngineHarness, tmp_path: Path) -> None:
         """New tables and columns behave as the strict-mode table says."""
@@ -411,6 +422,8 @@ class EngineConformance:
         """Images from one build share a generation and agree on anonymized values."""
         builds = _Builds(harness, tmp_path)
         table = harness.sample_column.table
+        formats = harness.engine.capabilities().formats
+        chosen = ImageFormat.LOGICAL if ImageFormat.LOGICAL in formats else formats[0]
         # The small image depends on the big one for its references.
         spec = builds.sample(
             "images:\n"
@@ -422,7 +435,7 @@ class EngineConformance:
             builds.lock(spec.source.connection),
             "work",
             stages=_BUILD,
-            options=PlanOptions(formats=(ImageFormat.LOGICAL,)),
+            options=PlanOptions(formats=(chosen,)),
         )
         assert not result.failed(), result.verification
         assert {s.identity.generation for s in result.images} == {result.generation}

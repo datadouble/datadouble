@@ -12,7 +12,8 @@ are not UTF-8 survive a round trip unchanged.
 """
 
 import re
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Generator, MutableMapping, Sequence
+from contextlib import contextmanager
 from typing import Protocol, cast
 from urllib.parse import unquote, urlsplit
 
@@ -113,6 +114,20 @@ def failure(error: RedisError, action: str) -> EngineError:
     first = str(error).split(" ", 1)[0]
     code = f" ({first})" if _CODE.fullmatch(first) else ""
     return EngineError(f"{action} failed: {type(error).__name__}{code}")
+
+
+@contextmanager
+def redacted(action: str) -> Generator[None]:
+    """Turn a Redis error in the block into an :func:`failure` for ``action``."""
+    try:
+        yield
+    except RedisError as error:
+        raise failure(error, action) from None
+
+
+def binary(reply: object) -> bytes:
+    """A bulk string reply as bytes."""
+    return reply if isinstance(reply, bytes) else str(reply).encode()
 
 
 def text(reply: object) -> str:

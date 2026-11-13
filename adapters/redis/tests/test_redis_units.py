@@ -4,6 +4,9 @@
 """The Redis adapter's parts that need no server."""
 
 import io
+from collections.abc import MutableMapping
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -11,6 +14,8 @@ from redis.exceptions import ResponseError
 
 from datadouble.engine import EngineError
 from datadouble.names import ColumnName, TableName
+from datadouble.programs import Completed
+from datadouble.runtime import Container, Server
 from datadouble.settings import parse_settings
 from datadouble.subset import (
     AllOf,
@@ -22,8 +27,18 @@ from datadouble.subset import (
     SelectedBy,
     ValuesIn,
 )
-from datadouble_redis import RedisConnection, RedisEngine
-from datadouble_redis.driver import failure, items, number, raw, text, texts
+from datadouble_redis import RedisConnection, RedisEngine, engine
+from datadouble_redis.driver import (
+    Client,
+    binary,
+    failure,
+    items,
+    number,
+    raw,
+    redacted,
+    text,
+    texts,
+)
 from datadouble_redis.keys import (
     KEY,
     Literals,
@@ -34,8 +49,14 @@ from datadouble_redis.keys import (
     place,
     projected,
 )
-from datadouble_redis.server import default_image, start_command
-from datadouble_redis.source import database_of, namespace, read_records, write_record
+from datadouble_redis.server import RedisServer, Tools, default_image, start_command
+from datadouble_redis.source import (
+    database_of,
+    namespace,
+    read_records,
+    server_version,
+    write_record,
+)
 from datadouble_redis.working import fill, server_databases
 
 USER = ColumnName("user_id")
@@ -118,6 +139,16 @@ def test_replies_and_errors() -> None:
     assert str(coded) == "reading failed: ResponseError (WRONGTYPE)"
     plain = failure(ResponseError("user script: alice@example.com"), "anonymizing")
     assert str(plain) == "anonymizing failed: ResponseError"
+    assert binary(b"x") == b"x"
+    assert binary(7) == b"7"
+    leaky = "ERR alice@example.com"
+    with (
+        pytest.raises(EngineError, match=r"^saving failed: ResponseError \(ERR\)$"),
+        redacted("saving"),
+    ):
+        raise ResponseError(leaky)
+    with redacted("nothing"):
+        pass
 
 
 def test_extract_records_round_trip(tmp_path: Path) -> None:
@@ -157,3 +188,50 @@ def test_names_settings_and_servers() -> None:
     engine = RedisEngine()
     assert (engine.name, engine.owner) == ("redis", "999:999")
     assert engine.capabilities().nested is False
+
+
+@dataclass
+class _Failing:
+    """A container runtime whose containers fail."""
+
+    def run(self, container: Container) -> Completed:
+        return Completed(1, "", f"no {container.image}")
+
+    def serve(self, container: Container) -> AbstractContextManager[Server]:
+        raise NotImplementedError
+
+    def release(self, owner: Path) -> None:
+        raise NotImplementedError
+
+
+def test_tools_and_servers_report_failures(tmp_path: Path) -> None:
+    tools = Tools(_Failing(), "redis:0")
+    with pytest.raises(EngineError, match="cannot read the Redis version: 'no redis:0'"):
+        tools.version(tmp_path)
+    with pytest.raises(EngineError, match="not running"):
+        _ = RedisServer(tools, tmp_path, tmp_path, 16).server
+    assert engine().name == "redis"
+
+
+@dataclass
+class _Silent:
+    """A connection to a server whose INFO leaves out its version."""
+
+    response_callbacks: MutableMapping[str, object]
+
+    def execute_command(self, *arguments: object) -> object:
+        return b"# Server\r\nredis_mode:standalone\r\n"
+
+    def execute(self, *, raise_on_error: bool = True) -> list[object]:
+        raise NotImplementedError
+
+    def pipeline(self, *, transaction: bool = True) -> "_Silent":
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
+
+
+def test_a_server_must_report_its_version() -> None:
+    with pytest.raises(EngineError, match="did not report its version"):
+        server_version(Client(_Silent({})))

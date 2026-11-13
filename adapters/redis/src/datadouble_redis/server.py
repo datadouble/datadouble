@@ -19,7 +19,7 @@ from pathlib import Path
 
 from datadouble.engine import EngineError
 from datadouble.runtime import Container, ContainerRuntime, Server
-from datadouble_redis.driver import Client, Error, failure
+from datadouble_redis.driver import Client, redacted
 
 RDB = "dump.rdb"
 PORT = 6379
@@ -35,14 +35,16 @@ def default_image(server_version: str) -> str:
 def start_command(directory: str, databases: int, *, persist: bool) -> str:
     """A shell command starting a server on ``directory`` with the password from the environment.
 
-    The password goes to the server as a configuration line on standard input.
-    Without ``persist`` the server never saves on its own.
+    The password goes to the server as a configuration line on standard input,
+    from a here-document, so the server replaces the shell as the container's
+    first process and stops when the container is told to. Without
+    ``persist`` the server never saves on its own.
     """
     saving = "" if persist else ' --save ""'
     return (
-        f"printf 'requirepass %s\\n' \"${LOGIN_ENV}\""
-        f" | exec redis-server - --dir {directory} --dbfilename {RDB} --databases {databases}"
-        f" --appendonly no --protected-mode no --port {PORT}{saving}"
+        f"exec redis-server - --dir {directory} --dbfilename {RDB} --databases {databases}"
+        f" --appendonly no --protected-mode no --port {PORT}{saving} <<EOF\n"
+        f"requirepass ${LOGIN_ENV}\nEOF\n"
     )
 
 
@@ -124,8 +126,7 @@ class RedisServer:
         """Write the data to ``dump.rdb``."""
         client = self.client(0)
         try:
-            client.command("SAVE")
-        except Error as error:
-            raise failure(error, "saving") from None
+            with redacted("saving"):
+                client.command("SAVE")
         finally:
             client.close()

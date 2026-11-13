@@ -28,7 +28,16 @@ from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, 
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import AllRows, Condition, KeyTuple
-from datadouble_redis.driver import Call, Client, Error, failure, items, number, text, texts
+from datadouble_redis.driver import (
+    Call,
+    Client,
+    binary,
+    items,
+    number,
+    redacted,
+    text,
+    texts,
+)
 from datadouble_redis.keys import (
     KEY,
     Literals,
@@ -90,9 +99,7 @@ def scan(client: Client, match: str = "*") -> Iterator[bytes]:
     while True:
         reply = items(client.command("SCAN", cursor, "MATCH", match, "COUNT", 1000))
         cursor = number(reply[0])
-        for key in items(reply[1]):
-            if isinstance(key, bytes):
-                yield key
+        yield from (binary(key) for key in items(reply[1]))
         if cursor == 0:
             return
 
@@ -172,9 +179,8 @@ def _column(name: ColumnName, kind: str) -> Column:
     if name == SCORES:
         return Column(name=name, type="zset scores", kind=ColumnKind.TEXT, nullable=False)
     column_kind, type_name = _KINDS.get(kind, (ColumnKind.OTHER, kind))
-    return Column(
-        name=name, type=type_name, kind=column_kind, nullable=name not in {VALUE, MEMBERS}
-    )
+    # A null reference is removed: the field, the element, or a string's key.
+    return Column(name=name, type=type_name, kind=column_kind, nullable=True)
 
 
 def introspect(clients: dict[int, Client], layout: Layout, sample: int) -> Catalog:
@@ -295,11 +301,9 @@ class RedisSnapshot:
     ) -> Iterable[KeyTuple]:
         """Distinct values of ``columns`` for the chosen keys."""
         client = self.source.client(table)
-        try:
+        with redacted(f"reading keys of {table}"):
             rows = (row for _, row in chosen(client, table, self.source.layout, condition, columns))
             return projected(rows, columns)
-        except Error as error:
-            raise failure(error, f"reading keys of {table}") from None
 
     def extract(
         self,
@@ -317,7 +321,7 @@ class RedisSnapshot:
             raise EngineError(message)
         directory.mkdir(parents=True, exist_ok=True)
         extracted: list[ExtractedTable] = []
-        try:
+        with redacted("extracting"):
             for position, table in enumerate(plan.extracted()):
                 client = self.source.client(table)
                 file = f"{position:05d}.keys"
@@ -327,16 +331,18 @@ class RedisSnapshot:
                         client, table, self.source.layout, selections.get(table, AllRows()), ()
                     )
                     for batch in batches(key for key, _ in keys):
-                        for key, dump in zip(
-                            batch, client.commands([("DUMP", key) for key in batch]), strict=True
-                        ):
-                            if isinstance(dump, bytes):
-                                write_record(out, key, dump)
-                                count += 1
+                        dumps = client.commands([("DUMP", key) for key in batch])
+                        # A key deleted since it was scanned has no serialization.
+                        kept = [
+                            (key, dump)
+                            for key, dump in zip(batch, dumps, strict=True)
+                            if isinstance(dump, bytes)
+                        ]
+                        for key, dump in kept:
+                            write_record(out, key, dump)
+                        count += len(kept)
                 extracted.append(ExtractedTable(table=table, file=file, keys=count))
             version = server_version(self.source.first)
-        except Error as error:
-            raise failure(error, "extracting") from None
         index = ExtractIndex(layout=self.source.layout, tables=tuple(extracted))
         (directory / "index.json").write_text(index.model_dump_json(indent=2), "utf-8")
         return ExtractResult(
@@ -367,10 +373,8 @@ class RedisSource:
 
     def catalog(self) -> Catalog:
         """Introspect the source."""
-        try:
+        with redacted("reading the catalog"):
             return introspect(self.clients, self.layout, self.sample)
-        except Error as error:
-            raise failure(error, "reading the catalog") from None
 
     @contextmanager
     def snapshot(self, as_of: dt.datetime) -> Generator[Snapshot]:
