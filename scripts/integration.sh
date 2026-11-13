@@ -78,8 +78,10 @@ case "${1:-}" in
         # file names (relative_files) let either combine the groups' data.
         reports=${REPORTS:-/reports}
         coverage=${COVERAGE:-/src/.venv/bin/coverage}
+        # The gate is the report's, which lists the lines no test ran; the
+        # XML report is written whatever the total.
         $coverage combine --keep --data-file="$reports/.coverage" "$reports"/.coverage.* \
-            && $coverage xml --data-file="$reports/.coverage" -o "$reports/coverage.xml" \
+            && $coverage xml --data-file="$reports/.coverage" -o "$reports/coverage.xml" --fail-under=0 \
             && $coverage report --data-file="$reports/.coverage"
         ;;
     *)
