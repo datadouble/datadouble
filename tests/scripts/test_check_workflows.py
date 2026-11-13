@@ -3,8 +3,9 @@
 
 from pathlib import Path
 
-import check_workflows
 import pytest
+
+import check_workflows
 
 WORKFLOW = """
 jobs:

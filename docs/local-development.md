@@ -12,7 +12,7 @@ sample dataset:
 |---|---|---|
 | PostgreSQL | official `postgres` | Pagila |
 | MySQL | official `mysql` | Sakila (also Jailer's Demo-Sakila model) |
-| SQL Server | Microsoft `mssql/server` | Sakila |
+| SQL Server | Microsoft `mssql/server` (Developer edition) | Sakila |
 | Oracle | Oracle Database Free | Sakila |
 | MongoDB | official `mongo`, as a one-member replica set | Generated cinema database (`dev/mongodb/seed.js`) |
 | Redis | official `redis` | Generated keyspace (strings, hashes, sets, streams) |

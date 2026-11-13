@@ -67,6 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transaction for keys and rows, the schema from `mysqldump`, working
   databases as throwaway servers in the official MySQL image, and physical
   (data directory) and logical (`mysqldump`) images.
+- **`datadouble-mssql`**, the SQL Server engine adapter: keys, schema and rows
+  read in one snapshot-isolation transaction, the schema scripted from the
+  catalog views, working databases as throwaway instances in Microsoft's SQL
+  Server image, and physical (data and log files) and logical (schema and
+  rows) images. Working databases need `source.server.accept_eula: true` and
+  Datadouble running as uid and gid 10001.
+- **`source.server`:** settings for an engine's working servers, checked by
+  its adapter.
 - **Jailer subsets:** a spec's `subset.jailer` names a Jailer extraction model
   and data model, read and translated on every run; `datadouble import-jailer`
   writes the translation as native settings. On Sakila, Jailer and Datadouble

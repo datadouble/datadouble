@@ -86,6 +86,10 @@ work directories at the same path. Compose service names do not resolve in
 those containers, so the PostgreSQL tests connect to the source by address.
 The suite runs as an unprivileged user, as Datadouble should, and containers
 run as that user too.
+That user is uid and gid 10001, because SQL Server in Microsoft's image runs
+only as 10001:10001 and the SQL Server adapter needs Datadouble to match
+(decision 83); its working-database tests therefore run only in Compose, while
+its plan and extract code also runs against a SQL Server on the host.
 
 GitHub's Ubuntu runners ship MySQL with an AppArmor profile for
 `/usr/sbin/mysqld`. Containers that Docker-in-Docker starts run without a
@@ -105,8 +109,11 @@ server. The cinema database is generated
 by `dev/mongodb/seed.js` when the service first starts. Sakila's rows are
 committed as bulk-load files in `dev/sakila` (converted once from jOOQ's
 collection by `scripts/sakila_bulk.py`); the `fixtures` service copies them
-into a volume that `dev/mysql` mounts read-only and loads with `LOAD DATA` at
-start, so they are in no image and never change underneath the tests.
+into a volume that `dev/mysql` and `dev/mssql` mount read-only and load (with
+`LOAD DATA` and `BULK INSERT`) at start, so they are in no image and never
+change underneath the tests. `dev/mssql` takes jOOQ's SQL Server schema, which
+lacks MySQL Sakila's triggers; its awkward cases add one, with the cases
+particular to SQL Server.
 
 ## Conformance suites
 
