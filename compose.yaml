@@ -27,12 +27,15 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
+      mssql:
+        condition: service_healthy
       jailer:
         condition: service_completed_successfully
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
       DATADOUBLE_TEST_MYSQL_URL: mysql://datadouble:datadouble@mysql:3306/sakila
+      DATADOUBLE_TEST_MSSQL_URL: mssql://datadouble:Datadouble-1@mssql:1433/sakila
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -95,6 +98,27 @@ services:
     healthcheck:
       # Ready only once the init scripts (Sakila) have finished.
       test: ["CMD-SHELL", "mysql -udatadouble -pdatadouble -N -e 'SELECT count(*) FROM sakila.audit_event' 2>/dev/null | grep -q 100"]
+      interval: 2s
+      timeout: 5s
+      retries: 120
+
+  # SQL Server 2022 (Developer edition) with Sakila (dev/mssql), bulk-loaded
+  # from the fixture at start.
+  mssql:
+    build:
+      context: dev/mssql
+    depends_on:
+      fixtures:
+        condition: service_completed_successfully
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: Datadouble-sa1
+    volumes:
+      - fixtures:/fixtures:ro
+    healthcheck:
+      # Ready only once Sakila and the awkward cases have loaded.
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U datadouble -P Datadouble-1 -h -1 -W -Q 'SET NOCOUNT ON; SELECT COUNT(*) FROM sakila.dbo.audit_event' 2>/dev/null | grep -q '^100$$'"]
       interval: 2s
       timeout: 5s
       retries: 120
