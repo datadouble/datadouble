@@ -16,7 +16,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 |---|---|---|
 | `make check` | Everything below except the integration suite and the docs | Host |
 | `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons and budget) | Host |
-| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows` | Host |
+| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, and `scripts/check_workflows.py` (every job sets `timeout-minutes`) | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
 | `make test-integration` | The whole suite, integration and conformance tests included, in the default Compose group, with the 100% gate on every package | Containers |
@@ -65,7 +65,7 @@ that milestones add and that combine freely, for example
 
 | Group | Services | Since |
 |---|---|---|
-| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL in M4 |
+| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`, run once by the `jailer` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL in M4 |
 | `k8s` (`make test-k8s`) | k3s, and a test runner reading its kubeconfig, sharing a work volume that pods reach through a `hostPath` PersistentVolume | M2; the Kubernetes runtime in M4 |
 | `btrfs` (`make test-btrfs`) | A privileged test runner with a loop-mounted btrfs filesystem | M2 |
 
@@ -137,6 +137,10 @@ anonymized values.
   and its pull request says why, and a change that removes one lowers it.
   Prefer restructuring code to adding one; external programs run only through
   `datadouble.programs`, which holds the one subprocess suppression.
+- **Everything has a time limit.** Each CI job sets `timeout-minutes`, a few
+  times its normal run (`scripts/check_workflows.py` enforces this), and each
+  test fails after 10 minutes with its stack (`pytest-timeout`), so a hang
+  shows where it is stuck and never holds a pull request's checks for hours.
 
 ## In CI
 

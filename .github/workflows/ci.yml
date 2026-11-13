@@ -20,6 +20,7 @@ jobs:
   checks:
     name: Lint, types and unit tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -79,6 +80,7 @@ jobs:
     # comes out, add it here, to TESTING.md and to the required checks on main.
     name: Unit tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -118,6 +120,7 @@ jobs:
   integration:
     name: Integration tests (Docker Compose)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: read
       id-token: write  # Codecov upload with OpenID Connect
@@ -200,6 +203,7 @@ jobs:
     # Kubernetes adapters, and a loop-mounted btrfs filesystem.
     name: ${{ matrix.group }} adapters (privileged)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -243,6 +247,7 @@ jobs:
   docs:
     name: Documentation site
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4

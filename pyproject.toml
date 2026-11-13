@@ -61,6 +61,7 @@ dev = [
     "pyright[nodejs]>=1.1.414",
     "pytest>=8.4",
     "pytest-cov>=7.0",
+    "pytest-timeout>=2.4",
     "ruff>=0.13",
     "types-pymysql>=1.1.0",
     "types-pyyaml>=6.0.12",
@@ -205,6 +206,8 @@ testpaths = [
 ]
 pythonpath = ["scripts", "adapters/postgres/tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
+# A hung test fails with its stack, well inside the CI job's own time limit.
+timeout = 600
 markers = [
     "integration: needs the Docker Compose services (run with `make test-integration`)",
     "k8s: needs the k8s Compose profile (run with `make test-k8s`)",
