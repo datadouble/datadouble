@@ -170,6 +170,37 @@ strategies produce identical restored images, a whole build from plan to store,
 a run killed with SIGKILL that resumes, and two image groups agreeing on
 anonymized values.
 
+## Measurements
+
+Recorded for M4.5 (performance tuning), from CI on 13 November 2026.
+
+**Wall time.** A pull request's checks take about 17 minutes. The slowest
+jobs are Oracle's six shards, 14 to 17 minutes each: Oracle's tests add up
+to 59 minutes, the longest takes 9.6 on its own, and each shard spends about
+five minutes pulling Oracle's image and loading Sakila. Every other
+integration job takes 3 to 7 minutes.
+
+**Golden image sizes.** Each conformance whole build records its archives'
+sizes, as stored (packed) and as files (unpacked); CI keeps them as the
+`image-sizes` artifact. The sample data is under 1 MB in every engine, so
+these sizes are almost all the engine's own fixed overhead: logs, journals
+and system tablespaces.
+
+| Engine | Logical, packed / unpacked | Physical, packed / unpacked |
+|---|---|---|
+| PostgreSQL | 0.4 / 0.6 MB | 9.2 / 73 MB |
+| SQL Server | 0.1 / 0.7 MB | 1.0 / 84 MB |
+| MySQL | 0.1 / 0.4 MB | 3.3 / 203 MB |
+| MongoDB | under 0.1 MB | 0.3 / 211 MB |
+| Oracle | 0.1 / 0.5 MB | 88.5 / 873 MB |
+
+Stored images compress the empty space away, except Oracle's. Every
+replicated copy of a physical image pays its unpacked size, which for Oracle
+is mostly the pluggable database's SYSTEM, SYSAUX, UNDO and TEMP datafiles.
+None of this is tuned: next to the size of a real subset it is small, and
+Oracle's is noted as the case to revisit if copies of real Oracle images
+prove costly.
+
 ## Rules
 
 - **No bind mounts from the repository.** On machines whose home directories
