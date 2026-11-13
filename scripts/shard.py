@@ -82,7 +82,7 @@ def write_durations(path: Path, durations: Mapping[str, float]) -> None:
     path.write_text(json.dumps(rounded, indent=1) + "\n", "utf-8")
 
 
-@dataclass
+@dataclass(eq=False)  # pytest keeps plugins in sets, so they hash by identity
 class _Recorder:
     """Adds up each test's phases and writes them when the session ends."""
 

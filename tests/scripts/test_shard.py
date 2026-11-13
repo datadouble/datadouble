@@ -65,9 +65,16 @@ def test_deselected_tests_are_reported(pytester: pytest.Pytester) -> None:
 
 def test_durations_are_recorded_and_merged(pytester: pytest.Pytester, tmp_path: Path) -> None:
     recorded = tmp_path / "one.json"
-    run(pytester, "--record-durations", str(recorded)).assert_outcomes(passed=7)
+    # A directory with its own conftest makes pytest hash every plugin.
+    nested = pytester.mkpydir("nested")
+    (nested / "conftest.py").write_text("", "utf-8")
+    (nested / "test_more.py").write_text("def test_more() -> None:\n    pass\n", "utf-8")
+    run(pytester, "--record-durations", str(recorded)).assert_outcomes(passed=8)
     seconds = read_durations(recorded)
-    assert sorted(seconds) == [f"test_numbers.py::test_{number}" for number in range(7)]
+    assert sorted(seconds) == [
+        "nested/test_more.py::test_more",
+        *(f"test_numbers.py::test_{number}" for number in range(7)),
+    ]
     assert all(value >= 0 for value in seconds.values())
     other = tmp_path / "two.json"
     other.write_text(json.dumps({"test_numbers.py::test_0": 3.14159, "elsewhere": 2}), "utf-8")
@@ -76,7 +83,7 @@ def test_durations_are_recorded_and_merged(pytester: pytest.Pytester, tmp_path: 
     combined = read_durations(merged)
     assert combined["test_numbers.py::test_0"] == pytest.approx(3.1)
     assert combined["elsewhere"] == pytest.approx(2.0)
-    assert len(combined) == 8
+    assert len(combined) == 9
 
 
 def test_merge_needs_an_output(capsys: pytest.CaptureFixture[str]) -> None:
