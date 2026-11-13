@@ -16,11 +16,11 @@ services:
   test:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}:${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}
+      - ${DATADOUBLE_HOST_WORK:-/var/tmp/datadouble-work}:${DATADOUBLE_HOST_WORK:-/var/tmp/datadouble-work}
     environment:
       DOCKER_HOST: unix:///var/run/docker.sock
       DATADOUBLE_TEST_DOCKER_ADDRESS: host.docker.internal
       DATADOUBLE_TEST_RUNTIME: '{"docker": {"publish": "0.0.0.0", "address": "host.docker.internal", "network": "${COMPOSE_PROJECT_NAME:-datadouble}_default"}}'
-      TMPDIR: ${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}
+      TMPDIR: ${DATADOUBLE_HOST_WORK:-/var/tmp/datadouble-work}
     extra_hosts:
       - host.docker.internal:host-gateway

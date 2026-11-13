@@ -16,6 +16,12 @@ lint-workflows`, `make typecheck`, `make test` on the host, and `make
 test-integration` for the Docker Compose suite. Never bind-mount the repository
 into containers.
 
+Don't run the whole integration suite locally before pushing: CI runs every
+group at once, far faster. If you changed one engine's adapter, run only its
+group, such as `make test-group GROUP=mysql`. Run the whole suite only if you
+changed the core or code more than one engine uses. When a `DOCKER=host` run
+fails, read its temporary files, then remove them with `make clean-work`.
+
 ## Before proposing anything
 
 1. Read [docs/decisions.md](docs/decisions.md). Decided items are settled; don't

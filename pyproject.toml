@@ -219,6 +219,9 @@ pythonpath = ["scripts", "adapters/postgres/tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 # A hung test fails with its stack, well inside the CI job's own time limit.
 timeout = 600
+# Working databases' files fill tmp_path: keep only failed tests' directories,
+# or a group's run outgrows the runner's disk.
+tmp_path_retention_policy = "failed"
 markers = [
     "integration: needs the Docker Compose services (run with `make test-integration`)",
     "k8s: needs the k8s Compose profile (run with `make test-k8s`)",

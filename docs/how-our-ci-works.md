@@ -52,17 +52,31 @@ working databases.
 `tests/integration-groups.txt` lists them, and a unit test checks that every
 test directory belongs to exactly one.
 
-| Group | What it tests | Services it starts | Runs as |
-|---|---|---|---|
-| `core` | The core, the conformance harness, the scripts, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL, S3, Vault | 999:999 |
-| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 |
-| `mongodb` | The MongoDB adapter | MongoDB | 999:999 |
-| `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 |
-| `mssql` | The SQL Server adapter | SQL Server | 10001:10001 |
+| Group | What it tests | Services it starts | Runs as | CI jobs |
+|---|---|---|---|---|
+| `core` | The core, the conformance harness, the scripts, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL, S3, Vault | 999:999 | 1 |
+| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
+| `mongodb` | The MongoDB adapter | MongoDB | 999:999 | 1 |
+| `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 | 2 |
+| `mssql` | The SQL Server adapter | SQL Server | 10001:10001 | 2 |
 
-Each group is its own CI job, named **Integration (group)**, so a slow engine
-does not hold the others up, and a failure tells you at once which engine it
-was.
+Each group runs in its own CI jobs, so a slow engine does not hold the others
+up, and a failure tells you at once which engine it was.
+
+### Shards: one group, several jobs
+
+A slow group is split into **shards**, each its own job running at the same
+time: **Integration (mysql 1/2)** runs the first, third, fifth… MySQL tests,
+and **Integration (mysql 2/2)** the second, fourth, sixth…. Together they run
+every test exactly once.
+
+Each extra job pays about two minutes of setup again (building the test
+image, downloading the database image, starting the source database), so
+only groups whose tests take several minutes get more than one. The number
+of shards is a column in `tests/integration-groups.txt`; change it there and
+CI follows (the **Integration jobs** job reads the table). On your machine
+groups run whole, unless you ask for a shard: `make test-group
+GROUP=mysql/2`.
 
 ### Why each group runs as a particular user
 
@@ -105,14 +119,27 @@ nothing else needs to.
 |---|---|
 | `make test-integration` | Every group, one after another, then the combined coverage with the 100% gate |
 | `make test-group GROUP=mysql` | One group, as its CI job does |
+| `make test-group GROUP=mysql/2` | Only the second of MySQL's shards, as its CI job does |
 | `make test-group GROUP=mysql DOCKER=host` | The same, on your own Docker daemon |
+| `make clean-work` | Remove the temporary files a `DOCKER=host` run left behind (see below) |
 
 The first run downloads every database image, so it is slow; later runs reuse
 them.
 
+You rarely need the whole suite on your own machine. If you changed one
+engine, run its group and leave the rest to CI. Run everything only if you
+changed the core or code more than one engine uses.
+
+With `DOCKER=host`, the tests keep their temporary files in
+`/var/tmp/datadouble-work` (on disk: `/tmp` is often a small tmpfs held in
+memory, and working databases are large). A failed test's files stay there
+so you can look at them; `make clean-work` removes them, and so does the next
+`DOCKER=host` run.
+
 ## When a job goes red
 
-- **Integration (group) failed:** open that job's log. pytest's summary at the
+- **Integration (group) failed:** open that job's log (for a sharded group,
+  the shard's job, such as **Integration (mysql 2/2)**). pytest's summary at the
   end names the failing tests. The lines **Disk before** and **Disk after**
   show the runner's free disk space, in case a group ran out.
 - **Integration coverage failed but every group passed:** coverage is
