@@ -66,6 +66,8 @@ def test_conditions() -> None:
     )
     assert renderer.params["as_of"] == "2026-01-01T10:30:00.000000"
     assert as_of_value(AS_OF) == "2026-01-01T10:30:00.000000"
+    with pytest.raises(EngineError, match="cannot bind a frozenset value"):
+        renderer.condition(ValuesIn((C("id"),), frozenset({(frozenset[int](),)})))
 
 
 def test_nested_selections() -> None:
@@ -179,7 +181,6 @@ def test_schema_filtering() -> None:
     schema = Schema(
         collation="SQL_Latin1_General_CP1_CI_AS",
         compatibility_level=160,
-        snapshot_isolation=True,
         read_committed_snapshot=False,
         statements=statements,
     )

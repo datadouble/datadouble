@@ -73,7 +73,6 @@ class Schema(BaseModel):
 
     collation: str
     compatibility_level: int
-    snapshot_isolation: bool
     read_committed_snapshot: bool
     statements: tuple[Statement, ...]
 
@@ -83,8 +82,7 @@ class Schema(BaseModel):
 
 
 _DATABASE = """
-SELECT collation_name, compatibility_level, CAST(snapshot_isolation_state AS INT),
-       CAST(is_read_committed_snapshot_on AS INT)
+SELECT collation_name, compatibility_level, CAST(is_read_committed_snapshot_on AS INT)
 FROM sys.databases WHERE database_id = DB_ID()
 """
 
@@ -504,8 +502,7 @@ def script(connection: Connection) -> Schema:
     return Schema(
         collation=_text(database[0]),
         compatibility_level=int(str(database[1])),
-        snapshot_isolation=int(str(database[2])) == 1,
-        read_committed_snapshot=_flag(database[3]),
+        read_committed_snapshot=_flag(database[2]),
         statements=(
             *schemas,
             *_sequences(connection),

@@ -18,7 +18,7 @@ files (physical) or the schema and rows in extract's format (logical);
 import datetime as dt
 import shutil
 from collections.abc import Generator, Iterable, Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from pathlib import Path
 
 import pymssql
@@ -364,9 +364,11 @@ def _reseed(connection: Connection) -> None:
 def _configure(connection: Connection, database: str, schema: Schema) -> None:
     """Give a new database the source's compatibility level and isolation settings."""
     name = quote(database)
-    settings = [compose("COMPATIBILITY_LEVEL = {}", str(schema.compatibility_level))]
-    if schema.snapshot_isolation:
-        settings.append("ALLOW_SNAPSHOT_ISOLATION ON")
+    # The source allows snapshot isolation, as extract needs, so copies do too.
+    settings = [
+        compose("COMPATIBILITY_LEVEL = {}", str(schema.compatibility_level)),
+        "ALLOW_SNAPSHOT_ISOLATION ON",
+    ]
     if schema.read_committed_snapshot:
         settings.append("READ_COMMITTED_SNAPSHOT ON")
     for setting in settings:
@@ -700,22 +702,16 @@ class MssqlWorking:
     @staticmethod
     def _write_logical(connection: Connection, info: DatabaseInfo, directory: Path) -> None:
         """The schema and every table's rows, in extract's format."""
-        try:
-            catalog, physical = introspect(connection)
-            schema = script(connection)
-        except pymssql.Error as error:
-            raise database_error(error, "scripting the image") from None
+        catalog, physical = introspect(connection)
+        schema = script(connection)
         (directory / "schema.json").write_text(schema.model_dump_json(indent=2), "utf-8")
         tables: list[ExtractedTable] = []
         for position, table in enumerate(t.name for t in catalog.tables):
             query = Renderer(as_of=_EPOCH).select(table, text_columns(physical, table), AllRows())
             file = f"{position:05d}.dat"
-            try:
-                with connection.cursor() as cursor, (directory / file).open("wb") as out:
-                    cursor.execute(query.text)
-                    rows = write_rows(cursor, out)
-            except pymssql.Error as error:
-                raise database_error(error, f"writing {table}") from None
+            with connection.cursor() as cursor, (directory / file).open("wb") as out:
+                cursor.execute(query.text)
+                rows = write_rows(cursor, out)
             tables.append(extracted_table(physical, table, file, rows))
         (directory / "index.json").write_text(
             ExtractIndex(
@@ -755,6 +751,3 @@ class MssqlWorking:
                 _bulk_load(connection, image, table, scratch)
             builder.rest()
             _reseed(connection)
-        with suppress(OSError):
-            for leftover in scratch.glob("*.fmt"):
-                leftover.unlink()

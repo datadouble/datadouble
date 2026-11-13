@@ -82,6 +82,7 @@ SCHEMA = [
     "CREATE VIEW child_ids AS SELECT id FROM child",
     "CREATE VIEW child_ids_again AS SELECT id FROM child_ids",
     "CREATE VIEW extra.note_ids AS SELECT id FROM extra.notes",
+    "CREATE VIEW extra.note_bodies AS SELECT body FROM extra.notes",
     "CREATE FUNCTION twice (@x INT) RETURNS INT AS BEGIN RETURN @x * 2 END",
     "CREATE PROCEDURE touch AS UPDATE child SET label = label",
     "CREATE SYNONYM parent_alias FOR dbo.parent",
@@ -113,7 +114,7 @@ subset:
   edges:
     child.parent_id -> parent: {on_missing: stub}
     child.other_id -> parent: {on_missing: null}
-    files.owner -> child: {on_missing: null}
+    files.owner -> child: {on_missing: stub}
   virtual_fks:
     child.other_id -> parent: {when: "kind = 'x'"}
 hooks:
@@ -134,6 +135,7 @@ def source() -> Generator[MssqlScratch]:
         assert isinstance(made, MssqlScratch)
         for statement in SCHEMA:
             made.execute(statement)
+        admin(f"ALTER DATABASE [{made.database}] SET READ_COMMITTED_SNAPSHOT ON")
         yield made
 
 
@@ -244,6 +246,11 @@ def test_fallbacks_schema_and_odd_values(source: MssqlScratch, tmp_path: Path) -
                 # Modules came across, in order, in their own schemas.
                 "SELECT 1 WHERE OBJECT_ID('dbo.child_ids_again') IS NULL",
                 "SELECT 1 WHERE OBJECT_ID('extra.note_ids') IS NULL",
+                "SELECT 1 WHERE OBJECT_ID('extra.note_bodies') IS NULL",
+                (
+                    "SELECT 1 FROM sys.databases WHERE database_id = DB_ID()"
+                    " AND (is_read_committed_snapshot_on = 0 OR snapshot_isolation_state = 0)"
+                ),
                 "SELECT 1 WHERE dbo.twice(2) <> 4",
                 "SELECT 1 WHERE OBJECT_ID('dbo.touch') IS NULL",
                 "SELECT 1 WHERE OBJECT_ID('dbo.parent_alias') IS NULL",
@@ -436,3 +443,8 @@ def test_instances_take_only_their_password(tmp_path: Path) -> None:
             cursor.execute(f"ALTER LOGIN sa WITH PASSWORD = 'Ch-{uuid.uuid4().hex}'")
         with pytest.raises(EngineError, match=r"connecting to the working database failed"):
             server.connect()
+    with (
+        pytest.raises(EngineError, match=r"using the working database failed: \[1\] boom"),
+        server.running(),
+    ):
+        raise pymssql.OperationalError(1, b"boom")

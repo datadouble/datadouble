@@ -183,10 +183,7 @@ class MssqlSnapshot:
         if refused:
             message = "cannot extract: " + "; ".join(refused) + "; exclude these tables"
             raise EngineError(message)
-        try:
-            schema = schema_for(script(self.connection), plan.excludes.excluded())
-        except pymssql.Error as error:
-            raise database_error(error, "scripting the schema") from None
+        schema = schema_for(script(self.connection), plan.excludes.excluded())
         (directory / "schema.json").write_text(schema.model_dump_json(indent=2), "utf-8")
         tables: list[ExtractedTable] = []
         for index, table in enumerate(extracted):

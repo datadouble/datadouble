@@ -208,6 +208,9 @@ class MssqlServer:
                 self._server, self._password = server, password
                 try:
                     yield self
+                except pymssql.Error as error:
+                    # Whatever the block did, the message leaves redacted.
+                    raise database_error(error, "using the working database") from None
                 finally:
                     self._server, self._password = None, ""
         finally:
