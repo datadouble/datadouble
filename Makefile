@@ -14,6 +14,7 @@ lint:
 # GitHub workflows: actionlint for syntax and shell, zizmor for security.
 lint-workflows:
 	actionlint
+	uv run python scripts/check_workflows.py
 	uvx --from zizmor==1.32.0 zizmor --offline .github/workflows
 
 typecheck:
