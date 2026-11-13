@@ -70,6 +70,7 @@ run_tests() {
     rm -f "/reports/.coverage.$name" "/reports/durations.$name.json"
     setpriv --reuid="$uid" --regid="$gid" "$groups" \
         env HOME="/tmp/home-$name" USER="test-$group" COVERAGE_FILE="/reports/.coverage.$name" \
+        DATADOUBLE_TEST_REPORTS=/reports \
         /src/.venv/bin/pytest -p no:cacheprovider --cov --cov-report= --cov-fail-under=0 \
         --durations=15 --durations-min=5 --record-durations "/reports/durations.$name.json" \
         "${shard[@]}" $(field "$group" 5)
