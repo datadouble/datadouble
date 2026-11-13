@@ -117,28 +117,30 @@ jobs:
       - name: Unit tests (100% coverage gate)
         run: make test
 
-  integration:
-    name: Integration tests (Docker Compose)
+  integration-group:
+    # One job per integration group (tests/integration-groups.txt), in
+    # parallel, each starting only the Compose services its tests need and
+    # running them as the user its engine's copies are served as. The tests
+    # drive the runner's own Docker daemon (compose.host.yaml): the runner is
+    # throwaway, and one daemon means one copy of each engine's image.
+    name: Integration (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      id-token: write  # Codecov upload with OpenID Connect
-    env:
-      # Empty on Dependabot and fork runs, which get no secrets.
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      SAME_REPO: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, postgres, mongodb, mysql, mssql]
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
-          # engine, Python, SeaweedFS, Docker and OpenBao images, GHCR for the
-          # uv image, Debian for git and btrfs-progs, GitHub release assets for
-          # cosign, dl.k8s.io for kubectl, raw GitHub for the pinned Pagila
-          # files, PyPI for the workspace, Codecov for the upload, and
-          # Microsoft's registry for the SQL Server image.
+          # engine, Python, SeaweedFS and OpenBao images, Microsoft's registry
+          # for SQL Server, GHCR for the uv image, Debian for git and
+          # btrfs-progs, GitHub release assets for cosign, dl.k8s.io for
+          # kubectl, raw GitHub for the pinned sample data, PyPI for the
+          # workspace, and the Actions cache for the test image's layers.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -160,6 +162,77 @@ jobs:
             deb.debian.org:443
             pypi.org:443
             files.pythonhosted.org:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The build cache (compose.cache.yaml) needs a Buildx builder and the
+      # Actions runtime token in the environment.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      # Runners promise only 14 GB of disk; the free space is recorded before
+      # and after, so a group that outgrows it shows here first.
+      - name: Disk before
+        run: df -h /
+
+      - name: Run the group
+        env:
+          GROUP: ${{ matrix.group }}
+        run: make test-group GROUP="$GROUP" DOCKER=host EXTRA_COMPOSE=compose.cache.yaml
+
+      - name: Disk after
+        if: ${{ always() }}
+        run: df -h /
+
+      - name: Keep the group's coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.group }}
+          path: .reports/.coverage.${{ matrix.group }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  integration:
+    # The required check: every group passed, and their combined coverage
+    # reaches 100%. The combined report goes to Codecov and to the sonar job.
+    name: Integration tests (Docker Compose)
+    needs: integration-group
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write  # Codecov upload with OpenID Connect
+    env:
+      # Empty on Dependabot and fork runs, which get no secrets.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      SAME_REPO: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Every group passed
+        env:
+          GROUPS_RESULT: ${{ needs.integration-group.result }}
+        run: test "$GROUPS_RESULT" = success
+
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # GitHub for the checkout and artifacts, uv's release assets, PyPI
+          # for coverage, Codecov for the upload.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            pypi.org:443
+            files.pythonhosted.org:443
             cli.codecov.io:443
             ingest.codecov.io:443
             api.codecov.io:443
@@ -169,24 +242,33 @@ jobs:
         with:
           persist-credentials: false
 
-      # The runner image ships MySQL with an AppArmor profile for
-      # /usr/sbin/mysqld. Containers that Docker-in-Docker starts run without
-      # a profile of their own, so the host's attaches to their mysqld by path
-      # and stops it writing working databases under /work. The runner is
-      # throwaway and its MySQL is never used; see TESTING.md to remove this.
-      - name: Unload the runner's MySQL AppArmor profile
-        run: |
-          if [ -f /etc/apparmor.d/usr.sbin.mysqld ]; then
-            sudo apparmor_parser --remove /etc/apparmor.d/usr.sbin.mysqld
-          fi
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
 
-      - name: Run the suite in the default Compose group
-        run: make test-integration
+      - name: Gather the groups' coverage
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-*
+          path: .reports
+          merge-multiple: true
 
-      # The coverage gate runs inside the suite; the upload is telemetry, so it
-      # never fails the job.
+      - name: Combine coverage, with the 100% gate
+        run: REPORTS=.reports COVERAGE="uv run coverage" scripts/integration.sh report
+
+      - name: Keep the combined report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: .reports/coverage.xml
+          if-no-files-found: error
+          retention-days: 3
+
+      # The gate is the step above; the upload is telemetry, so it never fails
+      # the job.
       - name: Upload coverage (OpenID Connect)
-        if: ${{ env.SAME_REPO == 'true' && hashFiles('.reports/coverage.xml') != '' }}
+        if: ${{ env.SAME_REPO == 'true' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml
@@ -194,12 +276,72 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload coverage (token, for forks)
-        if: ${{ env.SAME_REPO != 'true' && env.CODECOV_TOKEN != '' && hashFiles('.reports/coverage.xml') != '' }}
+        if: ${{ env.SAME_REPO != 'true' && env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml
           token: ${{ env.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  sonar:
+    # SonarQube Cloud's analysis, fed the combined coverage of the integration
+    # groups rather than running the suite again. The scan waits for the
+    # quality gate (sonar.qualitygate.wait), so a red gate fails this required
+    # job (decision 71). Dependabot and fork runs get no token and skip the scan.
+    needs: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read  # pull request analysis reads its metadata
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # binaries.sonarsource.com serves the scanner, which the action caches,
+          # so a missing endpoint only shows when the cache goes cold. The action
+          # verifies the scanner's signature with keys from the two keyservers.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            sonarcloud.io:443
+            api.sonarcloud.io:443
+            scanner.sonarcloud.io:443
+            binaries.sonarsource.com:443
+            keyserver.ubuntu.com:443
+            keys.openpgp.org:443
+            analysis-sensorcache-eu-central-1-prod.s3.eu-central-1.amazonaws.com:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # full history for blame and new-code detection
+
+      - name: The combined coverage report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-report
+          path: .reports
+
+      # The report must name every analysed file exactly once, or the scanner
+      # counts it as uncovered. Its source roots are repository-relative, which
+      # the scanner reads as absolute, so they are anchored to the checkout.
+      - name: Check and anchor the report
+        run: |
+          python3 scripts/check_coverage.py .reports/coverage.xml sonar-project.properties
+          sed -E "s#<source>([^/<][^<]*)</source>#<source>${GITHUB_WORKSPACE}/\1</source>#" \
+            .reports/coverage.xml > coverage.xml
+
+      - name: SonarQube Cloud scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: sonarsource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
+        env:
+          SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
 
   privileged:
     # The opt-in Compose groups that need privileged containers: k3s for the

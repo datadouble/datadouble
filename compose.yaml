@@ -1,11 +1,11 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-# `docker compose up` starts the default group: the test runner, PostgreSQL
-# with Pagila, an S3-compatible store, a Docker-in-Docker daemon and OpenBao.
-# Other groups are profiles, added as their milestones arrive and combined
-# freely, for example `docker compose --profile mysql --profile s3 up`.
-# See TESTING.md.
+# The integration suite's services. `make test-integration` and
+# `make test-group GROUP=...` start only the ones the groups being run need
+# (tests/integration-groups.txt); the privileged k8s and btrfs groups are
+# profiles. compose.host.yaml points the tests at the host's own Docker daemon
+# instead of the Docker-in-Docker one, as CI does. See TESTING.md.
 
 name: datadouble
 
@@ -14,23 +14,8 @@ services:
     build:
       context: .
       target: test
-    depends_on:
-      postgres:
-        condition: service_healthy
-      s3:
-        condition: service_healthy
-      docker:
-        condition: service_healthy
-      vault:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-      mysql:
-        condition: service_healthy
-      mssql:
-        condition: service_healthy
-      jailer:
-        condition: service_completed_successfully
+    # No depends_on: `make` starts only the services the groups being run
+    # need (tests/integration-groups.txt), and waits for them to be healthy.
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
@@ -213,6 +198,7 @@ services:
     build:
       context: .
       target: test
+    user: tester
     depends_on:
       k3s:
         condition: service_healthy

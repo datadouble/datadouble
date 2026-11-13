@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration test-k8s test-btrfs docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-group integration test-k8s test-btrfs docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -26,14 +26,42 @@ typecheck:
 test:
 	uv run pytest -m "not integration" --cov=core/src --cov=scripts
 
-# The whole suite, including integration tests, inside the default Compose group.
-# Reports are copied out of the stopped container rather than bind-mounted.
+# The integration suite, in groups (tests/integration-groups.txt), each run as
+# the user its engine's copies are served as, with only the Compose services
+# it needs. `make test-integration` runs every group and combines their
+# coverage into one report with the 100% gate; `make test-group GROUP=mysql`
+# runs one, as each CI job does. DOCKER=host uses the host's own Docker daemon
+# instead of Docker-in-Docker (compose.host.yaml), as CI does; EXTRA_COMPOSE
+# adds Compose files, such as CI's build cache (compose.cache.yaml). Reports
+# are copied out of the stopped test container rather than bind-mounted.
+DOCKER ?= dind
+HOST_WORK ?= /tmp/datadouble-work
+EXTRA_COMPOSE ?=
+COMPOSE := docker compose -f compose.yaml$(if $(filter host,$(DOCKER)), -f compose.host.yaml)$(foreach file,$(EXTRA_COMPOSE), -f $(file))
+DAEMON := $(if $(filter host,$(DOCKER)),,docker)
+
 test-integration:
+	@$(MAKE) --no-print-directory integration RUN_GROUPS="$$(scripts/integration.sh groups)" REPORT=yes
+
+test-group:
+	@test -n "$(GROUP)" || { echo "name a group: make test-group GROUP=<$$(scripts/integration.sh groups | tr '\n' '|')>"; exit 2; }
+	@$(MAKE) --no-print-directory integration RUN_GROUPS="$(GROUP)"
+
+integration:
 	mkdir -p .reports
-	docker compose up --build --abort-on-container-exit --exit-code-from test test; \
+	$(if $(filter host,$(DOCKER)),install -d -m 1777 $(HOST_WORK))
+	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) build test
+	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) up -d --wait $(DAEMON) $$(scripts/integration.sh services $(RUN_GROUPS)); \
 	status=$$?; \
-	docker compose cp test:/reports/coverage.xml .reports/coverage.xml || true; \
-	docker compose down --volumes; \
+	if [ $$status -eq 0 ]; then \
+		DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) run --name $${COMPOSE_PROJECT_NAME:-datadouble}-tests --no-deps test \
+			bash -c '/src/scripts/integration.sh test $(RUN_GROUPS); status=$$?; \
+				$(if $(REPORT),/src/scripts/integration.sh report || status=1;) exit $$status'; \
+		status=$$?; \
+		docker cp $${COMPOSE_PROJECT_NAME:-datadouble}-tests:/reports/. .reports/ || true; \
+		docker rm -f $${COMPOSE_PROJECT_NAME:-datadouble}-tests > /dev/null; \
+	fi; \
+	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) down --volumes; \
 	exit $$status
 
 # Opt-in groups that need privileged containers: k3s, and a loop-mounted btrfs.

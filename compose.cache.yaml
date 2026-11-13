@@ -1,0 +1,14 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# CI only: build the test image with GitHub Actions' build cache, so a job
+# rebuilds only the layers its changes touch (`make ... EXTRA_COMPOSE=compose.cache.yaml`).
+# It needs a Buildx builder and the Actions runtime token, which CI's jobs set up.
+
+services:
+  test:
+    build:
+      cache_from:
+        - type=gha,scope=datadouble-test
+      cache_to:
+        - type=gha,mode=max,scope=datadouble-test
