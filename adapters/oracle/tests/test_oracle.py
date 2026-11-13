@@ -61,7 +61,7 @@ SCHEMA = [
     """CREATE TRIGGER child_quiet BEFORE INSERT ON child FOR EACH ROW
         BEGIN :NEW.label := 'never'; END;""",
     "ALTER TRIGGER child_quiet DISABLE",
-    "CREATE VIEW item_ids AS SELECT id FROM items",
+    'CREATE VIEW item_ids AS SELECT "id" FROM items',
     "CREATE VIEW child_ids AS SELECT id FROM child",
     "CREATE VIEW child_ids_again AS SELECT id FROM child_ids",
     "CREATE FUNCTION twice (x NUMBER) RETURN NUMBER IS BEGIN RETURN x * 2; END;",

@@ -25,7 +25,9 @@ from datadouble_oracle import OracleEngine, parse_url
 from datadouble_oracle.driver import Connection, Value, connect
 from datadouble_oracle.render import quote
 
-pytestmark = pytest.mark.integration
+# Whole builds start an Oracle container (about 38 s) for each stage and image
+# format, and the strategies test runs two builds: twice the usual limit.
+pytestmark = [pytest.mark.integration, pytest.mark.timeout(1200)]
 
 URL_VARIABLE = "DATADOUBLE_TEST_ORACLE_URL"
 
@@ -91,7 +93,7 @@ def open_connection(url: str) -> Connection:
 
 @dataclass
 class OracleScratch:
-    """A throwaway schema on the test database, holding ``items(id)``."""
+    """A throwaway schema on the test database, holding ``items("id")``."""
 
     schema: str
     variable: str
@@ -125,7 +127,7 @@ class OracleScratch:
 
     def insert(self, item_id: int) -> None:
         """Insert and commit a row."""
-        self.execute("INSERT INTO items (id) VALUES (:1)", [item_id])
+        self.execute('INSERT INTO items ("id") VALUES (:1)', [item_id])
 
 
 def admin(statement: str) -> None:
@@ -155,7 +157,9 @@ def scratch() -> Generator[ScratchSource]:
     )
     source = OracleScratch(schema, variable)
     try:
-        source.execute("CREATE TABLE items (id NUMBER PRIMARY KEY)")
+        # Quoted: the suite names the column in lower case, which Oracle
+        # would otherwise fold to upper.
+        source.execute('CREATE TABLE items ("id" NUMBER PRIMARY KEY)')
         yield source
     finally:
         os.environ.pop(variable, None)

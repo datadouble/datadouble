@@ -492,12 +492,14 @@ class OracleWorking:
             with server.connect() as connection:
                 use_schemas(connection, info.schemas)
                 physical = introspect(connection, info.schemas)[1]
-                triggered = self._triggered_tables(connection, info.schemas)
-                for table in triggered:
+                # Only the enabled triggers, by name: a table's ENABLE ALL
+                # TRIGGERS would also enable the ones the source has disabled.
+                enabled = self._enabled_triggers(connection, info.schemas)
+                for owner, trigger in enabled:
                     _execute(
                         connection,
-                        f"disabling the triggers of {table}",
-                        compose("ALTER TABLE {} DISABLE ALL TRIGGERS", qualified(table)),
+                        f"disabling the trigger {owner}.{trigger}",
+                        compose("ALTER TRIGGER {}.{} DISABLE", quote(owner), quote(trigger)),
                     )
                 _prepare(connection)
                 by_table: dict[TableName, list[PlannedRule]] = {}
@@ -510,11 +512,11 @@ class OracleWorking:
                     _execute(connection, "an after_transform hook", hook.sql)
                 connection.commit()
                 _clean_up(connection)
-                for table in triggered:
+                for owner, trigger in enabled:
                     _execute(
                         connection,
-                        f"enabling the triggers of {table}",
-                        compose("ALTER TABLE {} ENABLE ALL TRIGGERS", qualified(table)),
+                        f"enabling the trigger {owner}.{trigger}",
+                        compose("ALTER TRIGGER {}.{} ENABLE", quote(owner), quote(trigger)),
                     )
                 counts = OracleRestored(connection, physical).counts(group.tables)
             unplugged = server.unplug()
@@ -523,18 +525,21 @@ class OracleWorking:
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod
-    def _triggered_tables(connection: Connection, schemas: tuple[str, ...]) -> list[TableName]:
+    def _enabled_triggers(
+        connection: Connection, schemas: tuple[str, ...]
+    ) -> list[tuple[str, str]]:
+        """The schemas' enabled table triggers, as owner and name."""
         rows = _rows(
             connection,
             "listing triggers",
             compose(
-                "SELECT DISTINCT table_owner, table_name FROM all_triggers WHERE owner IN ({})"
+                "SELECT owner, trigger_name FROM all_triggers WHERE owner IN ({})"
                 " AND status = 'ENABLED' AND base_object_type = 'TABLE' ORDER BY 1, 2",
                 binds(len(schemas)),
             ),
             {f"s{i}": schema for i, schema in enumerate(schemas)},
         )
-        return [TableName.of(str(owner), str(table)) for owner, table in rows]
+        return [(str(owner), str(trigger)) for owner, trigger in rows]
 
     # package and restore
 

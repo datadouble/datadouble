@@ -23,7 +23,7 @@ exactly the source's version
 
 import shlex
 from collections.abc import Generator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -124,7 +124,10 @@ class OracleEngine:
         try:
             yield OracleSession(opened, options, settings.schemas or (str(user),))
         finally:
-            opened.close()
+            # Already closed, or the connection was lost: there is nothing
+            # left to close, and the error that got here is the one to report.
+            with suppress(Error):
+                opened.close()
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Pluggable databases under ``scratch``, in the image for the source's version."""

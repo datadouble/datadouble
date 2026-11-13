@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
 from datadouble.names import ColumnName, EngineName, TableName
-from datadouble_oracle.driver import Connection, Value
+from datadouble_oracle.driver import Connection, Cursor, Value
 
 ENGINE = EngineName("oracle")
 
@@ -49,25 +49,96 @@ WHERE c.owner IN ({}) AND c.hidden_column = 'NO'
 ORDER BY c.owner, c.table_name, c.column_id
 """
 
-_PRIMARY_KEYS = """
-SELECT k.owner, k.table_name, c.column_name
-FROM all_constraints k
-JOIN all_cons_columns c ON c.owner = k.owner AND c.constraint_name = k.constraint_name
-WHERE k.owner IN ({}) AND k.constraint_type = 'P'
-ORDER BY k.owner, k.table_name, c.position
+# Keys come from two single-view queries joined here: joins between the
+# constraint views can get plans that run for many minutes, most of all in a
+# freshly plugged-in database with no dictionary statistics. The keys foreign
+# keys reference come too, in whichever schema they are.
+_REFERENCED = """
+(owner, constraint_name) IN (
+    SELECT r_owner, r_constraint_name FROM all_constraints
+    WHERE owner IN ({0}) AND constraint_type = 'R')
 """
 
-_FOREIGN_KEYS = """
-SELECT k.owner, k.table_name, k.constraint_name, c.column_name,
-       r.owner, r.table_name, rc.column_name
-FROM all_constraints k
-JOIN all_cons_columns c ON c.owner = k.owner AND c.constraint_name = k.constraint_name
-JOIN all_constraints r ON r.owner = k.r_owner AND r.constraint_name = k.r_constraint_name
-JOIN all_cons_columns rc ON rc.owner = r.owner AND rc.constraint_name = r.constraint_name
-    AND rc.position = c.position
-WHERE k.owner IN ({}) AND k.constraint_type = 'R'
-ORDER BY k.owner, k.table_name, k.constraint_name, c.position
+_CONSTRAINTS = (
+    """
+SELECT owner, constraint_name, table_name, constraint_type, r_owner, r_constraint_name,
+       delete_rule, status, validated, deferrable, deferred
+FROM all_constraints
+WHERE (owner IN ({0}) AND constraint_type IN ('P', 'R')) OR """
+    + _REFERENCED
+)
+
+_KEY_COLUMNS = (
+    """
+SELECT owner, constraint_name, column_name
+FROM all_cons_columns
+WHERE position IS NOT NULL AND (owner IN ({0}) OR """
+    + _REFERENCED
+    + """)
+ORDER BY owner, constraint_name, position
 """
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Reference:
+    """A foreign key, with the settings a script recreates it with."""
+
+    table: TableName
+    name: str
+    columns: tuple[ColumnName, ...]
+    target: TableName
+    target_columns: tuple[ColumnName, ...]
+    delete_rule: str
+    enabled: bool
+    validated: bool
+    deferrable: bool
+    deferred: bool
+
+
+def keys(
+    cursor: Cursor, schemas: tuple[str, ...]
+) -> tuple[dict[TableName, tuple[ColumnName, ...]], list[Reference]]:
+    """The schemas' primary keys, by table, and foreign keys, in order."""
+    names = binds(len(schemas))
+    params: dict[str, Value] = {f"s{i}": schema for i, schema in enumerate(schemas)}
+    cursor.execute(_CONSTRAINTS.format(names), params)
+    rows = {(str(row[0]), str(row[1])): row for row in cursor.fetchall()}
+    columns: defaultdict[tuple[str, str], list[ColumnName]] = defaultdict(list)
+    cursor.execute(_KEY_COLUMNS.format(names), params)
+    for owner, name, column in cursor.fetchall():
+        columns[(str(owner), str(name))].append(ColumnName(str(column)))
+    own = sorted(key for key, row in rows.items() if key[0] in schemas and row[3] in {"P", "R"})
+    primary = {
+        TableName.of(key[0], str(rows[key][2])): tuple(columns[key])
+        for key in own
+        if rows[key][3] == "P"
+    }
+    references = [_reference(key, rows, columns) for key in own if rows[key][3] == "R"]
+    references.sort(key=lambda r: (str(r.table), r.name))
+    return primary, references
+
+
+def _reference(
+    key: tuple[str, str],
+    rows: dict[tuple[str, str], tuple[object, ...]],
+    columns: dict[tuple[str, str], list[ColumnName]],
+) -> Reference:
+    row = rows[key]
+    target = (str(row[4]), str(row[5]))
+    return Reference(
+        table=TableName.of(key[0], str(row[2])),
+        name=key[1],
+        columns=tuple(columns[key]),
+        target=TableName.of(target[0], str(rows[target][2])),
+        target_columns=tuple(columns[target]),
+        delete_rule=str(row[6]),
+        enabled=row[7] == "ENABLED",
+        validated=row[8] == "VALIDATED",
+        deferrable=row[9] == "DEFERRABLE",
+        deferred=row[10] == "DEFERRED",
+    )
+
 
 _TIMESTAMP = re.compile(r"TIMESTAMP\(\d\)")
 _INTERVAL = re.compile(r"INTERVAL (DAY|YEAR)\(\d\) TO (SECOND|MONTH)(\(\d\))?")
@@ -250,38 +321,23 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
                 )
             if row[12] == "YES":
                 identity[name] = column_name
-        primary: defaultdict[TableName, list[ColumnName]] = defaultdict(list)
-        cursor.execute(_PRIMARY_KEYS.format(names), params)
-        for key in cursor.fetchall():
-            primary[TableName.of(str(key[0]), str(key[1]))].append(ColumnName(str(key[2])))
-        foreign: dict[tuple[TableName, str], tuple[TableName, list[ColumnName], list[ColumnName]]]
-        foreign = {}
-        cursor.execute(_FOREIGN_KEYS.format(names), params)
-        for row in cursor.fetchall():
-            text = [str(value) for value in row]
-            entry = foreign.setdefault(
-                (TableName.of(text[0], text[1]), text[2]), (TableName.of(text[4], text[5]), [], [])
-            )
-            entry[1].append(ColumnName(text[3]))
-            entry[2].append(ColumnName(text[6]))
+        primary, references = keys(cursor, schemas)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
             Table(
                 name=name,
                 columns=tuple(columns[name]),
-                primary_key=tuple(primary.get(name, [])),
+                primary_key=primary.get(name, ()),
                 foreign_keys=tuple(
                     ForeignKey(
-                        name=constraint,
-                        columns=tuple(own),
-                        target=target,
-                        target_columns=tuple(theirs),
+                        name=r.name,
+                        columns=r.columns,
+                        target=r.target,
+                        target_columns=r.target_columns,
                     )
-                    for (table, constraint), (target, own, theirs) in sorted(
-                        foreign.items(), key=lambda item: (str(item[0][0]), item[0][1])
-                    )
-                    if table == name
+                    for r in references
+                    if r.table == name
                 ),
             )
             for name in tables

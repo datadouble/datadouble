@@ -31,7 +31,7 @@ from pydantic import BaseModel, ConfigDict
 
 from datadouble.names import TableName
 from datadouble_oracle.driver import Connection, Value, read
-from datadouble_oracle.introspect import binds
+from datadouble_oracle.introspect import binds, keys
 from datadouble_oracle.render import compose, qualified, quote
 
 
@@ -129,18 +129,6 @@ WHERE i.table_owner IN ({}) AND i.generated = 'N' AND i.index_type NOT LIKE 'IOT
 ORDER BY i.owner, i.index_name
 """
 
-_FOREIGN_KEYS = """
-SELECT k.owner, k.table_name, k.constraint_name, c.column_name, r.owner, r.table_name,
-       rc.column_name, k.delete_rule, k.status, k.validated, k.deferrable, k.deferred
-FROM all_constraints k
-JOIN all_cons_columns c ON c.owner = k.owner AND c.constraint_name = k.constraint_name
-JOIN all_constraints r ON r.owner = k.r_owner AND r.constraint_name = k.r_constraint_name
-JOIN all_cons_columns rc ON rc.owner = r.owner AND rc.constraint_name = r.constraint_name
-    AND rc.position = c.position
-WHERE k.owner IN ({}) AND k.constraint_type = 'R'
-ORDER BY k.owner, k.table_name, k.constraint_name, c.position
-"""
-
 _DEPENDENCIES = """
 SELECT owner, name, referenced_owner, referenced_name
 FROM all_dependencies
@@ -228,45 +216,33 @@ def _views_in_order(
 
 
 def _foreign_keys(connection: Connection, schemas: tuple[str, ...]) -> list[Statement]:
-    keys: dict[tuple[str, str, str], tuple[tuple[object, ...], list[str], list[str]]] = {}
-    for row in _rows(connection, _FOREIGN_KEYS, schemas):
-        entry = keys.setdefault((str(row[0]), str(row[1]), str(row[2])), (row, [], []))
-        entry[1].append(str(row[3]))
-        entry[2].append(str(row[6]))
-    statements: list[Statement] = []
-    for (owner, table, name), (row, own, theirs) in keys.items():
-        child, parent = TableName.of(owner, table), TableName.of(str(row[4]), str(row[5]))
-        delete = {"CASCADE": " ON DELETE CASCADE", "SET NULL": " ON DELETE SET NULL"}
-        state = "ENABLE" if row[8] == "ENABLED" else "DISABLE"
-        validation = "VALIDATE" if row[9] == "VALIDATED" else "NOVALIDATE"
-        deferral = (
-            f" DEFERRABLE INITIALLY {'DEFERRED' if row[11] == 'DEFERRED' else 'IMMEDIATE'}"
-            if row[10] == "DEFERRABLE"
-            else ""
+    with connection.cursor() as cursor:
+        references = keys(cursor, schemas)[1]
+    delete = {"CASCADE": " ON DELETE CASCADE", "SET NULL": " ON DELETE SET NULL"}
+    return [
+        Statement(
+            phase=Phase.FOREIGN_KEY,
+            owner=r.table.namespace,
+            name=object_name(r.table.namespace, r.name),
+            sql=compose(
+                "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){}{} {} {}",
+                qualified(r.table),
+                quote(r.name),
+                ", ".join(quote(c) for c in r.columns),
+                qualified(r.target),
+                ", ".join(quote(c) for c in r.target_columns),
+                delete.get(r.delete_rule, ""),
+                f" DEFERRABLE INITIALLY {'DEFERRED' if r.deferred else 'IMMEDIATE'}"
+                if r.deferrable
+                else "",
+                "ENABLE" if r.enabled else "DISABLE",
+                "VALIDATE" if r.validated else "NOVALIDATE",
+            ),
+            table=r.table,
+            needs=(object_name(r.target.namespace, r.target.name),),
         )
-        statements.append(
-            Statement(
-                phase=Phase.FOREIGN_KEY,
-                owner=owner,
-                name=object_name(owner, name),
-                sql=compose(
-                    "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({})"
-                    " REFERENCES {} ({}){}{} {} {}",
-                    qualified(child),
-                    quote(name),
-                    ", ".join(quote(c) for c in own),
-                    qualified(parent),
-                    ", ".join(quote(c) for c in theirs),
-                    delete.get(str(row[7]), ""),
-                    deferral,
-                    state,
-                    validation,
-                ),
-                table=child,
-                needs=(object_name(parent.namespace, parent.name),),
-            )
-        )
-    return statements
+        for r in references
+    ]
 
 
 def script(connection: Connection, schemas: tuple[str, ...]) -> Schema:

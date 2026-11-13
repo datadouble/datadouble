@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from pydantic import JsonValue, TypeAdapter
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from datadouble.catalog import CatalogLock, write_lock
 from datadouble.engine import EngineAdapter, ExtractResult, Tooling
@@ -157,7 +157,7 @@ class _Builds:
         group = summary.identity.group
         file = Path(result.work) / "package" / group / archive.key.rsplit("/", 1)[1]
         scratch = self.root / f"restore-{tag}-{group}"
-        image, _ = unpack(file, scratch / "archive")
+        image, manifest = unpack(file, scratch / "archive")
         ((kind, settings),) = self.harness.runtime.items()
         working = self.harness.engine.working(
             scratch,
@@ -166,7 +166,9 @@ class _Builds:
                 image=self.sample().source.image,
                 server=self.sample().source.server,
             ),
-            summary.identity.engine_version,
+            # The full version: the identity names only the major one, and an
+            # engine's images may be tagged by more (Oracle's 23.26.3.0).
+            _Built.model_validate_json(manifest).working_server_version,
         )
         found: dict[str, set[str]] = {}
         with working.restore(image, ImageFormat.LOGICAL, scratch / "db") as restored:
@@ -176,6 +178,12 @@ class _Builds:
             for column in columns:
                 found[str(column)] = set(restored.text_values(column))
         return found
+
+
+class _Built(BaseModel):
+    """The part of an image's manifest :meth:`_Builds.restored_values` reads."""
+
+    working_server_version: str
 
 
 def _plan(result: RunResult) -> Plan:
