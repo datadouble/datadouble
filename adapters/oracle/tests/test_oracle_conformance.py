@@ -150,8 +150,8 @@ def scratch() -> Generator[ScratchSource]:
         " DEFAULT TABLESPACE sakila_data QUOTA UNLIMITED ON sakila_data"
     )
     admin(
-        f"GRANT CREATE SESSION, CREATE TABLE, SELECT_CATALOG_ROLE, EXECUTE ON DBMS_FLASHBACK"
-        f" TO {quote(schema)}"
+        "GRANT CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE TRIGGER, CREATE PROCEDURE,"
+        f" CREATE SEQUENCE, SELECT_CATALOG_ROLE TO {quote(schema)}"
     )
     source = OracleScratch(schema, variable)
     try:
