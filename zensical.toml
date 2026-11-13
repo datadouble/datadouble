@@ -33,6 +33,7 @@ nav = [
     { "Decisions" = "decisions.md" },
     { "Version 1 plan" = "v1-plan.md" },
     { "External services" = "external-services.md" },
+    { "How our CI works" = "how-our-ci-works.md" },
     { "Changelog" = "project/changelog.md" },
     { "Contributing" = "project/contributing.md" },
   ] },

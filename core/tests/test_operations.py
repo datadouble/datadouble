@@ -21,6 +21,7 @@ from datadouble.announce import (
     withdraw,
 )
 from datadouble.channels import point_channel, read_channel
+from datadouble.engine import EngineError
 from datadouble.images import (
     ImageArchive,
     ImageIdentity,
@@ -60,6 +61,8 @@ from datadouble.spec import (
 )
 from datadouble.staging import FetchStatus, Staging, StagingError, activate, fetch
 from datadouble.storage import FilesystemStore
+from fake_engine import ENGINES, FakeEngine
+from fakes import FakeSource, shop
 
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.UTC)
 
@@ -344,7 +347,7 @@ class Watched(FilesystemReplicator):
 def watched(registry: Registry, tmp_path: Path, spec: Spec) -> tuple[Registry, Watched]:
     replicator = Watched(tmp_path / "copies", spec)
     return Registry(
-        engines={},
+        engines=ENGINES,
         stores=registry.stores,
         replicators={"filesystem": lambda _settings: replicator},
         announcers=registry.announcers,
@@ -477,7 +480,7 @@ def test_claims_the_adapter_observes(tmp_path: Path, registry: Registry) -> None
         [ClaimState.CLAIMED, ClaimState.RETURNED],
     )
     wired = Registry(
-        engines={}, stores=registry.stores, replicators={"filesystem": lambda _s: observed}
+        engines=ENGINES, stores=registry.stores, replicators={"filesystem": lambda _s: observed}
     )
     result = replicate(spec, wired, Options())
     # One copy was claimed and the other returned: two fresh copies refill the pool.
@@ -492,7 +495,7 @@ def test_replicate_errors(tmp_path: Path, registry: Registry) -> None:
         replicate(bare, registry, Options())
     spec = make_spec(tmp_path)
     with pytest.raises(ReplicateError, match="no replicate adapter named 'filesystem'"):
-        replicate(spec, Registry(engines={}, stores={}), Options())
+        replicate(spec, Registry(engines=ENGINES, stores={}), Options())
     with pytest.raises(StagingError, match="no images in"):
         replicate(spec, registry, Options())
     (tmp_path / "staging" / PREFIX).mkdir(parents=True)
@@ -758,3 +761,18 @@ def test_signed_builds(tmp_path: Path) -> None:
     bundle = FilesystemStore(tmp_path / "build").get_bytes(bundle_key(summary))
     assert bundle is not None
     verify(summary, bundle, CosignTrust(public_key=EnvSecret(env="P")))
+
+
+def test_staging_and_copies_belong_to_the_serving_user(tmp_path: Path, registry: Registry) -> None:
+    spec = promoted(tmp_path, registry, "0000000000010001")
+    elsewhere = Registry(
+        engines={
+            "fake": lambda: FakeEngine(catalog=shop(), source=FakeSource(rows={}), owner_="1:1")
+        },
+        stores=registry.stores,
+        replicators=registry.replicators,
+    )
+    with pytest.raises(EngineError, match="served as 1:1"):
+        fetch(spec, elsewhere)
+    with pytest.raises(EngineError, match="served as 1:1"):
+        replicate(spec, elsewhere, Options())

@@ -35,10 +35,10 @@ from datadouble.engine import (
 )
 from datadouble.names import ColumnName, ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup
-from datadouble.runtime import Completed, Container, Server
+from datadouble.runtime import Completed, Container, Server, identity
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Condition, Edge, EdgeMode, KeyTuple
-from fakes import FakeSource, evaluate_predicate
+from fakes import FakeSource, evaluate_predicate, shop
 
 type Rows = dict[str, list[dict[str, Hashable]]]
 
@@ -282,10 +282,15 @@ class FakeEngine:
     hooks: list[str] = field(default_factory=list[str])
     snapshots: int = 0
     transforms: int = 0
+    owner_: str = field(default_factory=identity)
 
     @property
     def name(self) -> EngineName:
         return EngineName("fake")
+
+    @property
+    def owner(self) -> str:
+        return self.owner_
 
     def capabilities(self) -> Capabilities:
         return self.capabilities_
@@ -315,3 +320,12 @@ class FakeEngine:
 
 def check_protocols(engine: FakeEngine) -> EngineAdapter:
     return engine
+
+
+def fake_engine() -> FakeEngine:
+    """An engine whose copies are served as whoever runs the tests."""
+    return FakeEngine(catalog=shop(), source=FakeSource(rows={}))
+
+
+ENGINES = {"fake": fake_engine}
+"""The engine the non-production specs name, for its owner."""

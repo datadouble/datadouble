@@ -19,7 +19,8 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 | `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, and `scripts/check_workflows.py` (every job sets `timeout-minutes`) | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
-| `make test-integration` | The whole suite, integration and conformance tests included, in the default Compose group, with the 100% gate on every package | Containers |
+| `make test-integration` | The whole suite, integration and conformance tests included: every integration group in turn, then their combined coverage with the 100% gate on every package | Containers |
+| `make test-group GROUP=<name>` | One integration group, as its CI job runs it (`DOCKER=host` uses the host's Docker daemon) | Containers |
 | `make test-k8s`, `make test-btrfs` | The Kubernetes and btrfs adapters against k3s and a real btrfs filesystem (privileged) | Containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 
@@ -34,7 +35,9 @@ checkers prove unreachable), `if TYPE_CHECKING:` blocks and `__main__` guards.
 
 **Integration tests** are marked `@pytest.mark.integration` and run inside the
 Docker Compose services, which they reach through environment variables (for
-example `DATADOUBLE_TEST_POSTGRES_DSN`). `make test` deselects them.
+example `DATADOUBLE_TEST_POSTGRES_DSN`). `make test` deselects them. They run
+in groups; [How our CI works](docs/how-our-ci-works.md) explains them for
+newcomers.
 
 **Conformance suites** under `conformance/` must pass for every engine adapter
 (see below), and for CI/CD and agent skill adapters as they arrive.
@@ -57,49 +60,69 @@ in `.github/workflows/ci.yml` and to this table, then add its
 `Unit tests (Python 3.x)` check to the required checks on `main`. Moving the
 container images to it is a separate decision; Dependabot does not propose it.
 
-## Docker Compose groups
+## Integration groups and Compose services
 
-Plain `docker compose up` starts the default group. Other groups are profiles
-that milestones add and that combine freely, for example
-`docker compose --profile mysql up`.
+The integration suite runs in groups, listed in `tests/integration-groups.txt`
+with each group's user, Compose services and test paths;
+`tests/scripts/test_integration_groups.py` checks that every test path belongs
+to exactly one. `make test-group GROUP=<name>` starts only that group's
+services, waits for them to be healthy, and runs its tests; `make
+test-integration` runs every group in turn and combines their coverage. Each
+group is its own CI job.
 
-| Group | Services | Since |
-|---|---|---|
-| default | Test runner (Python, cosign, kubectl, the Docker CLI); PostgreSQL 18 with Pagila (`dev/postgres`); MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`); MySQL 8.4 with Sakila (`dev/mysql`), loaded from the shared Sakila fixture (`dev/sakila`, through the `fixtures` service); SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`), loaded from the same fixture; Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`, run once by the `jailer` service); S3 (SeaweedFS); Docker-in-Docker; OpenBao | M0; Pagila and S3 in M1; Docker and OpenBao in M2; MongoDB in M3; MySQL and SQL Server in M4 |
-| `k8s` (`make test-k8s`) | k3s, and a test runner reading its kubeconfig, sharing a work volume that pods reach through a `hostPath` PersistentVolume | M2; the Kubernetes runtime in M4 |
-| `btrfs` (`make test-btrfs`) | A privileged test runner with a loop-mounted btrfs filesystem | M2 |
+| Group | Tests | Services | User |
+|---|---|---|---|
+| `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao | 999:999 |
+| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 |
+| `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 |
+| `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 |
+| `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 |
 
-The full list of planned groups is in the [v1 plan](docs/v1-plan.md#test-environment).
-
-The `k8s` and `btrfs` groups need privileged containers, so they are opt-in and
-run in their own CI job. Their tests are marked `k8s` and `btrfs`; elsewhere
-they skip, and stand-in `kubectl` and `btrfs` scripts give the unit tests full
-coverage of the adapters. The Docker adapter's containers go to the
-Docker-in-Docker daemon, never to the host's.
+Sakila's rows come from the shared fixture (`dev/sakila`, through the
+`fixtures` service). Two more Compose groups are profiles that need
+privileged containers, opt-in and run in their own CI jobs: `k8s` (`make
+test-k8s`: k3s, and a test runner reading its kubeconfig, sharing a work volume
+that pods reach through a `hostPath` PersistentVolume) and `btrfs` (`make
+test-btrfs`: a privileged test runner with a loop-mounted btrfs filesystem).
+Their tests are marked `k8s` and `btrfs`; elsewhere they skip, and stand-in
+`kubectl` and `btrfs` scripts give the unit tests full coverage of the
+adapters.
 
 The test runner holds no engine software. Working databases, restores and
-engine tools run in the vendors' images on the Docker-in-Docker daemon, as the
-`docker` container runtime runs them in production (`DATADOUBLE_TEST_RUNTIME`
-gives the runtime settings). The runner and the daemon share the `work` volume
-at `/work`, where temporary files live (`TMPDIR`), because containers mount
-work directories at the same path. Compose service names do not resolve in
-those containers, so the PostgreSQL tests connect to the source by address.
-The suite runs as an unprivileged user, as Datadouble should, and containers
-run as that user too.
-That user is uid and gid 10001, because SQL Server in Microsoft's image runs
-only as 10001:10001 and the SQL Server adapter needs Datadouble to match
-(decision 83); its working-database tests therefore run only in Compose, while
-its plan and extract code also runs against a SQL Server on the host.
+engine tools run in the vendors' images, as the `docker` container runtime
+runs them in production (`DATADOUBLE_TEST_RUNTIME` gives the runtime
+settings), on one of two daemons:
 
-GitHub's Ubuntu runners ship MySQL with an AppArmor profile for
-`/usr/sbin/mysqld`. Containers that Docker-in-Docker starts run without a
-profile of their own (it cannot apply one), so the host's profile attaches to
-their `mysqld` by path and refuses to let it write working databases under
-`/work`. The integration and SonarQube Cloud jobs therefore unload that
-profile first (`apparmor_parser --remove`): the runner is throwaway and its
-MySQL is never started. Remove those steps if the runner image stops shipping
-the profile, or if the suite moves off Docker-in-Docker. Anyone running the
-suite on a host with the same profile has to unload it too.
+- **Docker-in-Docker** (the default, on developers' machines): the `docker`
+  service, isolated from the host's own containers. The runner and the daemon
+  share the `work` volume at `/work`, where temporary files live (`TMPDIR`),
+  because containers mount work directories at the same path. Compose service
+  names do not resolve in those containers, so the tests connect to sources by
+  address.
+- **The host's daemon** (`DOCKER=host`, in CI): `compose.host.yaml` mounts the
+  Docker socket, mounts a host directory (`HOST_WORK`, by default
+  `/tmp/datadouble-work`) at the same path for temporary files, joins engine
+  containers to the Compose network, and reaches them through their published
+  ports on the host. One daemon means one copy of each engine image.
+
+The tests run as unprivileged users, as Datadouble should, and containers run
+as the same user as the tests that start them. Datadouble runs as the user an
+engine's copies are served as (decision 86), so `scripts/integration.sh`
+starts as root only to run each group as its user, with the Docker socket's
+group when the tests drive the host's daemon. Each group writes its own
+coverage data, and the combined report must reach 100%. Working-database tests
+for SQL Server therefore run only in Compose; its plan and extract code also
+runs against a server on the host.
+
+GitHub's Ubuntu runners, like other Ubuntu hosts with MySQL installed, ship an
+AppArmor profile for `/usr/sbin/mysqld`. Containers that Docker-in-Docker
+starts run without a profile of their own (it cannot apply one), so the host's
+profile attaches to their `mysqld` by path and refuses to let it write working
+databases under `/work`. Containers on the host's own daemon run under
+Docker's default profile, which the host's does not override, so CI is
+unaffected; anyone running the suite with Docker-in-Docker on a host with that
+profile has to unload it (`sudo apparmor_parser --remove
+/etc/apparmor.d/usr.sbin.mysqld`).
 
 Pagila is fetched when `dev/postgres` is built, at a pinned commit and checked
 against its SHA-256. It uses pgvector, so `dev/postgres` is built on the pinned
@@ -156,10 +179,11 @@ anonymized values.
 | CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test`, on Python 3.13 |
 | CI | Unit tests (Python 3.x) | `make test` on each later supported version |
 | CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs` |
-| CI | Integration tests (Docker Compose) | `make test-integration`, then uploads coverage to Codecov |
+| CI | Integration (group) | One job per integration group, in parallel: `make test-group GROUP=<name> DOCKER=host`, with the test image's layers from GitHub's build cache (`compose.cache.yaml`); keeps the group's coverage data as an artifact |
+| CI | Integration coverage | Checks every group passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
+| CI | sonar | `scripts/check_coverage.py` on the combined report (every analysed file named exactly once), then the scan, which waits for the quality gate and fails the job if it fails |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |
-| SonarQube Cloud | sonar | `make test-integration` for coverage, `scripts/check_coverage.py` to check the report names every analysed file exactly once, then the scan, which waits for the quality gate and fails the job if it fails |
 | CodeQL, Dependency Review, Snyk Security, Scorecard | | Static analysis and dependency scanning |
 
 Every job runs on a hardened runner that blocks outbound traffic except to the

@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, JsonValue, TypeAdapter
 
+from datadouble.engine import check_owner
 from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
 from datadouble.names import Generation, GroupName
@@ -195,6 +196,7 @@ class Replication:
         if spec.fetch is None or spec.replicate is None:
             message = "the spec needs `fetch` and `replicate` sections to make copies"
             raise ReplicateError(message)
+        check_owner(registry.engine(spec.source.engine))
         self.spec = spec
         self.settings: Replicate = spec.replicate
         self.staging = Staging(spec.fetch)

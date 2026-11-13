@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from datadouble.catalog import Catalog
 from datadouble.names import ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup, PlannedRule
-from datadouble.runtime import ContainerRuntime
+from datadouble.runtime import ContainerRuntime, identity
 from datadouble.spec import Hook, ImageFormat, TransformHook
 from datadouble.subset import Condition, Edge, KeyReader
 
@@ -204,12 +204,34 @@ class ServerPlan(_Model):
     user: str
 
 
+def check_owner(engine: "EngineAdapter") -> None:
+    """Fail unless Datadouble runs as the user the engine's copies are served as."""
+    if identity() != engine.owner:
+        message = (
+            f"{engine.name} images are served as {engine.owner}, so their files must belong to"
+            f" that user and group; Datadouble runs as {identity()}. Run it as {engine.owner}"
+            f" (for example `docker run --user {engine.owner}` or a pod's runAsUser and"
+            " runAsGroup)"
+        )
+        raise EngineError(message)
+
+
 class EngineAdapter(Protocol):
     """An engine: its capabilities, the source side and the scratch side."""
 
     @property
     def name(self) -> EngineName:
         """The name specs use for this engine."""
+        ...
+
+    @property
+    def owner(self) -> str:
+        """The ``uid:gid`` a copy of its images is served as, in its vendor's image.
+
+        Datadouble runs as this user to build, fetch and replicate the engine's
+        images, so their files already belong to the server that will open
+        them (decision 86).
+        """
         ...
 
     def capabilities(self) -> Capabilities:

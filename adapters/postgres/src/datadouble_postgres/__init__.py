@@ -57,6 +57,11 @@ class PostgresEngine:
         """``postgres``."""
         return ENGINE
 
+    @property
+    def owner(self) -> str:
+        """``999:999``, the user the official PostgreSQL image serves as."""
+        return "999:999"
+
     def capabilities(self) -> Capabilities:
         """Both image formats, SQL expressions and the nested strategy."""
         return Capabilities(
@@ -105,7 +110,7 @@ class PostgresEngine:
         return ServerPlan(
             image=server_image or default_image(info.server_version),
             mount=MOUNT,
-            owner="999:999",
+            owner=self.owner,
             command=("sh", "-c", start),
             ready=("pg_isready", "--host=127.0.0.1", f"--dbname={info.database}"),
             port=5432,

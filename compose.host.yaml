@@ -1,0 +1,26 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# Point the tests at the host's own Docker daemon instead of the
+# Docker-in-Docker one: `make test-integration DOCKER=host`, as CI does.
+#
+# CI's runners are throwaway, so the isolation Docker-in-Docker gives a
+# developer's machine buys nothing there, and one daemon means one copy of
+# each engine's image. Engine containers bind-mount work directories at the
+# same path on the daemon's host, so the work directory is a host directory
+# mounted at the same path here. Engine containers join the Compose network,
+# so they can reach the source databases, and the tests reach them through
+# their published ports on the host.
+
+services:
+  test:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}:${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DATADOUBLE_TEST_DOCKER_ADDRESS: host.docker.internal
+      DATADOUBLE_TEST_RUNTIME: '{"docker": {"publish": "0.0.0.0", "address": "host.docker.internal", "network": "${COMPOSE_PROJECT_NAME:-datadouble}_default"}}'
+      TMPDIR: ${DATADOUBLE_HOST_WORK:-/tmp/datadouble-work}
+    extra_hosts:
+      - host.docker.internal:host-gateway

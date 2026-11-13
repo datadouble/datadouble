@@ -52,10 +52,12 @@ FROM tools AS test
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends btrfs-progs git \
     && rm -rf /var/lib/apt/lists/*
-# The suite runs as an ordinary user, as Datadouble should. /work is where the
-# Compose file mounts the volume shared with the Docker-in-Docker daemon.
+# The suite is built as an ordinary user. /work is where the Compose file
+# mounts the volume shared with the Docker-in-Docker daemon; every test user
+# writes there, and Docker fills a new volume from this directory.
 RUN useradd --uid 10001 --user-group --create-home --shell /usr/sbin/nologin tester \
-    && install --directory --owner tester --group tester /src /reports /work
+    && install --directory --owner tester --group tester /src /reports \
+    && install --directory --mode 1777 /work
 USER tester
 COPY --chown=tester:tester pyproject.toml uv.lock ./
 COPY --chown=tester:tester core/pyproject.toml core/README.md core/LICENSE core/
@@ -73,7 +75,12 @@ COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conf
 RUN uv sync --no-install-workspace
 COPY --chown=tester:tester . .
 RUN uv sync
-CMD ["uv", "run", "pytest", "--cov", "--cov-report=term-missing", "--cov-report=xml:/reports/coverage.xml"]
+# The suite runs each group as the user its engine's copies are served as
+# (decision 86), so the container starts as root to switch to each, and git
+# must accept a checkout another user owns. `make` names the groups to run.
+USER root
+RUN git config --system --add safe.directory '*'
+CMD ["/src/scripts/integration.sh"]
 
 FROM tools AS runtime
 LABEL org.opencontainers.image.source=https://github.com/datadouble/datadouble \

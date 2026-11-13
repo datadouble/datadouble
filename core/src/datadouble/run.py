@@ -42,6 +42,7 @@ from datadouble.engine import (
     Tooling,
     Transformation,
     WorkingDatabases,
+    check_owner,
 )
 from datadouble.images import (
     ImageArchive,
@@ -608,6 +609,7 @@ class Run:
             planned = self.plan()
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
+                check_owner(self.engine)
                 extracted = self.extract(planned)
                 working = self.engine.working(
                     self.root / "scratch", self.tooling(), extracted.server_version
