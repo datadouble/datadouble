@@ -14,9 +14,9 @@ has the reference details: every `make` target and every testing rule.
 - The slow part is the **integration tests**, which run real databases in
   containers. They are split into **groups**, one job per group, running in
   parallel.
-- A final job, **Integration tests (Docker Compose)**, checks that every group
-  passed and that, together, they test 100% of the code. The **sonar** job
-  then sends that same coverage to SonarQube Cloud; it does not run the tests
+- A final job, **Integration coverage**, checks that every group passed
+  and that, together, they test 100% of the code. The **sonar** job then
+  sends that same coverage to SonarQube Cloud; it does not run the tests
   again.
 - You can merge only when every required check is green, including Sonar's
   quality gate.
@@ -79,7 +79,7 @@ switch to each group's user before running its tests.
 
 Every line of code must be run by some test (the 100% gate). Each group's job
 records which lines its tests ran and keeps that record as a job artifact. The
-**Integration tests (Docker Compose)** job then:
+**Integration coverage** job then:
 
 1. collects every group's record,
 2. combines them (a line run by any group counts),
@@ -115,9 +115,8 @@ them.
 - **Integration (group) failed:** open that job's log. pytest's summary at the
   end names the failing tests. The lines **Disk before** and **Disk after**
   show the runner's free disk space, in case a group ran out.
-- **Integration tests (Docker Compose) failed but every group passed:**
-  coverage is under 100%. The log lists each file and the line numbers no test
-  ran.
+- **Integration coverage failed but every group passed:** coverage is
+  under 100%. The log lists each file and the line numbers no test ran.
 - **sonar failed:** SonarQube Cloud's quality gate failed. The job log links to
   the analysis, which says which condition (coverage on new code, a new bug, a
   security hotspot) needs attention.

@@ -180,7 +180,7 @@ anonymized values.
 | CI | Unit tests (Python 3.x) | `make test` on each later supported version |
 | CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs` |
 | CI | Integration (group) | One job per integration group, in parallel: `make test-group GROUP=<name> DOCKER=host`, with the test image's layers from GitHub's build cache (`compose.cache.yaml`); keeps the group's coverage data as an artifact |
-| CI | Integration tests (Docker Compose) | Checks every group passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
+| CI | Integration coverage | Checks every group passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
 | CI | sonar | `scripts/check_coverage.py` on the combined report (every analysed file named exactly once), then the scan, which waits for the quality gate and fails the job if it fails |
 | CI | Documentation site | `make docs` |
 | PR Images | Build, sign and attest PR image | Builds the runtime image, pushes it to GHCR, signs it with cosign and attests its SBOM and provenance |

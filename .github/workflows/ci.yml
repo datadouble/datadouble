@@ -200,7 +200,7 @@ jobs:
   integration:
     # The required check: every group passed, and their combined coverage
     # reaches 100%. The combined report goes to Codecov and to the sonar job.
-    name: Integration tests (Docker Compose)
+    name: Integration coverage
     needs: integration-group
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
