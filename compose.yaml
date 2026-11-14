@@ -23,6 +23,7 @@ services:
       DATADOUBLE_TEST_MSSQL_URL: mssql://datadouble:Datadouble-1@mssql:1433/sakila
       DATADOUBLE_TEST_ORACLE_URL: oracle://datadouble:Datadouble-1@oracle:1521/FREEPDB1
       DATADOUBLE_TEST_REDIS_URL: redis://redis:6379
+      DATADOUBLE_TEST_ELASTICSEARCH_URL: http://elastic:Datadouble-1@elasticsearch:9200
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -200,6 +201,26 @@ services:
       interval: 2s
       timeout: 5s
       retries: 60
+
+  # Elasticsearch 9.5 as a single node with generated indices derived from
+  # Pagila (dev/elasticsearch), seeded on its first start.
+  elasticsearch:
+    build:
+      context: dev/elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      node.store.allow_mmap: "false"
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      xpack.ml.enabled: "false"
+      ingest.geoip.downloader.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 120
 
   # Opt-in groups. Both need privileged containers.
 

@@ -107,6 +107,10 @@ Every read in a run sees the same point in time.
   time), which needs a replica set or sharded cluster. Collection and index
   listings are not allowed inside it, so they run first and the catalog
   fingerprint is checked again inside the session.
+- **Elasticsearch:** a point in time opened over every index the source's
+  patterns match; every search pages through it, so the extract sees the
+  indices as they were when it opened. Mappings are read outside it, and the
+  catalog fingerprint is checked again once it is open.
 - **Redis and Salesforce** have no transactional snapshot. Their adapters document
   the consistency they can offer.
 
@@ -138,6 +142,15 @@ strategy B.
   Columns are field paths found by sampling documents (`sample`, default 1000)
   and from any `$jsonSchema` validator, so strict mode still notices new
   fields.
+- **Elasticsearch:** each index is a table keyed by `_id`, with the field paths
+  its mapping declares as columns (`address.city`, `actors.actor_id` inside
+  nested documents). References are virtual foreign keys to `_id` or to
+  another field, and must be `keyword`, numeric or `_id` fields, which
+  queries match exactly. Seeds and `when` clauses are Query DSL objects, with
+  `":as_of"` for the plan's anchor time. Elasticsearch cannot evaluate another
+  index's selection inside a query, so only strategy B is available. Indices
+  whose mappings let documents hold undeclared fields are sampled as for
+  MongoDB, and the extract fails on any field the catalog does not list.
 - **Salesforce:** objects and lookup/master-detail relationships form a natural
   graph; filters are SOQL.
 - **Redis:** each key pattern is a table. ID-like segments of a key (numbers,

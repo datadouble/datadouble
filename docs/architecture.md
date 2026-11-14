@@ -223,7 +223,9 @@ runtime:
   removed before an image is packaged (decision 74).
 - **Leftovers.** Containers are labelled with the stage directory they serve;
   before a stage runs again the core removes what an interrupted attempt left
-  behind (decision 75).
+  behind (decision 75), and a resumed run removes any left under its
+  generation when it ends, since a killed attempt's last container can start
+  after its stage was cleared.
 
 ## Interfaces
 
