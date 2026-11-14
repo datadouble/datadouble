@@ -245,7 +245,7 @@ def test_fallbacks_rules_and_assertions(source: Scratch, tmp_path: Path) -> None
 def test_restored_checks(source: Scratch) -> None:
     restored = ElasticRestored(source.client)
     assert restored.failing_rows('{"index": "child", "query": {"match_all": {}}}') == 3
-    with pytest.raises(EngineError, match="an Elasticsearch assertion is"):
+    with pytest.raises(EngineError, match="an assertion is"):
         restored.failing_rows('{"query": {}}')
     with pytest.raises(EngineError, match=r"running an assertion failed: \w+ \(HTTP 400\)"):
         restored.failing_rows('{"index": "child", "query": {"bogus": {}}}')
