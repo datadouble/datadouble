@@ -78,7 +78,12 @@ def text(value: object) -> str:
 
 
 def _error_type(body: object) -> str:
-    error = as_document((as_document(body) or {}).get("error"))
+    """The type of a reply's error, or of the cause of its first failure."""
+    reply = as_document(body) or {}
+    failures = as_list(reply.get("failures")) or [{}]
+    error = as_document(reply.get("error")) or as_document(
+        (as_document(failures[0]) or {}).get("cause")
+    )
     kind = error.get("type") if error else None
     return kind if isinstance(kind, str) else "error"
 

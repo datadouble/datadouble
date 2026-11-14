@@ -175,8 +175,8 @@ def apply_fixup(client: Client, fixup: Fixup) -> None:
             _with_source(hit, rewrite(hit.get("_source"), child.split("."), lambda _: None))
             for hit in orphaned
         )
-        put(client, edge.child.name, lines, action)
-        refresh(client, [edge.child.name])
+        if put(client, edge.child.name, lines, action):
+            refresh(client, [edge.child.name])
     else:
         missing = sorted({found for hit in orphaned for found in held(hit, child)} - present)
         stubs: list[Document] = [
@@ -185,8 +185,8 @@ def apply_fixup(client: Client, fixup: Fixup) -> None:
             else {"_id": f"stub-{value}", "_source": {parent: value}}
             for value in missing
         ]
-        put(client, edge.parent.name, stubs, action)
-        refresh(client, [edge.parent.name])
+        if put(client, edge.parent.name, stubs, action):
+            refresh(client, [edge.parent.name])
 
 
 def _typed(original: object, replacement: str) -> object:
@@ -241,7 +241,10 @@ def anonymize(
             (
                 rule.column.column.split("."),
                 changer(
-                    rule, transformation.mapper(rule, sorted(originals.get(rule.column.column, ())))
+                    rule,
+                    {}
+                    if isinstance(rule.rule, NullRule)
+                    else transformation.mapper(rule, sorted(originals[rule.column.column])),
                 ),
             )
             for rule in plain
@@ -255,8 +258,9 @@ def anonymize(
                 if source != hit.get("_source"):
                     yield _with_source(hit, source)
 
-        if changers:
-            put(client, index, rewritten(), f"anonymizing {index}")
+        if changers and put(client, index, rewritten(), f"anonymizing {index}"):
+            # _update_by_query fails on documents changed since the last refresh.
+            refresh(client, [index])
     for rule in rules:
         if isinstance(rule.rule, ExpressionRule):
             _expression(client, index, rule, rule.rule)

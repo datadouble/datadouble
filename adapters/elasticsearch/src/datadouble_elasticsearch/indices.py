@@ -101,15 +101,18 @@ def operations(index: str, line: Document) -> list[dict[str, JsonValue]]:
     return [{"index": action}, _JSON.validate_python(as_document(line.get("_source")) or {})]
 
 
-def put(client: Client, index: str, lines: Iterable[Document], action: str) -> None:
-    """Index dump lines into ``index`` in batches."""
+def put(client: Client, index: str, lines: Iterable[Document], action: str) -> int:
+    """Index dump lines into ``index`` in batches; returns how many."""
     batch: list[dict[str, JsonValue]] = []
+    count = 0
     for line in lines:
         batch.extend(operations(index, line))
+        count += 1
         if len(batch) >= 2 * _BATCH:
             client.bulk(batch, action)
             batch = []
     client.bulk(batch, action)
+    return count
 
 
 def refresh(client: Client, indices: Iterable[str]) -> None:

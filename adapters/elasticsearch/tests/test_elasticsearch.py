@@ -183,14 +183,14 @@ def build(
     *,
     stages: tuple[Stage, ...] = tuple(Stage),
     resume: Generation | None = None,
+    sample: int = 1000,
 ) -> RunResult:
+    connection = {**source.connection, "sample": sample}
     parsed = parse_spec(
-        SPEC.replace("CONNECTION", json.dumps(dict(source.connection))).replace(
-            "STORE", str(tmp_path / "store")
-        )
+        SPEC.replace("CONNECTION", json.dumps(connection)).replace("STORE", str(tmp_path / "store"))
         + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
     )
-    with ElasticEngine().connect(source.connection) as session:
+    with ElasticEngine().connect(connection) as session:
         lock = CatalogLock.of(session.catalog())
     options = RunOptions(stages=stages, work=tmp_path / "work", resume=resume, plan=PlanOptions())
     return Run(parsed, lock, registry(), options).execute()
@@ -351,19 +351,19 @@ def test_schema_changes_after_planning(source: Scratch, tmp_path: Path) -> None:
 
 def test_unlisted_fields_fail_extract(source: Scratch, tmp_path: Path) -> None:
     source.client.request("PUT", path("other", "_mapping"), "closing", body={"dynamic": False})
-    planned = build(source, tmp_path, stages=(Stage.PLAN,))
-    # A field the sample did not see, in a document the extract copies.
+    planned = build(source, tmp_path, stages=(Stage.PLAN,), sample=1)
+    # A field the one-document sample did not see, in a document the extract copies.
     source.client.request(
         "PUT",
-        path("other", "_doc", "1"),
+        path("other", "_doc", "2"),
         "indexing",
-        body={"kind": "x", "code": "2", "secret": {"pin": "1234"}},
+        body={"kind": "y", "secret": {"pin": "1234"}},
         params={"refresh": True},
     )
     plan = Plan.model_validate_json((Path(planned.work) / "plan" / "plan.json").read_bytes())
     selections = dict.fromkeys(plan.extracted(), AllRows())
     with (
-        ElasticEngine().connect(source.connection) as session,
+        ElasticEngine().connect({**source.connection, "sample": 1}) as session,
         session.snapshot(plan.as_of) as snapshot,
         pytest.raises(EngineError, match=r"holds the field secret\.pin, which the catalog"),
     ):
