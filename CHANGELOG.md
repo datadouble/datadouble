@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The production boundary mark.** Reading a source and `promote` run only
+  where `DATADOUBLE_BOUNDARY=inside` is set, so a runner must be marked as
+  inside the production boundary before it can read production data.
 - **Files:** a spec's `files` section copies the file tree its rows refer to,
   as a second image beside the database's, through the `files` engine adapter
   (`datadouble-files`). Each top-level directory is selected with `find`
