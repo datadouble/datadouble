@@ -25,7 +25,8 @@ from datadouble_elasticsearch.client import Client, document, items, path
 from datadouble_elasticsearch.server import LOGIN_ENV, PORT, Tools, ready_command
 from datadouble_elasticsearch.working import ElasticWorking, serve_command
 from datadouble_opensearch import OPENSEARCH, engine
-from test_opensearch_conformance import URL, scratch
+from test_elasticsearch_conformance import scratch
+from test_opensearch_conformance import URL
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +43,7 @@ def test_served_copies(tmp_path: Path) -> None:
         spec = parse_spec(
             "name: items\n"
             f"source: {{engine: opensearch, connection: {json.dumps(dict(source.connection))}}}\n"
-            "subset: {seeds: {items: '{\"range\": {\"id\": {\"lte\": 2}}}'}}\n"
+            'subset: {seeds: {items: \'{"range": {"id": {"lte": 2}}}\'}}\n'
             f"runtime: {json.dumps(runtime_for_tests())}\n"
         )
         with engine().connect(source.connection) as session:
@@ -69,19 +70,19 @@ def test_served_copies(tmp_path: Path) -> None:
     copy = tmp_path / "copy"
     shutil.copytree(image, copy)
     command, marker = serve_command(OPENSEARCH, str(copy), "512m")
-    password = "0123456789abcdef0123456789abcdef"
+    login = "0123456789abcdef0123456789abcdef"
     container = Container(
         image=OPENSEARCH.image(VERSION),
         command=("sh", "-c", command),
         owner=copy,
         mounts=(copy,),
-        secrets={LOGIN_ENV: password},
+        secrets={LOGIN_ENV: login},
         port=PORT,
         ready=ready_command(OPENSEARCH, marker),
     )
     for _start in range(2):
         with runtime.serve(container) as server:
-            client = Client.at(server.endpoint.host, server.endpoint.port, password, OPENSEARCH)
+            client = Client.at(server.endpoint.host, server.endpoint.port, login, OPENSEARCH)
             reply = client.request("POST", path("items", "_search"), "reading", body={})
             hits = items(document(reply.get("hits"), "hits").get("hits"), "hits")
             assert sorted(str(document(hit, "a hit").get("_id")) for hit in hits) == ["1", "2"]
