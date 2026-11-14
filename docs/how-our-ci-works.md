@@ -60,6 +60,7 @@ test directory belongs to exactly one.
 | `redis` | The Redis adapter | Redis | 999:999 | 1 |
 | `elasticsearch` | The Elasticsearch adapter | Elasticsearch | 1000:0 | 2 |
 | `opensearch` | The OpenSearch adapter | OpenSearch | 1000:1000 | 2 |
+| `files` | The files adapter, beside PostgreSQL | PostgreSQL | 999:999 | 1 |
 | `mysql` | The MySQL adapter, and the Jailer comparison | MySQL, Jailer's export | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server | 10001:10001 | 2 |
 | `oracle` | The Oracle adapter | Oracle | 54321:54321 | 6 |

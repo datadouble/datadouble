@@ -6,7 +6,7 @@ import datetime as dt
 import pytest
 
 from datadouble.catalog import Catalog, CatalogLock
-from datadouble.names import GroupName, TableName
+from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import Capabilities, Plan, PlanError, PlanOptions, plan
 from datadouble.spec import ImageFormat, Strategy, StrictLevel, parse_spec
 from datadouble.subset import EdgeMode
@@ -429,6 +429,76 @@ def test_engines_without_hooks() -> None:
     reasons = problems("hooks: {before_load: [{sql: x}]}", capabilities=caps)
     assert reasons == ("the fake adapter does not run hooks",)
     assert planned(capabilities=caps).spec == "shop"
+
+
+def test_complete_engines_need_every_table_selected_or_excluded() -> None:
+    caps = CAPABILITIES.model_copy(update={"complete": True})
+    tree = catalog(table("avatars", ["path"], key=("path",)), table("tmp", ["path"], key=("path",)))
+    with pytest.raises(PlanError) as caught:
+        plan(
+            parse_spec(HEADER + "strict: off\nsubset: {seeds: {avatars: '-type f'}}"),
+            tree,
+            None,
+            caps,
+            PlanOptions(now=NOW),
+        )
+    assert caught.value.problems == ("public.tmp is neither selected nor excluded",)
+    chosen = plan(
+        parse_spec(HEADER + "strict: off\nexclude: [tmp]\nsubset: {seeds: {avatars: '-type f'}}"),
+        tree,
+        None,
+        caps,
+        PlanOptions(now=NOW),
+    )
+    assert chosen.extracted() == (TableName.of("public", "avatars"),)
+
+
+def test_paths_from_names_a_kept_column() -> None:
+    files = "files: {paths_from: users.note}\n"
+    found = planned(files).paths_from
+    assert found is not None
+    assert (found.table, found.columns, found.template) == (
+        TableName.of("public", "users"),
+        (ColumnName("note"),),
+        "{note}",
+    )
+    assert problems(files + 'exclude: ["users", "posts", "comments"]\n') == (
+        "files.paths_from names public.users, which is excluded",
+    )
+
+
+def test_paths_from_templates_and_patterns() -> None:
+    template = (
+        "files: {paths_from: {table: users, path: 'u/{ID}/{name}.{id}', match: '^u/(.+)$'}}\n"
+    )
+    found = planned(template).paths_from
+    assert found is not None
+    assert found.columns == (ColumnName("id"), ColumnName("name"))
+    assert found.template == "u/{id}/{name}.{id}"
+    assert found.path((7, "Ann")) == "7/Ann.7"
+    assert found.path((7, None)) is None
+    unmatched = found.model_copy(update={"match": "^x/(.+)$"})
+    assert unmatched.path((7, "Ann")) is None
+    assert found.model_copy(update={"match": None}).path((7, "Ann")) == "u/7/Ann.7"
+
+    def wrong(paths_from: str) -> tuple[str, ...]:
+        return problems(f"files: {{paths_from: {paths_from}}}\n")
+
+    assert wrong("{table: users, path: plain}") == (
+        "files.paths_from.path names no column, as {column}",
+    )
+    assert wrong("{table: users, path: '{nope}'}") == (
+        "column 'nope' is not in table public.users",
+        "files.paths_from.path names no column, as {column}",
+    )
+    assert wrong("{table: users, path: '{id}', match: '('}")[0].startswith(
+        "files.paths_from.match is not a regular expression"
+    )
+    assert wrong("{table: users, path: '{id}', match: 'x'}") == (
+        "files.paths_from.match needs a group for the path",
+    )
+    assert wrong("{table: nope, path: '{id}'}") == ("table 'nope' is not in the catalog",)
+    assert wrong("users.nope") == ("column 'nope' is not in table public.users",)
 
 
 def test_plan_error_message() -> None:

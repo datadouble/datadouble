@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Files:** a spec's `files` section copies the file tree its rows refer to,
+  as a second image beside the database's, through the `files` engine adapter
+  (`datadouble-files`). Each top-level directory is selected with `find`
+  tests or excluded, the files the chosen rows name are copied too
+  (`paths_from`, a template over a table's columns with an optional pattern
+  for URLs), `cleanup` commands run on the copy, and the PII scan reads
+  every file's text.
 - **OpenSearch:** an engine adapter (`datadouble-opensearch`) for OpenSearch
   2.4 or later, sharing the Elasticsearch adapter's code: the same tables,
   subsets, images and rules, with OpenSearch's image, security plugin and

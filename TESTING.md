@@ -96,6 +96,7 @@ the shards less even, never skip or repeat a test.
 | `redis` | The Redis adapter | Redis 8.10 with a generated keyspace of every data type (`dev/redis`), seeded at every start | 999:999 | 1 |
 | `elasticsearch` | The Elasticsearch adapter | Elasticsearch 9.5 as a single node with generated indices derived from Pagila (`dev/elasticsearch`), seeded on its first start | 1000:0 | 2 |
 | `opensearch` | The OpenSearch adapter | OpenSearch 3.9 as a single node with the Elasticsearch fixture's indices (`dev/opensearch`), seeded on its first start | 1000:1000 | 2 |
+| `files` | The files adapter, beside a PostgreSQL source | PostgreSQL; trees are generated per test | 999:999 | 1 |
 | `mysql` | The MySQL adapter and the Jailer comparison | MySQL 8.4 with Sakila (`dev/mysql`), Jailer's export of `dev/jailer/sakila.jm` (`dev/jailer`) | 999:999 | 2 |
 | `mssql` | The SQL Server adapter | SQL Server 2022 (Developer edition) with Sakila (`dev/mssql`) | 10001:10001 | 2 |
 | `oracle` | The Oracle adapter | Oracle Database Free 23.26 with Sakila (`dev/oracle`), loaded through external tables | 54321:54321 | 6 |

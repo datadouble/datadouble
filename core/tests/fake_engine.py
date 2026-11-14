@@ -70,6 +70,9 @@ def _statement(text: str) -> tuple[str, str, str]:
     return verb, table, predicate
 
 
+_FAKE = EngineName("fake")
+
+
 @dataclass
 class FakeRuntime:
     """A container runtime for engines that never start containers."""
@@ -283,10 +286,11 @@ class FakeEngine:
     snapshots: int = 0
     transforms: int = 0
     owner_: str = field(default_factory=identity)
+    name_: EngineName = _FAKE
 
     @property
     def name(self) -> EngineName:
-        return EngineName("fake")
+        return self.name_
 
     @property
     def owner(self) -> str:
