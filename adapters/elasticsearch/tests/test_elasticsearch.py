@@ -37,6 +37,7 @@ from datadouble_conformance.engine import runtime_for_tests
 from datadouble_elasticsearch import ElasticEngine
 from datadouble_elasticsearch.client import Client, Document, document, items, path
 from datadouble_elasticsearch.documents import Dump
+from datadouble_elasticsearch.indices import put, refresh
 from datadouble_elasticsearch.server import (
     LOGIN_ENV,
     PORT,
@@ -306,7 +307,15 @@ def test_source_failures(source: Scratch, monkeypatch: pytest.MonkeyPatch, tmp_p
     with pytest.raises(
         EngineError, match=r"seeding failed: document_parsing_exception \(HTTP 400\)"
     ):
-        source.client.bulk([{"index": {"_index": "child"}}, {"n": "alice@example.com"}], "seeding")
+        source.client.bulk(
+            [
+                {"index": {"_index": "child"}},
+                {"n": 4},
+                {"index": {"_index": "child"}},
+                {"n": "alice@example.com"},
+            ],
+            "seeding",
+        )
     # Unreadable sources: data streams, indices without _source, OpenSearch.
     source.client.request(
         "PUT",
@@ -338,6 +347,13 @@ def test_source_failures(source: Scratch, monkeypatch: pytest.MonkeyPatch, tmp_p
     with pytest.raises(EngineError, match="did not report its version"):
         server_version(source.client)
     assert tmp_path.exists()
+
+
+def test_large_indices_load_in_batches(source: Scratch) -> None:
+    lines: list[Document] = [{"_id": str(n), "_source": {"n": n}} for n in range(1200)]
+    assert put(source.client, "gone", lines, "loading") == 1200
+    refresh(source.client, ["gone"])
+    assert ElasticRestored(source.client).counts([table("gone")]) == {table("gone"): 1200}
 
 
 def test_schema_changes_after_planning(source: Scratch, tmp_path: Path) -> None:

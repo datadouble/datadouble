@@ -50,7 +50,7 @@ from datadouble_elasticsearch.server import (
     start_command,
 )
 from datadouble_elasticsearch.source import is_open, keys, mapped, table_columns
-from datadouble_elasticsearch.working import changer, serve_command
+from datadouble_elasticsearch.working import changer, check_snapshot, serve_command
 
 AS_OF = dt.datetime(2026, 1, 2, tzinfo=dt.UTC)
 CITY = ColumnName("address.city")
@@ -78,6 +78,7 @@ def test_paths_reach_nested_dotted_and_array_fields() -> None:
         "empty",
         "gone",
     ]
+    assert list(paths("text")) == []
     assert covered("client.ip", {"client"})
     assert not covered("client.ip", {"client.agent"})
 
@@ -274,6 +275,12 @@ class _Failing:
 
     def release(self, owner: Path) -> None:
         raise NotImplementedError
+
+
+def test_partial_snapshots_fail() -> None:
+    check_snapshot({"snapshot": {"state": "SUCCESS"}})
+    with pytest.raises(EngineError, match="the snapshot finished as PARTIAL"):
+        check_snapshot({"snapshot": {"state": "PARTIAL"}})
 
 
 def test_tools_report_failures(tmp_path: Path) -> None:

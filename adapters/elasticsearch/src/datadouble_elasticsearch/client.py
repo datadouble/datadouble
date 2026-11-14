@@ -21,7 +21,7 @@ from typing import Final
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from elastic_transport import NodeConfig, Transport, TransportError
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter
 
 from datadouble.engine import EngineError
 
@@ -39,12 +39,8 @@ LONG = 3600.0
 
 def as_document(value: object) -> Document | None:
     """``value`` as a JSON object, if it is one."""
-    if not isinstance(value, Mapping):
-        return None
-    try:
-        return _DOCUMENT.validate_python(value)
-    except ValidationError:
-        return None
+    # Parsed JSON's objects have text keys, so validating one cannot fail.
+    return _DOCUMENT.validate_python(value) if isinstance(value, Mapping) else None
 
 
 def as_list(value: object) -> list[object] | None:

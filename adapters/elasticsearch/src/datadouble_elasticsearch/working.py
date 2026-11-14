@@ -296,6 +296,14 @@ def snapshot_repository(location: str, *, readonly: bool) -> dict[str, JsonValue
     return {"type": "fs", "settings": {"location": location, "readonly": readonly}}
 
 
+def check_snapshot(reply: Mapping[str, object]) -> None:
+    """Fail unless a finished snapshot copied every shard."""
+    state = document(reply.get("snapshot"), "the snapshot").get("state")
+    if state != "SUCCESS":
+        message = f"the snapshot finished as {state}"
+        raise EngineError(message)
+
+
 class ElasticWorking:
     """Working databases and images under one scratch directory."""
 
@@ -382,10 +390,7 @@ class ElasticWorking:
                     body={"indices": list(info.indices), "include_global_state": False},
                     params={"wait_for_completion": True},
                 )
-                state = document(reply.get("snapshot"), "the snapshot").get("state")
-                if state != "SUCCESS":
-                    message = f"the snapshot finished as {state}"
-                    raise EngineError(message)
+                check_snapshot(reply)
                 client.request("DELETE", _REPOSITORY, "releasing the snapshot repository")
             return
         target = directory / _DUMP
