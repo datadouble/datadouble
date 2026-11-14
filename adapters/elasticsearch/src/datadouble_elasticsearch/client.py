@@ -158,13 +158,14 @@ class Client:
         )
         if reply.get("errors") is not True:
             return
-        for item in items(reply.get("items"), "bulk results"):
-            for result in document(item, "a bulk result").values():
-                outcome = document(result, "a bulk result")
-                if "error" in outcome:
-                    status = outcome.get("status")
-                    message = f"{action} failed: {_error_type(outcome)} (HTTP {status})"
-                    raise EngineError(message)
+        outcomes = (
+            document(result, "a bulk result")
+            for item in items(reply.get("items"), "bulk results")
+            for result in document(item, "a bulk result").values()
+        )
+        failed = next((outcome for outcome in outcomes if "error" in outcome), {})
+        message = f"{action} failed: {_error_type(failed)} (HTTP {failed.get('status')})"
+        raise EngineError(message)
 
     def _send(self, call: "_Call") -> Document:
         headers = {**self._headers, "accept": "application/json", "content-type": call.content}
