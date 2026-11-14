@@ -16,7 +16,7 @@ package = false
 # The number of checker suppressions allowed in the repository; see
 # scripts/check_source.py. Raising it needs a reason in the pull request.
 [tool.datadouble]
-suppressions = 26
+suppressions = 28
 
 [tool.uv.workspace]
 members = [
@@ -30,6 +30,7 @@ members = [
     "adapters/oracle",
     "adapters/postgres",
     "adapters/redis",
+    "adapters/elasticsearch",
     "adapters/s3",
     "adapters/vault",
     "conformance",
@@ -42,6 +43,7 @@ datadouble-mysql = { workspace = true }
 datadouble-oracle = { workspace = true }
 datadouble-postgres = { workspace = true }
 datadouble-redis = { workspace = true }
+datadouble-elasticsearch = { workspace = true }
 datadouble-conformance = { workspace = true }
 datadouble-s3 = { workspace = true }
 datadouble-docker = { workspace = true }
@@ -63,6 +65,7 @@ dev = [
     "datadouble-oracle",
     "datadouble-postgres",
     "datadouble-redis",
+    "datadouble-elasticsearch",
     "datadouble-s3",
     "datadouble-vault",
     "boto3-stubs[s3]>=1.43.126",
@@ -124,6 +127,7 @@ known-first-party = [
     "datadouble_oracle",
     "datadouble_postgres",
     "datadouble_redis",
+    "datadouble_elasticsearch",
     "datadouble_s3",
     "datadouble_vault",
     "check_source",
@@ -139,6 +143,7 @@ known-first-party = [
     "test_mysql_conformance",
     "test_oracle_conformance",
     "test_redis_conformance",
+    "test_elasticsearch_conformance",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -168,7 +173,9 @@ files = [
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/redis/src",
+    "adapters/elasticsearch/src",
     "adapters/redis/tests",
+    "adapters/elasticsearch/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
     "adapters/vault/src",
@@ -178,7 +185,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -204,7 +211,9 @@ include = [
     "adapters/postgres/src",
     "adapters/postgres/tests",
     "adapters/redis/src",
+    "adapters/elasticsearch/src",
     "adapters/redis/tests",
+    "adapters/elasticsearch/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
     "adapters/vault/src",
@@ -214,7 +223,7 @@ include = [
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests"]
+extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests", "adapters/elasticsearch/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -230,6 +239,7 @@ testpaths = [
     "adapters/oracle/tests",
     "adapters/postgres/tests",
     "adapters/redis/tests",
+    "adapters/elasticsearch/tests",
     "adapters/s3/tests",
     "adapters/vault/tests",
     "conformance/tests",
@@ -265,6 +275,7 @@ source = [
     "adapters/oracle/src",
     "adapters/postgres/src",
     "adapters/redis/src",
+    "adapters/elasticsearch/src",
     "adapters/s3/src",
     "adapters/vault/src",
     "conformance/src",

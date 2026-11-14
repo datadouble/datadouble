@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Elasticsearch:** an engine adapter (`datadouble-elasticsearch`) for
+  Elasticsearch 7.17 or later. Each index is a table keyed by `_id`, with its
+  mapping's field paths as columns, and the extract reads every index through
+  one point in time. Images are a snapshot repository (`physical`) or NDJSON
+  with each index's mappings and settings (`logical`). Expression rules are
+  Painless scripts. A copied document holding a field the catalog does not
+  list fails the extract.
 - **Redis:** an engine adapter (`datadouble-redis`). Each key pattern is a
   table (`user:{}`, `user:{}:sessions`), with `_key` holding the values its
   `{}` stand for, so references in key names and in values are declared like

@@ -16,6 +16,7 @@ sample dataset:
 | Oracle | Oracle Database Free (the full image, not `-lite`) | Sakila |
 | MongoDB | official `mongo`, as a one-member replica set | Generated cinema database (`dev/mongodb/seed.js`) |
 | Redis | official `redis` | Generated keyspace (strings, hashes, sets, streams) |
+| Elasticsearch | official `elasticsearch`, as a single node | Generated indices derived from Pagila (`dev/elasticsearch`) |
 | Salesforce | none (see below) | Recorded org metadata and records |
 
 Profiles can be started individually (`docker compose --profile postgres up`) so

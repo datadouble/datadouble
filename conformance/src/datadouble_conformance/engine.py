@@ -410,6 +410,10 @@ class EngineConformance:
             process.send_signal(signal.SIGKILL)
             process.wait()
         result = builds.run(spec, lock, "work", resume=Generation(generation.name))
+        # The killed run's last container can start after the resume released
+        # its stage; remove whatever is left under the run.
+        ((kind, settings),) = harness.runtime.items()
+        builds.registry.runtime(kind, settings).release(work)
         status = {(r.stage, r.group): r.status for r in result.stages}
         assert status[(Stage.PLAN, None)] is StageStatus.REUSED
         assert status[(Stage.EXTRACT, None)] is StageStatus.REUSED
