@@ -34,14 +34,9 @@ from datadouble.secrets import resolve_secret
 from datadouble.settings import parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_elasticsearch.client import Client
-from datadouble_elasticsearch.server import (
-    PORT,
-    ServerSettings,
-    Tools,
-    default_image,
-    ready_command,
-)
-from datadouble_elasticsearch.source import ENGINE, ElasticSource, Layout, server_version
+from datadouble_elasticsearch.product import ELASTICSEARCH, Product
+from datadouble_elasticsearch.server import PORT, ServerSettings, Tools, ready_command
+from datadouble_elasticsearch.source import ElasticSource, Layout, server_version
 from datadouble_elasticsearch.working import DatabaseInfo, ElasticWorking, serve_command
 
 MOUNT = "/var/lib/datadouble"
@@ -60,17 +55,21 @@ class ElasticConnection(BaseModel):
 
 
 class ElasticEngine:
-    """Implements :class:`datadouble.engine.EngineAdapter` for Elasticsearch."""
+    """Implements :class:`datadouble.engine.EngineAdapter` for Elasticsearch, or another product."""
+
+    def __init__(self, product: Product = ELASTICSEARCH) -> None:
+        """Serve ``product``."""
+        self.product = product
 
     @property
     def name(self) -> EngineName:
-        """``elasticsearch``."""
-        return ENGINE
+        """The product's engine name, such as ``elasticsearch``."""
+        return self.product.engine
 
     @property
     def owner(self) -> str:
-        """``1000:0``, the user the official Elasticsearch image serves as."""
-        return "1000:0"
+        """The user the product's official image serves as, such as ``1000:0``."""
+        return self.product.owner
 
     def capabilities(self) -> Capabilities:
         """Both formats and Painless expressions; no nested strategy or hooks."""
@@ -84,9 +83,9 @@ class ElasticEngine:
     @contextmanager
     def connect(self, connection: Mapping[str, JsonValue]) -> Generator[SourceSession]:
         """Connect to the source."""
-        settings = parse_settings(ElasticConnection, connection, "elasticsearch connection")
+        settings = parse_settings(ElasticConnection, connection, f"{self.name} connection")
         api_key = resolve_secret(settings.api_key) if settings.api_key else None
-        client = Client.from_url(resolve_secret(settings.url), api_key)
+        client = Client.from_url(resolve_secret(settings.url), self.product, api_key)
         try:
             server_version(client)
             yield ElasticSource(client, Layout(indices=settings.indices, sample=settings.sample))
@@ -95,27 +94,27 @@ class ElasticEngine:
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Single-node clusters under ``scratch``, in the image for the source's version."""
-        settings = parse_settings(ServerSettings, tooling.server, "elasticsearch server")
-        image = tooling.image or default_image(source_version)
-        return ElasticWorking(Tools(tooling.runtime, image, settings.heap), scratch)
+        settings = parse_settings(ServerSettings, tooling.server, f"{self.name} server")
+        image = tooling.image or self.product.image(source_version)
+        return ElasticWorking(Tools(self.product, tooling.runtime, image, settings.heap), scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:
-        """The official Elasticsearch image of the image's version, on the copy.
+        """The product's official image of the image's version, on the copy.
 
         The first start restores the image's snapshot into the copy; the
-        copy's password is the ``elastic`` user's.
+        copy's password is the administrator's.
         """
         info = DatabaseInfo.read(image)
-        command, marker = serve_command(MOUNT, ServerSettings().heap)
+        command, marker = serve_command(self.product, MOUNT, ServerSettings().heap)
         return ServerPlan(
-            image=server_image or default_image(info.server_version),
+            image=server_image or self.product.image(info.server_version),
             mount=MOUNT,
             owner=self.owner,
             command=("sh", "-c", command),
-            ready=ready_command(marker),
+            ready=ready_command(self.product, marker),
             port=PORT,
             database="",
-            user="elastic",
+            user=self.product.user,
         )
 
 

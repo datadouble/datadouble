@@ -9,9 +9,8 @@ Searches page through it with ``search_after``, in ``_shard_doc`` order.
 
 Seeds and ``when`` clauses are Query DSL objects written as JSON; the string
 ``":as_of"`` anywhere in them stands for the plan's anchor time. Strategy B's
-value sets become ``ids`` and ``terms`` queries. Elasticsearch cannot
-evaluate another index's selection inside a query, so strategy A is not
-offered.
+value sets become ``ids`` and ``terms`` queries. No query can evaluate
+another index's selection, so strategy A is not offered.
 """
 
 import datetime as dt
@@ -67,20 +66,21 @@ class PointInTime:
     @contextmanager
     def opened(cls, client: Client, targets: Sequence[str]) -> Generator["PointInTime"]:
         """Open a point in time over the open indices ``targets`` name, for the block."""
+        api = client.product.pit
         reply = client.request(
             "POST",
-            request_path(",".join(targets), "_pit"),
+            request_path(",".join(targets), *api.open.split("/")),
             "opening a point in time",
             params={"keep_alive": _KEEP, "expand_wildcards": "open", "ignore_unavailable": True},
         )
-        opened = cls(client, str(reply.get("id")))
+        opened = cls(client, str(reply.get(api.key)))
         try:
             yield opened
         finally:
             # A point in time that cannot be closed expires by itself.
             with suppress(EngineError):
                 client.request(
-                    "DELETE", "/_pit", "closing a point in time", body={"id": opened.pit}
+                    "DELETE", api.close, "closing a point in time", body=api.close_body(opened.pit)
                 )
 
     def hits(
@@ -200,7 +200,7 @@ def query(condition: Condition, as_of: dt.datetime, fields: Mapping[ColumnName, 
             clause = "should" if isinstance(condition, AnyOf) else "filter"
             return {"bool": {clause: [query(part, as_of, fields) for part in parts]}}
         case SelectedBy():
-            message = "Elasticsearch cannot evaluate nested selections; use the keys strategy"
+            message = "queries cannot evaluate nested selections; use the keys strategy"
             raise EngineError(message)
         case _:
             assert_never(condition)

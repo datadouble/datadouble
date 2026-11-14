@@ -20,6 +20,7 @@ from datadouble_conformance.engine import (
 )
 from datadouble_elasticsearch import ElasticEngine
 from datadouble_elasticsearch.client import Client, path
+from datadouble_elasticsearch.product import ELASTICSEARCH
 
 pytestmark = pytest.mark.integration
 
@@ -144,7 +145,7 @@ class ElasticScratch:
 @contextmanager
 def scratch() -> Generator[ElasticScratch]:
     """A fresh ``items`` index for the block, deleted afterwards."""
-    source = ElasticScratch(Client.from_url(os.environ[URL]))
+    source = ElasticScratch(Client.from_url(os.environ[URL], ELASTICSEARCH))
     source.drop()
     source.client.request(
         "PUT",
