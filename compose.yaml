@@ -24,6 +24,7 @@ services:
       DATADOUBLE_TEST_ORACLE_URL: oracle://datadouble:Datadouble-1@oracle:1521/FREEPDB1
       DATADOUBLE_TEST_REDIS_URL: redis://redis:6379
       DATADOUBLE_TEST_ELASTICSEARCH_URL: http://elastic:Datadouble-1@elasticsearch:9200
+      DATADOUBLE_TEST_OPENSEARCH_URL: http://admin:Datadouble-1-Search@opensearch:9200
       DATADOUBLE_TEST_S3_ENDPOINT: http://s3:8333
       # SeaweedFS accepts any credentials when it has no identities configured.
       AWS_ACCESS_KEY_ID: datadouble
@@ -216,6 +217,25 @@ services:
       xpack.ml.enabled: "false"
       ingest.geoip.downloader.enabled: "false"
       ES_JAVA_OPTS: -Xms512m -Xmx512m
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 120
+
+  # OpenSearch 3.9 as a single node with the same indices (dev/opensearch, which
+  # copies the Elasticsearch fixture's files), seeded on its first start.
+  opensearch:
+    build:
+      context: dev
+      dockerfile: opensearch/Dockerfile
+    environment:
+      discovery.type: single-node
+      plugins.security.ssl.http.enabled: "false"
+      plugins.security.audit.type: noop
+      node.store.allow_mmap: "false"
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/ready"]
       interval: 2s

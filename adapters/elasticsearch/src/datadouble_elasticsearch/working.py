@@ -34,6 +34,7 @@ from datadouble_elasticsearch.client import Client, Document, as_document, as_li
 from datadouble_elasticsearch.client import path as request_path
 from datadouble_elasticsearch.documents import Dump, entry, rewrite, values
 from datadouble_elasticsearch.indices import export, load, put, refresh
+from datadouble_elasticsearch.product import Product
 from datadouble_elasticsearch.search import ID, PointInTime, Query, parse
 from datadouble_elasticsearch.server import ElasticServer, Tools, curl, start_command
 from datadouble_elasticsearch.source import held
@@ -64,7 +65,7 @@ class DatabaseInfo(BaseModel):
 
 def _single(edge: Edge) -> tuple[ColumnName, ColumnName]:
     if len(edge.columns) != 1:
-        message = f"{edge.name}: Elasticsearch references must have one field on each side"
+        message = f"{edge.name}: references must have one field on each side"
         raise EngineError(message)
     return edge.columns[0], edge.parent_columns[0]
 
@@ -136,7 +137,7 @@ class ElasticRestored:
         assertion = parse(query, _EPOCH, "an assertion")
         index, matched = assertion.get("index"), as_document(assertion.get("query"))
         if not isinstance(index, str) or matched is None:
-            message = 'an Elasticsearch assertion is {"index": "...", "query": {...}}'
+            message = 'an assertion is {"index": "...", "query": {...}}'
             raise EngineError(message)
         reply = self.client.request(
             "POST",
@@ -314,7 +315,7 @@ class ElasticWorking:
         self._version: str | None = None
 
     def server_version(self) -> str:
-        """The version of the image's Elasticsearch."""
+        """The version of the image's server."""
         if self._version is None:
             self._version = self.tools.version(self.scratch)
         return self._version
@@ -432,7 +433,7 @@ class ElasticWorking:
             yield ElasticRestored(client)
 
 
-def serve_command(mount: str, heap: str) -> tuple[str, str]:
+def serve_command(product: Product, mount: str, heap: str) -> tuple[str, str]:
     """The shell that serves a copy of a physical image, and the file it marks restored.
 
     The first start restores the snapshot into the copy's data directory;
@@ -444,9 +445,9 @@ def serve_command(mount: str, heap: str) -> tuple[str, str]:
     restore = json.dumps({"include_global_state": False})
     restore_url = f"{base}{_SNAPSHOT}/_restore?wait_for_completion=true"
     steps = [
-        curl(f"-X PUT {base}{_REPOSITORY} -d {shlex.quote(register)}"),
-        curl(f"-X POST {shlex.quote(restore_url)} -d {shlex.quote(restore)}"),
+        curl(product, f"-X PUT {base}{_REPOSITORY} -d {shlex.quote(register)}"),
+        curl(product, f"-X POST {shlex.quote(restore_url)} -d {shlex.quote(restore)}"),
         f"touch {marker}",
     ]
     then = f"[ -f {marker} ] || {{ {' && '.join(steps)}; }}"
-    return start_command(f"{mount}/{DATA}", f"{mount}/{REPO}", heap, then), marker
+    return start_command(product, f"{mount}/{DATA}", f"{mount}/{REPO}", heap, then), marker

@@ -30,7 +30,7 @@ from pathlib import Path
 
 from datadouble.catalog import Catalog, Column, ColumnKind, Table
 from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
-from datadouble.names import ColumnName, EngineName, TableName
+from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
 from datadouble_elasticsearch.client import (
@@ -46,7 +46,6 @@ from datadouble_elasticsearch.documents import Dump, IndexFile, covered, paths, 
 from datadouble_elasticsearch.indices import export
 from datadouble_elasticsearch.search import ID, PointInTime, query
 
-ENGINE = EngineName("elasticsearch")
 UNMAPPED = "unmapped"
 """The type of a column for a field the mapping does not declare."""
 
@@ -90,11 +89,13 @@ class Layout:
 
 
 def server_version(client: Client) -> str:
-    """The server's version, such as ``9.5.5``; refuses an OpenSearch cluster."""
+    """The server's version, such as ``9.5.5``; refuses another product's server."""
     reply = client.request("GET", "/", "reading the server version")
     version = document(reply.get("version"), "the server version")
-    if version.get("distribution") == "opensearch":
-        message = "the source is OpenSearch; use the opensearch engine"
+    product = client.product
+    found = version.get("distribution", "elasticsearch")
+    if found != product.distribution:
+        message = f"the server is {found}, not {product.name}; use the {found} engine"
         raise EngineError(message)
     number = version.get("number")
     if not isinstance(number, str):
@@ -136,7 +137,7 @@ def _source_kept(index: str, mappings: Mapping[str, object]) -> None:
 
 
 def resolve(client: Client, patterns: Iterable[str]) -> list[str]:
-    """The open indices the patterns name; fails on data streams."""
+    """The open indices the patterns name, but for system indices; fails on data streams."""
     reply = client.request(
         "GET",
         path("_resolve", "index", ",".join(patterns)),
@@ -149,10 +150,12 @@ def resolve(client: Client, patterns: Iterable[str]) -> list[str]:
             " leave them out with a pattern such as -logs-*"
         )
         raise EngineError(message)
-    return sorted(
+    names = (
         str(document(index, "an index").get("name"))
         for index in items(reply.get("indices", []), "indices")
     )
+    # Names starting with a dot belong to the server, such as OpenSearch's security index.
+    return sorted(name for name in names if not name.startswith("."))
 
 
 def table_columns(
@@ -216,7 +219,7 @@ def introspect(client: Client, layout: Layout) -> Catalog:
             sampled = items(document(found.get("hits"), "search hits").get("hits"), "hits")
         columns = table_columns(index, mappings, (document(hit, "a hit") for hit in sampled))
         tables.append(Table(name=TableName.of("", index), columns=columns, primary_key=(ID,)))
-    return Catalog(engine=ENGINE, tables=tuple(tables))
+    return Catalog(engine=client.product.engine, tables=tuple(tables))
 
 
 def held(hit: Mapping[str, object], column: ColumnName) -> list[str]:

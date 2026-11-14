@@ -38,12 +38,12 @@ from datadouble_elasticsearch import ElasticEngine
 from datadouble_elasticsearch.client import Client, Document, document, items, path
 from datadouble_elasticsearch.documents import Dump
 from datadouble_elasticsearch.indices import put, refresh
+from datadouble_elasticsearch.product import ELASTICSEARCH
 from datadouble_elasticsearch.server import (
     LOGIN_ENV,
     PORT,
     ElasticServer,
     Tools,
-    default_image,
     ready_command,
 )
 from datadouble_elasticsearch.source import ElasticSource, Layout, server_version
@@ -92,7 +92,7 @@ class Scratch:
 
     def __init__(self) -> None:
         """Connect to the test cluster."""
-        self.client = Client.from_url(os.environ[URL])
+        self.client = Client.from_url(os.environ[URL], ELASTICSEARCH)
 
     @property
     def connection(self) -> Mapping[str, JsonValue]:
@@ -175,7 +175,7 @@ def registry() -> Registry:
 
 def tools() -> Tools:
     ((kind, settings),) = runtime_for_tests().items()
-    return Tools(installed().runtime(kind, settings), default_image(VERSION))
+    return Tools(ELASTICSEARCH, installed().runtime(kind, settings), ELASTICSEARCH.image(VERSION))
 
 
 def build(
@@ -245,7 +245,7 @@ def test_fallbacks_rules_and_assertions(source: Scratch, tmp_path: Path) -> None
 def test_restored_checks(source: Scratch) -> None:
     restored = ElasticRestored(source.client)
     assert restored.failing_rows('{"index": "child", "query": {"match_all": {}}}') == 3
-    with pytest.raises(EngineError, match="an Elasticsearch assertion is"):
+    with pytest.raises(EngineError, match="an assertion is"):
         restored.failing_rows('{"query": {}}')
     with pytest.raises(EngineError, match=r"running an assertion failed: \w+ \(HTTP 400\)"):
         restored.failing_rows('{"index": "child", "query": {"bogus": {}}}')
@@ -341,7 +341,9 @@ def test_source_failures(source: Scratch, monkeypatch: pytest.MonkeyPatch, tmp_p
     with pytest.raises(EngineError, match="gone does not keep whole documents"):
         ElasticSource(source.client, Layout(indices=("gone",), sample=10)).catalog()
     monkeypatch.setattr(Client, "request", replying({"version": {"distribution": "opensearch"}}))
-    with pytest.raises(EngineError, match="use the opensearch engine"):
+    with pytest.raises(
+        EngineError, match="the server is opensearch, not Elasticsearch; use the opensearch engine"
+    ):
         server_version(source.client)
     monkeypatch.setattr(Client, "request", replying({"version": {}}))
     with pytest.raises(EngineError, match="did not report its version"):
@@ -459,23 +461,25 @@ def test_served_copies(source: Scratch, tmp_path: Path) -> None:
     working = ElasticWorking(tools(), tmp_path / "scratch")
     working.package(Path(result.work) / "transform" / "all" / "db", ImageFormat.PHYSICAL, image)
     plan = ElasticEngine().server(image, None)
-    assert plan.image == default_image(VERSION)
+    assert plan.image == ELASTICSEARCH.image(VERSION)
     assert (plan.user, plan.database, plan.port) == ("elastic", "", PORT)
     # The plan's mount is a fixed path; serve the copy where it is instead.
     copy = tmp_path / "copy"
     shutil.copytree(image, copy)
-    command, marker = serve_command(str(copy), "512m")
+    command, marker = serve_command(ELASTICSEARCH, str(copy), "512m")
     container = Container(
-        image=default_image(VERSION),
+        image=ELASTICSEARCH.image(VERSION),
         command=("sh", "-c", command),
         owner=copy,
         mounts=(copy,),
         secrets={LOGIN_ENV: "copy-password"},
         port=PORT,
-        ready=ready_command(marker),
+        ready=ready_command(ELASTICSEARCH, marker),
     )
     for _start in range(2):
         with tools().runtime.serve(container) as server:
-            client = Client.at(server.endpoint.host, server.endpoint.port, "copy-password")
+            client = Client.at(
+                server.endpoint.host, server.endpoint.port, "copy-password", ELASTICSEARCH
+            )
             assert set(sources(client, "child")) == {"1", "2"}
             client.close()

@@ -41,11 +41,11 @@ from datadouble_elasticsearch.documents import (
     write_entries,
 )
 from datadouble_elasticsearch.indices import operations, portable
+from datadouble_elasticsearch.product import ELASTICSEARCH
 from datadouble_elasticsearch.search import parse, query
 from datadouble_elasticsearch.server import (
     ServerSettings,
     Tools,
-    default_image,
     ready_command,
     start_command,
 )
@@ -231,17 +231,19 @@ def test_settings_and_commands() -> None:
     assert parse_settings(ServerSettings, {"heap": "2g"}, "s").heap == "2g"
     with pytest.raises(SettingsError, match="heap"):
         parse_settings(ServerSettings, {"heap": "lots"}, "s")
-    assert default_image("9.5.5") == "elasticsearch:9.5.5"
-    plain = start_command("/d/data", None, "512m")
+    assert ELASTICSEARCH.image("9.5.5") == "elasticsearch:9.5.5"
+    plain = start_command(ELASTICSEARCH, "/d/data", None, "512m")
     assert "-Epath.data=/d/data" in plain
     assert "path.repo" not in plain
     assert "until" not in plain
-    command, marker = serve_command("/m", "512m")
+    command, marker = serve_command(ELASTICSEARCH, "/m", "512m")
     assert "-Epath.repo=/m/repo" in command
     assert "_snapshot/datadouble/golden/_restore" in command
     assert marker == "/m/restored"
-    assert ready_command(marker)[2].startswith("test -f /m/restored && ")
-    assert "DATADOUBLE_PASSWORD" not in ready_command()[2].replace('"$DATADOUBLE_PASSWORD"', "")
+    assert ready_command(ELASTICSEARCH, marker)[2].startswith("test -f /m/restored && ")
+    assert "DATADOUBLE_PASSWORD" not in ready_command(ELASTICSEARCH)[2].replace(
+        '"$DATADOUBLE_PASSWORD"', ""
+    )
     elastic = ElasticEngine()
     assert (elastic.name, elastic.owner) == ("elasticsearch", "1000:0")
     assert elastic.capabilities().nested is False
@@ -257,10 +259,10 @@ def test_replies() -> None:
     with pytest.raises(EngineError, match="JSON array for hits"):
         items({}, "hits")
     for url in ("ftp://host", "http://", "postgres://h:1/x"):
-        with pytest.raises(EngineError, match="an Elasticsearch URL is"):
-            Client.from_url(url)
-    Client.from_url("https://user:p%40ss@search.example.com/prefix/", "key").close()
-    Client.from_url("http://search.example.com:9200").close()
+        with pytest.raises(EngineError, match="the URL of the Elasticsearch source is"):
+            Client.from_url(url, ELASTICSEARCH)
+    Client.from_url("https://user:p%40ss@search.example.com/prefix/", ELASTICSEARCH, "key").close()
+    Client.from_url("http://search.example.com:9200", ELASTICSEARCH).close()
 
 
 @dataclass
@@ -285,7 +287,7 @@ def test_partial_snapshots_fail() -> None:
 
 def test_tools_report_failures(tmp_path: Path) -> None:
     with pytest.raises(EngineError, match="cannot read the Elasticsearch version: 'no x:1'"):
-        Tools(_Failing(), "x:1").version(tmp_path)
+        Tools(ELASTICSEARCH, _Failing(), "x:1").version(tmp_path)
 
 
 def test_null_and_value_changers() -> None:

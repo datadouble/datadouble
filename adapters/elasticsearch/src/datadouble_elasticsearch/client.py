@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-"""Requests to Elasticsearch's REST API, through elastic-transport.
+"""Requests to the REST API, through elastic-transport.
 
 The adapter talks to the REST API directly, with Elastic's own transport for
 connections and retries, rather than through the official client: each major
@@ -24,6 +24,7 @@ from elastic_transport import NodeConfig, Transport, TransportError
 from pydantic import JsonValue, TypeAdapter
 
 from datadouble.engine import EngineError
+from datadouble_elasticsearch.product import Product
 
 type Document = dict[str, object]
 type Params = Mapping[str, str | int | bool]
@@ -67,7 +68,7 @@ def items(value: object, what: str) -> list[object]:
 
 
 def text(value: object) -> str:
-    """A scalar as text, as Elasticsearch compares it: ``true``, ``42``, ``alice``."""
+    """A scalar as text, as the server compares it: ``true``, ``42``, ``alice``."""
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
@@ -90,15 +91,16 @@ def path(*parts: str) -> str:
 
 
 class Client:
-    """A connection to one cluster."""
+    """A connection to one cluster of a product."""
 
-    def __init__(self, transport: Transport, headers: Mapping[str, str]) -> None:
+    def __init__(self, transport: Transport, headers: Mapping[str, str], product: Product) -> None:
         """Send requests through ``transport`` with ``headers``."""
         self._transport = transport
         self._headers = dict(headers)
+        self.product = product
 
     @classmethod
-    def from_url(cls, url: str, api_key: str | None = None) -> "Client":
+    def from_url(cls, url: str, product: Product, api_key: str | None = None) -> "Client":
         """A client for the cluster at an ``http://`` or ``https://`` URL.
 
         Credentials in the URL are sent as basic authentication; an API key,
@@ -106,7 +108,9 @@ class Client:
         """
         parts = urlsplit(url)
         if parts.scheme not in _SCHEMES or not parts.hostname:
-            message = "an Elasticsearch URL is http[s]://[user:password@]host[:port]"
+            message = (
+                f"the URL of the {product.name} source is http[s]://[user:password@]host[:port]"
+            )
             raise EngineError(message)
         headers: dict[str, str] = {}
         if api_key:
@@ -120,14 +124,15 @@ class Client:
             parts.port or _SCHEMES[parts.scheme],
             path_prefix=parts.path.rstrip("/"),
         )
-        return cls(_transport(node), headers)
+        return cls(_transport(node), headers, product)
 
     @classmethod
-    def at(cls, host: str, port: int, password: str) -> "Client":
-        """A client for a working server, as its ``elastic`` user."""
+    def at(cls, host: str, port: int, password: str, product: Product) -> "Client":
+        """A client for a working node, as the product's administrator."""
         return cls(
             _transport(NodeConfig("http", host, port)),
-            {"authorization": _basic("elastic", password)},
+            {"authorization": _basic(product.user, password)},
+            product,
         )
 
     def request(

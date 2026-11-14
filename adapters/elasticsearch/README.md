@@ -36,7 +36,8 @@ false` or `runtime`) also gets a column for each such field in its first
 copies holds a field the catalog does not list, so strict mode covers every
 field that leaves the source. Indices that keep no `_source`, or only part of
 it, cannot be copied, and data streams are not copied: leave them out of
-`indices`.
+`indices`. Indices whose names start with a dot belong to the server and are
+never tables.
 
 An index keeps its mappings, aliases and the settings that describe it
 (shards, analysis, sorting, mode). Settings that tie it to the source
