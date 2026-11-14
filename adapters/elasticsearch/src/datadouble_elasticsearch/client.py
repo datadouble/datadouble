@@ -163,7 +163,8 @@ class Client:
             for item in items(reply.get("items"), "bulk results")
             for result in document(item, "a bulk result").values()
         )
-        failed = next((outcome for outcome in outcomes if "error" in outcome), {})
+        none: Document = {}
+        failed = next((outcome for outcome in outcomes if "error" in outcome), none)
         message = f"{action} failed: {_error_type(failed)} (HTTP {failed.get('status')})"
         raise EngineError(message)
 
