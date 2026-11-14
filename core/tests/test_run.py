@@ -11,10 +11,19 @@ from datadouble.anonymize import Anonymizer
 from datadouble.catalog import CatalogLock, ColumnKind
 from datadouble.engine import EngineError, Tooling
 from datadouble.images import ImageSummary, unpack
-from datadouble.names import ColumnName, ColumnRef, Generation, TableName
+from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
 from datadouble.planner import PlannedRule, PlanOptions
 from datadouble.registry import Registry
-from datadouble.run import Run, RunError, RunOptions, RunResult, Stage, fingerprint, value_mapper
+from datadouble.run import (
+    Run,
+    RunError,
+    RunOptions,
+    RunResult,
+    Stage,
+    StageStatus,
+    fingerprint,
+    value_mapper,
+)
 from datadouble.secrets import SecretError
 from datadouble.spec import (
     HashOptions,
@@ -28,7 +37,7 @@ from datadouble.spec import (
 from datadouble.storage import FilesystemStore, filesystem_store
 from datadouble.verify import CheckKind
 from fake_engine import FakeEngine, FakeRuntime, check_protocols
-from fakes import FakeSource, shop
+from fakes import FakeSource, catalog, shop, table
 
 ALL = tuple(Stage)
 T = TableName.of
@@ -419,3 +428,89 @@ def test_builds_run_as_the_serving_user(
         run(tmp_path, registry)
     # Planning alone touches no engine files.
     assert run(tmp_path, registry, stages=(Stage.PLAN,)).stages
+
+
+FILES_SPEC = (
+    SPEC
+    + """
+files:
+  connection: {root: /srv/uploads}
+  select: {avatars: "path <= 'a2'"}
+  paths_from: posts.title
+  cleanup: ["delete files.documents where path = 'b'"]
+"""
+)
+
+
+TEXT_PATH = {"path": ColumnKind.TEXT}
+
+
+def test_files_build_beside_the_source(tmp_path: Path, engine: FakeEngine) -> None:
+    tree = FakeEngine(
+        catalog=catalog(
+            *(
+                table(name, ["path"], key=("path",), kinds=TEXT_PATH, namespace="files")
+                for name in ("avatars", "documents")
+            )
+        ),
+        source=FakeSource(
+            rows={
+                T("files", "avatars"): [{"path": "a1"}, {"path": "a3"}],
+                T("files", "documents"): [{"path": "a"}, {"path": "b"}, {"path": "z"}],
+            }
+        ),
+        name_=EngineName("files"),
+    )
+    runtime = FakeRuntime()
+    registry = Registry(
+        engines={"fake": lambda: engine, "files": lambda: check_protocols(tree)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: runtime},
+    )
+    spec = FILES_SPEC.replace(
+        "select: {avatars: ", "exclude: []\n  select: {documents: \"path = 'none'\", avatars: "
+    )
+    keys = PlanOptions(strategy=Strategy.KEYS)
+    result = run(tmp_path, registry, spec=spec, plan=keys)
+    assert not result.failed(), result.verification
+    files = [r for r in result.stages if r.engine == "files"]
+    assert {r.stage for r in files} == set(Stage)
+    assert {s.identity.engine for s in result.images} == {"fake", "files"}
+    followed = json.loads((Path(result.work) / "extract" / "paths.json").read_text())
+    assert followed == ["a", "b", "c"]
+    # The files the chosen posts name, and the avatars the files' own seed selects.
+    rows = json.loads((Path(result.work) / "files" / "extract" / "data" / "rows.json").read_text())
+    assert {table: sorted(r["path"] for r in found) for table, found in rows.items()} == {
+        "files.avatars": ["a1"],
+        "files.documents": ["a", "b"],
+    }
+    # The cleanup removed document b from the copy.
+    transformed = json.loads(
+        (Path(result.work) / "files" / "transform" / "all" / "manifest.json").read_text()
+    )
+    assert {c["table"]["name"]: c["rows"] for c in transformed["outputs"]["counts"]} == {
+        "avatars": 1,
+        "documents": 1,
+    }
+    resumed = run(tmp_path, registry, spec=spec, resume=result.generation, plan=keys)
+    assert {r.status for r in resumed.stages} == {StageStatus.REUSED}
+
+
+def test_files_without_paths_from(tmp_path: Path, engine: FakeEngine) -> None:
+    tree = FakeEngine(
+        catalog=catalog(
+            table("avatars", ["path"], key=("path",), kinds=TEXT_PATH, namespace="files")
+        ),
+        source=FakeSource(rows={T("files", "avatars"): [{"path": "a1"}]}),
+        name_=EngineName("files"),
+    )
+    registry = Registry(
+        engines={"fake": lambda: engine, "files": lambda: tree},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
+    )
+    spec = SPEC + "files: {select: {avatars: \"path = 'a1'\"}}\n"
+    result = run(tmp_path, registry, spec=spec, plan=PlanOptions(strategy=Strategy.KEYS))
+    assert not result.failed(), result.verification
+    assert not (Path(result.work) / "extract" / "paths.json").exists()
+    assert len(result.images) == 2

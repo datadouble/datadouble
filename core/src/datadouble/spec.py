@@ -452,6 +452,33 @@ class Secrets(_Model):
     """Seeds deterministic anonymization; a random key per run when omitted."""
 
 
+FILES = EngineName("files")
+"""The engine that copies a ``files`` section's tree."""
+
+
+class Files(_Model):
+    """A file tree the source's rows refer to, copied beside it (decision 97).
+
+    The ``files`` engine adapter reads it: each top-level directory is a
+    table, and ``select`` gives each one ``find`` tests. Every top-level
+    directory must be selected or excluded.
+    """
+
+    connection: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    """Where the tree is and how to read it, checked by the ``files`` adapter."""
+    select: dict[str, str] = Field(default_factory=dict[str, str])
+    """Each top-level directory's ``find`` tests, such as ``-type f -mtime -30``."""
+    exclude: tuple[str, ...] = ()
+    """Top-level directories to leave out."""
+    paths_from: str | None = None
+    """A ``table.column`` of the source holding paths in the tree, relative to its
+    root: the files of the source's chosen rows are copied too."""
+    cleanup: tuple[str, ...] = ()
+    """Shell commands run in the copy's root after it is made, such as removing EXIF data."""
+    image: str | None = None
+    """The image the cleanup commands run in."""
+
+
 class Spec(_Model):
     """A whole spec."""
 
@@ -466,6 +493,7 @@ class Spec(_Model):
     subset: Subset = Subset()
     anonymize: dict[str, dict[str, Rule]] = Field(default_factory=dict[str, dict[str, Rule]])
     hooks: Hooks = Hooks()
+    files: Files | None = None
     images: dict[GroupName, ImageGroup] = Field(
         default_factory=lambda: {DEFAULT_GROUP: ImageGroup(include=("*",))}
     )
@@ -482,6 +510,28 @@ class Spec(_Model):
     announce: tuple[AdapterSettings, ...] = ()
     prune: Retention = Retention()
     secrets: Secrets = Secrets()
+
+    def files_spec(self) -> "Spec | None":
+        """The spec of the ``files`` section's build, sharing this one's images and storage."""
+        if self.files is None:
+            return None
+        files = self.files
+        return Spec(
+            name=self.name,
+            source=Source(engine=FILES, connection=files.connection, image=files.image),
+            exclude=files.exclude,
+            case_sensitive=self.case_sensitive,
+            # Every top-level directory must be selected or excluded instead.
+            strict=StrictLevel.OFF,
+            subset=Subset(as_of=self.subset.as_of, seeds=files.select),
+            hooks=Hooks(after_transform=tuple(TransformHook(sql=line) for line in files.cleanup)),
+            images=self.images,
+            package=self.package,
+            runtime=self.runtime,
+            store=self.store,
+            signing=self.signing,
+            secrets=self.secrets,
+        )
 
     @field_validator("runtime")
     @classmethod

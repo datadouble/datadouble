@@ -59,6 +59,9 @@ class Capabilities(BaseModel):
     """Whether strategy A is available (the engine evaluates nested selections)."""
     hooks: bool = True
     """Whether ``before_load`` and ``after_transform`` hooks can run."""
+    complete: bool = False
+    """Whether every table must be seeded or excluded, as a file tree's top-level
+    directories must be: nothing in the source goes unconsidered."""
 
 
 class PlanError(Exception):
@@ -134,6 +137,8 @@ class Plan(_Model):
     catalog: Catalog
     """The live catalog minus excluded tables."""
     warnings: tuple[str, ...]
+    paths_from: ColumnRef | None = None
+    """The column whose values for the chosen rows name the files to copy too."""
 
     def graph(self) -> Graph:
         """The selection graph."""
@@ -547,6 +552,12 @@ class _Planner:
         }
         rules.update({name: TableRule(table=name, rows_kept=False) for name in excluded})
         self.seeds(rules, excluded)
+        if self.capabilities.complete:
+            self.problems.extend(
+                f"{rule.table} is neither selected nor excluded"
+                for rule in rules.values()
+                if rule.seed is None and rule.table not in excluded and rule.rows_kept
+            )
         edges = self.edges(kept_tables)
         for edge in edges:
             self.check_edge(edge, rules, excluded)
@@ -576,6 +587,7 @@ class _Planner:
             self.problems.append(f"the {self.catalog.engine} adapter does not run hooks")
         formats = self.formats()
         strategy = self.strategy(graph)
+        paths_from = self.paths_from(excluded)
         if self.problems:
             raise PlanError(tuple(self.problems), strict)
         now = self.options.now or dt.datetime.now(tz=dt.UTC)
@@ -598,7 +610,17 @@ class _Planner:
             assertions=self.spec.verify.assertions,
             catalog=self.catalog.without(excluded),
             warnings=tuple(self.warnings),
+            paths_from=paths_from,
         )
+
+    def paths_from(self, excluded: frozenset[TableName]) -> ColumnRef | None:
+        files = self.spec.files
+        if files is None or files.paths_from is None:
+            return None
+        ref = self.attempt(self.resolver.column, files.paths_from)
+        if ref is not None and ref.table in excluded:
+            self.problems.append(f"files.paths_from names {ref.table}, which is excluded")
+        return ref
 
 
 _FALLBACKS: dict[OnMissing, EdgeMode] = {

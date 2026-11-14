@@ -54,14 +54,14 @@ from datadouble.images import (
     pack,
     unpack,
 )
-from datadouble.names import Generation, GroupName
+from datadouble.names import EngineName, Generation, GroupName, TableName
 from datadouble.planner import Plan, PlannedGroup, PlannedRule, PlanOptions, plan
 from datadouble.registry import Registry
 from datadouble.secrets import resolve_secret
 from datadouble.signing import bundle_key, sign
 from datadouble.spec import FakerRule, FormatPreservingRule, HashRule, Spec, StrictLevel
 from datadouble.storage import Store
-from datadouble.subset import key_conditions, nested_conditions
+from datadouble.subset import AnyOf, Condition, ValuesIn, key_conditions, nested_conditions
 from datadouble.verify import FormatReport, VerificationReport, check_image, restore_failed
 
 
@@ -118,6 +118,8 @@ class StageRecord(_Model):
     group: GroupName | None
     status: StageStatus
     seconds: float
+    engine: EngineName | None = None
+    """The engine of a second source, such as ``files``; None for the spec's source."""
 
 
 class RunResult(_Model):
@@ -143,10 +145,16 @@ class RunOptions(_Model):
     work: Path
     resume: Generation | None = None
     plan: PlanOptions = PlanOptions()
+    within: Path | None = None
+    """The generation directory of the run whose spec's second source, such as its
+    ``files``, this run builds."""
 
 
 _JSON = TypeAdapter(JsonValue)
 _MANIFEST = "manifest.json"
+_PATHS = "paths.json"
+"""The extract's file of the values of ``files.paths_from`` for the chosen rows."""
+_PATH_LIST: TypeAdapter[list[str]] = TypeAdapter(list[str])
 _VALUE_RULES = (FakerRule, HashRule, FormatPreservingRule)
 
 
@@ -186,15 +194,20 @@ class Run:
         options: RunOptions,
         clock: Callable[[], dt.datetime] = _now,
     ) -> None:
-        """Open a new generation or the one being resumed."""
+        """Open a new generation or the one being resumed, or join one (``options.within``)."""
         self.spec = spec
         self.lock = lock
         self.registry = registry
         self.options = options
         self.clock = clock
         self.engine: EngineAdapter = registry.engine(spec.source.engine)
-        self.record = self._record()
-        self.root = (options.work / spec.name / self.record.generation).resolve()
+        if options.within is None:
+            self.record = self._record()
+            self.root = (options.work / spec.name / self.record.generation).resolve()
+        else:
+            self.record = RunRecord.model_validate_json((options.within / "run.json").read_bytes())
+            self.root = options.within / spec.source.engine
+            self.root.mkdir(exist_ok=True)
         self.records: list[StageRecord] = []
         self.warnings: list[str] = []
         self._session: SourceSession | None = None
@@ -279,7 +292,13 @@ class Run:
         existing = self.manifest(stage, group)
         if existing is not None and existing.inputs == digest:
             self.records.append(
-                StageRecord(stage=stage, group=group, status=StageStatus.REUSED, seconds=0.0)
+                StageRecord(
+                    stage=stage,
+                    group=group,
+                    status=StageStatus.REUSED,
+                    seconds=0.0,
+                    engine=self._second(),
+                )
             )
             return existing
         if not self._wanted(stage):
@@ -305,9 +324,19 @@ class Run:
         )
         (directory / _MANIFEST).write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
         self.records.append(
-            StageRecord(stage=stage, group=group, status=StageStatus.RAN, seconds=seconds)
+            StageRecord(
+                stage=stage,
+                group=group,
+                status=StageStatus.RAN,
+                seconds=seconds,
+                engine=self._second(),
+            )
         )
         return manifest
+
+    def _second(self) -> EngineName | None:
+        """The engine, if this run builds a second source."""
+        return None if self.options.within is None else self.engine.name
 
     # Stages
 
@@ -371,6 +400,9 @@ class Run:
             "as_of": planned.as_of,
             "excludes": planned.excludes,
             "catalog": planned.catalog_fingerprint,
+            "followed": None
+            if self.options.within is None
+            else fingerprint((self.options.within / Stage.EXTRACT / _MANIFEST).read_bytes()),
         }
 
         def work(directory: Path) -> dict[str, JsonValue]:
@@ -381,11 +413,39 @@ class Run:
                     if planned.strategy == "nested"
                     else key_conditions(graph, snapshot)
                 )
+                selections = self._followed(planned, selections)
                 result = snapshot.extract(planned, selections, directory / "data", self.tooling())
+                if planned.paths_from is not None:
+                    ref = planned.paths_from
+                    found = snapshot.project(ref.table, selections[ref.table], (ref.column,))
+                    paths = sorted({str(row[0]) for row in found if row[0] is not None})
+                    (directory / _PATHS).write_text(json.dumps(paths), "utf-8")
             return {"result": _JSON.validate_python(result.model_dump(mode="json"))}
 
         manifest = self._stage(Stage.EXTRACT, None, inputs, work)
         return _load(ExtractResult, manifest.outputs["result"])
+
+    def _followed(
+        self, planned: Plan, selections: dict[TableName, Condition]
+    ) -> dict[TableName, Condition]:
+        """A second source's selections, with the rows the parent's ``paths_from`` names.
+
+        Each of the second source's tables also gets the rows whose key is one
+        of the paths; the adapter keeps those that are its own.
+        """
+        if self.options.within is None:
+            return selections
+        file = self.options.within / Stage.EXTRACT / _PATHS
+        if not file.is_file():
+            return selections
+        paths = frozenset((path,) for path in _PATH_LIST.validate_json(file.read_bytes()))
+        followed = dict(selections)
+        # The plan's catalog holds exactly the extracted tables.
+        for table in planned.catalog.tables:
+            followed[table.name] = AnyOf(
+                (selections[table.name], ValuesIn(table.primary_key, paths))
+            )
+        return followed
 
     def load(self, working: WorkingDatabases, planned: Plan, group: PlannedGroup) -> None:
         """Build the group's working database."""
@@ -604,44 +664,77 @@ class Run:
     # The whole run
 
     def execute(self) -> RunResult:
-        """Run the requested stages, reusing completed ones."""
+        """Run the requested stages, reusing completed ones.
+
+        A spec with ``files`` builds them as a second source in the same
+        generation: their extract follows the source's, and their groups' images
+        come after the source's.
+        """
         with self._exits:
+            files = self._files()
+            if files is not None:
+                self._exits.enter_context(files.exits)
             planned = self.plan()
+            files_planned = files.plan() if files is not None else None
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
-                check_owner(self.engine)
-                extracted = self.extract(planned)
-                working = self.engine.working(
-                    self.root / "scratch", self.tooling(), extracted.server_version
-                )
-                context = _Context(
-                    working=working,
-                    planned=planned,
-                    extract=extracted,
-                    key=self.key() if self._needs(Stage.TRANSFORM) else b"",
-                )
-                for group in planned.groups:
-                    self._group(context, group, outputs)
+                builds: list[tuple[Run, _Context]] = [(self, self.extracted(planned))]
+                if files is not None and files_planned is not None:
+                    builds.append((files, files.extracted(files_planned)))
+                for run, context in builds:
+                    for group in context.planned.groups:
+                        run.build(context, group, outputs)
                 if self.options.resume is not None:
                     # The interrupted attempt may have started a server after this one
                     # released its stage; every server of this run has stopped by now.
                     self.tooling().runtime.release(self.root)
+            records = [*self.records, *(files.records if files is not None else [])]
+            warnings = [*self.warnings, *(files.warnings if files is not None else [])]
             return RunResult(
                 generation=self.record.generation,
                 work=str(self.root),
-                stages=tuple(self.records),
+                stages=tuple(records),
                 verification=tuple(outputs.reports),
                 images=tuple(outputs.summaries),
                 stored=tuple(outputs.stored),
-                warnings=tuple(self.warnings),
+                warnings=tuple(warnings),
             )
+
+    def _files(self) -> "Run | None":
+        """The run of the spec's ``files``, if it has them."""
+        spec = self.spec.files_spec()
+        if spec is None:
+            return None
+        # The spec's strict mode and formats are its source's; the files' have their own.
+        options = self.options.model_copy(update={"plan": PlanOptions(), "within": self.root})
+        return Run(spec, None, self.registry, options, self.clock)
+
+    @property
+    def exits(self) -> ExitStack:
+        """What closes this run's connections."""
+        return self._exits
+
+    def extracted(self, planned: Plan) -> "_Context":
+        """Extract, and open the working databases the groups are built in."""
+        check_owner(self.engine)
+        extracted = self.extract(planned)
+        working = self.engine.working(
+            self.root / "scratch", self.tooling(), extracted.server_version
+        )
+        return _Context(
+            working=working,
+            planned=planned,
+            extract=extracted,
+            key=self.key() if self._needs(Stage.TRANSFORM) else b"",
+        )
 
     def _needs(self, stage: Stage) -> bool:
         """Whether ``stage`` or a later one was requested."""
         order = list(Stage)
         return any(self._wanted(s) for s in order[order.index(stage) :])
 
-    def _group(self, context: "_Context", group: PlannedGroup, outputs: "_Outputs") -> None:
+    def build(self, context: "_Context", group: PlannedGroup, outputs: "_Outputs") -> None:
+        """Build, check and store one group's image."""
         working, planned = context.working, context.planned
         if self._needs(Stage.LOAD):
             self.load(working, planned, group)
