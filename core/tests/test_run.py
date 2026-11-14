@@ -470,7 +470,8 @@ def test_files_build_beside_the_source(tmp_path: Path, engine: FakeEngine) -> No
     spec = FILES_SPEC.replace(
         "select: {avatars: ", "exclude: []\n  select: {documents: \"path = 'none'\", avatars: "
     )
-    keys = PlanOptions(strategy=Strategy.KEYS)
+    # The default strategy is nested, whose conditions a projection cannot read alone.
+    keys = PlanOptions()
     result = run(tmp_path, registry, spec=spec, plan=keys)
     assert not result.failed(), result.verification
     files = [r for r in result.stages if r.engine == "files"]
@@ -514,3 +515,35 @@ def test_files_without_paths_from(tmp_path: Path, engine: FakeEngine) -> None:
     assert not result.failed(), result.verification
     assert not (Path(result.work) / "extract" / "paths.json").exists()
     assert len(result.images) == 2
+
+
+def test_files_paths_from_a_pattern(tmp_path: Path, engine: FakeEngine) -> None:
+    tree = FakeEngine(
+        catalog=catalog(
+            table("documents", ["path"], key=("path",), kinds=TEXT_PATH, namespace="files")
+        ),
+        source=FakeSource(rows={T("files", "documents"): [{"path": "a"}, {"path": "b"}]}),
+        name_=EngineName("files"),
+    )
+    registry = Registry(
+        engines={"fake": lambda: engine, "files": lambda: tree},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
+    )
+    # A post with no title names no file, and is not counted as unmatched.
+    engine.source.rows[T("public", "posts")].append(
+        {"id": 13, "user_id": 1, "category_id": None, "title": None}
+    )
+    paths_from = (
+        "{table: posts, path: 'https://cdn/{title}?v={id}', match: '^https://cdn/([ab])[?]'}"
+    )
+    spec = SPEC + (
+        f"files:\n  select: {{documents: \"path = 'none'\"}}\n  paths_from: {paths_from}\n"
+    )
+    result = run(tmp_path, registry, spec=spec)
+    assert json.loads((Path(result.work) / "extract" / "paths.json").read_text()) == ["a", "b"]
+    expected = (
+        "files.paths_from: 1 value(s) did not match the pattern, so their files were not"
+        " copied; check `match`"
+    )
+    assert [w for w in result.warnings if "paths_from" in w] == [expected]

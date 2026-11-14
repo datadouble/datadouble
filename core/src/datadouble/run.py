@@ -21,7 +21,7 @@ import json
 import os
 import shutil
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -37,6 +37,7 @@ from datadouble.engine import (
     EngineError,
     ExtractResult,
     Mapper,
+    Snapshot,
     SourceSession,
     TableCount,
     Tooling,
@@ -55,13 +56,20 @@ from datadouble.images import (
     unpack,
 )
 from datadouble.names import EngineName, Generation, GroupName, TableName
-from datadouble.planner import Plan, PlannedGroup, PlannedRule, PlanOptions, plan
+from datadouble.planner import Plan, PlannedGroup, PlannedPaths, PlannedRule, PlanOptions, plan
 from datadouble.registry import Registry
 from datadouble.secrets import resolve_secret
 from datadouble.signing import bundle_key, sign
 from datadouble.spec import FakerRule, FormatPreservingRule, HashRule, Spec, StrictLevel
 from datadouble.storage import Store
-from datadouble.subset import AnyOf, Condition, ValuesIn, key_conditions, nested_conditions
+from datadouble.subset import (
+    AnyOf,
+    Condition,
+    Graph,
+    ValuesIn,
+    key_conditions,
+    nested_conditions,
+)
 from datadouble.verify import FormatReport, VerificationReport, check_image, restore_failed
 
 
@@ -415,15 +423,51 @@ class Run:
                 )
                 selections = self._followed(planned, selections)
                 result = snapshot.extract(planned, selections, directory / "data", self.tooling())
+                unmatched = 0
                 if planned.paths_from is not None:
-                    ref = planned.paths_from
-                    found = snapshot.project(ref.table, selections[ref.table], (ref.column,))
-                    paths = sorted({str(row[0]) for row in found if row[0] is not None})
+                    paths, unmatched = self._paths(
+                        planned, planned.paths_from, graph, snapshot, selections
+                    )
                     (directory / _PATHS).write_text(json.dumps(paths), "utf-8")
-            return {"result": _JSON.validate_python(result.model_dump(mode="json"))}
+            return {
+                "result": _JSON.validate_python(result.model_dump(mode="json")),
+                "unmatched_paths": unmatched,
+            }
 
         manifest = self._stage(Stage.EXTRACT, None, inputs, work)
+        unmatched = manifest.outputs.get("unmatched_paths")
+        if unmatched:
+            self.warnings.append(
+                f"files.paths_from: {unmatched} value(s) did not match the pattern, so their"
+                " files were not copied; check `match`"
+            )
         return _load(ExtractResult, manifest.outputs["result"])
+
+    @staticmethod
+    def _paths(
+        planned: Plan,
+        wanted: PlannedPaths,
+        graph: Graph,
+        snapshot: Snapshot,
+        selections: Mapping[TableName, Condition],
+    ) -> tuple[list[str], int]:
+        """The paths the chosen rows name, and how many values the pattern did not match.
+
+        The rows are read through the snapshot.
+        """
+        # A nested condition refers to other tables' selections, which a projection
+        # cannot see; the keys strategy's conditions stand alone.
+        keyed = key_conditions(graph, snapshot) if planned.strategy == "nested" else selections
+        rows = snapshot.project(wanted.table, keyed[wanted.table], wanted.columns)
+        paths: set[str] = set()
+        unmatched = 0
+        for row in rows:
+            path = wanted.path(row)
+            if path is not None:
+                paths.add(path)
+            elif all(value is not None for value in row):
+                unmatched += 1
+        return sorted(paths), unmatched
 
     def _followed(
         self, planned: Plan, selections: dict[TableName, Condition]

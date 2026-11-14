@@ -10,6 +10,7 @@ problem it finds, not just the first.
 """
 
 import datetime as dt
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from typing import assert_never
@@ -18,7 +19,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from datadouble import jailer
 from datadouble.catalog import Catalog, CatalogLock, Column, ColumnKind, ForeignKey, Table
-from datadouble.names import ColumnRef, EngineName, GroupName, SpecName, TableName
+from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
     Assertion,
@@ -31,6 +32,7 @@ from datadouble.spec import (
     ImageFormat,
     NullRule,
     OnMissing,
+    PathsFrom,
     Rule,
     Spec,
     Strategy,
@@ -116,6 +118,32 @@ class PiiAllow(_Model):
     patterns: tuple[str, ...]
 
 
+_PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
+
+
+class PlannedPaths(_Model):
+    """How the chosen rows of one table name files: ``files.paths_from``, resolved."""
+
+    table: TableName
+    columns: tuple[ColumnName, ...]
+    """The columns the template names, in the order its placeholders first use them."""
+    template: str
+    """The path, with ``{column}`` for each column's value."""
+    match: str | None = None
+    """A regular expression whose first group, where it matches, is the path."""
+
+    def path(self, values: tuple[object, ...]) -> str | None:
+        """The path one row names, given its values of ``columns``; None if it names none."""
+        if any(value is None for value in values):
+            return None
+        by_column = dict(zip(self.columns, (str(value) for value in values), strict=True))
+        filled = _PLACEHOLDER.sub(lambda found: by_column[ColumnName(found[1])], self.template)
+        if self.match is None:
+            return filled
+        matched = re.search(self.match, filled)
+        return matched[1] if matched else None
+
+
 class Plan(_Model):
     """Everything the later stages need, recorded in the plan's manifest."""
 
@@ -137,8 +165,8 @@ class Plan(_Model):
     catalog: Catalog
     """The live catalog minus excluded tables."""
     warnings: tuple[str, ...]
-    paths_from: ColumnRef | None = None
-    """The column whose values for the chosen rows name the files to copy too."""
+    paths_from: PlannedPaths | None = None
+    """How the chosen rows name the files to copy too."""
 
     def graph(self) -> Graph:
         """The selection graph."""
@@ -613,14 +641,53 @@ class _Planner:
             paths_from=paths_from,
         )
 
-    def paths_from(self, excluded: frozenset[TableName]) -> ColumnRef | None:
+    def placeholders(self, table: Table, template: str) -> dict[str, ColumnName]:
+        names: dict[str, ColumnName] = {}
+        for text in _PLACEHOLDER.findall(template):
+            column = self.attempt(self.resolver.column_of, table, text)
+            if column is not None:
+                names[text] = column.name
+        if not names:
+            self.problems.append("files.paths_from.path names no column, as {column}")
+        return names
+
+    def check_match(self, pattern: str) -> None:
+        try:
+            groups = re.compile(pattern).groups
+        except re.error as error:
+            self.problems.append(f"files.paths_from.match is not a regular expression: {error}")
+            return
+        if groups < 1:
+            self.problems.append("files.paths_from.match needs a group for the path")
+
+    def paths_from(self, excluded: frozenset[TableName]) -> PlannedPaths | None:
         files = self.spec.files
         if files is None or files.paths_from is None:
             return None
-        ref = self.attempt(self.resolver.column, files.paths_from)
-        if ref is not None and ref.table in excluded:
-            self.problems.append(f"files.paths_from names {ref.table}, which is excluded")
-        return ref
+        given = files.paths_from
+        if isinstance(given, str):
+            # `table.column` is the template `{column}` over that table.
+            ref = self.attempt(self.resolver.column, given)
+            if ref is None:
+                return None
+            given = PathsFrom(table=str(ref.table), path=f"{{{ref.column}}}")
+        table = self.attempt(self.resolver.table, given.table)
+        if table is None:
+            return None
+        if table.name in excluded:
+            self.problems.append(f"files.paths_from names {table.name}, which is excluded")
+        names = self.placeholders(table, given.path)
+        if given.match is not None:
+            self.check_match(given.match)
+        template = _PLACEHOLDER.sub(
+            lambda found: f"{{{names.get(found[1], found[1])}}}", given.path
+        )
+        return PlannedPaths(
+            table=table.name,
+            columns=tuple(dict.fromkeys(names.values())),
+            template=template,
+            match=given.match,
+        )
 
 
 _FALLBACKS: dict[OnMissing, EdgeMode] = {

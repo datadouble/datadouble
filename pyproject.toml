@@ -16,7 +16,7 @@ package = false
 # The number of checker suppressions allowed in the repository; see
 # scripts/check_source.py. Raising it needs a reason in the pull request.
 [tool.datadouble]
-suppressions = 28
+suppressions = 31
 
 [tool.uv.workspace]
 members = [
@@ -32,6 +32,7 @@ members = [
     "adapters/redis",
     "adapters/elasticsearch",
     "adapters/opensearch",
+    "adapters/files",
     "adapters/s3",
     "adapters/vault",
     "conformance",
@@ -46,6 +47,7 @@ datadouble-postgres = { workspace = true }
 datadouble-redis = { workspace = true }
 datadouble-elasticsearch = { workspace = true }
 datadouble-opensearch = { workspace = true }
+datadouble-files = { workspace = true }
 datadouble-conformance = { workspace = true }
 datadouble-s3 = { workspace = true }
 datadouble-docker = { workspace = true }
@@ -69,6 +71,7 @@ dev = [
     "datadouble-redis",
     "datadouble-elasticsearch",
     "datadouble-opensearch",
+    "datadouble-files",
     "datadouble-s3",
     "datadouble-vault",
     "boto3-stubs[s3]>=1.43.126",
@@ -132,6 +135,7 @@ known-first-party = [
     "datadouble_redis",
     "datadouble_elasticsearch",
     "datadouble_opensearch",
+    "datadouble_files",
     "datadouble_s3",
     "datadouble_vault",
     "check_source",
@@ -180,9 +184,11 @@ files = [
     "adapters/redis/src",
     "adapters/elasticsearch/src",
     "adapters/opensearch/src",
+    "adapters/files/src",
     "adapters/redis/tests",
     "adapters/elasticsearch/tests",
     "adapters/opensearch/tests",
+    "adapters/files/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
     "adapters/vault/src",
@@ -192,7 +198,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -220,9 +226,11 @@ include = [
     "adapters/redis/src",
     "adapters/elasticsearch/src",
     "adapters/opensearch/src",
+    "adapters/files/src",
     "adapters/redis/tests",
     "adapters/elasticsearch/tests",
     "adapters/opensearch/tests",
+    "adapters/files/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
     "adapters/vault/src",
@@ -232,7 +240,7 @@ include = [
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests", "adapters/elasticsearch/tests", "adapters/opensearch/tests"]
+extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests", "adapters/elasticsearch/tests", "adapters/opensearch/tests", "adapters/files/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -250,6 +258,7 @@ testpaths = [
     "adapters/redis/tests",
     "adapters/elasticsearch/tests",
     "adapters/opensearch/tests",
+    "adapters/files/tests",
     "adapters/s3/tests",
     "adapters/vault/tests",
     "conformance/tests",
@@ -287,6 +296,7 @@ source = [
     "adapters/redis/src",
     "adapters/elasticsearch/src",
     "adapters/opensearch/src",
+    "adapters/files/src",
     "adapters/s3/src",
     "adapters/vault/src",
     "conformance/src",

@@ -13,6 +13,7 @@ members = [
     "datadouble-conformance",
     "datadouble-docker",
     "datadouble-elasticsearch",
+    "datadouble-files",
     "datadouble-kubernetes",
     "datadouble-mongodb",
     "datadouble-mssql",
@@ -483,6 +484,17 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-files"
+version = "0.0.0"
+source = { editable = "adapters/files" }
+dependencies = [
+    { name = "datadouble" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "datadouble", editable = "core" }]
+
+[[package]]
 name = "datadouble-kubernetes"
 version = "0.0.0"
 source = { editable = "adapters/kubernetes" }
@@ -637,6 +649,7 @@ dev = [
     { name = "datadouble-conformance" },
     { name = "datadouble-docker" },
     { name = "datadouble-elasticsearch" },
+    { name = "datadouble-files" },
     { name = "datadouble-kubernetes" },
     { name = "datadouble-mongodb" },
     { name = "datadouble-mssql" },
@@ -670,6 +683,7 @@ dev = [
     { name = "datadouble-conformance", editable = "conformance" },
     { name = "datadouble-docker", editable = "adapters/docker" },
     { name = "datadouble-elasticsearch", editable = "adapters/elasticsearch" },
+    { name = "datadouble-files", editable = "adapters/files" },
     { name = "datadouble-kubernetes", editable = "adapters/kubernetes" },
     { name = "datadouble-mongodb", editable = "adapters/mongodb" },
     { name = "datadouble-mssql", editable = "adapters/mssql" },

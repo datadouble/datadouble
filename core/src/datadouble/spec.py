@@ -452,6 +452,19 @@ class Secrets(_Model):
     """Seeds deterministic anonymization; a random key per run when omitted."""
 
 
+class PathsFrom(_Model):
+    """How the source's chosen rows name files: a template over a table's columns.
+
+    ``path: "documents/{customer_id}/{file_name}"`` builds a path from two
+    columns; ``match``, if given, is a regular expression applied to the
+    result whose first group is the path, for values such as URLs.
+    """
+
+    table: str
+    path: str = Field(min_length=1)
+    match: str | None = None
+
+
 FILES = EngineName("files")
 """The engine that copies a ``files`` section's tree."""
 
@@ -470,9 +483,9 @@ class Files(_Model):
     """Each top-level directory's ``find`` tests, such as ``-type f -mtime -30``."""
     exclude: tuple[str, ...] = ()
     """Top-level directories to leave out."""
-    paths_from: str | None = None
-    """A ``table.column`` of the source holding paths in the tree, relative to its
-    root: the files of the source's chosen rows are copied too."""
+    paths_from: str | PathsFrom | None = None
+    """How the source's chosen rows name files to copy too, relative to the root:
+    a ``table.column`` holding paths, or a template and pattern (:class:`PathsFrom`)."""
     cleanup: tuple[str, ...] = ()
     """Shell commands run in the copy's root after it is made, such as removing EXIF data."""
     image: str | None = None

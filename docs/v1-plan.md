@@ -79,24 +79,32 @@ searches give a consistent view across indices.
 
 ```yaml
 files:
-  root: /srv/uploads
-  select:                                   # one or more find(1) expressions
-    - find . -path './avatars/*' -type f -mtime -30
-    - find . -path './documents/*' -type f -size -10M
-  paths_from: customer_documents.path       # follow the database subset
-  exclude: ["./tmp", "./cache"]
+  connection: {root: /srv/uploads, accept_inconsistent: true}
+  select:                                   # find(1) tests per top-level directory
+    avatars: -mtime -30
+    documents: -false                       # only the files paths_from names
+  paths_from:                               # follow the database subset
+    table: customer_documents
+    path: '{url}'                           # a template over the row's columns
+    match: '^https://cdn[.]example[.]com/uploads/([^?]+)'   # group 1 is the path
+  exclude: [tmp, cache]
   cleanup:                                  # shell, run on the copy only
     - find . -name '*.log' -delete
     - exiftool -all= -overwrite_original -r ./avatars
+  image: vendor/exiftool:13                 # the image cleanup runs in
 ```
 
+- **A second source (decision 97):** each top-level directory is a table of
+  files keyed by their path; the files build shares the spec's generation,
+  images groups and stores, with one image per group.
 - **Consistency:** a consistent snapshot needs btrfs, ZFS or LVM. Elsewhere,
   extract fails unless the spec explicitly accepts an inconsistent copy, and the
-  manifest records it.
-- **Strict mode:** every top-level directory is matched by a `find` or
-  explicitly excluded.
-- **Following the database subset:** `paths_from` feeds a path list from the
-  database extract to `find`, so only files for rows in the subset are copied.
+  manifest records it. Version 1 takes no filesystem snapshots.
+- **Strict mode:** every top-level directory is selected or explicitly
+  excluded; a new one fails the plan.
+- **Following the database subset:** `paths_from` reads the column's values
+  for the chosen rows inside the database's snapshot, and those files are
+  copied too, so only files for rows in the subset are copied.
 - **Cleanup is not proof.** A files PII scan stays mandatory in `verify`.
 - **Portability:** GNU findutils is pinned in the image. The filesystem skill
   explains each expression back in plain words and dry-runs it against a sample
