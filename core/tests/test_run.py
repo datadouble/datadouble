@@ -212,7 +212,7 @@ def test_resume_after_a_failure(
     assert statuses(resumed)["plan"] == "reused"
     assert statuses(resumed)["extract"] == "reused"
     assert statuses(resumed)["load/all"] == "ran"
-    assert runtime.released == ["all"]
+    assert runtime.released == ["all", generation]
     assert engine.snapshots == 1
     assert not resumed.failed()
 

@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 from collections.abc import Callable, Generator, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -70,7 +71,7 @@ subset:
   virtual_fks:
     child.parent_id -> parent: {}
     child.lost_id -> gone: {}
-    other.code -> parent.code: {when: '{"term": {"kind": "x"}}'}
+    other.code -> parent: {when: '{"term": {"kind": "x"}}'}
 anonymize:
   parent: {code: {hash: {}}}
   child:
@@ -134,7 +135,7 @@ def source() -> Generator[Scratch]:
         "PUT",
         path("other"),
         "creating",
-        body={"mappings": {"properties": {"kind": KEYWORD, "code": {"type": "long"}}}},
+        body={"mappings": {"properties": {"kind": KEYWORD, "code": KEYWORD}}},
     )
     made.client.bulk(
         [
@@ -151,7 +152,7 @@ def source() -> Generator[Scratch]:
             {"index": {"_index": "gone", "_id": "9"}},
             {},
             {"index": {"_index": "other", "_id": "1"}},
-            {"kind": "x", "code": 42},
+            {"kind": "x", "code": "2"},
         ],
         "seeding",
     )
@@ -231,6 +232,7 @@ def test_fallbacks_rules_and_assertions(source: Scratch, tmp_path: Path) -> None
     assert set(parents) == {"1", "2", "7"}
     assert parents["7"] == {}
     assert parents["2"]["code"] not in {None, 42}
+    assert parents["1"] == {}
     assert children["1"]["lost_id"] is None
     assert children["1"]["missing"] is None
     assert children["1"]["label"] == "hidden"
@@ -247,14 +249,16 @@ def test_restored_checks(source: Scratch) -> None:
     with pytest.raises(EngineError, match=r"running an assertion failed: \w+ \(HTTP 400\)"):
         restored.failing_rows('{"index": "child", "query": {"bogus": {}}}')
     edge = Edge(
-        name="virtual: other.code -> parent.code",
+        name="virtual: other.code -> parent",
         child=table("other"),
         columns=(ColumnName("code"),),
         parent=table("parent"),
-        parent_columns=(ColumnName("code"),),
+        parent_columns=(ColumnName("_id"),),
         when='{"term": {"kind": "x"}}',
     )
     assert restored.orphans(edge) == 0
+    by_field = replace(edge, parent_columns=(ColumnName("code"),))
+    assert restored.orphans(by_field) == 1
     to_ids = Edge(
         name="child.parent_id -> parent",
         child=table("child"),
@@ -353,7 +357,7 @@ def test_unlisted_fields_fail_extract(source: Scratch, tmp_path: Path) -> None:
         "PUT",
         path("other", "_doc", "1"),
         "indexing",
-        body={"kind": "x", "code": 42, "secret": {"pin": "1234"}},
+        body={"kind": "x", "code": "2", "secret": {"pin": "1234"}},
         params={"refresh": True},
     )
     plan = Plan.model_validate_json((Path(planned.work) / "plan" / "plan.json").read_bytes())

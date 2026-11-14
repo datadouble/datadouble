@@ -174,15 +174,25 @@ def test_mappings_become_columns() -> None:
     assert is_open(mappings)
     assert not is_open({"properties": {"a": {"type": "keyword"}}})
     sampled: list[dict[str, object]] = [
-        {"_source": {"meta": {"a": "x", "b": "y"}, "blob": {"anything": 1}}}
+        {
+            "_source": {
+                "meta": {"a": "x", "b": "y", "c": [1, "z"], "d": None, "e": {}},
+                "blob": {"x": 1},
+            }
+        }
     ]
     columns = table_columns("people", mappings, sampled)
     assert [
-        (c.name, c.type, str(c.kind)) for c in columns if c.name in {"_id", "meta.b", "shape"}
+        (c.name, c.type, str(c.kind))
+        for c in columns
+        if c.name in {"_id", "shape"} or c.type == "unmapped"
     ] == [
         ("_id", "_id", "text"),
         ("shape", "geo_point", "other"),
-        ("meta.b", "unmapped", "other"),
+        ("meta.b", "unmapped", "text"),
+        ("meta.c", "unmapped", "other"),
+        ("meta.d", "unmapped", "other"),
+        ("meta.e", "unmapped", "json"),
     ]
     for hidden in ({"enabled": False}, {"excludes": ["secret"]}):
         with pytest.raises(EngineError, match="does not keep whole documents"):

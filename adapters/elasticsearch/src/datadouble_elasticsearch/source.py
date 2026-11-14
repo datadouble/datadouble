@@ -21,6 +21,7 @@ import datetime as dt
 import hashlib
 import itertools
 import time
+from collections import defaultdict
 from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -70,6 +71,12 @@ _KINDS: Mapping[str, ColumnKind] = {
     "binary": ColumnKind.BINARY,
     **dict.fromkeys(("object", "nested", "flattened"), ColumnKind.JSON),
 }
+_VALUE_KINDS: tuple[tuple[type, ColumnKind], ...] = (
+    (bool, ColumnKind.BOOLEAN),
+    (int, ColumnKind.INTEGER),
+    (float, ColumnKind.FLOAT),
+    (str, ColumnKind.TEXT),
+)
 _OPEN = frozenset({"false", "runtime"})
 """``dynamic`` values that let documents hold fields the mapping does not declare."""
 
@@ -153,12 +160,12 @@ def table_columns(
 ) -> tuple[Column, ...]:
     """An index's columns: ``_id``, its declared fields, then fields only documents hold."""
     declared = dict(mapped(as_document(mappings.get("properties")) or {}))
-    seen = {
-        found
-        for hit in sampled
-        for found in paths(as_document(hit.get("_source")) or {})
-        if not covered(found, set(declared))
-    }
+    seen: defaultdict[str, set[ColumnKind]] = defaultdict(set)
+    for hit in sampled:
+        source = as_document(hit.get("_source")) or {}
+        for found in paths(source):
+            if not covered(found, set(declared)):
+                seen[found].update(_kind(value) for value in values(source, found.split(".")))
     _source_kept(index, mappings)
     return (
         Column(name=ID, type="_id", kind=ColumnKind.TEXT, nullable=False),
@@ -172,10 +179,23 @@ def table_columns(
             for name, kind in sorted(declared.items())
         ),
         *(
-            Column(name=ColumnName(name), type=UNMAPPED, kind=ColumnKind.OTHER, nullable=True)
-            for name in sorted(seen)
+            Column(
+                name=ColumnName(name),
+                type=UNMAPPED,
+                kind=kinds.pop() if len(kinds) == 1 else ColumnKind.OTHER,
+                nullable=True,
+            )
+            for name, kinds in sorted(seen.items())
         ),
     )
+
+
+def _kind(value: object) -> ColumnKind:
+    """The kind of a value in a document's source, for a field no mapping declares."""
+    for kind_type, kind in _VALUE_KINDS:
+        if isinstance(value, kind_type):
+            return kind
+    return ColumnKind.JSON
 
 
 def introspect(client: Client, layout: Layout) -> Catalog:

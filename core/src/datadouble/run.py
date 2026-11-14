@@ -622,6 +622,10 @@ class Run:
                 )
                 for group in planned.groups:
                     self._group(context, group, outputs)
+                if self.options.resume is not None:
+                    # The interrupted attempt may have started a server after this one
+                    # released its stage; every server of this run has stopped by now.
+                    self.tooling().runtime.release(self.root)
             return RunResult(
                 generation=self.record.generation,
                 work=str(self.root),
