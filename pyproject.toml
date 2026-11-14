@@ -255,7 +255,7 @@ testpaths = [
     "conformance/tests",
     "tests",
 ]
-pythonpath = ["scripts", "adapters/postgres/tests"]
+pythonpath = ["scripts", "adapters/postgres/tests", "adapters/elasticsearch/tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 # A hung test fails with its stack, well inside the CI job's own time limit.
 timeout = 600
