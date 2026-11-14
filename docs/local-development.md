@@ -17,6 +17,7 @@ sample dataset:
 | MongoDB | official `mongo`, as a one-member replica set | Generated cinema database (`dev/mongodb/seed.js`) |
 | Redis | official `redis` | Generated keyspace (strings, hashes, sets, streams) |
 | Elasticsearch | official `elasticsearch`, as a single node | Generated indices derived from Pagila (`dev/elasticsearch`) |
+| OpenSearch | official `opensearchproject/opensearch`, as a single node | The same indices (`dev/opensearch`) |
 | Salesforce | none (see below) | Recorded org metadata and records |
 
 Profiles can be started individually (`docker compose --profile postgres up`) so

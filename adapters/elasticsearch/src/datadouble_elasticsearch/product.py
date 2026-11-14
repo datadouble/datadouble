@@ -66,7 +66,7 @@ class Product:
         return f"{self.repository}:{server_version}"
 
 
-_COMMON = (
+COMMON_SETTINGS = (
     "discovery.type=single-node",
     # No memory-mapped index files, which would need the host's vm.max_map_count raised.
     "node.store.allow_mmap=false",
@@ -85,7 +85,7 @@ ELASTICSEARCH = Product(
     setup='export ELASTIC_PASSWORD="$DATADOUBLE_PASSWORD"',
     heap="ES_JAVA_OPTS",
     settings=(
-        *_COMMON,
+        *COMMON_SETTINGS,
         "xpack.security.enabled=true",
         "xpack.security.http.ssl.enabled=false",
         "xpack.security.transport.ssl.enabled=false",

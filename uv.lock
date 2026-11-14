@@ -17,6 +17,7 @@ members = [
     "datadouble-mongodb",
     "datadouble-mssql",
     "datadouble-mysql",
+    "datadouble-opensearch",
     "datadouble-oracle",
     "datadouble-postgres",
     "datadouble-redis",
@@ -538,6 +539,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-opensearch"
+version = "0.0.0"
+source = { editable = "adapters/opensearch" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "datadouble-elasticsearch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "datadouble-elasticsearch", editable = "adapters/elasticsearch" },
+]
+
+[[package]]
 name = "datadouble-oracle"
 version = "0.0.0"
 source = { editable = "adapters/oracle" }
@@ -625,6 +641,7 @@ dev = [
     { name = "datadouble-mongodb" },
     { name = "datadouble-mssql" },
     { name = "datadouble-mysql" },
+    { name = "datadouble-opensearch" },
     { name = "datadouble-oracle" },
     { name = "datadouble-postgres" },
     { name = "datadouble-redis" },
@@ -657,6 +674,7 @@ dev = [
     { name = "datadouble-mongodb", editable = "adapters/mongodb" },
     { name = "datadouble-mssql", editable = "adapters/mssql" },
     { name = "datadouble-mysql", editable = "adapters/mysql" },
+    { name = "datadouble-opensearch", editable = "adapters/opensearch" },
     { name = "datadouble-oracle", editable = "adapters/oracle" },
     { name = "datadouble-postgres", editable = "adapters/postgres" },
     { name = "datadouble-redis", editable = "adapters/redis" },

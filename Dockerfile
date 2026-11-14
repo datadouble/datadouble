@@ -31,7 +31,7 @@ COPY adapters/ adapters/
 COPY conformance/ conformance/
 RUN uv sync --no-dev --no-editable --package datadouble \
         --package datadouble-btrfs --package datadouble-docker --package datadouble-kubernetes \
-        --package datadouble-mongodb --package datadouble-mssql --package datadouble-mysql --package datadouble-oracle --package datadouble-postgres --package datadouble-redis --package datadouble-elasticsearch --package datadouble-s3 \
+        --package datadouble-mongodb --package datadouble-mssql --package datadouble-mysql --package datadouble-oracle --package datadouble-postgres --package datadouble-redis --package datadouble-elasticsearch --package datadouble-opensearch --package datadouble-s3 \
         --package datadouble-vault
 
 FROM base AS tools
@@ -72,6 +72,7 @@ COPY --chown=tester:tester adapters/oracle/pyproject.toml adapters/oracle/README
 COPY --chown=tester:tester adapters/postgres/pyproject.toml adapters/postgres/README.md adapters/postgres/LICENSE adapters/postgres/
 COPY --chown=tester:tester adapters/redis/pyproject.toml adapters/redis/README.md adapters/redis/LICENSE adapters/redis/
 COPY --chown=tester:tester adapters/elasticsearch/pyproject.toml adapters/elasticsearch/README.md adapters/elasticsearch/LICENSE adapters/elasticsearch/
+COPY --chown=tester:tester adapters/opensearch/pyproject.toml adapters/opensearch/README.md adapters/opensearch/LICENSE adapters/opensearch/
 COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
 COPY --chown=tester:tester adapters/vault/pyproject.toml adapters/vault/README.md adapters/vault/LICENSE adapters/vault/
 COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/

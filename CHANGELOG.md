@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OpenSearch:** an engine adapter (`datadouble-opensearch`) for OpenSearch
+  2.4 or later, sharing the Elasticsearch adapter's code: the same tables,
+  subsets, images and rules, with OpenSearch's image, security plugin and
+  point-in-time API.
 - **Elasticsearch:** an engine adapter (`datadouble-elasticsearch`) for
   Elasticsearch 7.17 or later. Each index is a table keyed by `_id`, with its
   mapping's field paths as columns, and the extract reads every index through

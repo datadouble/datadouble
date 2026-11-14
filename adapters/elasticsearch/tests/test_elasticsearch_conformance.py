@@ -20,7 +20,7 @@ from datadouble_conformance.engine import (
 )
 from datadouble_elasticsearch import ElasticEngine
 from datadouble_elasticsearch.client import Client, path
-from datadouble_elasticsearch.product import ELASTICSEARCH
+from datadouble_elasticsearch.product import ELASTICSEARCH, Product
 
 pytestmark = pytest.mark.integration
 
@@ -95,14 +95,16 @@ store:
 
 @dataclass
 class ElasticScratch:
-    """The ``items`` index on the test cluster, emptied for each use."""
+    """The ``items`` index on a test cluster, emptied for each use."""
 
     client: Client
+    url: str
+    """The environment variable with the cluster's URL."""
 
     @property
     def connection(self) -> Mapping[str, JsonValue]:
         """Settings naming the scratch indices."""
-        return {"url": {"env": URL}, "indices": list(SCRATCH)}
+        return {"url": {"env": self.url}, "indices": list(SCRATCH)}
 
     @property
     def items(self) -> TableName:
@@ -143,9 +145,9 @@ class ElasticScratch:
 
 
 @contextmanager
-def scratch() -> Generator[ElasticScratch]:
-    """A fresh ``items`` index for the block, deleted afterwards."""
-    source = ElasticScratch(Client.from_url(os.environ[URL], ELASTICSEARCH))
+def scratch(url: str = URL, product: Product = ELASTICSEARCH) -> Generator[ElasticScratch]:
+    """A fresh ``items`` index on the cluster at ``$url`` for the block, deleted afterwards."""
+    source = ElasticScratch(Client.from_url(os.environ[url], product), url)
     source.drop()
     source.client.request(
         "PUT",

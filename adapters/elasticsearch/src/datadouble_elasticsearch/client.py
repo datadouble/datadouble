@@ -108,7 +108,9 @@ class Client:
         """
         parts = urlsplit(url)
         if parts.scheme not in _SCHEMES or not parts.hostname:
-            message = f"the URL of the {product.name} source is http[s]://[user:password@]host[:port]"
+            message = (
+                f"the URL of the {product.name} source is http[s]://[user:password@]host[:port]"
+            )
             raise EngineError(message)
         headers: dict[str, str] = {}
         if api_key:
