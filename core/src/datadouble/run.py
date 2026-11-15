@@ -31,6 +31,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, JsonValue, TypeAdapte
 
 from datadouble import __version__
 from datadouble.anonymize import Anonymizer, new_key
+from datadouble.boundary import require_inside
 from datadouble.catalog import CatalogLock
 from datadouble.engine import (
     EngineAdapter,
@@ -368,6 +369,7 @@ class Run:
     def session(self) -> SourceSession:
         """The source connection, opened on first use."""
         if self._session is None:
+            require_inside("reading the source")
             self._session = self._exits.enter_context(
                 self.engine.connect(self.spec.source.connection)
             )

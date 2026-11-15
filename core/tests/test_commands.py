@@ -353,3 +353,18 @@ def test_import_jailer(spec_file: Path, tmp_path: Path) -> None:
     code, out = cli_run("--json", "import-jailer", "--spec", str(spec_file), *arguments)
     assert code == ExitCode.FAILURE
     assert json.loads(out)["error"] == ErrorCode.INVALID_SUBSET
+
+
+def test_unmarked_machines_cannot_read_the_source(
+    spec_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DATADOUBLE_BOUNDARY")
+    for command in ("lock", "plan"):
+        response = api.handle_json(json.dumps({"command": command, "spec": str(spec_file)}))
+        assert isinstance(response, api.ErrorResponse)
+        assert response.error is ErrorCode.OUTSIDE_BOUNDARY
+        assert "DATADOUBLE_BOUNDARY=inside" in response.message
+    monkeypatch.setenv("DATADOUBLE_BOUNDARY", "yes")
+    response = api.handle_json(json.dumps({"command": "plan", "spec": str(spec_file)}))
+    assert isinstance(response, api.ErrorResponse)
+    assert response.error is ErrorCode.OUTSIDE_BOUNDARY

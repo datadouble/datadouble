@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from datadouble.anonymize import Anonymizer
+from datadouble.boundary import BoundaryError
 from datadouble.catalog import CatalogLock, ColumnKind
 from datadouble.engine import EngineError, Tooling
 from datadouble.images import ImageSummary, unpack
@@ -547,3 +548,11 @@ def test_files_paths_from_a_pattern(tmp_path: Path, engine: FakeEngine) -> None:
         " copied; check `match`"
     )
     assert [w for w in result.warnings if "paths_from" in w] == [expected]
+
+
+def test_runs_need_the_boundary(
+    tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DATADOUBLE_BOUNDARY")
+    with pytest.raises(BoundaryError, match="reading the source runs only on machines"):
+        run(tmp_path, registry)

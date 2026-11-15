@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, Valid
 from datadouble import __version__, jailer
 from datadouble.announce import AnnounceError, announce, withdraw
 from datadouble.anonymize import AnonymizeError
+from datadouble.boundary import BoundaryError, require_inside
 from datadouble.catalog import CatalogError, CatalogLock, read_lock, write_lock
 from datadouble.channels import Channel
 from datadouble.engine import EngineError
@@ -121,6 +122,7 @@ class ErrorCode(StrEnum):
     REPLICATE_FAILED = "replicate_failed"
     ANNOUNCE_FAILED = "announce_failed"
     PRUNE_FAILED = "prune_failed"
+    OUTSIDE_BOUNDARY = "outside_boundary"
 
 
 class _Message(BaseModel):
@@ -466,6 +468,7 @@ _ERRORS: tuple[tuple[type[Exception], ErrorCode], ...] = (
     (ReplicateError, ErrorCode.REPLICATE_FAILED),
     (AnnounceError, ErrorCode.ANNOUNCE_FAILED),
     (PruneError, ErrorCode.PRUNE_FAILED),
+    (BoundaryError, ErrorCode.OUTSIDE_BOUNDARY),
 )
 _HANDLED: tuple[type[Exception], ...] = (
     SpecError,
@@ -509,6 +512,7 @@ def _lock(request: _SpecRequest) -> CatalogLock | None:
 def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
     spec = load_spec(request.spec)
     engine = registry.engine(spec.source.engine)
+    require_inside("reading the source")
     with engine.connect(spec.source.connection) as session:
         lock = CatalogLock.of(session.catalog())
     path = request.lock_path()
@@ -521,6 +525,7 @@ def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
 def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJailerResponse:
     spec = load_spec(request.spec)
     engine = registry.engine(spec.source.engine)
+    require_inside("reading the source")
     with engine.connect(spec.source.connection) as session:
         catalog = session.catalog()
     translated = jailer.load(
@@ -545,6 +550,7 @@ def _plan(request: PlanRequest, registry: Registry) -> PlanResponse:
     spec = load_spec(request.spec)
     lock = _lock(request)
     engine = registry.engine(spec.source.engine)
+    require_inside("reading the source")
     with engine.connect(spec.source.connection) as session:
         planned = plan(spec, session.catalog(), lock, engine.capabilities(), request.plan_options())
     if planned.warnings:

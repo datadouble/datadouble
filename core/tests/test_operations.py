@@ -20,6 +20,7 @@ from datadouble.announce import (
     describe,
     withdraw,
 )
+from datadouble.boundary import BoundaryError
 from datadouble.channels import point_channel, read_channel
 from datadouble.engine import EngineError
 from datadouble.images import (
@@ -143,6 +144,14 @@ def export_channel(tmp_path: Path) -> Generation | None:
 
 
 # promote
+
+
+def test_promote_needs_the_boundary(
+    tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DATADOUBLE_BOUNDARY")
+    with pytest.raises(BoundaryError, match="promote runs only on machines marked as inside"):
+        promote(make_spec(tmp_path), registry)
 
 
 def test_promote_copies_and_advances_the_channel(tmp_path: Path, registry: Registry) -> None:

@@ -304,10 +304,20 @@ boundary: self-hosted GitHub runners (or Actions Runner Controller), GitLab
 runners selected by tag, Jenkins agents selected by label, or a Kubernetes
 cluster in production.
 
+- **Runners are marked inside the boundary.** Reading a spec's source (`lock`,
+  `plan`, and every `run` that plans or extracts) and `promote` refuse to run
+  unless the machine's environment sets `DATADOUBLE_BOUNDARY=inside`, with the
+  error `outside_boundary` (decision 98). The operator sets it once, where the
+  runner is configured: a self-hosted GitHub runner's `.env`, a GitLab
+  runner's `environment`, a Jenkins agent's environment, or the pod template of
+  Datadouble's Kubernetes jobs. A machine nobody marked, such as a vendor's
+  hosted runner or an unfamiliar CI system, is refused before anything
+  connects.
 - `datadouble ci init --job build` fails without `--runner`. It never emits a
   vendor-hosted runner such as `ubuntu-latest`.
-- At run time, `build` fails if the CI/CD adapter can identify a vendor-hosted
-  runner (for example, GitHub's `RUNNER_ENVIRONMENT=github-hosted`).
+- At run time, `build` also fails if the CI/CD adapter can identify a
+  vendor-hosted runner (for example, GitHub's
+  `RUNNER_ENVIRONMENT=github-hosted`), even one marked inside.
 - `build` runs engine software in containers (decision 72), so its runner
   needs the spec's container runtime: a Docker-compatible daemon that sees
   the work directory at the same path, or, for `kubernetes`, a pod whose work

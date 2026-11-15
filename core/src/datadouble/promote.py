@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
 
+from datadouble.boundary import require_inside
 from datadouble.channels import point_channel
 from datadouble.images import ImageSummary, digest, generations, image_lines, read_summary
 from datadouble.names import Generation, GroupName
@@ -160,6 +161,7 @@ def promote(
     generation: Generation | None = None,
 ) -> tuple[Promoted, ...]:
     """Promote the newest (or the given) generation of each group; all or nothing."""
+    require_inside("promote")
     with tempfile.TemporaryDirectory(prefix="dd-promote-") as directory:
         promotion = _Promotion(spec, registry, Path(directory))
         wanted = groups or tuple(spec.images)
