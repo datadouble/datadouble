@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   action at `ci/github-actions`, which runs the Datadouble image on a
   self-hosted runner. `ci init` refuses GitHub's own runners for `build` and
   `promote`.
+- **GitLab CI.** The GitLab adapter (`datadouble-gitlab`) writes a file of
+  jobs per side of the boundary, including a job template pinned by tag and
+  SHA-256, with jobs chosen by `DATADOUBLE_JOB` from pipeline schedules or
+  manual runs, and on-demand copies in merge request environments that are
+  released when the request is merged or closed. Warnings are GitLab's
+  allowed failures (exit code 3), and outputs a dotenv report. `ci init`
+  lists the setup GitLab's configuration cannot hold, such as schedules.
 - **Reporting to the CI system.** `--ci SYSTEM` (or `ci` in a JSON request)
   masks the secret values Datadouble resolves in the system's logs and
   reports the response as step outputs, a job summary and the system's own
@@ -156,6 +163,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`datadouble-kubernetes`) and **`datadouble-vault`** (`vault`).
 - **`datadouble prune`** for the build's stores, the export stores and
   staging, never removing a channel's target, with `--dry-run`.
+
+### Changed
+
+- On-demand `replicate` makes copies up to the spec's `size` for an owner,
+  rather than `size` more each time, so repeating a request makes none.
 
 ### Fixed
 

@@ -464,6 +464,8 @@ class CiInitResponse(_Message):
     files: tuple[str, ...]
     environment: tuple[str, ...]
     """Environment variables the jobs read secrets from: define each where the jobs run."""
+    instructions: tuple[str, ...] = ()
+    """What to set up in the CI system that its configuration cannot hold."""
 
 
 class ErrorDetail(_Message):
@@ -712,6 +714,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         side=planned.side,
         files=tuple(written),
         environment=planned.environment(),
+        instructions=adapter.instructions(planned),
     )
 
 

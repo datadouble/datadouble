@@ -1,0 +1,60 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The job template every job `datadouble ci init --system gitlab` writes
+# extends. Generated configuration includes it from this repository at the
+# release's tag, pinned by its SHA-256 (`include: remote` with `integrity`).
+#
+# It runs one datadouble command in the Datadouble image as the engine's user
+# (decision 86), on the host's network, with the runner's Docker daemon for
+# the engines' containers and the project directory and the spec's host paths
+# at the same paths, since engine containers mount them by those paths. Jobs
+# therefore need a runner whose shell executor has Docker. The command writes
+# its outputs (outcome, generation, error code: never data) into
+# datadouble.env, a dotenv report that later jobs read and a file people can
+# download; a warning exits with 3, which `allow_failure: exit_codes` shows as
+# a warning.
+
+.datadouble:
+  allow_failure:
+    exit_codes: [3]
+  artifacts:
+    when: always
+    paths: [datadouble.env]
+    reports:
+      dotenv: datadouble.env
+  script:
+    - |
+      set -euo pipefail
+      mapfile -t arguments < <(printf '%s\n' "$DATADOUBLE_ARGUMENTS" | sed '/^[[:space:]]*$/d')
+      bridge=$(mktemp -d "$CI_PROJECT_DIR/.datadouble-ci.XXXXXX")
+      trap 'rm -rf "$bridge"' EXIT
+      chmod 0777 "$bridge"
+      : > datadouble.env
+      socket=/var/run/docker.sock
+      options=(
+          --rm --network host
+          --user "$DATADOUBLE_USER" --group-add "$(stat -c %g "$socket")"
+          --volume "$socket:$socket"
+          --volume "$CI_PROJECT_DIR:$CI_PROJECT_DIR" --workdir "$CI_PROJECT_DIR"
+          --env HOME=/tmp
+          --env DATADOUBLE_BOUNDARY --env CI_RUNNER_TAGS
+      )
+      # Docker would create a missing path as root, which the engine's user
+      # cannot write, so a path the runner lacks fails here.
+      while IFS= read -r path; do
+          if [ -z "$path" ]; then continue; fi
+          if [ ! -e "$path" ]; then
+              echo "error: $path does not exist on this runner; create it, owned by $DATADOUBLE_USER"
+              exit 1
+          fi
+          options+=(--volume "$path:$path")
+      done <<< "${DATADOUBLE_MOUNTS:-}"
+      while IFS= read -r name; do
+          if [ -n "$name" ]; then options+=(--env "$name"); fi
+      done <<< "${DATADOUBLE_ENVIRONMENT:-}"
+      status=0
+      docker run "${options[@]}" "$DATADOUBLE_IMAGE" \
+          --ci gitlab --ci-directory "$bridge" "${arguments[@]}" || status=$?
+      if [ -f "$bridge/outputs" ]; then cat "$bridge/outputs" > datadouble.env; fi
+      exit "$status"

@@ -491,6 +491,9 @@ def _ci_lines(response: api.CiInitResponse) -> list[str]:
     if response.environment:
         lines.append("define these as secrets where the jobs run:")
         lines.extend(f"  {name}" for name in response.environment)
+    if response.instructions:
+        lines.append("then, in the CI system:")
+        lines.extend(f"  {line}" for line in response.instructions)
     return lines
 
 

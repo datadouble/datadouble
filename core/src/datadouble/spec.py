@@ -427,7 +427,7 @@ class Replicate(_Model):
     using: AdapterSettings
     mode: ReplicateMode = ReplicateMode.POOL
     size: int = Field(default=2, ge=1)
-    """Unclaimed copies to keep ready (pool), or copies per request (on-demand)."""
+    """Unclaimed copies to keep ready (pool), or copies per owner (on-demand)."""
     expires_hours: int = Field(default=24, ge=1)
     """How long an on-demand copy lives before ``release --expired`` removes it."""
 

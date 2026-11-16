@@ -124,6 +124,7 @@ class RunContext:
     inputs: Mapping[str, str] = field(default_factory=dict[str, str])
     request: int | None = None
     run_id: str = "1"
+    """The CI system's run: a run with the ID of an earlier one retries it."""
 
 
 class CiHarness(Protocol):
@@ -154,6 +155,10 @@ class CiHarness(Protocol):
 
     def uploaded(self) -> list[Path]:
         """Files jobs uploaded to the system's own artifact storage."""
+        ...
+
+    def owner(self, repository: Path, request: int) -> str:
+        """Who a request's on-demand copies are for (``pr-7``, ``mr-1``)."""
         ...
 
 
@@ -398,7 +403,7 @@ class CiConformance:
 
         assert run("provision", Event.REQUEST_OPENED, request=7).state is State.SUCCESS
         (copy,) = shop.copies("on-demand")
-        assert copy.owner == "pr-7"
+        assert copy.owner == ci_harness.owner(shop.repository, 7)
         assert copy.generation == first
         assert run("release", Event.REQUEST_CLOSED, request=7).state is State.SUCCESS
         assert shop.copies("on-demand") == ()
@@ -438,7 +443,7 @@ class CiConformance:
         )  # fmt: skip
         assert isinstance(made, api.CiInitResponse), made
         ci_harness.prepare(pool_repository)
-        context = shop.context()
+        context = shop.context(run_id="401")
         built = ci_harness.run(shop.repository, "build", Event.MANUAL, context)
         assert built.state is State.SUCCESS, built.log
         promoted = ci_harness.run(shop.repository, "promote", Event.MANUAL, context)
@@ -477,13 +482,13 @@ class CiConformance:
         assert refused.error is api.ErrorCode.CI_FAILED
         environ = {"DATADOUBLE_BOUNDARY": "inside", **ci_harness.hosted_environment}
         hosted = ci_harness.run(
-            shop.repository, "build", Event.MANUAL, shop.context(environ=environ)
+            shop.repository, "build", Event.MANUAL, shop.context(run_id="301", environ=environ)
         )
         assert hosted.state is State.FAILURE, hosted.log
         assert hosted.outputs.get("error") == "outside_boundary", hosted.log
         unmarked = ci_harness.run(
             shop.repository, "build", Event.MANUAL,
-            shop.context(environ={"RUNNER_ENVIRONMENT": "self-hosted"}),
+            shop.context(run_id="302", environ={"RUNNER_ENVIRONMENT": "self-hosted"}),
         )  # fmt: skip
         assert unmarked.outputs.get("error") == "outside_boundary", unmarked.log
         assert shop.generations(shop.store) == []
