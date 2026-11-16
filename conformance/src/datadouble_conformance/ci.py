@@ -136,8 +136,8 @@ class CiHarness(Protocol):
         ...
 
     @property
-    def hosted_runner(self) -> str:
-        """A runner the vendor hosts, which ``ci init`` must refuse for ``build``."""
+    def hosted_runner(self) -> str | None:
+        """A vendor's runner ``ci init`` must refuse, or None where there are none (Jenkins)."""
         ...
 
     @property
@@ -474,12 +474,13 @@ class CiConformance:
 
     def test_hosted_runners_are_refused(self, ci_harness: CiHarness, shop: World) -> None:
         """``build`` is never generated for, nor runs on, a vendor-hosted runner."""
-        refused = ci_init(
-            shop, ci_harness.system, shop.spec("on-demand"), JobKind.BUILD,
-            runner=ci_harness.hosted_runner, work=str(shop.base / "work"),
-        )  # fmt: skip
-        assert isinstance(refused, api.ErrorResponse)
-        assert refused.error is api.ErrorCode.CI_FAILED
+        if ci_harness.hosted_runner is not None:
+            refused = ci_init(
+                shop, ci_harness.system, shop.spec("on-demand"), JobKind.BUILD,
+                runner=ci_harness.hosted_runner, work=str(shop.base / "work"),
+            )  # fmt: skip
+            assert isinstance(refused, api.ErrorResponse)
+            assert refused.error is api.ErrorCode.CI_FAILED
         environ = {"DATADOUBLE_BOUNDARY": "inside", **ci_harness.hosted_environment}
         hosted = ci_harness.run(
             shop.repository, "build", Event.MANUAL, shop.context(run_id="301", environ=environ)

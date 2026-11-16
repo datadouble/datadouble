@@ -1,0 +1,17 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The test Jenkins: one administrator, and the built-in node running jobs
+# labelled as both of the suite's runners.
+jenkins:
+  systemMessage: Datadouble CI/CD conformance
+  numExecutors: 2
+  labelString: "prod-db staging"
+  mode: NORMAL
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${DDCI_JENKINS_PASSWORD}"
+  authorizationStrategy: loggedInUsersCanDoAnything

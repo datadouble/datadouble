@@ -37,6 +37,7 @@ members = [
     "adapters/vault",
     "ci/github-actions",
     "ci/gitlab",
+    "ci/jenkins",
     "conformance",
 ]
 
@@ -59,6 +60,7 @@ datadouble-btrfs = { workspace = true }
 datadouble-mongodb = { workspace = true }
 datadouble-github-actions = { workspace = true }
 datadouble-gitlab = { workspace = true }
+datadouble-jenkins = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -80,6 +82,7 @@ dev = [
     "datadouble-vault",
     "datadouble-github-actions",
     "datadouble-gitlab",
+    "datadouble-jenkins",
     "boto3-stubs[s3]>=1.43.126",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
@@ -146,6 +149,7 @@ known-first-party = [
     "datadouble_vault",
     "datadouble_github_actions",
     "datadouble_gitlab",
+    "datadouble_jenkins",
     "check_source",
     "make_tag",
     "check_coverage",
@@ -205,12 +209,14 @@ files = [
     "ci/github-actions/tests",
     "ci/gitlab/src",
     "ci/gitlab/tests",
+    "ci/jenkins/src",
+    "ci/jenkins/tests",
     "conformance/src",
     "conformance/tests",
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/s3/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/s3/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:ci/jenkins/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -251,6 +257,8 @@ include = [
     "ci/github-actions/tests",
     "ci/gitlab/src",
     "ci/gitlab/tests",
+    "ci/jenkins/src",
+    "ci/jenkins/tests",
     "conformance/src",
     "conformance/tests",
     "scripts",
@@ -279,6 +287,7 @@ testpaths = [
     "adapters/vault/tests",
     "ci/github-actions/tests",
     "ci/gitlab/tests",
+    "ci/jenkins/tests",
     "conformance/tests",
     "tests",
 ]
@@ -320,6 +329,7 @@ source = [
     "adapters/vault/src",
     "ci/github-actions/src",
     "ci/gitlab/src",
+    "ci/jenkins/src",
     "conformance/src",
     "scripts",
 ]
