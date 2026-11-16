@@ -9,7 +9,7 @@
 # the official PostgreSQL image with the extension added, so the source is
 # exactly the server the conformance spec's working image runs; installing the
 # extension from apt would upgrade PostgreSQL past it.
-FROM pgvector/pgvector:0.8.2-pg18-trixie@sha256:b7337db8fe39d12fe8ecb0003c72680f24479813a744b43154eee6f2eab5a5f3
+FROM pgvector/pgvector:0.8.7-pg18-trixie@sha256:ab49524d18df7200b74ac9a475e1db6297fc1eb57da4c214c63d10ecc4b754fa
 
 COPY --chmod=0644 roles.sql /docker-entrypoint-initdb.d/05-roles.sql
 ADD --chmod=0644 \
