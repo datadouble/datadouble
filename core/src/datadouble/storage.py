@@ -93,8 +93,12 @@ class FilesystemStore:
 
     def _write(self, key: str, write: "_Writer") -> None:
         target = self._path(key)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        handle, temporary = tempfile.mkstemp(dir=target.parent, prefix=".partial-")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            handle, temporary = tempfile.mkstemp(dir=target.parent, prefix=".partial-")
+        except OSError as error:
+            message = f"cannot write {key} to {self.describe()}: {error.strerror}"
+            raise StoreError(message) from None
         os.close(handle)
         try:
             write(Path(temporary))

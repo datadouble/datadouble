@@ -218,31 +218,50 @@ requests and maps the CI system's conventions onto them. It has three parts:
 ### Generation
 
 ```
-datadouble ci init --system jenkins --job build,promote --spec prod.yml --runner prod-db
-datadouble ci init --system jenkins --job fetch,provision,release,prune,activate --spec prod.yml
-datadouble ci init --system gitlab --job provision,release --mode on-demand --spec prod.yml
+datadouble ci init --system github-actions --job build,promote,prune --spec datadouble/shop.yml \
+    --runner prod-db --work /srv/datadouble/work
+datadouble ci init --system github-actions --job fetch,provision,release,prune,activate \
+    --spec datadouble/shop.yml --runner staging
 ```
 
 The equivalent JSON request:
 
 ```json
-{"command": "ci.init", "system": "jenkins", "jobs": ["build", "promote"],
- "spec": "prod.yml", "runner": "prod-db"}
+{"command": "ci.init", "system": "github-actions", "jobs": ["build", "promote", "prune"],
+ "spec": "datadouble/shop.yml", "runner": "prod-db", "work": "/srv/datadouble/work"}
 ```
 
-The response lists the files written. Generated configuration:
+The response lists the files written and the environment variables the jobs
+read secrets from. One call writes one side of the boundary: mixing
+production and non-production jobs fails, and `prune` alone needs `--side`.
 
-- Pins the Datadouble version
-- References secrets by name only
-- Includes schedules and job chaining (for example `promote` after a successful
-  `build`), with time zones stated explicitly
-- Includes the system's concurrency controls
-- Exposes run-time switches as job parameters: debug output, keeping the
-  scratch work directory for inspection (it stays in production), dry runs for
-  `prune`, and the channel to use
+The core decides what every job runs (decision 100): its `datadouble`
+command lines, triggers, schedules and parameters, which secrets it reads and
+which host paths it needs. The adapter only writes that in its system's form,
+so the jobs are the same on every system. Generated configuration:
 
-Generating `build` requires an explicit runner target (see
-[where jobs run](#where-jobs-run)).
+- Pins the Datadouble version: the native step at that release's tag, and
+  the release's image.
+- References secrets by name only. Each job gets only the secrets its own
+  spec sections name (`build` the source's and the build store's, `fetch` the
+  trust settings'), plus `COSIGN_PASSWORD` for a build signed with a key, and
+  any `--env NAME` given for credentials adapters read from the
+  environment, such as `AWS_ACCESS_KEY_ID`.
+- Includes schedules, in UTC, and job chaining: `promote` after a successful
+  `build`, and a pool's `provision` after `fetch`.
+- Includes the system's concurrency controls, per job, and per request for
+  on-demand copies.
+- Exposes run-time switches as job parameters: `--dry-run` for `prune`, and
+  the generation to `activate`.
+- Passes the CI system's run ID as `--retry-key` to `build`, so retrying a
+  failed run resumes the generation it started (decision 100).
+- Makes on-demand copies when a pull or merge request opens, for
+  `pr-<number>`, and releases them when it closes. Requests from forks never
+  run on the team's runners.
+
+The mode, pool or on-demand, comes from the spec's `replicate` section.
+Generating `build` or `promote` requires an explicit runner target, and
+`build` an absolute work directory (see [where jobs run](#where-jobs-run)).
 
 ### Supported systems
 
@@ -250,7 +269,7 @@ Generating `build` requires an explicit runner target (see
 
 | System | Native form | Outputs | Secrets | Teardown hook |
 |---|---|---|---|---|
-| GitHub Actions | Container actions in this repository (`datadouble/datadouble/actions/build@v1`, one per job) and reusable workflows | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage | `pull_request: closed` workflow |
+| GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage and for keyless signing | `pull_request: closed` workflow |
 | GitLab CI | CI/CD Catalog components with `spec:inputs`, one per job | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
 | Jenkins | Shared library with one step per job (`datadoubleBuild(spec: ...)`); `activate` uses an `input` step to choose the generation | Step return values, env vars | Credentials binding | `post { cleanup }` or a branch-deletion job |
 | Argo CD | Helm chart: CronJobs for build, promote, fetch, pool provisioning and prune; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret` | Kubernetes Secrets, External Secrets | PostDelete hook |
@@ -267,17 +286,19 @@ can mirror that project.
 
 ### Runtime bridging
 
-The core receives the CI system as an explicit `--ci <system>` (set by generated
-configuration and the native steps), not by auto-detection. The CI/CD adapter
-then:
+The core receives the CI system as an explicit `--ci <system>` (set by the
+native steps; `ci` in a JSON request), not by auto-detection. The CI/CD
+adapter then:
 
-- Resolves secret references through the system's mechanism and registers every
-  resolved value with the system's log masking.
-- Writes the JSON response's outputs as native job outputs, maps the outcome
-  (success, warning, failure) to the native build state, and writes a short
-  summary (image ID, generation, row counts, verification result, copies made
-  or released) where the system has one, so the system's own notifications
-  report it.
+- Registers every secret value Datadouble resolves with the system's log
+  masking, where the system has it (GitHub's `add-mask`). Secrets reach
+  Datadouble as environment variables, set from the system's own secrets.
+- Writes the JSON response's outputs as native job outputs (`outcome`, the
+  `generation` a run built, the `error` code of a failure), maps the outcome
+  (success, warning, failure) to the native build state, and writes the
+  summary the CLI prints where the system has one, so the system's own
+  notifications report it. GitHub Actions has no warning state, so a warning
+  is a passing step with a warning annotation.
 - Emits concurrency controls in generated configuration (GitHub `concurrency`,
   GitLab `resource_group`, Jenkins `disableConcurrentBuilds` / `lock`). The core
   also takes locks in storage and staging, because different systems may run
@@ -291,7 +312,8 @@ CI systems' own artifact and cache storage is often outside production (GitHub's
 artifact storage is on github.com, for example). CI/CD adapters never upload
 extract artifacts, working databases or golden images there. Resumability
 ([decision 7](decisions.md)) for `build` uses a persistent work directory in
-production scratch space, named in the spec, not the CI workspace.
+production scratch space, named when the jobs are generated (`--work`), not the
+CI workspace.
 
 Manifests and reports may be uploaded as CI artifacts, so they must never
 contain data values. In particular, `pii-scan` reports name columns and
@@ -315,8 +337,8 @@ cluster in production.
   connects.
 - `datadouble ci init --job build` fails without `--runner`. It never emits a
   vendor-hosted runner such as `ubuntu-latest`.
-- At run time, `build` also fails if the CI/CD adapter can identify a
-  vendor-hosted runner (for example, GitHub's
+- At run time, reading the source and `promote` also fail if any installed
+  CI/CD adapter recognizes a vendor-hosted runner (for example, GitHub's
   `RUNNER_ENVIRONMENT=github-hosted`), even one marked inside.
 - `build` runs engine software in containers (decision 72), so its runner
   needs the spec's container runtime: a Docker-compatible daemon that sees
@@ -325,6 +347,17 @@ cluster in production.
 
 Non-production jobs get separate generated configuration and separate secrets.
 Generation never puts production credentials into a non-production job.
+
+### How a job runs Datadouble
+
+Native steps run the pinned Datadouble image with the runner's Docker daemon
+(decision 100). The image runs as the engine's user (decision 86), on the
+host's network, so it reaches the source and the working servers' published
+ports as the runner would. The workspace, and every absolute path the job's
+spec sections name (stores, staging, copies, a Unix socket directory, the
+work directory), are mounted at the same path, because the engine containers
+Datadouble starts mount them by those paths. A job's runner therefore needs
+Docker, with those paths owned by the engine's user.
 
 ## Testing
 
@@ -340,42 +373,52 @@ combination, plus validation with each system's own tooling:
 | Jenkins | Declarative pipeline validator in the Jenkins container; shared-library unit tests with JenkinsPipelineUnit |
 | Argo CD / Kubernetes | `helm lint`, `kubeconform` |
 
-**2. Local end-to-end.** Each system runs in containers under `dev/ci/`,
-alongside the PostgreSQL dev profile, and runs every job against the Pagila
-sample:
+**2. Local end-to-end.** Each system runs locally, and runs every job, as
+`ci init` wrote it, against a small shop database in PostgreSQL, with the
+Datadouble image built from the checkout (`make test-ci SYSTEM=<name>`):
 
 | System | Local runtime |
 |---|---|
-| GitHub Actions | `act` with a self-hosted-style runner image |
+| GitHub Actions | `act`, running jobs on the host as a self-hosted runner does |
 | GitLab CI | GitLab CE and GitLab Runner containers |
 | Jenkins | `jenkins/jenkins` configured with Configuration as Code |
 | Argo CD | kind cluster with Argo CD installed |
 
-These profiles are heavy and opt-in (`docker compose --profile ci-gitlab up`).
+The container-based systems' profiles live under `dev/ci/`; they are heavy and
+opt-in (`docker compose --profile ci-gitlab up`).
 
 **3. Scheduled runs on hosted services.** GitHub Actions on this repository and
-a GitLab.com project, nightly. They use ephemeral self-hosted runners started by
+a GitLab.com project, nightly (the GitLab run waits for that project; see
+decision 99). They use ephemeral self-hosted runners started by
 the test, so the hosted-runner refusal in `build` is exercised exactly as in
 real use. This catches API and runner changes that local runtimes like `act`
 don't reproduce.
 
 ### CI/CD conformance suite
 
-Every CI/CD adapter must pass a shared suite under `conformance/ci/`:
+Every CI/CD adapter must pass a shared suite, `datadouble_conformance.ci` in
+the conformance package. The adapter's tests supply a harness that runs one
+generated job in the system's local runtime; each test starts from a fresh
+source, stores and repository, with jobs `ci init` wrote for both sides:
 
 - build → promote → fetch → provision completes in both pool and on-demand
   modes, and each job's native outputs and build state match its JSON response.
 - A warning outcome maps to the native warning state; a failure stores nothing.
 - A known test secret never appears in the job logs.
-- `promote` refuses an image whose verification failed or was skipped.
-- `build` refuses to generate or run on a vendor-hosted runner.
-- A `build` killed mid-run resumes from the last completed stage on retry.
-- `fetch` skips the download when nothing newer exists, and `replicate` never
-  copies an image `fetch` is still writing.
+- `promote` refuses when verification failed.
+- `build` refuses to generate or run on a vendor-hosted runner, or on a runner
+  nobody marked inside the boundary.
+- A `build` that fails part way resumes from the last completed stage when the
+  run is retried.
+- `fetch` skips the download when nothing newer exists.
 - `activate` rolls the staging channel back, and new copies come from the
   chosen generation.
-- `release` removes every on-demand copy `provision` created, `release
-  --expired` collects a copy whose teardown was skipped, and pool recycling
-  replaces old-generation copies without emptying the pool.
+- `release` removes every on-demand copy `provision` created when the request
+  closes, and its scheduled sweep runs.
 - `prune` never removes an image a channel points to.
 - No data artifact is uploaded to the CI system's artifact storage.
+
+The core's own tests cover what needs a clock or a race rather than a CI
+system: `release --expired` collecting a copy past its expiry, pool recycling
+across generations, and `replicate` never copying an image `fetch` is still
+writing.

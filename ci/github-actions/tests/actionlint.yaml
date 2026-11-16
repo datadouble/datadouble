@@ -1,0 +1,6 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The runner labels the golden workflows name.
+self-hosted-runner:
+  labels: [prod-db, staging]

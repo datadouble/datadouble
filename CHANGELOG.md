@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI/CD jobs, starting with GitHub Actions.** `datadouble ci init` writes a
+  side of the boundary's jobs for a spec (`build`, `promote`, `fetch`,
+  `provision`, `release`, `prune`, `activate`), with schedules, chaining,
+  concurrency and per-job secrets referenced by name. The GitHub Actions
+  adapter (`datadouble-github-actions`) writes a workflow per job using the
+  action at `ci/github-actions`, which runs the Datadouble image on a
+  self-hosted runner. `ci init` refuses GitHub's own runners for `build` and
+  `promote`.
+- **Reporting to the CI system.** `--ci SYSTEM` (or `ci` in a JSON request)
+  masks the secret values Datadouble resolves in the system's logs and
+  reports the response as step outputs, a job summary and the system's own
+  success, warning or failure state.
+- **Retries resume.** `run --retry-key KEY` resumes the generation an earlier
+  attempt with the same key started, so a retried CI run picks up where it
+  failed.
+- **Hosted runners are refused at run time.** Reading a source and `promote`
+  fail on a machine a CI/CD adapter recognizes as its vendor's hosted runner,
+  such as GitHub's, even when it is marked inside the boundary.
 - **The production boundary mark.** Reading a source and `promote` run only
   where `DATADOUBLE_BOUNDARY=inside` is set, so a runner must be marked as
   inside the production boundary before it can read production data.
@@ -138,3 +156,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`datadouble-kubernetes`) and **`datadouble-vault`** (`vault`).
 - **`datadouble prune`** for the build's stores, the export stores and
   staging, never removing a channel's target, with `--dry-run`.
+
+### Fixed
+
+- The Datadouble image could not load the S3 store adapter, which imported a
+  typing-only package at run time. Every command that loads the installed
+  adapters failed in the image.
+- A work directory, filesystem store or staging directory Datadouble could
+  not write ended the command with a Python traceback. Each is now an error
+  response (`run_failed`, `store_failed`, `staging_failed`), and any other
+  file that fails is `file_failed`, without the file's name.

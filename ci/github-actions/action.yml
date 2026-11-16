@@ -1,0 +1,45 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# Runs one datadouble command in the Datadouble image and reports it to
+# GitHub Actions. Workflows written by `datadouble ci init --system
+# github-actions` use it; see this directory's README.
+
+name: Datadouble
+description: Run a Datadouble command in the Datadouble image, as the engine's user
+author: Tight Line LLC
+branding:
+  icon: copy
+  color: blue
+
+inputs:
+  arguments:
+    description: The datadouble command line after the global options, one argument per line
+    required: true
+  image:
+    description: The Datadouble image, pinned to a release
+    required: true
+  user:
+    description: The uid:gid Datadouble runs as, the engine's owner
+    required: true
+  mounts:
+    description: Host paths the spec names, one per line, mounted at the same path
+    required: false
+    default: ""
+  environment:
+    description: Environment variables the spec reads secrets from, one name per line
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: datadouble
+      shell: bash
+      env:
+        DATADOUBLE_ARGUMENTS: ${{ inputs.arguments }}
+        DATADOUBLE_IMAGE: ${{ inputs.image }}
+        DATADOUBLE_USER: ${{ inputs.user }}
+        DATADOUBLE_MOUNTS: ${{ inputs.mounts }}
+        DATADOUBLE_ENVIRONMENT: ${{ inputs.environment }}
+      run: '"$GITHUB_ACTION_PATH/run.sh"'

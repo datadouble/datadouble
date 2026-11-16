@@ -785,3 +785,10 @@ def test_staging_and_copies_belong_to_the_serving_user(tmp_path: Path, registry:
         fetch(spec, elsewhere)
     with pytest.raises(EngineError, match="served as 1:1"):
         replicate(spec, elsewhere, Options())
+
+
+def test_staging_it_cannot_use(tmp_path: Path, registry: Registry) -> None:
+    spec = promoted(tmp_path, registry, "0000000000010001")
+    (tmp_path / "staging").write_text("not a directory", encoding="utf-8")
+    with pytest.raises(StagingError, match=r"cannot use staging at .*: Not a directory"):
+        fetch(spec, registry)

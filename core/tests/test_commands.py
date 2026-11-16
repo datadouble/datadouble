@@ -13,9 +13,10 @@ from test_jailer import MODEL, model_files
 from test_run import SPEC, dataset
 
 from datadouble import api, cli
-from datadouble.api import ErrorCode, ExitCode
+from datadouble.api import ErrorCode
 from datadouble.catalog import CatalogLock, write_lock
 from datadouble.engine import EngineError
+from datadouble.outcome import ExitCode
 from datadouble.registry import Registry, RegistryError, installed
 from datadouble.run import Run, RunError, RunOptions, Stage
 from datadouble.spec import parse_spec

@@ -35,6 +35,7 @@ members = [
     "adapters/files",
     "adapters/s3",
     "adapters/vault",
+    "ci/github-actions",
     "conformance",
 ]
 
@@ -55,6 +56,7 @@ datadouble-vault = { workspace = true }
 datadouble-kubernetes = { workspace = true }
 datadouble-btrfs = { workspace = true }
 datadouble-mongodb = { workspace = true }
+datadouble-github-actions = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -74,6 +76,7 @@ dev = [
     "datadouble-files",
     "datadouble-s3",
     "datadouble-vault",
+    "datadouble-github-actions",
     "boto3-stubs[s3]>=1.43.126",
     "mypy>=1.18",
     "pyright[nodejs]>=1.1.414",
@@ -138,6 +141,7 @@ known-first-party = [
     "datadouble_files",
     "datadouble_s3",
     "datadouble_vault",
+    "datadouble_github_actions",
     "check_source",
     "make_tag",
     "check_coverage",
@@ -193,12 +197,14 @@ files = [
     "adapters/s3/tests",
     "adapters/vault/src",
     "adapters/vault/tests",
+    "ci/github-actions/src",
+    "ci/github-actions/tests",
     "conformance/src",
     "conformance/tests",
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/s3/src:adapters/vault/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/s3/src:adapters/vault/src:ci/github-actions/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -235,6 +241,8 @@ include = [
     "adapters/s3/tests",
     "adapters/vault/src",
     "adapters/vault/tests",
+    "ci/github-actions/src",
+    "ci/github-actions/tests",
     "conformance/src",
     "conformance/tests",
     "scripts",
@@ -261,6 +269,7 @@ testpaths = [
     "adapters/files/tests",
     "adapters/s3/tests",
     "adapters/vault/tests",
+    "ci/github-actions/tests",
     "conformance/tests",
     "tests",
 ]
@@ -275,6 +284,7 @@ markers = [
     "integration: needs the Docker Compose services (run with `make test-integration`)",
     "k8s: needs the k8s Compose profile (run with `make test-k8s`)",
     "btrfs: needs the btrfs Compose profile (run with `make test-btrfs`)",
+    "ci_conformance: runs generated CI/CD jobs locally (run with `make test-ci SYSTEM=...`)",
 ]
 xfail_strict = true
 
@@ -299,6 +309,7 @@ source = [
     "adapters/files/src",
     "adapters/s3/src",
     "adapters/vault/src",
+    "ci/github-actions/src",
     "conformance/src",
     "scripts",
 ]

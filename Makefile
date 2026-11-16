@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs test-ci docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -11,9 +11,11 @@ lint:
 	uv run ruff check .
 	uv run python scripts/check_source.py
 
-# GitHub workflows: actionlint for syntax and shell, zizmor for security.
+# GitHub workflows: actionlint for syntax and shell, zizmor for security; and the
+# workflows the GitHub Actions adapter writes (its golden files).
 lint-workflows:
 	actionlint
+	actionlint -config-file ci/github-actions/tests/actionlint.yaml ci/github-actions/tests/golden/*/*.golden
 	uv run python scripts/check_workflows.py
 	uvx --from zizmor==1.32.0 zizmor --offline .github/workflows
 
@@ -24,7 +26,7 @@ typecheck:
 # Unit tests on the host, with the 100% coverage gate over the code they can
 # reach. Adapter code that needs a database is covered by test-integration.
 test:
-	uv run pytest -m "not integration" --cov=core/src --cov=scripts
+	uv run pytest -m "not integration and not ci_conformance" --cov=core/src --cov=ci/github-actions/src --cov=scripts
 
 # The integration suite, in groups (tests/integration-groups.txt), each run as
 # the user its engine's copies are served as, with only the Compose services
@@ -40,8 +42,18 @@ EXTRA_COMPOSE ?=
 COMPOSE := docker compose -f compose.yaml$(if $(filter host,$(DOCKER)), -f compose.host.yaml)$(foreach file,$(EXTRA_COMPOSE), -f $(file))
 DAEMON := $(if $(filter host,$(DOCKER)),,docker)
 
+# The whole suite also runs each CI/CD system's conformance suite (test-ci),
+# whose coverage joins the groups' before the combined report and its gate.
+CI_SYSTEMS := github-actions
+
 test-integration:
-	@$(MAKE) --no-print-directory integration RUN_GROUPS="$$(scripts/integration.sh groups)" REPORT=yes
+	rm -f .reports/.coverage.*
+	@$(MAKE) --no-print-directory integration RUN_GROUPS="$$(scripts/integration.sh groups)"
+	@for system in $(CI_SYSTEMS); do \
+		$(MAKE) --no-print-directory test-ci SYSTEM=$$system COVERAGE_FILE=.reports/.coverage.ci-$$system \
+			PYTEST_ARGS="--cov --cov-report= --cov-fail-under=0" || exit 1; \
+	done
+	REPORTS=.reports COVERAGE="uv run coverage" PYTHON="uv run python" scripts/integration.sh report
 
 test-group:
 	@test -n "$(GROUP)" || { echo "name a group: make test-group GROUP=<$$(scripts/integration.sh groups | tr '\n' '|')>"; exit 2; }
@@ -56,8 +68,7 @@ integration:
 	status=$$?; \
 	if [ $$status -eq 0 ]; then \
 		DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) run --name $${COMPOSE_PROJECT_NAME:-datadouble}-tests --no-deps test \
-			bash -c '/src/scripts/integration.sh test $(RUN_GROUPS); status=$$?; \
-				$(if $(REPORT),/src/scripts/integration.sh report || status=1;) exit $$status'; \
+			bash -c '/src/scripts/integration.sh test $(RUN_GROUPS)'; \
 		status=$$?; \
 		docker cp $${COMPOSE_PROJECT_NAME:-datadouble}-tests:/reports/. .reports/ || true; \
 		docker rm -f $${COMPOSE_PROJECT_NAME:-datadouble}-tests > /dev/null; \
@@ -86,6 +97,20 @@ test-btrfs:
 	status=$$?; \
 	docker compose --profile btrfs down --volumes; \
 	exit $$status
+
+# The CI/CD conformance suite for one system, such as `make test-ci
+# SYSTEM=github-actions`: real generated jobs, run in the system's local
+# runtime (act for GitHub Actions) with the Datadouble image built from this
+# checkout. Worlds live under CI_WORK, which the Docker daemon must see.
+CI_IMAGE ?= datadouble:ci-test
+CI_WORK ?= /var/tmp
+
+test-ci:
+	@test -n "$(SYSTEM)" || { echo "name a system: make test-ci SYSTEM=github-actions"; exit 2; }
+	docker build --target runtime --tag $(CI_IMAGE) .
+	DATADOUBLE_TEST_CI_IMAGE=$(CI_IMAGE) DATADOUBLE_TEST_CI_WORK=$(CI_WORK) \
+		$(if $(COVERAGE_FILE),COVERAGE_FILE=$(COVERAGE_FILE)) \
+		uv run pytest -p no:cacheprovider -m ci_conformance ci/$(SYSTEM)/tests $(PYTEST_ARGS)
 
 docs:
 	uv run --group docs zensical build --strict

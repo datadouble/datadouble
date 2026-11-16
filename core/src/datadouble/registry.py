@@ -5,8 +5,8 @@
 
 Engines register under ``datadouble.engines``, stores under
 ``datadouble.stores``, container runtimes under ``datadouble.runtimes``,
-replicate adapters under ``datadouble.replicators`` and announce adapters
-under ``datadouble.announcers``, so third-party adapters
+replicate adapters under ``datadouble.replicators``, announce adapters
+under ``datadouble.announcers`` and CI/CD adapters under ``datadouble.ci``, so third-party adapters
 installed from anywhere are found the same way as Datadouble's own.
 """
 
@@ -17,6 +17,7 @@ from importlib.metadata import entry_points
 from pydantic import JsonValue
 
 from datadouble.announce import AnnouncerFactory
+from datadouble.ci import CiAdapter, CiFactory
 from datadouble.engine import EngineAdapter
 from datadouble.replicate import ReplicatorFactory
 from datadouble.runtime import ContainerRuntime, RuntimeFactory
@@ -41,6 +42,7 @@ class Registry:
     )
     announcers: Mapping[str, AnnouncerFactory] = field(default_factory=dict[str, AnnouncerFactory])
     runtimes: Mapping[str, RuntimeFactory] = field(default_factory=dict[str, RuntimeFactory])
+    ci: Mapping[str, CiFactory] = field(default_factory=dict[str, CiFactory])
 
     def engine(self, name: str) -> EngineAdapter:
         """The engine adapter registered as ``name``."""
@@ -72,6 +74,18 @@ class Registry:
             raise RegistryError(message)
         return factory(settings)
 
+    def ci_system(self, name: str) -> CiAdapter:
+        """The CI/CD adapter registered as ``name``."""
+        factory = self.ci.get(name)
+        if factory is None:
+            installed = ", ".join(sorted(self.ci)) or "none"
+            message = (
+                f"no CI/CD adapter named {name!r} is installed (installed: {installed});"
+                f" install datadouble-{name}"
+            )
+            raise RegistryError(message)
+        return factory()
+
 
 def installed() -> Registry:
     """Every adapter installed in this environment."""
@@ -90,10 +104,14 @@ def installed() -> Registry:
     runtimes: dict[str, RuntimeFactory] = {
         point.name: point.load() for point in entry_points(group="datadouble.runtimes")
     }
+    ci: dict[str, CiFactory] = {
+        point.name: point.load() for point in entry_points(group="datadouble.ci")
+    }
     return Registry(
         engines=engines,
         stores=stores,
         replicators=replicators,
         announcers=announcers,
         runtimes=runtimes,
+        ci=ci,
     )

@@ -556,3 +556,9 @@ def test_runs_need_the_boundary(
     monkeypatch.delenv("DATADOUBLE_BOUNDARY")
     with pytest.raises(BoundaryError, match="reading the source runs only on machines"):
         run(tmp_path, registry)
+
+
+def test_an_unusable_work_directory(tmp_path: Path, registry: Registry) -> None:
+    (tmp_path / "work").write_text("not a directory", encoding="utf-8")
+    with pytest.raises(RunError, match=r"cannot start a generation in .*work: Not a directory"):
+        run(tmp_path, registry)

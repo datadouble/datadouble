@@ -100,6 +100,8 @@ class RunRecord(_Model):
     generation: Generation
     spec: str
     created_at: AwareDatetime
+    retry_key: str | None = None
+    """The CI system's ID for the run that started the generation (``RunOptions.retry_key``)."""
 
 
 class StageManifest(_Model):
@@ -153,6 +155,9 @@ class RunOptions(_Model):
     stages: tuple[Stage, ...]
     work: Path
     resume: Generation | None = None
+    retry_key: str | None = None
+    """The CI system's ID for this run, the same when it is retried: a retry resumes
+    the generation started under the same key, and anything else starts a new one."""
     plan: PlanOptions = PlanOptions()
     within: Path | None = None
     """The generation directory of the run whose spec's second source, such as its
@@ -210,6 +215,7 @@ class Run:
         self.options = options
         self.clock = clock
         self.engine: EngineAdapter = registry.engine(spec.source.engine)
+        self.resumed = False
         if options.within is None:
             self.record = self._record()
             self.root = (options.work / spec.name / self.record.generation).resolve()
@@ -225,19 +231,41 @@ class Run:
 
     # The generation
 
+    def _retried(self) -> Generation | None:
+        """The generation an earlier attempt with this run's retry key started."""
+        key = self.options.retry_key
+        if key is None:
+            return None
+        for path in sorted((self.options.work / self.spec.name).glob("*/run.json"), reverse=True):
+            record = RunRecord.model_validate_json(path.read_bytes())
+            if record.retry_key == key:
+                return record.generation
+        return None
+
     def _record(self) -> RunRecord:
-        if self.options.resume is None:
+        resume = self.options.resume or self._retried()
+        if resume is None:
             created = self.clock()
             generation = new_generation(int(created.timestamp() * 1000))
-            record = RunRecord(generation=generation, spec=self.spec.name, created_at=created)
+            record = RunRecord(
+                generation=generation,
+                spec=self.spec.name,
+                created_at=created,
+                retry_key=self.options.retry_key,
+            )
             root = self.options.work / self.spec.name / generation
-            root.mkdir(parents=True, exist_ok=False)
-            (root / "run.json").write_text(record.model_dump_json(indent=2), encoding="utf-8")
+            try:
+                root.mkdir(parents=True, exist_ok=False)
+                (root / "run.json").write_text(record.model_dump_json(indent=2), encoding="utf-8")
+            except OSError as error:
+                message = f"cannot start a generation in {self.options.work}: {error.strerror}"
+                raise RunError(message) from None
             return record
-        path = self.options.work / self.spec.name / self.options.resume / "run.json"
+        path = self.options.work / self.spec.name / resume / "run.json"
         if not path.is_file():
-            message = f"there is no generation {self.options.resume} of {self.spec.name} to resume"
+            message = f"there is no generation {resume} of {self.spec.name} to resume"
             raise RunError(message)
+        self.resumed = True
         return RunRecord.model_validate_json(path.read_bytes())
 
     def key(self) -> bytes:
@@ -369,7 +397,7 @@ class Run:
     def session(self) -> SourceSession:
         """The source connection, opened on first use."""
         if self._session is None:
-            require_inside("reading the source")
+            require_inside("reading the source", self.registry)
             self._session = self._exits.enter_context(
                 self.engine.connect(self.spec.source.connection)
             )
@@ -730,7 +758,7 @@ class Run:
                 for run, context in builds:
                     for group in context.planned.groups:
                         run.build(context, group, outputs)
-                if self.options.resume is not None:
+                if self.resumed:
                     # The interrupted attempt may have started a server after this one
                     # released its stage; every server of this run has stopped by now.
                     self.tooling().runtime.release(self.root)

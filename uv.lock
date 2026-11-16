@@ -14,6 +14,7 @@ members = [
     "datadouble-docker",
     "datadouble-elasticsearch",
     "datadouble-files",
+    "datadouble-github-actions",
     "datadouble-kubernetes",
     "datadouble-mongodb",
     "datadouble-mssql",
@@ -495,6 +496,21 @@ dependencies = [
 requires-dist = [{ name = "datadouble", editable = "core" }]
 
 [[package]]
+name = "datadouble-github-actions"
+version = "0.0.0"
+source = { editable = "ci/github-actions" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
 name = "datadouble-kubernetes"
 version = "0.0.0"
 source = { editable = "adapters/kubernetes" }
@@ -650,6 +666,7 @@ dev = [
     { name = "datadouble-docker" },
     { name = "datadouble-elasticsearch" },
     { name = "datadouble-files" },
+    { name = "datadouble-github-actions" },
     { name = "datadouble-kubernetes" },
     { name = "datadouble-mongodb" },
     { name = "datadouble-mssql" },
@@ -684,6 +701,7 @@ dev = [
     { name = "datadouble-docker", editable = "adapters/docker" },
     { name = "datadouble-elasticsearch", editable = "adapters/elasticsearch" },
     { name = "datadouble-files", editable = "adapters/files" },
+    { name = "datadouble-github-actions", editable = "ci/github-actions" },
     { name = "datadouble-kubernetes", editable = "adapters/kubernetes" },
     { name = "datadouble-mongodb", editable = "adapters/mongodb" },
     { name = "datadouble-mssql", editable = "adapters/mssql" },

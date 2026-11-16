@@ -9,12 +9,20 @@ requests for this module, so behavior cannot differ between them.
 """
 
 import platform
-from enum import IntEnum, StrEnum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from datadouble import __version__, jailer
 from datadouble.announce import AnnounceError, announce, withdraw
@@ -22,10 +30,21 @@ from datadouble.anonymize import AnonymizeError
 from datadouble.boundary import BoundaryError, require_inside
 from datadouble.catalog import CatalogError, CatalogLock, read_lock, write_lock
 from datadouble.channels import Channel
+from datadouble.ci import (
+    IMAGE,
+    CiBridge,
+    CiError,
+    JobKind,
+    PipelineOptions,
+    Report,
+    Side,
+    pipeline,
+)
 from datadouble.engine import EngineError
 from datadouble.images import ImageError
 from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
+from datadouble.outcome import ExitCode, Outcome
 from datadouble.planner import Plan, PlanError, PlanOptions, plan
 from datadouble.promote import Promoted, PromoteError, promote
 from datadouble.prune import PruneError, PruneResult, PruneTarget, prune
@@ -77,33 +96,14 @@ class Command(StrEnum):
     ANNOUNCE = "announce"
     COPIES = "copies"
     PRUNE = "prune"
-
-
-class Outcome(StrEnum):
-    """How an operation ended.
-
-    Anything that could put real personal data into a copy is always a
-    failure, never a warning.
-    """
-
-    SUCCESS = "success"
-    WARNING = "warning"
-    FAILURE = "failure"
-
-
-class ExitCode(IntEnum):
-    """Process exit codes, so CI systems can tell a warning from a failure."""
-
-    SUCCESS = 0
-    FAILURE = 1
-    USAGE = 2
-    WARNING = 3
+    CI_INIT = "ci.init"
 
 
 class ErrorCode(StrEnum):
     """Machine-readable reasons a request failed."""
 
     INVALID_REQUEST = "invalid_request"
+    FILE_FAILED = "file_failed"
     INVALID_SPEC = "invalid_spec"
     INVALID_SETTINGS = "invalid_settings"
     CATALOG_LOCK = "catalog_lock"
@@ -123,6 +123,7 @@ class ErrorCode(StrEnum):
     ANNOUNCE_FAILED = "announce_failed"
     PRUNE_FAILED = "prune_failed"
     OUTSIDE_BOUNDARY = "outside_boundary"
+    CI_FAILED = "ci_failed"
 
 
 class _Message(BaseModel):
@@ -134,19 +135,24 @@ class _Message(BaseModel):
 # Requests
 
 
-class VersionRequest(_Message):
+class _Request(_Message):
+    ci: CiBridge | None = None
+    """The CI system running the request: its outputs, summary, outcome and log masking."""
+
+
+class VersionRequest(_Request):
     """Ask for the installed Datadouble version."""
 
     command: Literal[Command.VERSION]
 
 
-class SchemaRequest(_Message):
+class SchemaRequest(_Request):
     """Ask for the JSON Schema that specs are validated against."""
 
     command: Literal[Command.SCHEMA]
 
 
-class _SpecRequest(_Message):
+class _SpecRequest(_Request):
     spec: Path
     lock: Path | None = None
     """The catalog lock; ``catalog.lock`` next to the spec when omitted."""
@@ -195,9 +201,18 @@ class RunRequest(_Overrides):
     stages: tuple[Stage, ...] = Field(min_length=1)
     work: Path = Path(".datadouble")
     resume: Generation | None = None
+    retry_key: str | None = Field(default=None, min_length=1)
+    """The CI system's ID for this run: a retry resumes the generation it started."""
+
+    @model_validator(mode="after")
+    def _one_way_to_resume(self) -> "RunRequest":
+        if self.resume is not None and self.retry_key is not None:
+            message = "give resume or retry_key, not both"
+            raise ValueError(message)
+        return self
 
 
-class _Groups(_Message):
+class _Groups(_Request):
     spec: Path
     groups: tuple[GroupName, ...] = ()
     """Image groups to work on; every group in the spec when empty."""
@@ -263,13 +278,35 @@ class CopiesRequest(_Groups):
     command: Literal[Command.COPIES]
 
 
-class PruneRequest(_Message):
+class PruneRequest(_Request):
     """Apply retention to the build's stores, the export stores, or staging."""
 
     command: Literal[Command.PRUNE]
     spec: Path
     target: PruneTarget
     dry_run: bool = False
+
+
+class CiInitRequest(_Request):
+    """Write one side's CI/CD configuration for a spec's jobs."""
+
+    command: Literal[Command.CI_INIT]
+    system: str
+    jobs: tuple[JobKind, ...] = Field(min_length=1)
+    spec: Path
+    runner: str | None = None
+    """The runner jobs run on; required for build and promote."""
+    work: Path | None = None
+    """The build's work directory in production scratch space; required for build."""
+    side: Side | None = None
+    """Which side ``prune`` alone runs on."""
+    output: Path = Path()
+    """The repository root the configuration is written into."""
+    image: str | None = None
+    """The Datadouble image jobs run; this version's published image by default."""
+    environment: tuple[str, ...] = ()
+    """More environment variables every job passes on, for credentials adapters read
+    from the environment, such as ``AWS_ACCESS_KEY_ID``."""
 
 
 type Request = (
@@ -288,6 +325,7 @@ type Request = (
     | AnnounceRequest
     | CopiesRequest
     | PruneRequest
+    | CiInitRequest
 )
 
 _REQUEST: TypeAdapter[Request] = TypeAdapter(
@@ -306,7 +344,8 @@ _REQUEST: TypeAdapter[Request] = TypeAdapter(
         | ReleaseRequest
         | AnnounceRequest
         | CopiesRequest
-        | PruneRequest,
+        | PruneRequest
+        | CiInitRequest,
         Field(discriminator="command"),
     ]
 )
@@ -415,6 +454,18 @@ class PruneResponse(_Message):
     bytes: int
 
 
+class CiInitResponse(_Message):
+    """The configuration files written, and the secrets the jobs read by name."""
+
+    command: Literal[Command.CI_INIT] = Command.CI_INIT
+    outcome: Literal[Outcome.SUCCESS] = Outcome.SUCCESS
+    system: str
+    side: Side
+    files: tuple[str, ...]
+    environment: tuple[str, ...]
+    """Environment variables the jobs read secrets from: define each where the jobs run."""
+
+
 class ErrorDetail(_Message):
     """One problem found in a request."""
 
@@ -445,6 +496,7 @@ type Response = (
     | ActivateResponse
     | CopiesResponse
     | PruneResponse
+    | CiInitResponse
     | ErrorResponse
 )
 
@@ -469,6 +521,7 @@ _ERRORS: tuple[tuple[type[Exception], ErrorCode], ...] = (
     (AnnounceError, ErrorCode.ANNOUNCE_FAILED),
     (PruneError, ErrorCode.PRUNE_FAILED),
     (BoundaryError, ErrorCode.OUTSIDE_BOUNDARY),
+    (CiError, ErrorCode.CI_FAILED),
 )
 _HANDLED: tuple[type[Exception], ...] = (
     SpecError,
@@ -512,7 +565,7 @@ def _lock(request: _SpecRequest) -> CatalogLock | None:
 def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
     spec = load_spec(request.spec)
     engine = registry.engine(spec.source.engine)
-    require_inside("reading the source")
+    require_inside("reading the source", registry)
     with engine.connect(spec.source.connection) as session:
         lock = CatalogLock.of(session.catalog())
     path = request.lock_path()
@@ -525,7 +578,7 @@ def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
 def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJailerResponse:
     spec = load_spec(request.spec)
     engine = registry.engine(spec.source.engine)
-    require_inside("reading the source")
+    require_inside("reading the source", registry)
     with engine.connect(spec.source.connection) as session:
         catalog = session.catalog()
     translated = jailer.load(
@@ -550,7 +603,7 @@ def _plan(request: PlanRequest, registry: Registry) -> PlanResponse:
     spec = load_spec(request.spec)
     lock = _lock(request)
     engine = registry.engine(spec.source.engine)
-    require_inside("reading the source")
+    require_inside("reading the source", registry)
     with engine.connect(spec.source.connection) as session:
         planned = plan(spec, session.catalog(), lock, engine.capabilities(), request.plan_options())
     if planned.warnings:
@@ -564,6 +617,7 @@ def _run(request: RunRequest, registry: Registry) -> RunResponse:
         stages=request.stages,
         work=request.work,
         resume=request.resume,
+        retry_key=request.retry_key,
         plan=request.plan_options(),
     )
     result = Run(spec, _lock(request), registry, options).execute()
@@ -625,6 +679,42 @@ def _with_secrets(
     return tuple(c for c in copies_of(spec, groups, with_secrets=True) if c.id in ids)
 
 
+def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
+    spec = load_spec(request.spec)
+    adapter = registry.ci_system(request.system)
+    engine = registry.engine(spec.source.engine)
+    root = request.output.resolve()
+    try:
+        spec_path = request.spec.resolve().relative_to(root).as_posix()
+    except ValueError:
+        message = f"the spec {request.spec} is not inside {request.output}, the repository root"
+        raise CiError(message) from None
+    options = PipelineOptions(
+        kinds=request.jobs,
+        spec_path=spec_path,
+        image=request.image or f"{IMAGE}:v{__version__}",
+        version=__version__,
+        owner=engine.owner,
+        runner=request.runner,
+        work=request.work,
+        side=request.side,
+        environment=request.environment,
+    )
+    planned = pipeline(spec, options)
+    written: list[str] = []
+    for generated in adapter.generate(planned):
+        path = request.output / generated.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(generated.content, encoding="utf-8")
+        written.append(str(path))
+    return CiInitResponse(
+        system=adapter.name,
+        side=planned.side,
+        files=tuple(written),
+        environment=planned.environment(),
+    )
+
+
 def _operate(request: Request, registry: Registry) -> Response:
     match request:
         case PromoteRequest():
@@ -643,6 +733,8 @@ def _operate(request: Request, registry: Registry) -> Response:
             spec = load_spec(request.spec)
             result = prune(spec, registry, request.target, dry_run=request.dry_run)
             return PruneResponse(result=result, bytes=result.bytes)
+        case CiInitRequest():
+            return _ci_init(request, registry)
         case (
             ReplicateRequest()
             | ClaimRequest()
@@ -692,12 +784,18 @@ def handle(request: Request, registry: Registry | None = None) -> Response:
                 | AnnounceRequest()
                 | CopiesRequest()
                 | PruneRequest()
+                | CiInitRequest()
             ):
                 return _operate(request, registry or installed())
             case _:
                 assert_never(request)
     except _HANDLED as error:
         return _error(error)
+    except OSError as error:
+        # A file the adapters did not explain, such as a directory nobody can
+        # write; its name could come from a source's file tree, so it is left out.
+        message = f"a file operation failed: {error.strerror}"
+        return ErrorResponse(error=ErrorCode.FILE_FAILED, message=message)
 
 
 _TAG_ERRORS = frozenset({"union_tag_invalid", "union_tag_not_found"})
@@ -746,3 +844,32 @@ def exit_code(response: Response) -> ExitCode:
             return ExitCode.FAILURE
         case _:
             assert_never(response.outcome)
+
+
+def ci_report(response: Response, summary: str) -> Report:
+    """What the CI system is told about a response: no data values, only identifiers."""
+    outputs = {"outcome": str(response.outcome)}
+    match response:
+        case ErrorResponse():
+            outputs["error"] = str(response.error)
+            return Report(
+                command="error",
+                outcome=response.outcome,
+                outputs=outputs,
+                summary=summary,
+                message=response.message,
+            )
+        case RunResponse():
+            outputs["generation"] = response.result.generation
+            warnings = response.result.warnings
+        case PlanResponse():
+            warnings = response.plan.warnings
+        case _:
+            warnings = ()
+    return Report(
+        command=str(response.command),
+        outcome=response.outcome,
+        outputs=outputs,
+        summary=summary,
+        warnings=tuple(warnings),
+    )

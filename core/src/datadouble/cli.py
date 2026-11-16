@@ -6,6 +6,11 @@
 The CLI only builds JSON requests for :mod:`datadouble.api`. ``--dry-run``
 prints the request it would send, and ``datadouble api`` reads a request from
 standard input, so anything the CLI can do is also available as JSON.
+
+A request that names its CI system (``--ci``, or ``ci`` in JSON) has its
+resolved secrets masked in the system's logs while it runs, and its response
+reported to the system afterwards: outputs, a summary and the outcome, in
+the system's own form, with the exit code the system expects.
 """
 
 import argparse
@@ -17,7 +22,10 @@ from typing import TextIO, assert_never
 from pydantic import JsonValue
 
 from datadouble import api
+from datadouble.ci import JobKind, Side, masking
+from datadouble.outcome import ExitCode
 from datadouble.prune import PruneTarget
+from datadouble.registry import RegistryError, installed
 from datadouble.replicate import Copy
 from datadouble.run import Stage
 from datadouble.spec import ImageFormat, Strategy, StrictLevel
@@ -27,8 +35,11 @@ class _Arguments(argparse.Namespace):
     """Typed view of the parsed command line."""
 
     command: str
+    ci_command: str
     json: bool
     dry_run: bool
+    ci: str | None
+    ci_directory: str | None
     spec: str | None
     lock: str | None
     strict: str | None
@@ -45,10 +56,17 @@ class _Arguments(argparse.Namespace):
     copy_ids: list[str]
     model: str
     datamodel: str
-    output: str
+    output: str | None
     expired: bool
     target: str
     report_only: bool
+    retry_key: str | None
+    system: str
+    jobs: list[list[str]]
+    runner: str | None
+    side: str | None
+    image: str | None
+    environment: list[str] | None
 
 
 def _stages(text: str) -> list[str]:
@@ -57,6 +75,15 @@ def _stages(text: str) -> list[str]:
     unknown = [name for name in names if name not in known]
     if unknown or not names:
         message = f"stages are a comma-separated list of: {', '.join(Stage)}"
+        raise argparse.ArgumentTypeError(message)
+    return names
+
+
+def _jobs(text: str) -> list[str]:
+    names = [part.strip() for part in text.split(",") if part.strip()]
+    known = {job.value for job in JobKind}
+    if not names or any(name not in known for name in names):
+        message = f"jobs are a comma-separated list of: {', '.join(JobKind)}"
         raise argparse.ArgumentTypeError(message)
     return names
 
@@ -148,6 +175,36 @@ def _operation_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
     )
 
 
+def _ci_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
+    ci = add("ci", help="CI/CD configuration")
+    actions = ci.add_subparsers(dest="ci_command", required=True, metavar="ACTION")
+    init = actions.add_parser("init", help="write CI/CD configuration for a spec's jobs")
+    init.add_argument("--system", required=True, help="the CI/CD system, such as github-actions")
+    init.add_argument(
+        "--job",
+        dest="jobs",
+        type=_jobs,
+        action="append",
+        required=True,
+        help=f"jobs, comma-separated or repeated, on one side of the boundary: {','.join(JobKind)}",
+    )
+    init.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    init.add_argument("--runner", help="the runner jobs run on; required for build and promote")
+    init.add_argument("--work", help="the build's work directory in production scratch space")
+    init.add_argument(
+        "--side", choices=[side.value for side in Side], help="the side prune alone runs on"
+    )
+    init.add_argument("--output", help="the repository root to write into (default: .)")
+    init.add_argument("--image", help="the Datadouble image jobs run (default: this version's)")
+    init.add_argument(
+        "--env",
+        dest="environment",
+        action="append",
+        metavar="NAME",
+        help="another environment variable every job passes on (repeatable)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser(
@@ -163,6 +220,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="print the JSON request without running it",
+    )
+    parser.add_argument(
+        "--ci", metavar="SYSTEM", help="report to this CI/CD system and mask secrets in its logs"
+    )
+    parser.add_argument(
+        "--ci-directory",
+        metavar="DIR",
+        help="where the CI/CD adapter writes outputs for the native step to pick up",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
     commands.add_parser(api.Command.VERSION, help="show the installed version")
@@ -187,8 +252,15 @@ def build_parser() -> argparse.ArgumentParser:
     _spec_arguments(run)
     _override_arguments(run)
     run.add_argument("--work", help="the work directory (default: .datadouble)")
-    run.add_argument("--resume", metavar="GENERATION", help="resume this generation")
+    resuming = run.add_mutually_exclusive_group()
+    resuming.add_argument("--resume", metavar="GENERATION", help="resume this generation")
+    resuming.add_argument(
+        "--retry-key",
+        metavar="KEY",
+        help="the CI system's ID for this run; a retry resumes the generation it started",
+    )
     _operation_parsers(commands.add_parser)
+    _ci_parsers(commands.add_parser)
     commands.add_parser("api", help="read a JSON request from standard input")
     return parser
 
@@ -216,9 +288,7 @@ def _run_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     fields["stages"] = list(arguments.stages)
     if arguments.work:
         fields["work"] = arguments.work
-    if arguments.resume:
-        fields["resume"] = arguments.resume
-    return fields
+    return _set(fields, arguments, "resume", "retry_key")
 
 
 def _group_fields(arguments: _Arguments) -> dict[str, JsonValue]:
@@ -274,6 +344,15 @@ def _prune_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     return fields
 
 
+def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
+    fields: dict[str, JsonValue] = {
+        "system": arguments.system,
+        "jobs": list(dict.fromkeys(name for names in arguments.jobs for name in names)),
+        "spec": arguments.spec,
+    }
+    return _set(fields, arguments, "runner", "work", "side", "output", "image", "environment")
+
+
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.VERSION: lambda _: {},
     api.Command.SCHEMA: lambda _: {},
@@ -295,6 +374,7 @@ _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.ANNOUNCE: _announce_fields,
     api.Command.COPIES: _group_fields,
     api.Command.PRUNE: _prune_fields,
+    api.Command.CI_INIT: _ci_init_fields,
 }
 
 
@@ -303,7 +383,14 @@ def build_request(arguments: _Arguments) -> str:
 
     The parser only accepts commands listed here, so the lookup cannot miss.
     """
-    return json.dumps({"command": arguments.command, **_FIELDS[arguments.command](arguments)})
+    command = f"ci.{arguments.ci_command}" if arguments.command == "ci" else arguments.command
+    fields = _FIELDS[command](arguments)
+    if arguments.ci:
+        bridge: dict[str, JsonValue] = {"system": arguments.ci}
+        if arguments.ci_directory:
+            bridge["directory"] = arguments.ci_directory
+        fields["ci"] = bridge
+    return json.dumps({"command": command, **fields})
 
 
 def _error_lines(response: api.ErrorResponse) -> list[str]:
@@ -398,7 +485,18 @@ def _operation_lines(
             assert_never(response)
 
 
-def _simple(response: api.VersionResponse | api.SchemaResponse | api.LockResponse) -> str:
+def _ci_lines(response: api.CiInitResponse) -> list[str]:
+    lines = [f"wrote {response.system} configuration for the {response.side} side:"]
+    lines.extend(f"  {path}" for path in response.files)
+    if response.environment:
+        lines.append("define these as secrets where the jobs run:")
+        lines.extend(f"  {name}" for name in response.environment)
+    return lines
+
+
+def _simple(
+    response: api.VersionResponse | api.SchemaResponse | api.LockResponse | api.CiInitResponse,
+) -> str:
     match response:
         case api.VersionResponse():
             return f"datadouble {response.version} (Python {response.python})"
@@ -406,6 +504,8 @@ def _simple(response: api.VersionResponse | api.SchemaResponse | api.LockRespons
             return json.dumps(response.schema_, indent=2)
         case api.LockResponse():
             return f"wrote {response.lock}: {response.tables} tables ({response.fingerprint})"
+        case api.CiInitResponse():
+            return "\n".join(_ci_lines(response))
         case _:
             assert_never(response)
 
@@ -413,7 +513,9 @@ def _simple(response: api.VersionResponse | api.SchemaResponse | api.LockRespons
 def summarize(response: api.Response) -> str:
     """Describe a response for people, the default output without ``--json``."""
     match response:
-        case api.VersionResponse() | api.SchemaResponse() | api.LockResponse():
+        case (
+            api.VersionResponse() | api.SchemaResponse() | api.LockResponse() | api.CiInitResponse()
+        ):
             return _simple(response)
         case api.ImportJailerResponse():
             lines = [f"wrote {response.output} and {response.lock}"]
@@ -437,6 +539,25 @@ def summarize(response: api.Response) -> str:
             assert_never(response)
 
 
+def _respond(raw: str) -> tuple[api.Response, ExitCode]:
+    """Carry out a JSON request, bridged to its CI system if it names one."""
+    request = api.parse_request(raw)
+    if isinstance(request, api.ErrorResponse):
+        return request, api.exit_code(request)
+    if request.ci is None:
+        response = api.handle(request)
+        return response, api.exit_code(response)
+    try:
+        adapter = installed().ci_system(request.ci.system)
+    except RegistryError as error:
+        failed = api.ErrorResponse(error=api.ErrorCode.ADAPTER_MISSING, message=str(error))
+        return failed, api.exit_code(failed)
+    with masking(adapter.mask):
+        response = api.handle(request)
+    report = api.ci_report(response, summarize(response))
+    return response, adapter.report(report, request.ci.directory)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -449,18 +570,18 @@ def main(
     arguments = build_parser().parse_args(argv, namespace=_Arguments())
 
     if arguments.command == "api":
-        response = api.handle_json(source.read())
+        response, code = _respond(source.read())
         sink.write(response.model_dump_json() + "\n")
-        return api.exit_code(response)
+        return code
 
     request = build_request(arguments)
     if arguments.dry_run:
         sink.write(request + "\n")
-        return api.ExitCode.SUCCESS
+        return ExitCode.SUCCESS
 
-    response = api.handle_json(request)
+    response, code = _respond(request)
     sink.write((response.model_dump_json() if arguments.json else summarize(response)) + "\n")
-    return api.exit_code(response)
+    return code
 
 
 if __name__ == "__main__":

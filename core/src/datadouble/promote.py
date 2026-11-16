@@ -161,7 +161,7 @@ def promote(
     generation: Generation | None = None,
 ) -> tuple[Promoted, ...]:
     """Promote the newest (or the given) generation of each group; all or nothing."""
-    require_inside("promote")
+    require_inside("promote", registry)
     with tempfile.TemporaryDirectory(prefix="dd-promote-") as directory:
         promotion = _Promotion(spec, registry, Path(directory))
         wanted = groups or tuple(spec.images)
