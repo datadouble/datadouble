@@ -57,13 +57,14 @@ Only re-recording needs a Salesforce org; everything else runs offline.
 
 ## CI/CD systems
 
-Each Tier 1 CI/CD system also has an opt-in container profile under `dev/ci/`
-(GitLab CE and Runner, Jenkins, a kind cluster with Argo CD, and `act` for GitHub
-Actions). See [CI/CD integration](ci-cd.md#testing).
+Each Tier 1 CI/CD system runs its generated jobs locally: `act` for GitHub
+Actions (`make test-ci SYSTEM=github-actions`), and opt-in container profiles
+under `dev/ci/` for GitLab CE and Runner, Jenkins, and a kind cluster with
+Argo CD. See [CI/CD integration](ci-cd.md#testing).
 
 ## Conformance suite
 
 Every adapter must pass a shared suite under `conformance/`, run against its
 container (or fake): catalog introspection, consistent snapshot behavior, subset
 correctness on the sample data, load round-trips, and excludes/strict-mode
-behavior. CI/CD adapters have their own suite under `conformance/ci/`.
+behavior. CI/CD adapters have their own suite, `datadouble_conformance.ci`.

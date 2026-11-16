@@ -3,17 +3,19 @@
 
 import json
 import platform
+from pathlib import Path
 
 import pytest
 
 from datadouble import __version__, api
+from datadouble.outcome import ExitCode
 
 
 def test_version_request_returns_installed_version() -> None:
     response = api.handle(api.VersionRequest(command=api.Command.VERSION))
 
     assert response == api.VersionResponse(version=__version__, python=platform.python_version())
-    assert api.exit_code(response) is api.ExitCode.SUCCESS
+    assert api.exit_code(response) is ExitCode.SUCCESS
 
 
 def test_json_request_round_trip() -> None:
@@ -43,7 +45,7 @@ def test_invalid_request_fails_loudly(raw: str, location: str) -> None:
     assert isinstance(response, api.ErrorResponse)
     assert response.error is api.ErrorCode.INVALID_REQUEST
     assert location in [detail.location for detail in response.details]
-    assert api.exit_code(response) is api.ExitCode.FAILURE
+    assert api.exit_code(response) is ExitCode.FAILURE
 
 
 def test_messages_are_immutable() -> None:
@@ -51,3 +53,14 @@ def test_messages_are_immutable() -> None:
 
     with pytest.raises(ValueError, match="frozen"):
         request.command = api.Command.VERSION
+
+
+def test_file_failures_are_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def unreadable(path: Path) -> object:
+        raise PermissionError(13, "Permission denied", str(path / "customers" / "a-name.pdf"))
+
+    monkeypatch.setattr(api, "load_spec", unreadable)
+    response = api.handle(api.FetchRequest(command=api.Command.FETCH, spec=tmp_path / "s.yml"))
+    assert isinstance(response, api.ErrorResponse)
+    assert response.error is api.ErrorCode.FILE_FAILED
+    assert response.message == "a file operation failed: Permission denied"

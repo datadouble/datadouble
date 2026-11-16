@@ -17,15 +17,19 @@ Credentials come from the usual AWS sources and never appear in the spec.
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
-from mypy_boto3_s3 import S3Client
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.settings import parse_settings
 from datadouble.storage import Store, StoreError, check_key
+
+if TYPE_CHECKING:
+    # Typing stubs, installed only for development; the runtime image lacks them.
+    from mypy_boto3_s3 import S3Client
 
 _MISSING = frozenset({"NoSuchKey", "404", "NotFound"})
 
@@ -56,7 +60,7 @@ def _code(error: ClientError) -> str:
 class S3Store:
     """Images under one bucket and key prefix."""
 
-    def __init__(self, settings: S3Settings, client: S3Client) -> None:
+    def __init__(self, settings: S3Settings, client: "S3Client") -> None:
         """Use ``client`` for every request."""
         self.settings = settings
         self.client = client

@@ -90,3 +90,12 @@ def test_generations_sort_by_time() -> None:
     early, late = new_generation(1_000), new_generation(2_000)
     assert early < late
     assert len(new_generation()) == 16
+
+
+def test_a_store_it_cannot_write(tmp_path: Path) -> None:
+    (tmp_path / "store").write_text("not a directory", encoding="utf-8")
+    store = FilesystemStore(tmp_path / "store")
+    with pytest.raises(
+        StoreError, match=r"cannot write a/b to filesystem:.*store: Not a directory"
+    ):
+        store.put_bytes("a/b", b"data")

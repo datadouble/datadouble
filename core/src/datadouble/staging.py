@@ -110,8 +110,13 @@ class Staging:
     def locked(self, prefix: str) -> Generator[None]:
         """Hold the line's lock, so only one fetch, replicate or release works on it."""
         line = self.line(prefix)
-        line.mkdir(parents=True, exist_ok=True)
-        with (line / ".lock").open("w") as handle:
+        try:
+            line.mkdir(parents=True, exist_ok=True)
+            lock = (line / ".lock").open("w")
+        except OSError as error:
+            message = f"cannot use staging at {line}: {error.strerror}"
+            raise StagingError(message) from None
+        with lock as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             try:
                 yield

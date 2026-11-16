@@ -8,7 +8,7 @@ import platform
 import pytest
 
 from datadouble import __version__, api, cli
-from datadouble.api import ExitCode
+from datadouble.outcome import ExitCode
 
 
 def run(*argv: str, stdin: str = "") -> tuple[int, str]:

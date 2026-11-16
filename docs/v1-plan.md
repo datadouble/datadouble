@@ -196,7 +196,7 @@ differently shaped engine, before breadth.
 | M5 | **Redis, Elasticsearch, OpenSearch** | Each passes conformance, including strict mode on keys or mapping fields |
 | M6 | **Filesystem** | Only files for subset rows are copied; an unmatched top-level directory fails the plan; a planted file of fake personal data fails verify |
 | M7 | **Salesforce against the fake**, plus cassette recording, scrubbing and replay tooling | Conformance passes offline; the scrubber removes tokens, session IDs, instance URLs and org IDs from a synthetic recording |
-| M8 | **CI/CD libraries** | The CI/CD conformance suite passes for all four systems, locally and in the nightly hosted runs |
+| M8 | **CI/CD libraries.** In five pull requests (decision 99): GitHub Actions with the shared CI/CD core and conformance suite, GitLab CI, Jenkins, Argo CD, then the nightly hosted runs | The CI/CD conformance suite passes for all four systems, locally and in the nightly hosted runs |
 | M9 | **Agent skills and plugin** | `claude plugin validate` passes and every skill scenario holds, including the refusal cases |
 | M10 | **Using Datadouble documentation and example repository.** Quickstart, generated spec and CLI references, CI/CD library and agent skill guides, added to the existing site | The example repository's pipelines run green from a fresh clone, on both sides of the boundary; every spec field and CLI command appears in the generated references |
 

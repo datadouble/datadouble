@@ -232,11 +232,91 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  ci-conformance:
+    # The CI/CD conformance suite for each system: the jobs `ci init` writes,
+    # run in the system's local runtime (act, running jobs on this machine as
+    # a self-hosted runner does) with the Datadouble image built here.
+    name: CI/CD conformance (${{ matrix.system }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        system: [github-actions]
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # As the integration jobs, for the Datadouble and PostgreSQL images
+          # and the workspace; GitHub release assets for act; GitHub for the
+          # checkout action the generated jobs use.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            releases.astral.sh:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            pypi.org:443
+            files.pythonhosted.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install the workspace
+        run: uv sync --frozen
+
+      - name: Install act
+        env:
+          ACT_VERSION: 0.2.97
+        run: |
+          base="https://github.com/nektos/act/releases/download/v${ACT_VERSION}"
+          file="act_Linux_x86_64.tar.gz"
+          curl -fsSLO "${base}/${file}"
+          curl -fsSLO "${base}/checksums.txt"
+          grep " ${file}\$" checksums.txt | sha256sum --check
+          tar xzf "${file}" act
+          sudo install act /usr/local/bin/
+
+      - name: Run the suite
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: >
+          make test-ci SYSTEM="$SYSTEM" COVERAGE_FILE=".reports/.coverage.ci-$SYSTEM"
+          PYTEST_ARGS="--cov --cov-report= --cov-fail-under=0"
+
+      - name: Keep the suite's coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-ci-${{ matrix.system }}
+          path: .reports/.coverage.ci-${{ matrix.system }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
   integration:
     # The required check: every group passed, and their combined coverage
     # reaches 100%. The combined report goes to Codecov and to the sonar job.
     name: Integration coverage
-    needs: integration-group
+    needs: [integration-group, ci-conformance]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -251,7 +331,8 @@ jobs:
       - name: Every group passed
         env:
           GROUPS_RESULT: ${{ needs.integration-group.result }}
-        run: test "$GROUPS_RESULT" = success
+          CI_RESULT: ${{ needs.ci-conformance.result }}
+        run: test "$GROUPS_RESULT" = success && test "$CI_RESULT" = success
 
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4

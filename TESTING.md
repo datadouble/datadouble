@@ -9,6 +9,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 - Docker Engine with the Compose and Buildx plugins
 - GNU `make`
 - [actionlint](https://github.com/rhysd/actionlint), for `make lint-workflows`
+- [act](https://github.com/nektos/act), for `make test-ci SYSTEM=github-actions`
 
 ## Commands
 
@@ -16,12 +17,13 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 |---|---|---|
 | `make check` | Everything below except the integration suite and the docs | Host |
 | `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons and budget) | Host |
-| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, and `scripts/check_workflows.py` (every job sets `timeout-minutes`) | Host |
+| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, `scripts/check_workflows.py` (every job sets `timeout-minutes`), and `actionlint` over the workflows the GitHub Actions adapter writes (its golden files) | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
-| `make test` | Unit tests, with the 100% branch coverage gate on the core and scripts | Host |
+| `make test` | Unit tests, with the 100% branch coverage gate on the core, the GitHub Actions adapter and scripts | Host |
 | `make test-integration` | The whole suite, integration and conformance tests included: every integration group in turn, then their combined coverage with the 100% gate on every package | Containers |
 | `make test-group GROUP=<name>` | One integration group, as its CI job runs it (`DOCKER=host` uses the host's Docker daemon) | Containers |
 | `make test-k8s`, `make test-btrfs` | The Kubernetes and btrfs adapters against k3s and a real btrfs filesystem (privileged) | Containers |
+| `make test-ci SYSTEM=<name>` | The CI/CD conformance suite for one system: builds the Datadouble image, then runs the jobs `ci init` writes in the system's local runtime (`act` for GitHub Actions) | Host and containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 
 ## Test layers
@@ -40,7 +42,14 @@ in groups; [How our CI works](docs/how-our-ci-works.md) explains them for
 newcomers.
 
 **Conformance suites** under `conformance/` must pass for every engine adapter
-(see below), and for CI/CD and agent skill adapters as they arrive.
+(see below), every CI/CD adapter, and agent skill adapters as they arrive.
+
+**CI/CD conformance tests** are marked `@pytest.mark.ci_conformance`. Each
+starts a PostgreSQL source and directories under `/var/tmp` (`CI_WORK`), writes
+jobs for both sides of the boundary with `ci init`, and runs them as the CI
+system would, with the image `make test-ci` builds. A job's runner needs
+Docker and the Datadouble image; the tests remove their containers and
+directories afterwards. `make test` deselects them.
 
 ## Supported Python versions
 

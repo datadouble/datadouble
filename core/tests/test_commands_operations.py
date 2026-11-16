@@ -11,7 +11,8 @@ import pytest
 from test_operations import build, make_spec
 
 from datadouble import api, cli
-from datadouble.api import ErrorCode, ExitCode
+from datadouble.api import ErrorCode
+from datadouble.outcome import ExitCode
 from datadouble.registry import Registry
 from datadouble.spec import SpecError, parse_spec
 
