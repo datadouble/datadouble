@@ -25,6 +25,7 @@ def test_adapting_a_workflow() -> None:
         "        uses: datadouble/datadouble/ci/github-actions@v1.2.3\n"
     )
     assert nightly.adapt(generated) == (
+        "# Copyright (c) 2026- Tight Line LLC\n# SPDX-License-Identifier: MIT\n\n"
         "on:\n  workflow_dispatch:\n"
         "        uses: ./ci/github-actions # zizmor: ignore[self-repository]\n"
     )

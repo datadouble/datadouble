@@ -40,9 +40,12 @@ _SCHEDULE = re.compile(r"  schedule:\n(    - cron: [^\n]+\n)+")
 _LOCAL = "uses: ./ci/github-actions # zizmor: ignore[self-repository]"
 
 
+_HEADER = "# Copyright (c) 2026- Tight Line LLC\n# SPDX-License-Identifier: MIT\n\n"
+
+
 def adapt(workflow: str) -> str:
     """A generated workflow, using this checkout's action and with no schedule."""
-    return _SCHEDULE.sub("", _USES.sub(_LOCAL, workflow))
+    return _HEADER + _SCHEDULE.sub("", _USES.sub(_LOCAL, workflow))
 
 
 def _work(spec: Path) -> str:
