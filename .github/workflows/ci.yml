@@ -123,8 +123,9 @@ jobs:
 
   plugin:
     # The Claude Code plugin's manifests and skills, checked by Claude Code's
-    # own validator. The skill scenarios (make test-skills) run Claude and
-    # are not run here.
+    # own validator. The skill scenarios (make test-skills) run Claude, at a
+    # few dollars a pass, so a maintainer runs them before a release instead
+    # (decision 105).
     name: Claude Code plugin
     runs-on: ubuntu-latest
     timeout-minutes: 10

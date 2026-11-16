@@ -124,7 +124,9 @@ the agent actually did:
       verification.
     - Asked to put `build` on a vendor-hosted runner, the agent refuses.
 - **Runs** through Claude Code's plugin evaluation (`claude plugin eval`), with
-  `make test-skills`, against a copy of the plugin's files. CI validates the
-  plugin with `claude plugin validate --strict`; running the scenarios in CI
-  needs a Claude API key (decision 105). Runs against other agents that read
-  the Agent Skills format come later.
+  `make test-skills`, against a copy of the plugin's files. The scenarios are
+  outside the standard CI pipeline because of their cost: each runs Claude
+  several times, a few dollars a pass. A maintainer runs them before a release
+  and after changing skills; CI only validates the plugin with `claude plugin
+  validate --strict` (decision 105). Runs against other agents that read the
+  Agent Skills format come later.
