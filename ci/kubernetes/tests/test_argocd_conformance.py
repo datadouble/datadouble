@@ -101,6 +101,8 @@ def _kind(*arguments: str) -> None:
 def _load(name: str, image: str, scratch: Path) -> None:
     """Import an image into the node; `kind load` fails on multi-platform images."""
     archive = scratch / "image.tar"
+    if not docker("image", "ls", "--quiet", image).strip():
+        docker("pull", "--quiet", image)
     docker("save", "--output", str(archive), image)
     done = run_program(
         "sh",
