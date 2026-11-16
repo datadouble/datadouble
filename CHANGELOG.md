@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Using Datadouble documentation.** The site gains a quickstart, a spec
+  reference generated from the JSON Schema, a CLI reference generated from
+  the CLI, and guides to the CI/CD libraries, the agent skills and the
+  example repository. The spec's JSON Schema now describes each field.
 - **Agent skills.** A Claude Code plugin (this repository is its marketplace)
   with skills that set up a whole pipeline, a spec, file trees, and each job,
   following shared rules: configuration only from `ci init`, no weakened
@@ -190,6 +194,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than `size` more each time, so repeating a request makes none.
 
 ### Fixed
+
+- A catalog lock Datadouble could not write ended with a generic file error;
+  the error now names the lock file.
 
 - The Datadouble image could not load the S3 store adapter, which imported a
   typing-only package at run time. Every command that loads the installed

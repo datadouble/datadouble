@@ -147,7 +147,11 @@ class CatalogLock(_Model):
 def write_lock(lock: CatalogLock, path: Path) -> None:
     """Write a lock file: indented JSON with sorted keys, so diffs are readable."""
     text = json.dumps(lock.model_dump(mode="json"), indent=2, sort_keys=True)
-    path.write_text(text + "\n", encoding="utf-8")
+    try:
+        path.write_text(text + "\n", encoding="utf-8")
+    except OSError as error:
+        message = f"cannot write the catalog lock {path}: {error.strerror}"
+        raise CatalogError(message) from None
 
 
 def read_lock(path: Path) -> CatalogLock:

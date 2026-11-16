@@ -79,6 +79,24 @@ def _stages(text: str) -> list[str]:
     return names
 
 
+class CommandParser(argparse.ArgumentParser):
+    """An argument parser that lists its arguments, for the CLI reference."""
+
+    @property
+    def arguments(self) -> list[argparse.Action]:
+        """Every argument, in the order added, groups' and sub-commands' included."""
+        return list(self._actions)
+
+    @property
+    def commands(self) -> dict[str, "CommandParser"]:
+        """The sub-commands added with :meth:`command`, in order."""
+        found: dict[str, CommandParser] = self.__dict__.setdefault("_commands", {})
+        return found
+
+
+type _Add = Callable[[str, str], CommandParser]
+
+
 def _jobs(text: str) -> list[str]:
     names = [part.strip() for part in text.split(",") if part.strip()]
     known = {job.value for job in JobKind}
@@ -127,17 +145,17 @@ def _group_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _operation_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
-    promote = add(api.Command.PROMOTE, help="copy verified, signed images to the export stores")
+def _operation_parsers(add: _Add) -> None:
+    promote = add(api.Command.PROMOTE, "copy verified, signed images to the export stores")
     _group_arguments(promote)
     promote.add_argument("--generation", help="the generation to promote (default: newest)")
-    fetch = add(api.Command.FETCH, help="bring new promoted images into staging")
+    fetch = add(api.Command.FETCH, "bring new promoted images into staging")
     _group_arguments(fetch)
-    activate = add(api.Command.ACTIVATE, help="point the staging channel at a staged generation")
+    activate = add(api.Command.ACTIVATE, "point the staging channel at a staged generation")
     activate.add_argument("generation", help="the generation to activate")
     _group_arguments(activate)
     replicate = add(
-        api.Command.REPLICATE, help="fill the pool, or make on-demand copies, and announce them"
+        api.Command.REPLICATE, "fill the pool, or make on-demand copies, and announce them"
     )
     _group_arguments(replicate)
     replicate.add_argument("--owner", help="who on-demand copies are for")
@@ -145,21 +163,21 @@ def _operation_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
         "--all-at-once", action="store_true", help="replace stale pool copies before refilling"
     )
     replicate.add_argument("--no-announce", action="store_true", help="make copies only")
-    claim = add(api.Command.CLAIM, help="take an unclaimed pool copy")
+    claim = add(api.Command.CLAIM, "take an unclaimed pool copy")
     _group_arguments(claim)
     claim.add_argument("--owner", required=True, help="who is taking the copy")
     claim.add_argument("--no-announce", action="store_true", help="claim only")
-    release = add(api.Command.RELEASE, help="destroy copies by ID, owner or expiry")
+    release = add(api.Command.RELEASE, "destroy copies by ID, owner or expiry")
     release.add_argument("copy_ids", nargs="*", metavar="COPY_ID", help="copies to release")
     _group_arguments(release)
     release.add_argument("--owner", help="release every copy this owner has")
     release.add_argument("--expired", action="store_true", help="release expired copies")
-    announce = add(api.Command.ANNOUNCE, help="announce existing copies again")
+    announce = add(api.Command.ANNOUNCE, "announce existing copies again")
     _group_arguments(announce)
     announce.add_argument("--owner", help="announce this owner's copies (default: the pool)")
-    copies = add(api.Command.COPIES, help="list copies")
+    copies = add(api.Command.COPIES, "list copies")
     _group_arguments(copies)
-    prune = add(api.Command.PRUNE, help="apply retention")
+    prune = add(api.Command.PRUNE, "apply retention")
     prune.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
     prune.add_argument(
         "--target",
@@ -175,10 +193,12 @@ def _operation_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
     )
 
 
-def _ci_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
-    ci = add("ci", help="CI/CD configuration")
+def _ci_parsers(add: _Add) -> None:
+    ci = add("ci", "CI/CD configuration")
     actions = ci.add_subparsers(dest="ci_command", required=True, metavar="ACTION")
-    init = actions.add_parser("init", help="write CI/CD configuration for a spec's jobs")
+    summary = "write CI/CD configuration for a spec's jobs"
+    init = actions.add_parser("init", help=summary, description=summary)
+    ci.commands["init"] = init
     init.add_argument("--system", required=True, help="the CI/CD system, such as github-actions")
     init.add_argument(
         "--job",
@@ -205,9 +225,9 @@ def _ci_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> CommandParser:
     """Build the argument parser."""
-    parser = argparse.ArgumentParser(
+    parser = CommandParser(
         prog="datadouble",
         description="Realistic, safe copies of production data for development and testing.",
     )
@@ -230,13 +250,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="where the CI/CD adapter writes outputs for the native step to pick up",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
-    commands.add_parser(api.Command.VERSION, help="show the installed version")
-    commands.add_parser(api.Command.SCHEMA, help="print the spec JSON Schema")
-    lock = commands.add_parser(api.Command.LOCK, help="write the catalog lock for a spec")
+
+    def add(name: str, summary: str) -> CommandParser:
+        """A command, with its summary as both its help and its description."""
+        child = commands.add_parser(name, help=summary, description=summary)
+        parser.commands[name] = child
+        return child
+
+    add(api.Command.VERSION, "show the installed version")
+    add(api.Command.SCHEMA, "print the spec JSON Schema")
+    lock = add(api.Command.LOCK, "write the catalog lock for a spec")
     _spec_arguments(lock)
-    importing = commands.add_parser(
+    importing = add(
         api.Command.IMPORT_JAILER,
-        help="translate a Jailer subset into native spec settings, and lock the catalog",
+        "translate a Jailer subset into native spec settings, and lock the catalog",
     )
     _spec_arguments(importing)
     importing.add_argument("--model", required=True, help="the Jailer extraction model (.jm)")
@@ -244,10 +271,10 @@ def build_parser() -> argparse.ArgumentParser:
     importing.add_argument(
         "--output", required=True, help="where to write the native subset settings (YAML)"
     )
-    planning = commands.add_parser(api.Command.PLAN, help="plan a build without extracting")
+    planning = add(api.Command.PLAN, "plan a build without extracting")
     _spec_arguments(planning)
     _override_arguments(planning)
-    run = commands.add_parser(api.Command.RUN, help="run build stages, or resume a generation")
+    run = add(api.Command.RUN, "run build stages, or resume a generation")
     run.add_argument("stages", type=_stages, help=f"comma-separated stages: {','.join(Stage)}")
     _spec_arguments(run)
     _override_arguments(run)
@@ -259,9 +286,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="KEY",
         help="the CI system's ID for this run; a retry resumes the generation it started",
     )
-    _operation_parsers(commands.add_parser)
-    _ci_parsers(commands.add_parser)
-    commands.add_parser("api", help="read a JSON request from standard input")
+    _operation_parsers(add)
+    _ci_parsers(add)
+    add("api", "read a JSON request from standard input")
     return parser
 
 
