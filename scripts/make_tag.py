@@ -16,6 +16,7 @@ opens the release pull request. ``tag`` checks the merged result and pushes the
 ``v<version>`` tag, which starts the release workflow.
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -33,6 +34,12 @@ _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 _UNRELEASED = "## [Unreleased]"
 _PROJECT_VERSION = re.compile(r'^(version\s*=\s*)"[^"]*"', re.MULTILINE)
 _MEMBERS = TypeAdapter(list[str])
+_PLUGIN = Path(".claude-plugin/plugin.json")
+_CHART = Path("ci/kubernetes/chart/Chart.yaml")
+_CHART_VALUES = Path("ci/kubernetes/chart/values.yaml")
+_CHART_VERSION = re.compile(r"^(version|appVersion): \S+$", re.MULTILINE)
+_CHART_IMAGE = re.compile(r"^(image: ghcr\.io/datadouble/datadouble:v)\S+$", re.MULTILINE)
+_OBJECT = TypeAdapter(dict[str, object])
 
 
 class ReleaseError(Exception):
@@ -120,6 +127,37 @@ def set_project_version(pyproject: str, version: str) -> str:
     return _PROJECT_VERSION.sub(rf'\g<1>"{version}"', pyproject, count=1)
 
 
+def set_released_versions(root: Path, version: str) -> list[Path]:
+    """Set the version outside the packages, where the files exist; return those changed.
+
+    The Claude Code plugin's manifest, and the Helm chart with the image its
+    values name, are released with the packages.
+    """
+    changed: list[Path] = []
+    plugin = root / _PLUGIN
+    if plugin.exists():
+        manifest = _OBJECT.validate_json(plugin.read_text(encoding="utf-8"))
+        manifest["version"] = version
+        plugin.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        changed.append(plugin)
+    for path, pattern, replacement in (
+        (root / _CHART, _CHART_VERSION, rf"\g<1>: {version}"),
+        (root / _CHART_VALUES, _CHART_IMAGE, rf"\g<1>{version}"),
+    ):
+        if path.exists():
+            path.write_text(pattern.sub(replacement, path.read_text(encoding="utf-8")), "utf-8")
+            changed.append(path)
+    return changed
+
+
+def plugin_version(root: Path) -> str | None:
+    """The Claude Code plugin's version, if there is a plugin."""
+    plugin = root / _PLUGIN
+    if not plugin.exists():
+        return None
+    return str(_OBJECT.validate_json(plugin.read_text(encoding="utf-8")).get("version"))
+
+
 def package_files(root: Path) -> list[Path]:
     """The ``pyproject.toml`` of every workspace member."""
     workspace = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
@@ -167,6 +205,11 @@ def prepare(version: str, root: Path, runner: Runner, day: date) -> str:
             set_project_version(path.read_text(encoding="utf-8"), version), encoding="utf-8"
         )
         runner("git", "add", str(path))
+    for path in set_released_versions(root, version):
+        runner("git", "add", str(path))
+    # The nightly run's workflows name the version that wrote them.
+    runner("uv", "run", "python", "scripts/nightly.py", "write")
+    runner("git", "add", ".github/workflows")
     runner("git", "add", str(changelog_path))
     runner(
         "git",
@@ -198,6 +241,10 @@ def tag(version: str, root: Path, runner: Runner) -> str:
         if found != version:
             message = f"{path} is at {found}, not {version}; has the release PR merged?"
             raise ReleaseError(message)
+    found_plugin = plugin_version(root)
+    if found_plugin not in {None, version}:
+        message = f"{_PLUGIN} is at {found_plugin}, not {version}; has the release PR merged?"
+        raise ReleaseError(message)
     if not has_release_section((root / "CHANGELOG.md").read_text(encoding="utf-8"), version):
         message = f"CHANGELOG.md has no dated [{version}] section"
         raise ReleaseError(message)

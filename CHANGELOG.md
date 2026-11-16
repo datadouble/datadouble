@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Agent skills.** A Claude Code plugin (this repository is its marketplace)
+  with skills that set up a whole pipeline, a spec, file trees, and each job,
+  following shared rules: configuration only from `ci init`, no weakened
+  safety settings, no secrets handled and no vendor-hosted runners for
+  production jobs. `/plugin install datadouble --marketplace
+  datadouble/datadouble`.
 - **CI/CD jobs, starting with GitHub Actions.** `datadouble ci init` writes a
   side of the boundary's jobs for a spec (`build`, `promote`, `fetch`,
   `provision`, `release`, `prune`, `activate`), with schedules, chaining,

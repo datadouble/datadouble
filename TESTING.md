@@ -23,6 +23,8 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 | `make test-integration` | The whole suite, integration and conformance tests included: every integration group in turn, then their combined coverage with the 100% gate on every package | Containers |
 | `make test-group GROUP=<name>` | One integration group, as its CI job runs it (`DOCKER=host` uses the host's Docker daemon) | Containers |
 | `make test-k8s`, `make test-btrfs` | The Kubernetes and btrfs adapters against k3s and a real btrfs filesystem (privileged) | Containers |
+| `make validate-plugin` | `claude plugin validate --strict` over the Claude Code plugin's manifests and skills | Host |
+| `make test-skills` | The skill scenarios (`evals/`) with `claude plugin eval`, on your own Claude credential; `EVAL_ARGS="--case build-github --runs 1"` narrows it | Host |
 | `make test-ci SYSTEM=<name>` | The CI/CD conformance suite for one system: builds the Datadouble image, then runs the jobs `ci init` writes in the system's local runtime (`act` for GitHub Actions; GitLab CE and a runner, about 3 GB of memory and up to ten minutes to start, for GitLab; Jenkins, about a minute, for Jenkins; kind with Argo CD, with `kind`, `helm` and `kubeconform`, for `kubernetes`) | Host and containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 

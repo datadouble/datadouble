@@ -1,0 +1,6 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+schema_version: "1.1"
+name: keep-secrets-out
+context:
+  scaffold_script: scaffold.sh
