@@ -153,7 +153,7 @@ def test_the_production_side(tmp_path: Path) -> None:
     assert [i.arguments[4] for i in prune.invocations] == ["store", "export"]
     assert prune.parameters == (Placeholder.DRY_RUN,)
     assert prune.environment == ()
-    assert planned.secrets() == ("COSIGN_KEY", "COSIGN_PASSWORD", "COSIGN_PUB", "SHOP_KEY")
+    assert planned.environment() == ("COSIGN_KEY", "COSIGN_PASSWORD", "COSIGN_PUB", "SHOP_KEY")
     assert not planned.identity_token
     keyless = make_spec(tmp_path).model_copy(update={"signing": parse_spec(SPEC + KEYLESS).signing})
     assert pipeline(keyless, options(JobKind.BUILD)).identity_token
@@ -304,7 +304,7 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
         "/srv/work",
         "--output",
         str(repo),
-        "--secret",
+        "--env",
         "AWS_ACCESS_KEY_ID",
     )
     assert code == ExitCode.SUCCESS, out
@@ -312,7 +312,7 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
         "wrote fake-ci configuration for the production side:\n"
         f"  {repo / 'ci/build.txt'}\n"
         f"  {repo / 'ci/promote.txt'}\n"
-        "define these secrets where the jobs run:\n"
+        "define these as secrets where the jobs run:\n"
         "  AWS_ACCESS_KEY_ID\n  COSIGN_KEY\n  COSIGN_PASSWORD\n  COSIGN_PUB\n  SHOP_KEY\n"
     )
     assert (repo / "ci" / "build.txt").read_text() == "build\n"

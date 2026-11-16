@@ -245,7 +245,7 @@ so the jobs are the same on every system. Generated configuration:
 - References secrets by name only. Each job gets only the secrets its own
   spec sections name (`build` the source's and the build store's, `fetch` the
   trust settings'), plus `COSIGN_PASSWORD` for a build signed with a key, and
-  any `--secret NAME` given for credentials adapters read from the
+  any `--env NAME` given for credentials adapters read from the
   environment, such as `AWS_ACCESS_KEY_ID`.
 - Includes schedules, in UTC, and job chaining: `promote` after a successful
   `build`, and a pool's `provision` after `fetch`.

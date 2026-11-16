@@ -342,11 +342,11 @@ def _generate(built: World, system: str) -> None:
         runner=RUNNERS[Side.PRODUCTION], work=str(built.base / "work"),
     )  # fmt: skip
     assert isinstance(production, api.CiInitResponse), production
-    assert set(production.secrets) == set(built.secrets)
+    assert set(production.environment) == set(built.secrets)
     others = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
     non_production = ci_init(built, system, on_demand, *others, runner=RUNNERS[Side.NON_PRODUCTION])
     assert isinstance(non_production, api.CiInitResponse), non_production
-    assert "DDCI_SOURCE_DSN" not in non_production.secrets
+    assert "DDCI_SOURCE_DSN" not in non_production.environment
 
 
 class CiConformance:

@@ -304,7 +304,7 @@ class CiInitRequest(_Request):
     """The repository root the configuration is written into."""
     image: str | None = None
     """The Datadouble image jobs run; this version's published image by default."""
-    secrets: tuple[str, ...] = ()
+    environment: tuple[str, ...] = ()
     """More environment variables every job passes on, for credentials adapters read
     from the environment, such as ``AWS_ACCESS_KEY_ID``."""
 
@@ -462,8 +462,8 @@ class CiInitResponse(_Message):
     system: str
     side: Side
     files: tuple[str, ...]
-    secrets: tuple[str, ...]
-    """Environment variables to define as secrets where the jobs run."""
+    environment: tuple[str, ...]
+    """Environment variables the jobs read secrets from: define each where the jobs run."""
 
 
 class ErrorDetail(_Message):
@@ -698,7 +698,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         runner=request.runner,
         work=request.work,
         side=request.side,
-        secrets=request.secrets,
+        environment=request.environment,
     )
     planned = pipeline(spec, options)
     written: list[str] = []
@@ -711,7 +711,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         system=adapter.name,
         side=planned.side,
         files=tuple(written),
-        secrets=planned.secrets(),
+        environment=planned.environment(),
     )
 
 

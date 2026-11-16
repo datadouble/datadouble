@@ -25,7 +25,7 @@ for on-demand copies, and a concurrency group. The response lists the
 environment variables the jobs read secrets from; define each as a
 repository or environment secret. Each job receives only the ones its part of
 the spec names. Name credentials an adapter reads from the environment rather
-than the spec, such as `AWS_ACCESS_KEY_ID`, with `--secret NAME`.
+than the spec, such as `AWS_ACCESS_KEY_ID`, with `--env NAME`.
 
 `build` and `promote` need `--runner`, a self-hosted runner's label inside the
 production boundary, and `build` needs `--work`, a directory in production

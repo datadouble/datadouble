@@ -128,7 +128,7 @@ class Pipeline:
     identity_token: bool = False
     """Whether jobs need the CI system's identity token, for keyless signing in ``build``."""
 
-    def secrets(self) -> tuple[str, ...]:
+    def environment(self) -> tuple[str, ...]:
         """Every environment variable a job reads a secret from."""
         return tuple(sorted({name for job in self.jobs for name in job.environment}))
 
@@ -453,7 +453,7 @@ class PipelineOptions:
     runner: str | None = None
     work: Path | None = None
     side: Side | None = None
-    secrets: tuple[str, ...] = ()
+    environment: tuple[str, ...] = ()
     """More environment variables every job passes on, for credentials adapters read
     from the environment rather than the spec, such as ``AWS_ACCESS_KEY_ID``."""
 
@@ -490,7 +490,9 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
             _JOBS[kind](context),
             mounts=host_paths(spec, kind, side, extra if kind is JobKind.BUILD else ()),
             environment=tuple(
-                sorted({*secret_names(spec, kind, side), *_implicit(spec, kind), *options.secrets})
+                sorted(
+                    {*secret_names(spec, kind, side), *_implicit(spec, kind), *options.environment}
+                )
             ),
         )
         for kind in JobKind

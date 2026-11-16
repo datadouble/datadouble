@@ -66,7 +66,7 @@ class _Arguments(argparse.Namespace):
     runner: str | None
     side: str | None
     image: str | None
-    secrets: list[str] | None
+    environment: list[str] | None
 
 
 def _stages(text: str) -> list[str]:
@@ -197,8 +197,8 @@ def _ci_parsers(add: Callable[..., argparse.ArgumentParser]) -> None:
     init.add_argument("--output", help="the repository root to write into (default: .)")
     init.add_argument("--image", help="the Datadouble image jobs run (default: this version's)")
     init.add_argument(
-        "--secret",
-        dest="secrets",
+        "--env",
+        dest="environment",
         action="append",
         metavar="NAME",
         help="another environment variable every job passes on (repeatable)",
@@ -350,7 +350,7 @@ def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
         "jobs": list(dict.fromkeys(name for names in arguments.jobs for name in names)),
         "spec": arguments.spec,
     }
-    return _set(fields, arguments, "runner", "work", "side", "output", "image", "secrets")
+    return _set(fields, arguments, "runner", "work", "side", "output", "image", "environment")
 
 
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
@@ -488,9 +488,9 @@ def _operation_lines(
 def _ci_lines(response: api.CiInitResponse) -> list[str]:
     lines = [f"wrote {response.system} configuration for the {response.side} side:"]
     lines.extend(f"  {path}" for path in response.files)
-    if response.secrets:
-        lines.append("define these secrets where the jobs run:")
-        lines.extend(f"  {name}" for name in response.secrets)
+    if response.environment:
+        lines.append("define these as secrets where the jobs run:")
+        lines.extend(f"  {name}" for name in response.environment)
     return lines
 
 
