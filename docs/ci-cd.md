@@ -271,7 +271,7 @@ Generating `build` or `promote` requires an explicit runner target, and
 |---|---|---|---|---|
 | GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage and for keyless signing | `pull_request: closed` workflow |
 | GitLab CI | An included file of jobs extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`); CI/CD Catalog components once the GitLab mirror exists | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
-| Jenkins | Shared library with one step per job (`datadoubleBuild(spec: ...)`); `activate` uses an `input` step to choose the generation | Step return values, env vars | Credentials binding | `post { cleanup }` or a branch-deletion job |
+| Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step; `activate` takes the generation as a parameter | Step return values, the build's description | Credentials binding | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
 | Argo CD | Helm chart: CronJobs for build, promote, fetch, pool provisioning and prune; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret` | Kubernetes Secrets, External Secrets | PostDelete hook |
 
 The Kubernetes pieces (container image, Job templates, RBAC) form a shared base
@@ -376,7 +376,7 @@ combination, plus validation with each system's own tooling:
 |---|---|
 | GitHub Actions | `actionlint` |
 | GitLab CI | CI Lint API against the containerized GitLab below |
-| Jenkins | Declarative pipeline validator in the Jenkins container; shared-library unit tests with JenkinsPipelineUnit |
+| Jenkins | Declarative pipeline validator in the Jenkins container; the conformance suite runs the shared library itself |
 | Argo CD / Kubernetes | `helm lint`, `kubeconform` |
 
 **2. Local end-to-end.** Each system runs locally, and runs every job, as
@@ -387,7 +387,7 @@ Datadouble image built from the checkout (`make test-ci SYSTEM=<name>`):
 |---|---|
 | GitHub Actions | `act`, running jobs on the host as a self-hosted runner does |
 | GitLab CI | GitLab CE and a GitLab Runner with the shell executor, in containers |
-| Jenkins | `jenkins/jenkins` configured with Configuration as Code |
+| Jenkins | `jenkins/jenkins` with pinned plugins, configured with Configuration as Code, its built-in node running jobs with the host's Docker daemon |
 | Argo CD | kind cluster with Argo CD installed |
 
 The container-based systems' profiles live under `dev/ci/`; they are heavy and

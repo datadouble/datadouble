@@ -26,7 +26,7 @@ typecheck:
 # Unit tests on the host, with the 100% coverage gate over the code they can
 # reach. Adapter code that needs a database is covered by test-integration.
 test:
-	uv run pytest -m "not integration and not ci_conformance" --cov=core/src --cov=ci/github-actions/src --cov=ci/gitlab/src --cov=scripts
+	uv run pytest -m "not integration and not ci_conformance" --cov=core/src --cov=ci/github-actions/src --cov=ci/gitlab/src --cov=ci/jenkins/src --cov=scripts
 
 # The integration suite, in groups (tests/integration-groups.txt), each run as
 # the user its engine's copies are served as, with only the Compose services
@@ -44,7 +44,7 @@ DAEMON := $(if $(filter host,$(DOCKER)),,docker)
 
 # The whole suite also runs each CI/CD system's conformance suite (test-ci),
 # whose coverage joins the groups' before the combined report and its gate.
-CI_SYSTEMS := github-actions gitlab
+CI_SYSTEMS := github-actions gitlab jenkins
 
 test-integration:
 	rm -f .reports/.coverage.*
@@ -100,9 +100,9 @@ test-btrfs:
 
 # The CI/CD conformance suite for one system, such as `make test-ci
 # SYSTEM=github-actions`: real generated jobs, run in the system's local
-# runtime (act for GitHub Actions, GitLab CE and a runner for GitLab) with the
-# Datadouble image built from this checkout. Worlds live under CI_WORK, which
-# the Docker daemon must see.
+# runtime (act for GitHub Actions, GitLab CE and a runner for GitLab, Jenkins
+# for Jenkins) with the Datadouble image built from this checkout. Worlds
+# live under CI_WORK, which the Docker daemon must see.
 CI_IMAGE ?= datadouble:ci-test
 CI_WORK ?= /var/tmp
 

@@ -243,16 +243,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        system: [github-actions, gitlab]
+        system: [github-actions, gitlab, jenkins]
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
-          # As the integration jobs, for the Datadouble and PostgreSQL images
-          # and the workspace; GitHub release assets for act; GitHub for the
-          # checkout action the generated jobs use.
+          # As the integration jobs, for the Datadouble, PostgreSQL, GitLab
+          # and Jenkins images and the workspace; GitHub release assets for
+          # act; GitHub for the checkout action the generated jobs use;
+          # Jenkins' update center and plugin archive for the test Jenkins.
           allowed-endpoints: >
+            updates.jenkins.io:443
+            archives.jenkins.io:443
+            repo.jenkins-ci.org:443
+            *.cloudflare.jenkins.io:443
             github.com:443
             api.github.com:443
             codeload.github.com:443

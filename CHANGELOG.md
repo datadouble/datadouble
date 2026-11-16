@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   released when the request is merged or closed. Warnings are GitLab's
   allowed failures (exit code 3), and outputs a dotenv report. `ci init`
   lists the setup GitLab's configuration cannot hold, such as schedules.
+- **Jenkins.** The Jenkins adapter (`datadouble-jenkins`) writes a declarative
+  Jenkinsfile per job, which loads the shared library in `ci/jenkins` at the
+  release's tag and calls its `datadouble` step. Schedules are UTC `cron`
+  triggers, `promote` follows `build` through an `upstream` trigger, secrets
+  are bound credentials, and a warning marks the build unstable. On-demand
+  copies take an `OWNER` parameter, and a `RETRY_KEY` parameter resumes a
+  failed build.
 - **Reporting to the CI system.** `--ci SYSTEM` (or `ci` in a JSON request)
   masks the secret values Datadouble resolves in the system's logs and
   reports the response as step outputs, a job summary and the system's own

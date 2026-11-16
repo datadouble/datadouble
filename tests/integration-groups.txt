@@ -10,7 +10,7 @@
 # checks that every test path in pyproject.toml belongs to exactly one group.
 #
 # group | user:group | shards | Compose services | test paths
-core | 999:999 | 1 | postgres s3 vault | core/tests conformance/tests tests adapters/btrfs/tests adapters/docker/tests adapters/kubernetes/tests adapters/s3/tests adapters/vault/tests ci/github-actions/tests ci/gitlab/tests
+core | 999:999 | 1 | postgres s3 vault | core/tests conformance/tests tests adapters/btrfs/tests adapters/docker/tests adapters/kubernetes/tests adapters/s3/tests adapters/vault/tests ci/github-actions/tests ci/gitlab/tests ci/jenkins/tests
 postgres | 999:999 | 1 | postgres s3 | adapters/postgres/tests
 mongodb | 999:999 | 1 | mongodb | adapters/mongodb/tests
 mysql | 999:999 | 2 | mysql jailer | adapters/mysql/tests
