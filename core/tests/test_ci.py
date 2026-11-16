@@ -67,6 +67,9 @@ class FakeCi:
             for job in pipeline.jobs
         )
 
+    def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
+        return (f"schedule {pipeline.jobs[0].kind}",) if pipeline.side is Side.PRODUCTION else ()
+
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         return "a fake hosted runner" if self.hosted else None
 
@@ -314,6 +317,7 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
         f"  {repo / 'ci/promote.txt'}\n"
         "define these as secrets where the jobs run:\n"
         "  AWS_ACCESS_KEY_ID\n  COSIGN_KEY\n  COSIGN_PASSWORD\n  COSIGN_PUB\n  SHOP_KEY\n"
+        "then, in the CI system:\n  schedule build\n"
     )
     assert (repo / "ci" / "build.txt").read_text() == "build\n"
     (planned,) = ci.pipelines

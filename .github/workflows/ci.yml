@@ -235,14 +235,15 @@ jobs:
   ci-conformance:
     # The CI/CD conformance suite for each system: the jobs `ci init` writes,
     # run in the system's local runtime (act, running jobs on this machine as
-    # a self-hosted runner does) with the Datadouble image built here.
+    # a self-hosted runner does; GitLab CE with a shell-executor runner) with
+    # the Datadouble image built here.
     name: CI/CD conformance (${{ matrix.system }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        system: [github-actions]
+        system: [github-actions, gitlab]
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -417,9 +418,13 @@ jobs:
       # The gate is the step above; the upload is telemetry, so it never fails
       # the job.
       # A blocked or stalled download shows as this step's timeout, not the job's.
+      # Codecov only reports coverage; the gate is the combine step above and
+      # the sonar job. Its upload has hung past its time limit on some runs,
+      # which must not fail a check whose coverage already passed.
       - name: Upload coverage (OpenID Connect)
         if: ${{ env.SAME_REPO == 'true' }}
         timeout-minutes: 5
+        continue-on-error: true
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml
@@ -429,6 +434,7 @@ jobs:
       - name: Upload coverage (token, for forks)
         if: ${{ env.SAME_REPO != 'true' && env.CODECOV_TOKEN != '' }}
         timeout-minutes: 5
+        continue-on-error: true
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./.reports/coverage.xml

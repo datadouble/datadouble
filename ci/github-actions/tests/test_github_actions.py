@@ -201,3 +201,8 @@ def test_jobs_without_host_paths() -> None:
     workflow = yaml.safe_load(render(planned, fetch))
     (step,) = workflow["jobs"]["fetch"]["steps"][1:]
     assert "mounts" not in step["with"]
+
+
+def test_workflows_need_no_other_setup() -> None:
+    ci, _ = github()
+    assert ci.instructions(SCENARIOS["production"]) == ()

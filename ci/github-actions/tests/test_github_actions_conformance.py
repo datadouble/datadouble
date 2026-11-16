@@ -142,6 +142,10 @@ class Act:
             state = State.SUCCESS
         return JobRun(state=state, outputs=outputs, log=log)
 
+    def owner(self, repository: Path, request: int) -> str:
+        del repository
+        return f"pr-{request}"
+
     def uploaded(self) -> list[Path]:
         return sorted(path for path in self.artifacts.rglob("*") if path.is_file())
 

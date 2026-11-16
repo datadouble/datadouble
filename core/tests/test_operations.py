@@ -432,6 +432,9 @@ def test_on_demand_copies(tmp_path: Path, registry: Registry) -> None:
 
     made = replicate(spec, registry, Options(owner="mr-12", clock=lambda: T0))
     (copy,) = made.created
+    again = replicate(spec, registry, Options(owner="mr-12", clock=lambda: T0))
+    assert again.created == ()
+    assert [c.id for c in again.copies] == [copy.id]
     assert (copy.owner, copy.claimed, copy.expires_at) == (
         "mr-12",
         True,

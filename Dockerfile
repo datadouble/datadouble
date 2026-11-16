@@ -33,7 +33,7 @@ COPY conformance/ conformance/
 RUN uv sync --no-dev --no-editable --package datadouble \
         --package datadouble-btrfs --package datadouble-docker --package datadouble-kubernetes \
         --package datadouble-mongodb --package datadouble-mssql --package datadouble-mysql --package datadouble-oracle --package datadouble-postgres --package datadouble-redis --package datadouble-elasticsearch --package datadouble-opensearch --package datadouble-files --package datadouble-s3 \
-        --package datadouble-vault --package datadouble-github-actions
+        --package datadouble-vault --package datadouble-github-actions --package datadouble-gitlab
 
 FROM base AS tools
 # The docker command (static), kubectl and cosign, all pinned.
@@ -78,6 +78,7 @@ COPY --chown=tester:tester adapters/files/pyproject.toml adapters/files/README.m
 COPY --chown=tester:tester adapters/s3/pyproject.toml adapters/s3/README.md adapters/s3/LICENSE adapters/s3/
 COPY --chown=tester:tester adapters/vault/pyproject.toml adapters/vault/README.md adapters/vault/LICENSE adapters/vault/
 COPY --chown=tester:tester ci/github-actions/pyproject.toml ci/github-actions/README.md ci/github-actions/LICENSE ci/github-actions/
+COPY --chown=tester:tester ci/gitlab/pyproject.toml ci/gitlab/README.md ci/gitlab/LICENSE ci/gitlab/
 COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/
 RUN uv sync --no-install-workspace
 COPY --chown=tester:tester . .

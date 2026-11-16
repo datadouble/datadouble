@@ -179,6 +179,10 @@ class CiAdapter(Protocol):
         """The system's configuration for the pipeline's jobs."""
         ...
 
+    def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
+        """Setup the system's configuration cannot hold, such as GitLab's pipeline schedules."""
+        ...
+
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         """A description of the runner, if ``environ`` shows the vendor hosts it."""
         ...

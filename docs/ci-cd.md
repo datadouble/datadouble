@@ -130,7 +130,7 @@ bad.
 | Mode | Behavior | Suits |
 |---|---|---|
 | **pool** | Keep N unclaimed copies of the active generation ready; consumers claim one | Large images, where copying takes longer than a developer will wait |
-| **on-demand** | Make N copies for a named requester (pipeline, merge request, environment) | Small images, CI test jobs |
+| **on-demand** | Make N copies for a named requester (pipeline, merge request, environment); asking again makes none until some are released | Small images, CI test jobs |
 
 Copies are written under a temporary name and renamed when complete. A copy
 that never completed is removed by `release`.
@@ -270,7 +270,7 @@ Generating `build` or `promote` requires an explicit runner target, and
 | System | Native form | Outputs | Secrets | Teardown hook |
 |---|---|---|---|---|
 | GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage and for keyless signing | `pull_request: closed` workflow |
-| GitLab CI | CI/CD Catalog components with `spec:inputs`, one per job | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
+| GitLab CI | An included file of jobs extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`); CI/CD Catalog components once the GitLab mirror exists | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
 | Jenkins | Shared library with one step per job (`datadoubleBuild(spec: ...)`); `activate` uses an `input` step to choose the generation | Step return values, env vars | Credentials binding | `post { cleanup }` or a branch-deletion job |
 | Argo CD | Helm chart: CronJobs for build, promote, fetch, pool provisioning and prune; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret` | Kubernetes Secrets, External Secrets | PostDelete hook |
 
@@ -281,8 +281,14 @@ that Argo CD uses directly and that the Tier 2 Kubernetes systems build on.
 Pipelines, CircleCI, Bitbucket Pipelines and Buildkite.
 
 GitLab's CI/CD Catalog needs the components to live in a GitLab project, so they
-are published from a GitLab mirror of this repository. Self-managed GitLab users
-can mirror that project.
+will be published from a GitLab mirror of this repository. Until that project
+exists, generated jobs include the job template straight from this repository
+(decision 101). Self-managed GitLab users can mirror the file or the project.
+
+Some setup cannot live in a system's configuration: GitLab's pipeline
+schedules, for one. `ci init` lists those steps in its response
+(`instructions`), and a GitLab schedule names the job it runs in the
+`DATADOUBLE_JOB` variable.
 
 ### Runtime bridging
 
@@ -380,7 +386,7 @@ Datadouble image built from the checkout (`make test-ci SYSTEM=<name>`):
 | System | Local runtime |
 |---|---|
 | GitHub Actions | `act`, running jobs on the host as a self-hosted runner does |
-| GitLab CI | GitLab CE and GitLab Runner containers |
+| GitLab CI | GitLab CE and a GitLab Runner with the shell executor, in containers |
 | Jenkins | `jenkins/jenkins` configured with Configuration as Code |
 | Argo CD | kind cluster with Argo CD installed |
 

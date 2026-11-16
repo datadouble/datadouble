@@ -322,7 +322,7 @@ class Replication:
 
 
 def replicate(spec: Spec, registry: "Registry", options: Options) -> ReplicateResult:
-    """Fill the pool, or make copies for ``options.owner`` in on-demand mode."""
+    """Fill the pool, or make copies for ``options.owner`` in on-demand mode, up to ``size``."""
     work = Replication(spec, registry, options)
     on_demand = work.settings.mode is ReplicateMode.ON_DEMAND
     if on_demand and not options.owner:
@@ -333,7 +333,10 @@ def replicate(spec: Spec, registry: "Registry", options: Options) -> ReplicateRe
             active = work.active(line.prefix)
             copies = work.tidy(line)
             if on_demand:
-                for _ in range(work.settings.size):
+                # Up to `size` per owner, so a repeated request (a retried job, a merge
+                # request's pipeline on every push) makes no more.
+                owned = sum(1 for copy in copies if copy.owner == options.owner)
+                for _ in range(work.settings.size - owned):
                     work.make(line, copies, active)
             else:
                 work.fill_pool(line, copies, active)

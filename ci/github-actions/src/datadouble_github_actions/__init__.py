@@ -246,6 +246,11 @@ class GitHubActions:
             for job in pipeline.jobs
         )
 
+    def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
+        """Workflows hold everything, schedules included."""
+        del pipeline
+        return ()
+
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         """GitHub's runners say ``RUNNER_ENVIRONMENT=github-hosted``."""
         if environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
