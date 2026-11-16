@@ -218,6 +218,11 @@ def render(pipeline: Pipeline, job: Job) -> str:
     # PyYAML quotes `on`, a boolean in YAML 1.1; GitHub reads either form.
     text = text.replace("'on':", "on:", 1).replace("workflow_dispatch: null", "workflow_dispatch:")
     text = text.replace(f"uses: {CHECKOUT}\n", f"uses: {CHECKOUT} # {CHECKOUT_VERSION}\n")
+    # The job a workflow_run follows is never started by a pull request, and the
+    # follower checks out the default branch without credentials.
+    text = text.replace(
+        "  workflow_run:\n", "  workflow_run: # zizmor: ignore[dangerous-triggers]\n", 1
+    )
     return _HEADER.format(version=pipeline.version) + text
 
 

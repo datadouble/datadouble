@@ -11,11 +11,13 @@ lint:
 	uv run ruff check .
 	uv run python scripts/check_source.py
 
-# GitHub workflows: actionlint for syntax and shell, zizmor for security; and the
-# workflows the GitHub Actions adapter writes (its golden files).
+# GitHub workflows: actionlint for syntax and shell, zizmor for security; the
+# workflows the GitHub Actions adapter writes (its golden files); and that the
+# nightly run's generated workflows are current (scripts/nightly.py).
 lint-workflows:
 	actionlint
 	actionlint -config-file ci/github-actions/tests/actionlint.yaml ci/github-actions/tests/golden/*/*.golden
+	uv run python scripts/nightly.py check
 	uv run python scripts/check_workflows.py
 	uvx --from zizmor==1.32.0 zizmor --offline .github/workflows
 
