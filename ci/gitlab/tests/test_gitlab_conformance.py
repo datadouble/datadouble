@@ -31,6 +31,7 @@ import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
+from datadouble.ci import Side
 from datadouble.programs import run_program
 from datadouble_conformance.ci import (
     RUNNERS,
@@ -422,6 +423,14 @@ class GitLabCe:
 
     def owner(self, repository: Path, request: int) -> str:
         return f"mr-{self.projects[repository].requests[request]}"
+
+    def runtime(self, network: str, base: Path) -> Mapping[str, JsonValue]:
+        del base
+        return {"docker": {"network": network}}
+
+    def runner(self, side: Side, base: Path) -> str:
+        del base
+        return RUNNERS[side]
 
     def uploaded(self) -> list[Path]:
         """Every file in jobs' artifacts except the outputs (``datadouble.env``)."""

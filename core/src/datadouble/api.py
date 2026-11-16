@@ -691,6 +691,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     except ValueError:
         message = f"the spec {request.spec} is not inside {request.output}, the repository root"
         raise CiError(message) from None
+    lock = request.spec.parent / "catalog.lock"
     options = PipelineOptions(
         kinds=request.jobs,
         spec_path=spec_path,
@@ -701,6 +702,8 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         work=request.work,
         side=request.side,
         environment=request.environment,
+        spec_text=request.spec.read_text(encoding="utf-8"),
+        lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
     )
     planned = pipeline(spec, options)
     written: list[str] = []

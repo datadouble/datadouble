@@ -243,7 +243,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        system: [github-actions, gitlab, jenkins]
+        system: [github-actions, gitlab, jenkins, kubernetes]
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -258,6 +258,10 @@ jobs:
             archives.jenkins.io:443
             repo.jenkins-ci.org:443
             *.cloudflare.jenkins.io:443
+            quay.io:443
+            cdn01.quay.io:443
+            cdn02.quay.io:443
+            cdn03.quay.io:443
             github.com:443
             api.github.com:443
             codeload.github.com:443
@@ -301,6 +305,18 @@ jobs:
           grep " ${file}\$" checksums.txt | sha256sum --check
           tar xzf "${file}" act
           sudo install act /usr/local/bin/
+
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: 0.8.0
+        run: |
+          base="https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}"
+          file="kubeconform-linux-amd64.tar.gz"
+          curl -fsSLO "${base}/${file}"
+          curl -fsSLO "${base}/CHECKSUMS"
+          grep " ${file}\$" CHECKSUMS | sha256sum --check
+          tar xzf "${file}" kubeconform
+          sudo install kubeconform /usr/local/bin/
 
       - name: Run the suite
         env:

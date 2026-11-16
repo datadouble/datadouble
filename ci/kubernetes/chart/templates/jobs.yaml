@@ -1,0 +1,43 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# A CronJob per scheduled or manual job, suspended when it has no schedule.
+# A request's Application (one with an owner) has only Argo CD hook Jobs:
+# PreSync makes the owner's copies, PostDelete releases them when the
+# Application is deleted.
+{{- range $job := .Values.jobs }}
+{{- if and (not $job.hook) (not $.Values.owner) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ printf "%s-%s" (include "datadouble.name" $) $job.name | trunc 52 | trimSuffix "-" }}
+spec:
+  schedule: {{ $job.schedule | default "0 0 31 2 *" | quote }}
+  timeZone: Etc/UTC
+  suspend: {{ not $job.schedule }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ mul $job.timeoutMinutes 60 }}
+      template:
+        {{- include "datadouble.pod" (dict "root" $ "job" $job) | nindent 8 }}
+{{- else if and $job.hook $.Values.owner }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "datadouble-%s-%s" $.Release.Name $job.name | trunc 63 | trimSuffix "-" }}
+  annotations:
+    argocd.argoproj.io/hook: {{ $job.hook }}
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: {{ mul $job.timeoutMinutes 60 }}
+  template:
+    {{- include "datadouble.pod" (dict "root" $ "job" $job) | nindent 4 }}
+{{- end }}
+{{- end }}
