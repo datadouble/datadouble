@@ -158,6 +158,7 @@ known-first-party = [
     "make_tag",
     "check_coverage",
     "check_workflows",
+    "nightly",
     "sakila_bulk",
     "fakes",
     "fake_engine",

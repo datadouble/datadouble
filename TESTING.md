@@ -17,7 +17,7 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 |---|---|---|
 | `make check` | Everything below except the integration suite and the docs | Host |
 | `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons and budget) | Host |
-| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, `scripts/check_workflows.py` (every job sets `timeout-minutes`), and `actionlint` over the workflows the GitHub Actions adapter writes (its golden files) | Host |
+| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, `scripts/check_workflows.py` (every job sets `timeout-minutes`), `actionlint` over the workflows the GitHub Actions adapter writes (its golden files), and `scripts/nightly.py check` (the nightly run's generated workflows are current) | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core, the CI/CD adapters and scripts | Host |
 | `make test-integration` | The whole suite, integration and conformance tests included: every integration group in turn, then their combined coverage with the 100% gate on every package | Containers |

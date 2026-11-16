@@ -16,6 +16,7 @@ variables → Actions**.
 | `GITLAB_RUNNER_TOKEN` | Registering the ephemeral runner for nightly GitLab tests | [GitLab](#gitlabcom) |
 | `GITLAB_TRIGGER_TOKEN` | Starting the nightly GitLab pipeline | [GitLab](#gitlabcom) |
 | `RUNNER_ADMIN_TOKEN` | Registering ephemeral self-hosted GitHub runners for nightly tests | [GitHub](#github) |
+| `DATADOUBLE_NIGHTLY_DSN` | The nightly run's throwaway source database, which the nightly job starts with this DSN's password; any random password will do | `gh secret set` |
 
 Codecov, GitHub Container Registry and PyPI use OpenID Connect and need no
 secret.

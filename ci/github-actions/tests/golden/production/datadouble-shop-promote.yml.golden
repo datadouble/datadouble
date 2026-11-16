@@ -2,7 +2,7 @@
 # the options and generate it again, rather than editing it by hand.
 name: Datadouble shop promote
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows:
       - Datadouble shop build
     types:

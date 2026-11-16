@@ -395,10 +395,21 @@ opt-in (`docker compose --profile ci-gitlab up`).
 
 **3. Scheduled runs on hosted services.** GitHub Actions on this repository and
 a GitLab.com project, nightly (the GitLab run waits for that project; see
-decision 99). They use ephemeral self-hosted runners started by
-the test, so the hosted-runner refusal in `build` is exercised exactly as in
-real use. This catches API and runner changes that local runtimes like `act`
-don't reproduce.
+decision 99). They use self-hosted runners started by the test, so the
+hosted-runner refusal in `build` is exercised exactly as in real use. This
+catches API and runner changes that local runtimes like `act` don't
+reproduce.
+
+On GitHub (`.github/workflows/nightly.yml`, decision 104), a job on a
+GitHub-hosted machine starts a source database and a self-hosted runner on
+that machine, marked inside the boundary, then runs the workflows `ci init`
+writes for `tests/nightly/nightly.yml` in order: build, promote by
+`workflow_run`, fetch, provision by `workflow_run`, and prune on both sides.
+Those workflows are committed, since GitHub runs only workflows in the
+repository; `scripts/nightly.py` writes them, using the checkout's action and
+without schedules, and `make lint-workflows` fails if they are stale. The
+build signs without keys through GitHub's identity token, and the job checks
+that the hosted machine itself is refused even when marked inside.
 
 ### CI/CD conformance suite
 

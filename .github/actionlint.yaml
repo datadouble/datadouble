@@ -1,0 +1,7 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The label of the self-hosted runner the nightly run starts
+# (.github/workflows/nightly.yml).
+self-hosted-runner:
+  labels: [datadouble-nightly]
