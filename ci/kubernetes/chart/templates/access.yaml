@@ -1,0 +1,53 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# What Datadouble's pods may do: run working servers and restores as pods
+# (the `kubernetes` runtime), and write copies' Secrets (`k8s-secret`).
+{{- if not .Values.owner }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "datadouble.name" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "datadouble.name" . }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, pods/exec, pods/portforward, secrets]
+    verbs: [get, list, watch, create, delete, patch]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "datadouble.name" . }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ include "datadouble.name" . }}}
+subjects:
+  - {kind: ServiceAccount, name: {{ include "datadouble.name" . }}, namespace: {{ .Release.Namespace }}}
+{{- if .Values.persistentVolumes }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ printf "%s-%s" (include "datadouble.name" .) .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumes]
+    verbs: [get, list, watch, create, delete, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ printf "%s-%s" (include "datadouble.name" .) .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ printf "%s-%s" (include "datadouble.name" .) .Release.Namespace }}
+subjects:
+  - {kind: ServiceAccount, name: {{ include "datadouble.name" . }}, namespace: {{ .Release.Namespace }}}
+{{- end }}
+{{- end }}

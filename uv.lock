@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "datadouble",
+    "datadouble-argocd",
     "datadouble-btrfs",
     "datadouble-conformance",
     "datadouble-docker",
@@ -435,6 +436,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-argocd"
+version = "0.0.0"
+source = { editable = "ci/kubernetes" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
 name = "datadouble-btrfs"
 version = "0.0.0"
 source = { editable = "adapters/btrfs" }
@@ -693,6 +709,7 @@ source = { virtual = "." }
 dev = [
     { name = "boto3-stubs", extra = ["s3"] },
     { name = "datadouble" },
+    { name = "datadouble-argocd" },
     { name = "datadouble-btrfs" },
     { name = "datadouble-conformance" },
     { name = "datadouble-docker" },
@@ -730,6 +747,7 @@ docs = [
 dev = [
     { name = "boto3-stubs", extras = ["s3"], specifier = ">=1.43.126" },
     { name = "datadouble", editable = "core" },
+    { name = "datadouble-argocd", editable = "ci/kubernetes" },
     { name = "datadouble-btrfs", editable = "adapters/btrfs" },
     { name = "datadouble-conformance", editable = "conformance" },
     { name = "datadouble-docker", editable = "adapters/docker" },

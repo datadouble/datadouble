@@ -272,7 +272,7 @@ Generating `build` or `promote` requires an explicit runner target, and
 | GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage and for keyless signing | `pull_request: closed` workflow |
 | GitLab CI | An included file of jobs extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`); CI/CD Catalog components once the GitLab mirror exists | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
 | Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step; `activate` takes the generation as a parameter | Step return values, the build's description | Credentials binding | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
-| Argo CD | Helm chart: CronJobs for build, promote, fetch, pool provisioning and prune; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret` | Kubernetes Secrets, External Secrets | PostDelete hook |
+| Argo CD | An Application per side, installing this repository's Helm chart at the release's tag: a CronJob per job, a following job also running as a later step of its leader's pod; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret`; containers' termination messages | Kubernetes Secrets, External Secrets | PostDelete hook |
 
 The Kubernetes pieces (container image, Job templates, RBAC) form a shared base
 that Argo CD uses directly and that the Tier 2 Kubernetes systems build on.
@@ -388,7 +388,7 @@ Datadouble image built from the checkout (`make test-ci SYSTEM=<name>`):
 | GitHub Actions | `act`, running jobs on the host as a self-hosted runner does |
 | GitLab CI | GitLab CE and a GitLab Runner with the shell executor, in containers |
 | Jenkins | `jenkins/jenkins` with pinned plugins, configured with Configuration as Code, its built-in node running jobs with the host's Docker daemon |
-| Argo CD | kind cluster with Argo CD installed |
+| Argo CD | kind cluster with Argo CD's core install and a Helm repository serving the checkout's chart |
 
 The container-based systems' profiles live under `dev/ci/`; they are heavy and
 opt-in (`docker compose --profile ci-gitlab up`).

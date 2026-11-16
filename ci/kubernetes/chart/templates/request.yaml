@@ -1,0 +1,14 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# A request's Application records whom its copies are for. It also gives the
+# Application something to sync: Argo CD runs hooks only during a sync, and
+# an Application of hooks alone counts as synced from the start.
+{{- if .Values.owner }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "datadouble-%s-request" .Release.Name | trunc 63 | trimSuffix "-" }}
+data:
+  owner: {{ .Values.owner | quote }}
+{{- end }}

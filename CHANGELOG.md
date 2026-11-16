@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are bound credentials, and a warning marks the build unstable. On-demand
   copies take an `OWNER` parameter, and a `RETRY_KEY` parameter resumes a
   failed build.
+- **Argo CD and Kubernetes.** A Helm chart (`ci/kubernetes/chart`) runs
+  Datadouble's jobs as CronJobs, and the Argo CD adapter
+  (`datadouble-argocd`) writes an Application per side of the boundary that
+  installs it with the jobs, the spec and its lock as values. A following
+  job runs as a later step of its leader's pod, on-demand copies are PreSync
+  and PostDelete hooks on a request's Application, and the boundary mark is a
+  ConfigMap the cluster's operator creates.
 - **Reporting to the CI system.** `--ci SYSTEM` (or `ci` in a JSON request)
   masks the secret values Datadouble resolves in the system's logs and
   reports the response as step outputs, a job summary and the system's own
