@@ -52,6 +52,7 @@ from datadouble_redis.keys import (
 from datadouble_redis.server import RedisServer, Tools, default_image, start_command
 from datadouble_redis.source import (
     database_of,
+    key_row,
     namespace,
     read_records,
     server_version,
@@ -184,6 +185,7 @@ def test_names_settings_and_servers() -> None:
     assert server_databases(connection.layout()) == 16
     assert default_image("8.10.3") == "redis:8.10.3"
     assert '--save ""' in start_command("/d", 16, persist=False)
+    assert "--loadmodule" in start_command("/d", 16, persist=False)
     assert "--save" not in start_command("/d", 16, persist=True)
     engine = RedisEngine()
     assert (engine.name, engine.owner) == ("redis", "999:999")
@@ -235,3 +237,7 @@ class _Silent:
 def test_a_server_must_report_its_version() -> None:
     with pytest.raises(EngineError, match="did not report its version"):
         server_version(Client(_Silent({})))
+
+
+def test_keys_gone_since_listing_have_only_their_name() -> None:
+    assert key_row("gone", "none", None) == {ColumnName("_key"): ["gone"]}

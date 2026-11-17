@@ -25,7 +25,7 @@ from datadouble_conformance.engine import runtime_for_tests
 from datadouble_mysql import MysqlEngine
 from datadouble_mysql.server import MysqlServer, Tools, default_image
 from datadouble_mysql.source import MysqlSession
-from test_mysql_conformance import MysqlScratch, scratch
+from test_mysql_conformance import MysqlScratch, admin, scratch
 
 pytestmark = pytest.mark.integration
 
@@ -313,3 +313,53 @@ def test_the_build_user_must_be_removable(tmp_path: Path) -> None:
         server.connect() as connection,
     ):
         connection.cursor().execute("SET GLOBAL super_read_only = ON")
+
+
+PLUGIN_SPEC = """
+name: scratch
+source: {engine: mysql, connection: CONNECTION}
+exclude: ["items"]
+subset:
+  seeds: {notes: "id > 0"}
+"""
+
+
+def test_plugins_the_data_needs_are_installed(source: MysqlScratch, tmp_path: Path) -> None:
+    # The example full-text parser that ships in the official image.
+    admin("INSTALL PLUGIN simple_parser SONAME 'mypluglib.so'")
+    try:
+        source.execute(
+            "CREATE TABLE notes"
+            " (id INT PRIMARY KEY, body TEXT, FULLTEXT (body) WITH PARSER simple_parser)"
+        )
+        source.execute("INSERT INTO notes VALUES (1, 'hello world')")
+        with MysqlEngine().connect(source.connection) as session:
+            catalog = session.catalog()
+        assert "plugin mypluglib.so" in {str(r) for r in catalog.requirements}
+        result = build(
+            source, tmp_path, spec=PLUGIN_SPEC, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD)
+        )
+        assert not result.failed()
+        assert tuple(
+            r.name
+            for r in working_databases(tmp_path / "scratch").available()
+            if r.name == "mypluglib.so"
+        ) == ("mypluglib.so",)
+        # Omitted, the plugin is not installed, and the table using it must go.
+        omitted = (
+            PLUGIN_SPEC.replace(
+                "connection: CONNECTION}", "connection: CONNECTION, omit: [mypluglib.so]}"
+            )
+            .replace('["items"]', '["items", "notes"]')
+            .replace('notes: "id > 0"', 'files: "id > 0"')
+        )
+        result = build(
+            source,
+            tmp_path / "omitted",
+            spec=omitted,
+            stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD),
+        )
+        assert not result.failed()
+    finally:
+        source.execute("DROP TABLE IF EXISTS notes")
+        admin("UNINSTALL PLUGIN simple_parser")

@@ -44,6 +44,7 @@ from datadouble_redis.source import (
     batches,
     database_of,
     keys_of,
+    modules,
     read_records,
     read_rows,
 )
@@ -178,8 +179,19 @@ class RedisWorking:
         return self._version
 
     def available(self) -> tuple[Requirement, ...]:
-        """Nothing yet: this adapter reports no requirements of its sources."""
-        return ()
+        """The modules a server in the image loads, from a throwaway server."""
+        directory = self.scratch / "available"
+        server = RedisServer(self.tools, directory, self.scratch, 1)
+        try:
+            with server.running():
+                client = server.client(0)
+                try:
+                    with redacted("listing the image's modules"):
+                        return modules(client)
+                finally:
+                    client.close()
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
 
     @contextmanager
     def _open(self, data: Path, owner: Path, layout: Layout) -> Generator[Keyspace]:

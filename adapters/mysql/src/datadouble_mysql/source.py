@@ -31,7 +31,7 @@ from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
 from datadouble_mysql.errors import database_error
-from datadouble_mysql.introspect import Physical, introspect
+from datadouble_mysql.introspect import Physical, Plugin, introspect
 from datadouble_mysql.render import Renderer, compose
 from datadouble_mysql.server import Tools, checked, default_image
 
@@ -71,6 +71,8 @@ class ExtractIndex(BaseModel):
     tables: tuple[ExtractedTable, ...]
     omitted_views: tuple[str, ...]
     """Views that depend on excluded tables, left out of the schema."""
+    plugins: tuple[Plugin, ...] = ()
+    """Plugins the source installed from libraries, which ``load`` installs."""
 
     def table(self, name: TableName) -> ExtractedTable | None:
         """The extracted table called ``name``."""
@@ -194,7 +196,10 @@ class MysqlSnapshot:
             )
         (directory / "index.json").write_text(
             ExtractIndex(
-                database=self.session.database, tables=tuple(tables), omitted_views=omitted
+                database=self.session.database,
+                tables=tuple(tables),
+                omitted_views=omitted,
+                plugins=self.physical.plugins,
             ).model_dump_json(indent=2),
             "utf-8",
         )

@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from datadouble.catalog import Catalog, Column, ColumnKind, Table
+from datadouble.catalog import Catalog, Column, ColumnKind, Requirement, RequirementKind, Table
 from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
@@ -88,6 +88,23 @@ class Layout:
     sample: int
 
 
+def plugins(client: Client) -> tuple[Requirement, ...]:
+    """The plugins installed on the cluster's nodes (``GET _nodes/plugins``), with versions."""
+    reply = client.request("GET", "/_nodes/plugins", "listing the plugins")
+    found: set[Requirement] = set()
+    for node in document(reply.get("nodes"), "the nodes").values():
+        for plugin in items(document(node, "a node").get("plugins"), "a node's plugins"):
+            described = document(plugin, "a plugin")
+            found.add(
+                Requirement(
+                    kind=RequirementKind.PLUGIN,
+                    name=text(described.get("name")),
+                    version=text(described.get("version")),
+                )
+            )
+    return tuple(sorted(found, key=lambda r: (r.name, r.version or "")))
+
+
 def server_version(client: Client) -> str:
     """The server's version, such as ``9.5.5``; refuses another product's server."""
     reply = client.request("GET", "/", "reading the server version")
@@ -124,6 +141,20 @@ def is_open(mappings: Mapping[str, object]) -> bool:
         return True
     properties = as_document(mappings.get("properties")) or {}
     return any(is_open(as_document(field) or {}) for field in properties.values())
+
+
+_SERVER_MARKERS = ("query_insights_feature_space",)
+"""``_meta`` keys of indices a server plugin writes for itself."""
+
+
+def server_owned(mappings: Mapping[str, object]) -> bool:
+    """Whether a plugin made the index for itself, such as OpenSearch's ``top_queries-*``.
+
+    Query insights writes one a day with no leading dot and without hiding it,
+    so only its mapping's ``_meta`` tells it from consumers' indices.
+    """
+    meta = as_document(mappings.get("_meta")) or {}
+    return any(marker in meta for marker in _SERVER_MARKERS)
 
 
 def _source_kept(index: str, mappings: Mapping[str, object]) -> None:
@@ -208,6 +239,8 @@ def introspect(client: Client, layout: Layout) -> Catalog:
         what = f"reading the mapping of {index}"
         reply = client.request("GET", path(index, "_mapping"), what)
         mappings = document(document(reply.get(index), what).get("mappings") or {}, what)
+        if server_owned(mappings):
+            continue
         sampled: list[object] = []
         if is_open(mappings):
             found = client.request(
@@ -219,7 +252,7 @@ def introspect(client: Client, layout: Layout) -> Catalog:
             sampled = items(document(found.get("hits"), "search hits").get("hits"), "hits")
         columns = table_columns(index, mappings, (document(hit, "a hit") for hit in sampled))
         tables.append(Table(name=TableName.of("", index), columns=columns, primary_key=(ID,)))
-    return Catalog(engine=client.product.engine, tables=tuple(tables))
+    return Catalog(engine=client.product.engine, tables=tuple(tables), requirements=plugins(client))
 
 
 def held(hit: Mapping[str, object], column: ColumnName) -> list[str]:

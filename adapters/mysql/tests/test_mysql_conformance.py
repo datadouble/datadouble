@@ -145,7 +145,7 @@ class MysqlScratch:
         self.execute("INSERT INTO items (id) VALUES (%s)", [item_id])
 
 
-def _admin(statement: str) -> None:
+def admin(statement: str) -> None:
     options, _ = parse_url(os.environ[URL_VARIABLE])
     with pymysql.connect(
         host=options["host"],
@@ -166,14 +166,14 @@ def scratch() -> Generator[ScratchSource]:
     os.environ[variable] = urlunsplit(
         (parts.scheme, parts.netloc, f"/{database}", parts.query, parts.fragment)
     )
-    _admin(f"CREATE DATABASE {quote(database)}")
+    admin(f"CREATE DATABASE {quote(database)}")
     source = MysqlScratch(database, variable)
     try:
         source.execute("CREATE TABLE items (id INT PRIMARY KEY)")
         yield source
     finally:
         os.environ.pop(variable, None)
-        _admin(f"DROP DATABASE {quote(database)}")
+        admin(f"DROP DATABASE {quote(database)}")
 
 
 @pytest.fixture

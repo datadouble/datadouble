@@ -25,6 +25,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from datadouble.catalog import Requirement, RequirementKind
 from datadouble.engine import EngineError
 from datadouble.runtime import Container, ContainerRuntime
 from datadouble_elasticsearch.client import Client
@@ -36,6 +37,8 @@ LOGIN_ENV = "DATADOUBLE_PASSWORD"
 LOGIN_FILE = ".login"
 """The file beside a working database's data directory that holds its password."""
 _VERSION = re.compile(r"Version: (\d+\.\d+\.\d+)")
+_PLUGIN_NAME = re.compile(r"^Name: (\S+)$", re.MULTILINE)
+_PLUGIN_VERSION = re.compile(r"^Version: (\S+)$", re.MULTILINE)
 _STOP = (
     "stop() { kill -TERM $pid; wait $pid; status=$?; [ $status -eq 143 ] && exit 0; exit $status; }"
 )
@@ -111,6 +114,21 @@ class Tools:
             message = f"cannot read the {self.product.name} version: {detail!r}"
             raise EngineError(message)
         return match.group(1)
+
+    def plugins(self, owner: Path) -> tuple[Requirement, ...]:
+        """The plugins installed in the image, from its plugin tool."""
+        command = (f"{self.product.engine}-plugin", "list", "--verbose")
+        done = self.runtime.run(Container(image=self.image, command=command, owner=owner))
+        if done.status != 0:
+            detail = (done.stderr or done.stdout).strip()[-80:]
+            message = f"cannot list the {self.product.name} image's plugins: {detail!r}"
+            raise EngineError(message)
+        names = _PLUGIN_NAME.findall(done.stdout)
+        versions = _PLUGIN_VERSION.findall(done.stdout)
+        return tuple(
+            Requirement(kind=RequirementKind.PLUGIN, name=name, version=version)
+            for name, version in zip(names, versions, strict=True)
+        )
 
 
 def _password(directory: Path) -> str:

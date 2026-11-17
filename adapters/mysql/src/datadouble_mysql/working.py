@@ -24,7 +24,7 @@ import pymysql
 from pydantic import BaseModel, ConfigDict
 from pymysql.connections import Connection
 
-from datadouble.catalog import Column, ColumnKind, Requirement
+from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -234,8 +234,11 @@ class MysqlWorking:
         return self._version
 
     def available(self) -> tuple[Requirement, ...]:
-        """Nothing yet: this adapter reports no requirements of its sources."""
-        return ()
+        """The plugin libraries in the image's plugin directory, at any version."""
+        return tuple(
+            Requirement(kind=RequirementKind.PLUGIN, name=library)
+            for library in self.tools.plugin_libraries(self.scratch)
+        )
 
     # load
 
@@ -255,8 +258,18 @@ class MysqlWorking:
         for name in ("schema.sql", "triggers.sql"):
             script = without_definers((extract / name).read_text("utf-8"))
             (directory / name).write_text(script, "utf-8")
+        omitted = frozenset(r.name for r in plan.omitted)
         with server.running():
             with server.connect() as connection:
+                # Installed plugins are kept in the data directory, so later
+                # servers and copies load them too.
+                for plugin in index.plugins:
+                    if plugin.library not in omitted:
+                        _execute(
+                            connection,
+                            f"installing plugin {plugin.name}",
+                            f"INSTALL PLUGIN {plugin.name} SONAME '{plugin.library}'",
+                        )
                 for hook in hooks:
                     _execute(connection, "a before_load hook", hook.sql)
             server.tool("mysql", [], directory / "schema.sql")

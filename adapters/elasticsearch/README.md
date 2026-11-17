@@ -55,3 +55,24 @@ any document.
 
 The source must be Elasticsearch 7.17 or later. Working nodes have a 512 MB
 heap; set `source.server.heap` (such as `2g`) for larger subsets.
+
+## Plugins
+
+Every plugin installed on the source's nodes (`GET _nodes/plugins`) is a
+requirement at its version, such as `analysis-icu 9.5.5`. Reading them
+needs the `monitor` cluster privilege, as well as read access to the
+indices. Before reading the source, a build lists the working image's
+plugins (`elasticsearch-plugin list`) and fails with `requirement_unmet` if
+one is missing. The official image has none installed, so a source with
+analysis or mapper plugins needs an image that adds them, built `FROM` the
+official image of the source's version:
+
+```dockerfile
+FROM elasticsearch:9.5.5
+RUN elasticsearch-plugin install --batch analysis-icu analysis-kuromoji
+```
+
+Then name it in `source.image`. A plugin the copies can go without, such
+as a repository plugin, can be left out with `source.omit`; an index whose
+mapping uses an omitted plugin's analyzer or field type fails to load, so
+exclude it too.

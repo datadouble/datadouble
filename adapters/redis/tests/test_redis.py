@@ -377,3 +377,34 @@ def test_large_keyspaces_scan_in_rounds(source: RedisScratch) -> None:
         with session.snapshot(dt.datetime.now(tz=dt.UTC)) as snapshot:
             keys = snapshot.project(bulk, AllRows(), (ColumnName("_key"),))
             assert len(set(keys)) == 2500
+
+
+MODULE_SPEC = """
+name: scratch
+source: {engine: redis, connection: CONNECTION}
+subset:
+  seeds: {"json:{}": "*"}
+"""
+
+
+def test_module_data_is_a_column_and_loads(source: RedisScratch, tmp_path: Path) -> None:
+    source.command("JSON.SET", "json:1", "$", '{"email": "someone@example.com"}')
+    with RedisEngine().connect(source.connection) as session:
+        catalog = session.catalog()
+    assert {"ReJSON", "search", "timeseries", "bf"} <= {r.name for r in catalog.requirements}
+    table = catalog.table(TableName.of(f"db{source.database}", "json:{}"))
+    assert table is not None
+    value = table.column(ColumnName("value"))
+    assert value is not None
+    assert (value.type, value.kind) == ("ReJSON-RL", ColumnKind.OTHER)
+    result = build(
+        source, tmp_path, spec=MODULE_SPEC, stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD)
+    )
+    assert not result.failed()
+    data = Path(result.work) / "load" / "all" / "db"
+    server = RedisServer(tools(), data / "data", tmp_path / "check", 16)
+    with server.running():
+        client = server.client(source.database)
+        document = client.command("JSON.GET", "json:1")
+        client.close()
+    assert "someone@example.com" in str(document)
