@@ -113,6 +113,7 @@ def test_listed_paths_stay_in_their_table(tmp_path: Path) -> None:
 
 def test_snapshots_need_consent(tmp_path: Path) -> None:
     source = FilesSource(tree(tmp_path), accept_inconsistent=False)
+    assert source.server_version() == "1"
     assert source.catalog().tables
     with pytest.raises(EngineError, match="accept_inconsistent: true"), source.snapshot(AS_OF):
         pass
@@ -166,6 +167,7 @@ def test_working_copies(tmp_path: Path) -> None:
     runtime = _Runtime()
     working = FilesWorking(runtime, "img", tmp_path / "scratch")
     assert working.server_version() == "1"
+    assert working.available() == ()
     planned = plan(
         parse_spec(
             "name: t\nsource: {engine: files}\nstrict: off\nexclude: [tmp]\n"
