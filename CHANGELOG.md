@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Requirements for MySQL, Redis, Elasticsearch and OpenSearch.** MySQL
+  reports storage engine and full-text parser plugins and installs them in
+  working servers; Redis reports modules; Elasticsearch and OpenSearch
+  report plugins. Listing Elasticsearch plugins needs the `monitor` cluster
+  privilege.
 - **Source requirements.** The catalog lists the add-ons a source uses
   beyond its server, starting with PostgreSQL extensions, at the source's
   versions. The lock records them and strict mode treats a change like a
@@ -203,6 +208,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than `size` more each time, so repeating a request makes none.
 
 ### Fixed
+
+- Redis working servers and copies did not load the image's bundled
+  modules, so a source with JSON, search, time series or Bloom keys could
+  not load. They now load every module in the image's module directory, and
+  a key of a module's type gets a column strict mode asks about.
 
 - A catalog lock Datadouble could not write ended with a generic file error;
   the error now names the lock file.

@@ -322,8 +322,8 @@ class ElasticWorking:
         return self._version
 
     def available(self) -> tuple[Requirement, ...]:
-        """Nothing yet: this adapter reports no requirements of its sources."""
-        return ()
+        """The plugins installed in the image."""
+        return self.tools.plugins(self.scratch)
 
     def load(
         self,

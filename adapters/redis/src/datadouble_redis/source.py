@@ -23,7 +23,7 @@ from typing import IO
 
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Catalog, Column, ColumnKind, Table
+from datadouble.catalog import Catalog, Column, ColumnKind, Requirement, RequirementKind, Table
 from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
@@ -170,8 +170,12 @@ def _row(name: str, kind: str, reply: object) -> Row:
                 fields = texts(items(entry)[1])
                 for field, value in zip(fields[::2], fields[1::2], strict=True):
                     row.setdefault(ColumnName(field), []).append(value)
+        case "none":
+            pass  # deleted since it was listed
         case _:
-            pass
+            # A module's type (ReJSON-RL, TSDB-TYPE): Datadouble cannot read its
+            # values, but the column makes strict mode ask what to do with them.
+            row[VALUE] = []
     return row
 
 
@@ -214,7 +218,24 @@ def introspect(clients: dict[int, Client], layout: Layout, sample: int) -> Catal
         ]
         identity = Column(name=KEY, type="key", kind=ColumnKind.TEXT, nullable=False)
         tables.append(Table(name=table, columns=(identity, *described), primary_key=(KEY,)))
-    return Catalog(engine=ENGINE, tables=tuple(tables))
+    first = clients[layout.databases[0]]
+    return Catalog(engine=ENGINE, tables=tuple(tables), requirements=modules(first))
+
+
+def modules(client: Client) -> tuple[Requirement, ...]:
+    """The modules the server has loaded, each at its version (``MODULE LIST``)."""
+    found: list[Requirement] = []
+    for entry in items(client.command("MODULE", "LIST")):
+        fields = items(entry)
+        described = {text(fields[i]): fields[i + 1] for i in range(0, len(fields) - 1, 2)}
+        found.append(
+            Requirement(
+                kind=RequirementKind.MODULE,
+                name=text(described["name"]),
+                version=str(number(described["ver"])),
+            )
+        )
+    return tuple(sorted(found, key=lambda r: r.name))
 
 
 def server_version(client: Client) -> str:

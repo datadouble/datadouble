@@ -85,6 +85,14 @@ class Tools:
             raise EngineError(message)
         return match.group(1)
 
+    def plugin_libraries(self, owner: Path) -> tuple[str, ...]:
+        """The libraries in the image's plugin directory, such as ``rewriter.so``."""
+        listing = "ls \"$(mysqld --verbose --help 2> /dev/null | awk '/^plugin-dir/ {print $2}')\""
+        output = checked(
+            "listing plugins", self.runtime.run(self.container(["sh", "-c", listing], owner, ()))
+        )
+        return tuple(name for name in output.split() if name.endswith(".so"))
+
 
 class MysqlServer:
     """One server, identified by its data directory."""

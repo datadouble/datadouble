@@ -32,18 +32,26 @@ def default_image(server_version: str) -> str:
     return f"redis:{server_version}"
 
 
+MODULES = "/usr/local/lib/redis/modules"
+"""Where the official image keeps its modules (JSON, search, time series, Bloom)."""
+
+
 def start_command(directory: str, databases: int, *, persist: bool) -> str:
     """A shell command starting a server on ``directory`` with the password from the environment.
 
-    The password goes to the server as a configuration line on standard input,
-    from a here-document, so the server replaces the shell as the container's
-    first process and stops when the container is told to. Without
-    ``persist`` the server never saves on its own.
+    The server loads every module in :data:`MODULES`, as the image's own
+    entrypoint does, so data of a module's types loads. The password goes to
+    the server as a configuration line on standard input, from a
+    here-document, so the server replaces the shell as the container's first
+    process and stops when the container is told to. Without ``persist`` the
+    server never saves on its own.
     """
     saving = "" if persist else ' --save ""'
     return (
+        f'set --; for module in {MODULES}/*.so; do [ -e "$module" ]'
+        ' && set -- "$@" --loadmodule "$module"; done; '
         f"exec redis-server - --dir {directory} --dbfilename {RDB} --databases {databases}"
-        f" --appendonly no --protected-mode no --port {PORT}{saving} <<EOF\n"
+        f' --appendonly no --protected-mode no --port {PORT}{saving} "$@" <<EOF\n'
         f"requirepass ${LOGIN_ENV}\nEOF\n"
     )
 

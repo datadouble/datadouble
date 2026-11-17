@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from datadouble.catalog import Catalog, Column, ColumnKind, Table
+from datadouble.catalog import Catalog, Column, ColumnKind, Requirement, RequirementKind, Table
 from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
@@ -86,6 +86,23 @@ class Layout:
 
     indices: tuple[str, ...]
     sample: int
+
+
+def plugins(client: Client) -> tuple[Requirement, ...]:
+    """The plugins installed on the cluster's nodes (``GET _nodes/plugins``), with versions."""
+    reply = client.request("GET", "/_nodes/plugins", "listing the plugins")
+    found: set[Requirement] = set()
+    for node in document(reply.get("nodes"), "the nodes").values():
+        for plugin in items(document(node, "a node").get("plugins"), "a node's plugins"):
+            described = document(plugin, "a plugin")
+            found.add(
+                Requirement(
+                    kind=RequirementKind.PLUGIN,
+                    name=text(described.get("name")),
+                    version=text(described.get("version")),
+                )
+            )
+    return tuple(sorted(found, key=lambda r: (r.name, r.version or "")))
 
 
 def server_version(client: Client) -> str:
@@ -219,7 +236,7 @@ def introspect(client: Client, layout: Layout) -> Catalog:
             sampled = items(document(found.get("hits"), "search hits").get("hits"), "hits")
         columns = table_columns(index, mappings, (document(hit, "a hit") for hit in sampled))
         tables.append(Table(name=TableName.of("", index), columns=columns, primary_key=(ID,)))
-    return Catalog(engine=client.product.engine, tables=tuple(tables))
+    return Catalog(engine=client.product.engine, tables=tuple(tables), requirements=plugins(client))
 
 
 def held(hit: Mapping[str, object], column: ColumnName) -> list[str]:

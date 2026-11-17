@@ -288,6 +288,40 @@ def test_partial_snapshots_fail() -> None:
 def test_tools_report_failures(tmp_path: Path) -> None:
     with pytest.raises(EngineError, match="cannot read the Elasticsearch version: 'no x:1'"):
         Tools(ELASTICSEARCH, _Failing(), "x:1").version(tmp_path)
+    with pytest.raises(EngineError, match="cannot list the Elasticsearch image's plugins"):
+        Tools(ELASTICSEARCH, _Failing(), "x:1").plugins(tmp_path)
+
+
+PLUGIN_LIST = """\
+Plugins directory: /usr/share/elasticsearch/plugins
+analysis-icu
+- Plugin information:
+Name: analysis-icu
+Description: The ICU Analysis plugin.
+Version: 9.5.5
+Elasticsearch Version: 9.5.5
+Java Version: 21
+"""
+
+
+@dataclass
+class _Listing:
+    """A container runtime whose containers print the plugin list."""
+
+    def run(self, container: Container) -> Completed:
+        assert container.command == ("elasticsearch-plugin", "list", "--verbose")
+        return Completed(0, PLUGIN_LIST, "")
+
+    def serve(self, container: Container) -> AbstractContextManager[Server]:
+        raise NotImplementedError
+
+    def release(self, owner: Path) -> None:
+        raise NotImplementedError
+
+
+def test_the_image_lists_its_plugins(tmp_path: Path) -> None:
+    (plugin,) = Tools(ELASTICSEARCH, _Listing(), "x:1").plugins(tmp_path)
+    assert str(plugin) == "plugin analysis-icu 9.5.5"
 
 
 def test_null_and_value_changers() -> None:

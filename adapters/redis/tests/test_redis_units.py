@@ -184,6 +184,7 @@ def test_names_settings_and_servers() -> None:
     assert server_databases(connection.layout()) == 16
     assert default_image("8.10.3") == "redis:8.10.3"
     assert '--save ""' in start_command("/d", 16, persist=False)
+    assert "--loadmodule" in start_command("/d", 16, persist=False)
     assert "--save" not in start_command("/d", 16, persist=True)
     engine = RedisEngine()
     assert (engine.name, engine.owner) == ("redis", "999:999")

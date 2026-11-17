@@ -12,9 +12,18 @@ since loading leaves them out.
 from collections import defaultdict
 from dataclasses import dataclass
 
+from pydantic import BaseModel, ConfigDict, Field
 from pymysql.connections import Connection
 
-from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
+from datadouble.catalog import (
+    Catalog,
+    Column,
+    ColumnKind,
+    ForeignKey,
+    Requirement,
+    RequirementKind,
+    Table,
+)
 from datadouble.names import ColumnName, EngineName, TableName
 
 ENGINE = EngineName("mysql")
@@ -30,6 +39,16 @@ SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE, EXTRA
 FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = %s
 ORDER BY TABLE_NAME, ORDINAL_POSITION
+"""
+
+# Only plugins the data needs: storage engines and full-text parsers. Others
+# (authentication, password policy, audit, replication) change how a server
+# behaves, not what it can load.
+_PLUGINS = """
+SELECT PLUGIN_NAME, PLUGIN_LIBRARY FROM INFORMATION_SCHEMA.PLUGINS
+WHERE PLUGIN_LIBRARY IS NOT NULL AND PLUGIN_STATUS = 'ACTIVE'
+  AND PLUGIN_TYPE IN ('STORAGE ENGINE', 'FTPARSER')
+ORDER BY PLUGIN_LIBRARY, PLUGIN_NAME
 """
 
 _KEYS = """
@@ -88,6 +107,21 @@ class Physical:
 
     generated: dict[TableName, frozenset[ColumnName]]
     """Generated columns, which loading leaves out."""
+    plugins: tuple["Plugin", ...] = ()
+    """Plugins installed from a library, which working servers install too."""
+
+
+class Plugin(BaseModel):
+    """A plugin installed from a library (``INSTALL PLUGIN name SONAME 'library'``)."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    name: str = Field(pattern=r"^[A-Za-z0-9_]+$")
+    library: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
+
+    def requirement(self) -> Requirement:
+        """The plugin's library as a requirement; its version is the server's."""
+        return Requirement(kind=RequirementKind.PLUGIN, name=self.library)
 
 
 def _text(value: object) -> str:
@@ -125,6 +159,10 @@ def introspect(connection: Connection, database: str) -> tuple[Catalog, Physical
             entry = foreign.setdefault(key, (TableName.of(_text(schema), _text(target)), [], []))
             entry[1].append(ColumnName(_text(column_name)))
             entry[2].append(ColumnName(_text(target_column)))
+        cursor.execute(_PLUGINS)
+        plugins = tuple(
+            Plugin(name=_text(name), library=_text(library)) for name, library in cursor.fetchall()
+        )
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -145,5 +183,7 @@ def introspect(connection: Connection, database: str) -> tuple[Catalog, Physical
             )
             for name in names
         ),
+        requirements=tuple(dict.fromkeys(plugin.requirement() for plugin in plugins)),
     )
-    return catalog, Physical(generated={t: frozenset(c) for t, c in generated.items()})
+    physical = Physical(generated={t: frozenset(c) for t, c in generated.items()}, plugins=plugins)
+    return catalog, physical

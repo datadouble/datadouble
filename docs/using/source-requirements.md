@@ -6,8 +6,17 @@ calls these the source's **requirements**. A golden image is built in a
 working database running the vendor's image, so that image must have every
 requirement the source uses, at the version the source runs.
 
-PostgreSQL reports its extensions today. The other engines follow (see the
-[v1 plan](../v1-plan.md)), and this page grows with them.
+| Engine | Requirements | Listed in the working image by |
+|---|---|---|
+| PostgreSQL | Extensions, at the source's version | `pg_available_extension_versions` |
+| MySQL | Storage engine and full-text parser plugins, by library | The plugin directory |
+| Redis | Modules, at the source's version | `MODULE LIST` on a server that loads the image's modules |
+| Elasticsearch, OpenSearch | Plugins, at the source's version | `elasticsearch-plugin list` or `opensearch-plugin list` |
+
+SQL Server, Oracle and MongoDB follow, and Salesforce's managed packages
+come with the Salesforce adapter (see the [v1 plan](../v1-plan.md)). Each
+adapter's README says what it reports and which images provide common
+add-ons.
 
 ## What Datadouble does
 
@@ -66,7 +75,7 @@ changed, and run `datadouble plan` to check the spec.
 ## Anonymizing columns of an add-on's type
 
 A column whose type comes from an add-on, such as PostGIS `geometry`,
-pgvector `vector` or `hstore`, has the kind `other`. Strict mode makes you
+pgvector `vector`, `hstore` or a RedisJSON document, has the kind `other`. Strict mode makes you
 decide what to do with it like any other column. Built-in strategies such as
 `faker` don't apply to it; use `null`, `expression` or an `after_transform`
 hook, or keep it if it holds no personal data.
