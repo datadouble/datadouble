@@ -3,12 +3,14 @@
 
 """The engine conformance suite against Pagila, in the Compose postgres service."""
 
+import json
 import os
 import socket
 import uuid
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -16,14 +18,20 @@ from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import JsonValue
 
+from datadouble.catalog import CatalogLock, RequirementKind
+from datadouble.engine import Tooling
 from datadouble.names import ColumnName, ColumnRef, TableName
+from datadouble.registry import Registry, installed
+from datadouble.run import Run, RunOptions, Stage
+from datadouble.spec import parse_spec
+from datadouble.storage import filesystem_store
 from datadouble_conformance.engine import (
     EngineConformance,
     EngineHarness,
-    ScratchSource,
     runtime_for_tests,
 )
 from datadouble_postgres import PostgresEngine
+from datadouble_postgres.cluster import Cluster, Tools
 
 pytestmark = pytest.mark.integration
 
@@ -151,7 +159,7 @@ class PostgresScratch:
 
 
 @contextmanager
-def scratch() -> Generator[ScratchSource]:
+def scratch() -> Generator[PostgresScratch]:
     """Create a scratch database, and drop it afterwards."""
     admin = os.environ[DSN_VARIABLE]
     database = f"dd_scratch_{uuid.uuid4().hex[:12]}"
@@ -189,3 +197,57 @@ def harness() -> EngineHarness:
 
 class TestConformance(EngineConformance):
     """PostgreSQL passes the engine conformance suite."""
+
+
+def _tooling(tmp_path: Path) -> tuple[Registry, Tools]:
+    registry = Registry(
+        engines={"postgres": PostgresEngine},
+        stores={"filesystem": filesystem_store},
+        runtimes=installed().runtimes,
+    )
+    ((kind, settings),) = runtime_for_tests().items()
+    return registry, Tools(registry.runtime(kind, settings), PGVECTOR, tmp_path / "tools")
+
+
+def test_the_image_lists_every_extension_version(tmp_path: Path) -> None:
+    _, tools = _tooling(tmp_path)
+    tooling = Tooling(runtime=tools.runtime, image=PGVECTOR)
+    available = PostgresEngine().working(tmp_path / "scratch", tooling, "18.7").available()
+    assert {("hstore", "1.4"), ("hstore", "1.8"), ("vector", "0.8.7")} <= {
+        (r.name, r.version) for r in available
+    }
+    assert {r.kind for r in available} == {RequirementKind.EXTENSION}
+
+
+def test_extensions_keep_their_versions_and_omitted_ones_go(tmp_path: Path) -> None:
+    registry, tools = _tooling(tmp_path)
+    with scratch() as source:
+        source.execute(sql.SQL("CREATE EXTENSION hstore VERSION '1.4'"))
+        source.execute(sql.SQL("CREATE EXTENSION cube"))
+        source.execute(sql.SQL("CREATE TABLE public.tags (id integer PRIMARY KEY, a hstore)"))
+        source.execute(sql.SQL("INSERT INTO public.tags VALUES (1, 'k=>v')"))
+        settings = json.dumps(dict(source.connection))
+        spec = parse_spec(
+            f"name: scratch\nsource: {{engine: postgres, connection: {settings},"
+            f" image: {json.dumps(PGVECTOR)}, omit: [cube],"
+            " server: {shared_preload_libraries: [pg_stat_statements]}}\n"
+            "subset: {seeds: {items: 'true', tags: 'true'}}\n"
+            f"runtime: {json.dumps(runtime_for_tests())}\n"
+        )
+        with PostgresEngine().connect(source.connection) as session:
+            catalog = session.catalog()
+        assert {str(r) for r in catalog.requirements} == {
+            "extension hstore 1.4",
+            "extension cube 1.5",
+        }
+        options = RunOptions(stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD), work=tmp_path / "work")
+        result = Run(spec, CatalogLock.of(catalog), registry, options).execute()
+        assert not result.failed()
+    datadir = next((tmp_path / "work").rglob("pgdata"))
+    cluster = Cluster(tools, datadir, datadir.parent)
+    with cluster.running(), cluster.connect(source.database) as database:
+        rows = database.execute("SELECT extname, extversion FROM pg_extension").fetchall()
+        installed_now = {str(name): str(version) for name, version in rows}
+        preload = database.execute("SHOW shared_preload_libraries").fetchone()
+    assert installed_now == {"plpgsql": "1.0", "hstore": "1.4"}
+    assert preload == ("pg_stat_statements",)

@@ -278,6 +278,10 @@ class OracleSession:
         self.settings = settings
         self.schemas = schemas
 
+    def server_version(self) -> str:
+        """The source's version."""
+        return server_version(self.connection)
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         try:

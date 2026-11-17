@@ -178,6 +178,37 @@ uses, or a copy in a private registry.
 `source.server` holds settings for the working servers, which the engine
 adapter checks; SQL Server's needs `accept_eula: true`, the operator's
 acceptance of Microsoft's licence, and takes an `edition` (decision 83).
+PostgreSQL's takes `shared_preload_libraries`, for extensions that must load
+at server start.
+
+### Source requirements
+
+A source often depends on more than its server: PostgreSQL extensions, MySQL
+plugins, Redis modules, search plugins, Salesforce managed packages. A
+working image that lacks one cannot load the data (decision 107).
+
+- **The engine adapter lists them.** Introspection reports each as a
+  `Requirement` in the catalog: a kind (`extension`, `plugin`, `module`,
+  `package`, `option`), a name and the version the source runs.
+- **The lock records them.** Strict mode treats a new requirement like a new
+  table, and a removed one, or one at another version, like a changed table
+  (see [strict mode](excludes-and-strict-mode.md#levels)).
+- **The build checks the image first.** Before it opens the snapshot, the
+  build asks the working image what it provides (the adapter's
+  `available()`) and fails with `requirement_unmet`, listing every
+  requirement it lacks or lacks at the source's version. The fix is an image
+  that has them, in `source.image`.
+- **The working database runs the source's versions.** PostgreSQL creates
+  each extension at the source's version, not the image's default.
+- **Leaving one out is explicit.** `source.omit` names requirements the
+  copies go without. Anything that uses an omitted one must be excluded too,
+  or the build fails; nothing is dropped silently. Naming a requirement the
+  source does not use fails the plan.
+- **The build record lists them.** Each image's manifest holds the
+  requirements its copies need and the ones it omitted.
+
+Each adapter's README lists what it reports and the images that provide
+common add-ons.
 
 Datadouble runs as the `uid:gid` the engine's copies are served as (decision
 86): 999:999 for the official PostgreSQL, MySQL and MongoDB images,

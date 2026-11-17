@@ -17,8 +17,9 @@ stops and tells the person why.
    Applications), existing specs and existing Datadouble jobs. Ask only for
    what you cannot find.
 4. **Never weaken safety settings.** Do not lower `strict`, add excludes,
-   drop verification or anonymization rules, or pass `--no-strict` to make a
-   run pass. Report the failure, what it means, and the person's options.
+   add `source.omit` entries, drop verification or anonymization rules, or
+   pass `--no-strict` to make a run pass. Report the failure, what it means,
+   and the person's options.
 5. **Production stays in production.** Never generate `build` or `promote`
    for a vendor-hosted runner (GitHub's `ubuntu-*`, GitLab's `saas-*`), never
    give a non-production job a source's or production store's credentials,

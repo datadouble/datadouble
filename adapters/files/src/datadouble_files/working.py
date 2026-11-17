@@ -22,6 +22,7 @@ from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from datadouble.catalog import Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -100,6 +101,10 @@ class FilesWorking:
     def server_version(self) -> str:
         """The tree layout's version; there is no server."""
         return VERSION
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     def _commands(self, commands: Iterable[str], tree: Path, owner: Path) -> None:
         for number, command in enumerate(commands, 1):

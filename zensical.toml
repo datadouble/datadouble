@@ -34,6 +34,7 @@ nav = [
     { "Quickstart" = "using/quickstart.md" },
     { "Spec reference" = "using/spec-reference.md" },
     { "CLI reference" = "using/cli-reference.md" },
+    { "Extensions and plugins" = "using/source-requirements.md" },
     { "CI/CD libraries" = "using/ci-cd-libraries.md" },
     { "Agent skills" = "using/agent-skills.md" },
     { "Example repository" = "using/example-repository.md" },

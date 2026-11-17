@@ -4,9 +4,10 @@
 """The scratch side: working databases, anonymization, images and restores.
 
 ``load`` builds a group's working database in a fresh cluster: hooks, the
-schema's pre-data section, the rows (with triggers off), fallbacks for missing
-parents, the post-data section (indexes and constraints, which also check the
-data), sequences, and finally dropping the tables that belong to other groups.
+source's extensions at the source's versions, the schema's pre-data section,
+the rows (with triggers off), fallbacks for missing parents, the post-data
+section (indexes and constraints, which also check the data), sequences, and
+finally dropping the tables that belong to other groups.
 ``transform`` copies the stopped cluster and anonymizes the copy in one
 transaction. ``package`` writes the data directory (physical) or a ``pg_dump``
 archive (logical); ``restore`` brings either back up for verification.
@@ -22,7 +23,7 @@ import psycopg
 from psycopg import sql
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Column, ColumnKind
+from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
@@ -39,8 +40,17 @@ type Connection = psycopg.Connection[tuple[object, ...]]
 _DATADIR = "pgdata"
 _DUMP = "database.dump"
 _INFO = "database.json"
-_TOC = re.compile(r"^\d+; \d+ \d+ (.+) \S+$")
-_DESCRIPTIONS = ("FK CONSTRAINT", "MATERIALIZED VIEW DATA", "MATERIALIZED VIEW", "VIEW", "COMMENT")
+# An entry ends with its owner; extensions have none, so their lines end in a space.
+_TOC = re.compile(r"^\d+; \d+ \d+ (.+) \S*$")
+_DESCRIPTIONS = (
+    "FK CONSTRAINT",
+    "MATERIALIZED VIEW DATA",
+    "MATERIALIZED VIEW",
+    "VIEW",
+    "COMMENT",
+    "SCHEMA",
+    "EXTENSION",
+)
 _PLACEHOLDERS: dict[ColumnKind, str] = {
     ColumnKind.TEXT: "",
     ColumnKind.INTEGER: "0",
@@ -83,28 +93,46 @@ def _commas(parts: Iterable[sql.Composable]) -> sql.Composed:
     return sql.SQL(", ").join(parts)
 
 
-def filter_toc(listing: str, drop: frozenset[tuple[str, str, str]]) -> str:
+def toc_entry(line: str) -> tuple[str, str, str] | None:
+    """A ``pg_restore --list`` line's ``(description, schema, tag)``, for the kinds handled."""
+    match = _TOC.match(line)
+    if match is None:
+        return None
+    description = next((d for d in _DESCRIPTIONS if match.group(1).startswith(d + " ")), None)
+    if description is None:
+        return None
+    schema, _, tag = match.group(1)[len(description) + 1 :].partition(" ")
+    return description, schema, tag
+
+
+def filter_toc(
+    listing: str, drop: frozenset[tuple[str, str, str]], *, comments: bool = True
+) -> str:
     """Remove ``pg_restore --list`` entries matching ``(description, schema, tag)``.
 
-    Comments on a removed object are removed with it.
+    Comments on a removed object are removed with it, unless ``comments`` is false.
     """
-    commented = {(schema, f"{description} {tag}") for description, schema, tag in drop}
+    commented = (
+        {(schema, f"{description} {tag}") for description, schema, tag in drop}
+        if comments
+        else set[tuple[str, str]]()
+    )
     kept: list[str] = []
     for line in listing.splitlines():
-        match = _TOC.match(line)
-        description = (
-            next((d for d in _DESCRIPTIONS if match.group(1).startswith(d + " ")), None)
-            if match
-            else None
-        )
-        if match is not None and description is not None:
-            schema, _, tag = match.group(1)[len(description) + 1 :].partition(" ")
-            if (description, schema, tag) in drop or (
-                description == "COMMENT" and (schema, tag) in commented
-            ):
+        entry = toc_entry(line)
+        if entry is not None:
+            description, schema, tag = entry
+            if entry in drop or (description == "COMMENT" and (schema, tag) in commented):
                 continue
         kept.append(line)
     return "\n".join(kept) + "\n"
+
+
+def only_toc(listing: str, description: str) -> tuple[str, frozenset[tuple[str, str, str]]]:
+    """The listing reduced to entries of one ``description``, and those entries."""
+    entries = [(line, toc_entry(line)) for line in listing.splitlines()]
+    kept = [(line, e) for line, e in entries if e is not None and e[0] == description]
+    return "".join(line + "\n" for line, _ in kept), frozenset(e for _, e in kept)
 
 
 def placeholder(table: TableName, column: Column) -> sql.Composable:
@@ -215,6 +243,25 @@ class PostgresWorking:
             self._version = self.tools.version()
         return self._version
 
+    def available(self) -> tuple[Requirement, ...]:
+        """Every version of every extension the image has, from a throwaway cluster."""
+        directory = self.scratch / "available"
+        cluster = Cluster(self.tools, directory / _DATADIR, directory)
+        try:
+            cluster.initialize()
+            with cluster.running(), cluster.connect("postgres") as connection:
+                rows = connection.execute(
+                    "SELECT name, version FROM pg_catalog.pg_available_extension_versions"
+                ).fetchall()
+        except psycopg.Error as error:
+            raise database_error(error, "listing the image's extensions") from None
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+        return tuple(
+            Requirement(kind=RequirementKind.EXTENSION, name=str(name), version=str(version))
+            for name, version in rows
+        )
+
     # load
 
     def load(
@@ -250,6 +297,7 @@ class PostgresWorking:
             with cluster.connect(index.database) as connection:
                 for hook in hooks:
                     _execute(connection, "a before_load hook", trusted(hook.sql))
+            listing = self._extensions(cluster, index, plan, dump, listing)
             self._restore(cluster, index.database, dump, "pre-data", filter_toc(listing, views))
             with cluster.connect(index.database) as connection, connection.transaction():
                 connection.execute("SET LOCAL session_replication_role = replica")
@@ -280,6 +328,40 @@ class PostgresWorking:
         )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
+
+    def _extensions(
+        self, cluster: Cluster, index: ExtractIndex, plan: Plan, dump: Path, listing: str
+    ) -> str:
+        """Create the kept extensions at the source's versions; the listing left to restore.
+
+        ``pg_dump`` writes ``CREATE EXTENSION`` without a version, which would
+        install the image's default. So the schemas are restored first, then
+        each extension is created at its version, and the listing returned
+        holds neither. Omitted extensions are left out; whatever uses one fails
+        to restore.
+        """
+        if not index.extensions:
+            return listing
+        omitted = frozenset(r.name for r in plan.omitted)
+        schemas, schema_entries = only_toc(listing, "SCHEMA")
+        _, extension_entries = only_toc(listing, "EXTENSION")
+        if schema_entries:
+            self._restore(cluster, index.database, dump, "pre-data", schemas)
+        with cluster.connect(index.database) as connection:
+            for extension in index.extensions:
+                if extension.name in omitted:
+                    continue
+                _execute(
+                    connection,
+                    f"creating extension {extension.name} {extension.version}",
+                    sql.SQL("CREATE EXTENSION IF NOT EXISTS {} WITH SCHEMA {} VERSION {}").format(
+                        sql.Identifier(extension.name),
+                        sql.Identifier(extension.schema_),
+                        sql.Literal(extension.version),
+                    ),
+                )
+        rest = filter_toc(listing, extension_entries)
+        return filter_toc(rest, schema_entries, comments=False)
 
     def _restore(self, cluster: Cluster, database: str, dump: Path, section: str, toc: str) -> None:
         listing = cluster.datadir.parent / f"{section}.list"

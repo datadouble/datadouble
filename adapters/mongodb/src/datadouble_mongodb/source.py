@@ -278,6 +278,13 @@ class MongoSource:
         self.database: Database[dict[str, object]] = client[database]
         self.sample = sample
 
+    def server_version(self) -> str:
+        """The source's version."""
+        try:
+            return str(self.client.server_info().get("version", ""))
+        except PyMongoError as error:
+            raise failure(error, "reading the server version") from None
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         try:

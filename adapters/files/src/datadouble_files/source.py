@@ -98,6 +98,10 @@ class FilesSource:
         self.root = root
         self.accept_inconsistent = accept_inconsistent
 
+    def server_version(self) -> str:
+        """The adapter's own format version: a directory has no server."""
+        return VERSION
+
     def catalog(self) -> Catalog:
         """The top-level directories."""
         return catalog(self.root)

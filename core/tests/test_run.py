@@ -9,8 +9,8 @@ import pytest
 
 from datadouble.anonymize import Anonymizer
 from datadouble.boundary import BoundaryError
-from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError, Tooling
+from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, RequirementKind
+from datadouble.engine import EngineError, RequirementError, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
 from datadouble.planner import PlannedRule, PlanOptions
@@ -126,14 +126,15 @@ def run(
     spec: str = SPEC,
     stages: tuple[Stage, ...] = ALL,
     resume: Generation | None = None,
-    lock: bool = True,
+    lock: bool | Catalog = True,
     plan: PlanOptions | None = None,
 ) -> RunResult:
     parsed = parse_spec(spec.replace("STORE", str(tmp_path / "store")))
     options = RunOptions(
         stages=stages, work=tmp_path / "work", resume=resume, plan=plan or PlanOptions()
     )
-    lock_value = CatalogLock.of(shop()) if lock else None
+    locked = lock if isinstance(lock, Catalog) else shop()
+    lock_value = CatalogLock.of(locked) if lock else None
     return Run(parsed, lock_value, registry, options, _clock).execute()
 
 
@@ -562,3 +563,38 @@ def test_an_unusable_work_directory(tmp_path: Path, registry: Registry) -> None:
     (tmp_path / "work").write_text("not a directory", encoding="utf-8")
     with pytest.raises(RunError, match=r"cannot start a generation in .*work: Not a directory"):
         run(tmp_path, registry)
+
+
+def test_the_image_must_provide_the_source_requirements(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+    engine.catalog = shop().model_copy(update={"requirements": (vector,)})
+    with pytest.raises(RequirementError) as missing:
+        run(tmp_path / "a", registry, lock=engine.catalog)
+    assert missing.value.problems == ("extension vector is not in the working image",)
+    # The image is checked before the snapshot opens.
+    assert engine.snapshots == 0
+    engine.available = (vector.model_copy(update={"version": "0.8.7"}),)
+    with pytest.raises(RequirementError) as other:
+        run(tmp_path / "b", registry, lock=engine.catalog)
+    assert other.value.problems == (
+        "extension vector 0.8.2 is not in the working image, which has 0.8.7",
+    )
+    engine.available = (vector,)
+    assert not run(tmp_path / "c", registry, lock=engine.catalog).failed()
+
+
+def test_omitted_requirements_are_not_checked(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+    engine.catalog = shop().model_copy(update={"requirements": (vector,)})
+    spec = SPEC.replace("image: vendor/fake:1}", "image: vendor/fake:1, omit: [vector]}")
+    result = run(tmp_path, registry, spec=spec, lock=engine.catalog)
+    assert not result.failed()
+    (summary,) = [s for s in result.images if s.identity.group == "all"]
+    _, manifest = unpack(tmp_path / "store" / summary.archives[0].key, tmp_path / "unpacked")
+    build = json.loads(manifest)
+    assert build["omitted"] == [{"kind": "extension", "name": "vector", "version": "0.8.2"}]
+    assert build["requirements"] == []

@@ -4,7 +4,8 @@
 """Catalogs and catalog locks.
 
 An engine adapter introspects a source into a :class:`Catalog`: its tables,
-columns, primary keys and foreign keys. ``datadouble lock`` writes the catalog
+columns, primary keys and foreign keys, and the add-ons the source depends on
+(its :class:`Requirement` list). ``datadouble lock`` writes the catalog
 to ``catalog.lock`` next to the spec, and strict mode compares the live catalog
 against it at plan time.
 """
@@ -81,11 +82,43 @@ class Table(_Model):
         return next((column for column in self.columns if column.name == name), None)
 
 
+class RequirementKind(StrEnum):
+    """The engine-neutral family of something a source needs beyond the server itself."""
+
+    EXTENSION = "extension"
+    PLUGIN = "plugin"
+    MODULE = "module"
+    PACKAGE = "package"
+    OPTION = "option"
+
+
+class Requirement(_Model):
+    """An add-on the source uses, which the working image must provide.
+
+    ``version`` is the version the source runs, when the engine has one; the
+    working image must provide exactly that version.
+    """
+
+    kind: RequirementKind
+    name: str
+    version: str | None = None
+
+    def __str__(self) -> str:
+        """``extension vector 0.8.2``."""
+        return " ".join(part for part in (self.kind.value, self.name, self.version) if part)
+
+
 class Catalog(_Model):
     """Everything strict mode and the planner need to know about a source."""
 
     engine: EngineName
     tables: tuple[Table, ...]
+    requirements: tuple[Requirement, ...] = ()
+    """What the source needs beyond the server: extensions, plugins, modules."""
+
+    def requirement(self, name: str) -> Requirement | None:
+        """The requirement called ``name``, if there is one."""
+        return next((r for r in self.requirements if r.name == name), None)
 
     def table(self, name: TableName) -> Table | None:
         """The table called ``name``, if there is one."""
@@ -97,9 +130,8 @@ class Catalog(_Model):
 
     def without(self, names: frozenset[TableName]) -> "Catalog":
         """The catalog minus the tables in ``names``."""
-        return Catalog(
-            engine=self.engine,
-            tables=tuple(table for table in self.tables if table.name not in names),
+        return self.model_copy(
+            update={"tables": tuple(table for table in self.tables if table.name not in names)}
         )
 
     def fingerprint(self) -> str:
@@ -108,7 +140,7 @@ class Catalog(_Model):
 
 
 def normalize(catalog: Catalog) -> Catalog:
-    """Sort tables, foreign keys and nothing else, so equal catalogs compare equal.
+    """Sort tables, foreign keys and requirements, so equal catalogs compare equal.
 
     Column order is kept: it is part of a table's definition.
     """
@@ -121,13 +153,17 @@ def normalize(catalog: Catalog) -> Catalog:
             )
             for table in tables
         ),
+        requirements=tuple(sorted(catalog.requirements, key=lambda r: (r.kind, r.name))),
     )
 
 
 def _canonical(catalog: Catalog) -> str:
-    return json.dumps(
-        normalize(catalog).model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-    )
+    form = normalize(catalog).model_dump(mode="json")
+    # A catalog without requirements hashes as it did before they existed, so
+    # locks written then stay valid.
+    if not catalog.requirements:
+        del form["requirements"]
+    return json.dumps(form, sort_keys=True, separators=(",", ":"))
 
 
 class CatalogLock(_Model):
@@ -146,7 +182,10 @@ class CatalogLock(_Model):
 
 def write_lock(lock: CatalogLock, path: Path) -> None:
     """Write a lock file: indented JSON with sorted keys, so diffs are readable."""
-    text = json.dumps(lock.model_dump(mode="json"), indent=2, sort_keys=True)
+    form = lock.model_dump(mode="json")
+    if not lock.catalog.requirements:
+        del form["catalog"]["requirements"]
+    text = json.dumps(form, indent=2, sort_keys=True)
     try:
         path.write_text(text + "\n", encoding="utf-8")
     except OSError as error:

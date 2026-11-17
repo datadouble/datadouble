@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from datadouble.catalog import Catalog
+from datadouble.catalog import Catalog, Requirement
 from datadouble.engine import (
     EngineAdapter,
     EngineError,
@@ -124,6 +124,9 @@ class FakeSnapshot:
 class FakeSession:
     engine: "FakeEngine"
 
+    def server_version(self) -> str:
+        return "1.2"
+
     def catalog(self) -> Catalog:
         return self.engine.catalog
 
@@ -198,6 +201,9 @@ class FakeWorking:
 
     def server_version(self) -> str:
         return "1.0"
+
+    def available(self) -> tuple[Requirement, ...]:
+        return self.engine.available
 
     def load(
         self,
@@ -286,6 +292,7 @@ class FakeEngine:
     snapshots: int = 0
     transforms: int = 0
     owner_: str = field(default_factory=identity)
+    available: tuple[Requirement, ...] = ()
     name_: EngineName = _FAKE
 
     @property

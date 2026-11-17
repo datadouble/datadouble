@@ -13,14 +13,19 @@ Known table or column removed or changed   fail     fail      fail
 New table matching an exclude pattern      ignored  ignored   ignored
 New table, not excluded                    warn     fail      fail
 New column in a known table                warn     warn      fail
+Requirement removed or at another version  fail     fail      fail
+New requirement                            warn     fail      fail
 =========================================  =======  ========  ===========
+
+Requirements are the extensions, plugins and modules the source uses; see
+:class:`~datadouble.catalog.Requirement`.
 """
 
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Catalog, Table
+from datadouble.catalog import Catalog, Requirement, Table
 from datadouble.names import TableName
 from datadouble.resolve import Resolver
 from datadouble.spec import StrictLevel
@@ -73,6 +78,9 @@ class Difference(StrEnum):
     COLUMN_CHANGED = "column-changed"
     NEW_TABLE = "new-table"
     NEW_COLUMN = "new-column"
+    REQUIREMENT_REMOVED = "requirement-removed"
+    REQUIREMENT_CHANGED = "requirement-changed"
+    NEW_REQUIREMENT = "new-requirement"
 
 
 class Severity(StrEnum):
@@ -88,6 +96,12 @@ RESOLUTIONS = (
     "add anonymization rules for it, then re-lock with `datadouble lock`",
 )
 """The ways to resolve a new table or column, in the order to consider them."""
+
+REQUIREMENT_RESOLUTIONS = (
+    "check that the working image provides it, then re-lock with `datadouble lock`",
+    "leave it out with `source.omit`, then re-lock with `datadouble lock`",
+)
+"""The ways to resolve a new requirement."""
 
 
 class Finding(_Model):
@@ -169,6 +183,44 @@ def _compare_table(live: Table, locked: Table, level: StrictLevel) -> list[Findi
     return findings
 
 
+def _compare_requirements(
+    live: tuple[Requirement, ...], locked: tuple[Requirement, ...], level: StrictLevel
+) -> list[Finding]:
+    findings: list[Finding] = []
+    current = {(r.kind, r.name): r for r in live}
+    for requirement in locked:
+        found = current.pop((requirement.kind, requirement.name), None)
+        if found is None:
+            findings.append(
+                Finding(
+                    difference=Difference.REQUIREMENT_REMOVED,
+                    severity=Severity.FAIL,
+                    object=str(requirement),
+                    detail="the source no longer uses it; re-lock",
+                )
+            )
+        elif found.version != requirement.version:
+            findings.append(
+                Finding(
+                    difference=Difference.REQUIREMENT_CHANGED,
+                    severity=Severity.FAIL,
+                    object=str(found),
+                    detail=f"locked at version {requirement.version}; re-lock",
+                )
+            )
+    findings.extend(
+        Finding(
+            difference=Difference.NEW_REQUIREMENT,
+            severity=_severity_new_table(level),
+            object=str(requirement),
+            detail="the source uses it, and the lock does not",
+            resolutions=REQUIREMENT_RESOLUTIONS,
+        )
+        for requirement in current.values()
+    )
+    return findings
+
+
 def check_strict(
     live: Catalog,
     lock: Catalog,
@@ -205,4 +257,5 @@ def check_strict(
         for table in live.tables
         if table.name not in locked_names and table.name not in excluded
     )
+    findings.extend(_compare_requirements(live.requirements, lock.requirements, level))
     return StrictReport(level=level, lock_fingerprint=lock_fingerprint, findings=tuple(findings))

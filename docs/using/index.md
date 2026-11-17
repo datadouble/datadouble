@@ -9,6 +9,8 @@ it is in the Design section.
   generated from the JSON Schema.
 - [CLI reference](cli-reference.md): every command and option, generated
   from the CLI.
+- [Extensions, plugins and modules](source-requirements.md): sources that
+  use more than the server, and the images their copies need.
 - [CI/CD libraries](ci-cd-libraries.md): jobs for GitHub Actions, GitLab
   CI, Jenkins and Argo CD, written by `datadouble ci init`.
 - [Agent skills](agent-skills.md): the Claude Code plugin that sets a

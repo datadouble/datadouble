@@ -38,6 +38,7 @@ from datadouble.engine import (
     EngineError,
     ExtractResult,
     Mapper,
+    RequirementError,
     Snapshot,
     SourceSession,
     TableCount,
@@ -45,6 +46,7 @@ from datadouble.engine import (
     Transformation,
     WorkingDatabases,
     check_owner,
+    unmet,
 )
 from datadouble.images import (
     ImageArchive,
@@ -604,6 +606,8 @@ class Run:
                 "datadouble": __version__,
                 "source_server_version": extract.server_version,
                 "working_server_version": version,
+                "requirements": planned.catalog.requirements,
+                "omitted": planned.omitted,
                 "snapshot": extract.snapshot,
                 "snapshot_seconds": extract.snapshot_seconds,
                 "as_of": planned.as_of,
@@ -791,10 +795,16 @@ class Run:
     def extracted(self, planned: Plan) -> "_Context":
         """Extract, and open the working databases the groups are built in."""
         check_owner(self.engine)
+        scratch = self.root / "scratch"
+        # Check the image before reading the snapshot, which can take hours.
+        checked = bool(planned.catalog.requirements) and self._wanted(Stage.EXTRACT)
+        if checked:
+            version = self.session().server_version()
+            _require(self.engine.working(scratch, self.tooling(), version), planned)
         extracted = self.extract(planned)
-        working = self.engine.working(
-            self.root / "scratch", self.tooling(), extracted.server_version
-        )
+        working = self.engine.working(scratch, self.tooling(), extracted.server_version)
+        if planned.catalog.requirements and not checked:
+            _require(working, planned)
         return _Context(
             working=working,
             planned=planned,
@@ -848,3 +858,10 @@ def _counts(counts: tuple[TableCount, ...]) -> list[JsonValue]:
 def _load[T](kind: type[T], value: JsonValue) -> T:
     """Read a manifest field back into its model, through JSON so enums parse."""
     return TypeAdapter(kind).validate_json(json.dumps(value))
+
+
+def _require(working: WorkingDatabases, planned: Plan) -> None:
+    """Fail unless the working image provides every requirement the copies keep."""
+    problems = unmet(planned.catalog.requirements, working.available())
+    if problems:
+        raise RequirementError(problems)

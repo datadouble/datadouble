@@ -6,7 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from datadouble.catalog import CatalogError, CatalogLock, normalize, read_lock, write_lock
+from datadouble.catalog import (
+    CatalogError,
+    CatalogLock,
+    Requirement,
+    RequirementKind,
+    normalize,
+    read_lock,
+    write_lock,
+)
+from datadouble.engine import unmet
 from datadouble.names import ColumnName, ColumnRef, TableName, check_name
 from fakes import catalog, table
 
@@ -88,3 +97,47 @@ def test_a_lock_it_cannot_write(tmp_path: Path) -> None:
             CatalogLock.of(catalog(table("public.items", "id"))),
             tmp_path / "taken" / "catalog.lock",
         )
+
+
+VECTOR = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+CUBE = Requirement(kind=RequirementKind.EXTENSION, name="cube", version="1.5")
+
+
+def test_requirements_change_the_fingerprint_but_not_their_order() -> None:
+    plain = catalog(table("users", ["id"]))
+    with_two = plain.model_copy(update={"requirements": (VECTOR, CUBE)})
+    reordered = plain.model_copy(update={"requirements": (CUBE, VECTOR)})
+    assert with_two.fingerprint() != plain.fingerprint()
+    assert with_two.fingerprint() == reordered.fingerprint()
+    assert with_two.requirement("cube") == CUBE
+    assert with_two.requirement("nope") is None
+    assert str(VECTOR) == "extension vector 0.8.2"
+    assert str(Requirement(kind=RequirementKind.MODULE, name="ReJSON")) == "module ReJSON"
+
+
+def test_a_lock_without_requirements_is_written_as_before(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.lock"
+    write_lock(CatalogLock.of(catalog(table("users", ["id"]))), path)
+    assert "requirements" not in json.loads(path.read_text(encoding="utf-8"))["catalog"]
+    lock = CatalogLock.of(
+        catalog(table("users", ["id"])).model_copy(update={"requirements": (VECTOR,)})
+    )
+    write_lock(lock, path)
+    assert read_lock(path) == lock
+
+
+def test_unmet_requirements() -> None:
+    available = (
+        VECTOR.model_copy(update={"version": "0.8.7"}),
+        VECTOR,
+        Requirement(kind=RequirementKind.MODULE, name="search"),
+    )
+    assert unmet((VECTOR,), available) == ()
+    assert (
+        unmet((Requirement(kind=RequirementKind.MODULE, name="search", version="2"),), available)
+        == ()
+    )
+    assert unmet((CUBE, VECTOR.model_copy(update={"version": "0.9"})), available) == (
+        "extension cube is not in the working image",
+        "extension vector 0.9 is not in the working image, which has 0.8.2, 0.8.7",
+    )
