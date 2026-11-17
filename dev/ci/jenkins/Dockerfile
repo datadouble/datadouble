@@ -13,9 +13,7 @@ USER root
 RUN git config --system --add safe.directory '*'
 USER jenkins
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
-# Plugins come from Jenkins' archive, not the mirrors downloads redirect to,
-# so CI's egress rules can name every host.
-ENV JENKINS_UC_DOWNLOAD_URL=https://archives.jenkins.io/plugins
+# Each plugin's line names its URL in the Jenkins Maven repository.
 RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 COPY casc.yaml /usr/share/jenkins/ref/casc.yaml
 ENV CASC_JENKINS_CONFIG=/usr/share/jenkins/ref/casc.yaml \

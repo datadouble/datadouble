@@ -285,11 +285,12 @@ jobs:
           # As the integration jobs, for the Datadouble, PostgreSQL, GitLab
           # and Jenkins images and the workspace; GitHub release assets for
           # act; GitHub for the checkout action the generated jobs use;
-          # Jenkins' update center and plugin archive for the test Jenkins.
+          # Jenkins' update center and Maven repository (whose files are on
+          # S3) for the test Jenkins.
           allowed-endpoints: >
             updates.jenkins.io:443
-            archives.jenkins.io:443
             repo.jenkins-ci.org:443
+            jfrog-prod-use1-shared-virginia-main.s3.amazonaws.com:443
             *.cloudflare.jenkins.io:443
             quay.io:443
             cdn01.quay.io:443
