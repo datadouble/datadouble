@@ -25,7 +25,7 @@ from datadouble.subset import (
 from datadouble_postgres.errors import redact, tool_error
 from datadouble_postgres.introspect import kind_of
 from datadouble_postgres.render import Renderer, native
-from datadouble_postgres.working import filter_toc, placeholder
+from datadouble_postgres.working import filter_toc, only_toc, placeholder
 
 AS_OF = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 USERS = TableName.of("public", "users")
@@ -181,6 +181,27 @@ def test_filter_toc() -> None:
         ";",
         "215; 1259 16400 TABLE public actor postgres",
         "400; 2606 16600 FK CONSTRAINT public film_actor film_actor_actor_id_fkey postgres",
+    ]
+
+
+EXTENSIONS = """\
+7; 2615 16512 SCHEMA - s postgres
+3539; 0 0 COMMENT - SCHEMA s postgres
+2; 3079 16384 EXTENSION - hstore\x20
+3540; 0 0 COMMENT - EXTENSION hstore\x20
+221; 1259 16513 TABLE s t postgres
+"""
+
+
+def test_schemas_and_extensions_split_out() -> None:
+    schemas, schema_entries = only_toc(EXTENSIONS, "SCHEMA")
+    assert schemas == "7; 2615 16512 SCHEMA - s postgres\n"
+    _, extension_entries = only_toc(EXTENSIONS, "EXTENSION")
+    assert extension_entries == frozenset({("EXTENSION", "-", "hstore")})
+    rest = filter_toc(filter_toc(EXTENSIONS, extension_entries), schema_entries, comments=False)
+    assert rest.splitlines() == [
+        "3539; 0 0 COMMENT - SCHEMA s postgres",
+        "221; 1259 16513 TABLE s t postgres",
     ]
 
 

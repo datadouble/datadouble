@@ -199,6 +199,7 @@ differently shaped engine, before breadth.
 | M8 | **CI/CD libraries.** In five pull requests (decision 99): GitHub Actions with the shared CI/CD core and conformance suite, GitLab CI, Jenkins, Argo CD, then the nightly hosted runs | The CI/CD conformance suite passes for all four systems, locally and in the nightly hosted runs |
 | M9 | **Agent skills and plugin** | `claude plugin validate` passes and every skill scenario holds, including the refusal cases |
 | M10 | **Using Datadouble documentation and example repository.** Quickstart, generated spec and CLI references, CI/CD library and agent skill guides, added to the existing site | The example repository's pipelines run green from a fresh clone, on both sides of the boundary; every spec field and CLI command appears in the generated references |
+| M11 | **Source requirements** (decision 107). In three pull requests: the core with PostgreSQL; Redis, Elasticsearch, OpenSearch and MySQL; SQL Server, Oracle and MongoDB. Salesforce's managed packages are part of M7 | Each engine reports its source's add-ons in the lock; a build against an image that lacks one fails before extract, naming it; PostgreSQL copies run the source's extension versions; the docs, the example repository and the skills cover it |
 
 ## How the run works
 

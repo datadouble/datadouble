@@ -323,6 +323,10 @@ class ElasticSource:
         self.client = client
         self.layout = layout
 
+    def server_version(self) -> str:
+        """The cluster's version."""
+        return server_version(self.client)
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         return introspect(self.client, self.layout)

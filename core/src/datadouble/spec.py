@@ -131,6 +131,10 @@ class Source(_Model):
     the engine adapter picks the official image of the source's version."""
     server: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     """Settings for the engine's working servers, checked by the engine adapter."""
+    omit: tuple[str, ...] = ()
+    """Requirements (extensions, plugins, modules) the source uses that copies
+    leave out, by name. Anything that uses one must be excluded too, or the
+    build fails."""
 
 
 class Follow(_Model):

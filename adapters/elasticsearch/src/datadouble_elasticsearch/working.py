@@ -24,6 +24,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
+from datadouble.catalog import Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
@@ -319,6 +320,10 @@ class ElasticWorking:
         if self._version is None:
             self._version = self.tools.version(self.scratch)
         return self._version
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     def load(
         self,

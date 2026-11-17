@@ -24,7 +24,7 @@ import pymysql
 from pydantic import BaseModel, ConfigDict
 from pymysql.connections import Connection
 
-from datadouble.catalog import Column, ColumnKind
+from datadouble.catalog import Column, ColumnKind, Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -232,6 +232,10 @@ class MysqlWorking:
         if self._version is None:
             self._version = self.tools.version(self.scratch)
         return self._version
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     # load
 

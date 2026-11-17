@@ -25,7 +25,7 @@ import pymssql
 from pydantic import BaseModel, ConfigDict
 from pymssql import Connection
 
-from datadouble.catalog import Column, ColumnKind
+from datadouble.catalog import Column, ColumnKind, Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -502,6 +502,10 @@ class MssqlWorking:
             finally:
                 shutil.rmtree(directory, ignore_errors=True)
         return self._version
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     def _check_version(self, server: MssqlServer, source_version: str) -> str:
         version = server.version()

@@ -20,16 +20,17 @@ address in ``dsn``.
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Annotated
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabases
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
-from datadouble.settings import NoSettings, parse_settings
+from datadouble.settings import parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_postgres.cluster import SUPERUSER, Tools, default_image
 from datadouble_postgres.errors import database_error
@@ -47,6 +48,17 @@ class PostgresConnection(BaseModel):
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     dsn: SecretRef
+
+
+class PostgresServerSettings(BaseModel):
+    """The ``source.server`` settings."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    shared_preload_libraries: tuple[Annotated[str, Field(pattern=r"^[A-Za-z0-9_$.-]+$")], ...] = ()
+    """Libraries the server loads at start, for extensions that need them
+    (``timescaledb``, ``pg_cron``). A physical image keeps the setting, so its
+    copies load them too."""
 
 
 class PostgresEngine:
@@ -84,9 +96,10 @@ class PostgresEngine:
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Clusters under ``scratch``, in the image for the source's version."""
-        parse_settings(NoSettings, tooling.server, "postgres server")
+        settings = parse_settings(PostgresServerSettings, tooling.server, "postgres server")
         image = tooling.image or default_image(source_version)
-        return PostgresWorking(Tools(tooling.runtime, image, scratch), scratch)
+        tools = Tools(tooling.runtime, image, scratch, settings.shared_preload_libraries)
+        return PostgresWorking(tools, scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:
         """The official PostgreSQL image of the image's version, on the copy.

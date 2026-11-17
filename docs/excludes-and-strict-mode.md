@@ -68,9 +68,17 @@ CLI: `--strict=columns` (default), `--strict=tables`, `--strict=off`, and
 | New table matching an exclude pattern | Ignored | Ignored | Ignored |
 | New table, not excluded | Warn, include | **Fail** | **Fail** |
 | New column in a known table | Warn | Warn | **Fail** |
+| Requirement removed, or at another version | **Fail** | **Fail** | **Fail** |
+| New requirement | Warn | **Fail** | **Fail** |
 
 Removed or changed objects always fail: the plan cannot run correctly against
 them, whatever the strictness.
+
+Requirements are the add-ons a source uses beyond the server itself, such as
+PostgreSQL extensions (see [architecture](architecture.md#source-requirements)).
+The lock records each one at the source's version, so an extension installed
+or upgraded on the source stops the build until someone checks that the
+working image has it and re-locks.
 
 ### Why the default is strictest
 

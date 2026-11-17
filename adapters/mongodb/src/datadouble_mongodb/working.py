@@ -22,6 +22,7 @@ from pymongo import UpdateMany
 from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
+from datadouble.catalog import Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -155,6 +156,10 @@ class MongoWorking:
         if self._version is None:
             self._version = self.tools.version(self.scratch)
         return self._version
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     def load(
         self,

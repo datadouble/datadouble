@@ -371,6 +371,10 @@ class RedisSource:
         """The client for a table's database."""
         return self.clients[database_of(table)]
 
+    def server_version(self) -> str:
+        """The first database's server version."""
+        return server_version(self.first)
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         with redacted("reading the catalog"):

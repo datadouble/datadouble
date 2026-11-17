@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from datadouble import __version__, api
+from datadouble.engine import RequirementError
 from datadouble.outcome import ExitCode
 
 
@@ -64,3 +65,15 @@ def test_file_failures_are_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert isinstance(response, api.ErrorResponse)
     assert response.error is api.ErrorCode.FILE_FAILED
     assert response.message == "a file operation failed: Permission denied"
+
+
+def test_unmet_requirements_are_listed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def lacking(_path: Path) -> object:
+        raise RequirementError(("extension vector is not in the working image",))
+
+    monkeypatch.setattr(api, "load_spec", lacking)
+    response = api.handle(api.FetchRequest(command=api.Command.FETCH, spec=tmp_path / "s.yml"))
+    assert isinstance(response, api.ErrorResponse)
+    assert response.error is api.ErrorCode.REQUIREMENT_UNMET
+    assert "source.image" in response.message
+    assert [d.problem for d in response.details] == ["extension vector is not in the working image"]

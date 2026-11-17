@@ -8,14 +8,26 @@ partitions are represented by their partitioned root (a reference to a
 partition becomes a reference to its root), and tables owned by extensions are
 left out. Types are spelled with ``format_type`` under an
 empty search path, so user-defined types come out schema-qualified.
+
+Every extension except ``plpgsql``, which every database has, is a
+requirement at the version the source runs.
 """
 
 from collections import defaultdict
 from dataclasses import dataclass
 
 import psycopg
+from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
+from datadouble.catalog import (
+    Catalog,
+    Column,
+    ColumnKind,
+    ForeignKey,
+    Requirement,
+    RequirementKind,
+    Table,
+)
 from datadouble.names import ColumnName, EngineName, TableName
 
 ENGINE = EngineName("postgres")
@@ -62,6 +74,14 @@ GROUP BY con.conrelid, con.contype, con.conname, tn.nspname, tc.relname
 ORDER BY con.conrelid, con.conname
 """
 
+_EXTENSIONS = """
+SELECT e.extname, e.extversion, n.nspname
+FROM pg_catalog.pg_extension e
+JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+WHERE e.extname <> 'plpgsql'
+ORDER BY e.oid
+"""
+
 _KINDS = {
     "int2": ColumnKind.INTEGER,
     "int4": ColumnKind.INTEGER,
@@ -94,6 +114,20 @@ def kind_of(base_type: str, category: str) -> ColumnKind:
     return _KINDS.get(base_type, ColumnKind.OTHER)
 
 
+class Extension(BaseModel):
+    """An installed extension: its version and the schema its objects are in."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    name: str
+    version: str
+    schema_: str
+
+    def requirement(self) -> Requirement:
+        """The extension as a requirement of the source."""
+        return Requirement(kind=RequirementKind.EXTENSION, name=self.name, version=self.version)
+
+
 @dataclass(frozen=True, slots=True)
 class Physical:
     """What the adapter needs beyond the engine-neutral catalog."""
@@ -102,6 +136,8 @@ class Physical:
     """Partitioned tables, read without ``ONLY`` so their partitions are included."""
     generated: dict[TableName, frozenset[ColumnName]]
     """Generated columns, which COPY leaves out."""
+    extensions: tuple[Extension, ...]
+    """Installed extensions, in the order they were created."""
 
 
 def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Catalog, Physical]:
@@ -149,6 +185,11 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
                         target_columns=tuple(ColumnName(str(n)) for n in _strings(target_names)),
                     )
                 )
+        cursor.execute(_EXTENSIONS)
+        extensions = tuple(
+            Extension(name=str(name), version=str(version), schema_=str(schema))
+            for name, version, schema in cursor.fetchall()
+        )
         cursor.execute(
             "SELECT pg_catalog.set_config('search_path', %s, true)",
             [str(saved[0]) if saved else ""],
@@ -164,10 +205,12 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
             )
             for oid, (name, _) in tables.items()
         ),
+        requirements=tuple(extension.requirement() for extension in extensions),
     )
     physical = Physical(
         partitioned=frozenset(name for name, kind in tables.values() if kind == "p"),
         generated={name: frozenset(cols) for name, cols in generated.items()},
+        extensions=extensions,
     )
     return catalog, physical
 

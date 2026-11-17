@@ -35,3 +35,26 @@ each object and the ways to resolve it: anonymize it, exclude it, or accept
 it in the lock once someone has checked it holds no personal data. Show the
 person those options and let them choose (rule 4). `datadouble lock` records
 the current catalog after they have.
+
+## Extensions, plugins and modules
+
+The lock lists the add-ons the source uses beyond its server (its
+requirements, such as PostgreSQL extensions), each at the source's version.
+Strict mode fails the plan when one is new, removed or upgraded, and a build
+fails with `requirement_unmet` when the working image lacks one.
+
+- **Look before you ask.** The lock (`catalog.lock`) lists the requirements;
+  the engine adapter's README lists images that provide common ones.
+- **Suggest an image first.** Propose a `source.image` built on the source's
+  server release that has the add-on, such as `postgis/postgis:18-3.6`. Some
+  add-ons also need `source.server` settings; for PostgreSQL,
+  `shared_preload_libraries`.
+- **Leaving one out is the person's decision.** `source.omit` drops a
+  requirement from the copies, and anything that uses it must be excluded
+  too. Explain that, and add it only when the person asks (rule 4). Managed
+  services' own extensions, such as `aws_s3` on Amazon RDS, are the usual
+  case.
+- **Columns of an add-on's type** (`geometry`, `vector`, `hstore`) have the
+  kind `other`: `faker` does not apply, so suggest `null`, `expression` or
+  keeping the column if it holds no personal data.
+

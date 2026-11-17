@@ -27,7 +27,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from datadouble.catalog import Catalog
+from datadouble.catalog import Catalog, Requirement
 from datadouble.names import ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup, PlannedRule
 from datadouble.runtime import ContainerRuntime, identity
@@ -37,6 +37,40 @@ from datadouble.subset import Condition, Edge, KeyReader
 
 class EngineError(Exception):
     """An engine operation that failed; the message is safe to show and log."""
+
+
+class RequirementError(Exception):
+    """The working image lacks requirements the source uses; ``problems`` lists each."""
+
+    def __init__(self, problems: tuple[str, ...]) -> None:
+        """Name every unmet requirement."""
+        super().__init__(
+            f"the working image lacks {len(problems)} requirement(s) of the source;"
+            " name an image that has them in source.image, or leave them out with source.omit"
+        )
+        self.problems = problems
+
+
+def unmet(needed: Iterable[Requirement], available: Iterable[Requirement]) -> tuple[str, ...]:
+    """What ``needed`` asks for that ``available`` does not provide.
+
+    An available requirement without a version provides every version.
+    """
+    offered: dict[tuple[str, str], set[str | None]] = {}
+    for requirement in available:
+        offered.setdefault((requirement.kind, requirement.name), set()).add(requirement.version)
+    problems: list[str] = []
+    for requirement in needed:
+        versions = offered.get((requirement.kind, requirement.name))
+        if versions is None:
+            problems.append(f"{requirement.kind} {requirement.name} is not in the working image")
+        elif None not in versions and requirement.version not in versions:
+            listed = ", ".join(sorted(v for v in versions if v is not None))
+            problems.append(
+                f"{requirement.kind} {requirement.name} {requirement.version} is not in the"
+                f" working image, which has {listed}"
+            )
+    return tuple(problems)
 
 
 class _Model(BaseModel):
@@ -103,8 +137,12 @@ class Snapshot(KeyReader, Protocol):
 class SourceSession(Protocol):
     """An open connection to the source."""
 
+    def server_version(self) -> str:
+        """The source server's version, which picks the default working image."""
+        ...
+
     def catalog(self) -> Catalog:
-        """Introspect the tables, columns and keys."""
+        """Introspect the tables, columns, keys and requirements."""
         ...
 
     def snapshot(self, as_of: dt.datetime) -> AbstractContextManager[Snapshot]:
@@ -140,6 +178,13 @@ class WorkingDatabases(Protocol):
 
     def server_version(self) -> str:
         """The version of the server that builds and restores images."""
+        ...
+
+    def available(self) -> tuple[Requirement, ...]:
+        """The requirements the working image can provide, one entry per version.
+
+        An entry without a version provides every version of it.
+        """
         ...
 
     def load(

@@ -18,7 +18,15 @@ from typing import assert_never
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from datadouble import jailer
-from datadouble.catalog import Catalog, CatalogLock, Column, ColumnKind, ForeignKey, Table
+from datadouble.catalog import (
+    Catalog,
+    CatalogLock,
+    Column,
+    ColumnKind,
+    ForeignKey,
+    Requirement,
+    Table,
+)
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
@@ -163,7 +171,9 @@ class Plan(_Model):
     pii_allow: tuple[PiiAllow, ...]
     assertions: tuple[Assertion, ...]
     catalog: Catalog
-    """The live catalog minus excluded tables."""
+    """The live catalog minus excluded tables and omitted requirements."""
+    omitted: tuple[Requirement, ...] = ()
+    """The source's requirements that ``source.omit`` leaves out."""
     warnings: tuple[str, ...]
     paths_from: PlannedPaths | None = None
     """How the chosen rows name the files to copy too."""
@@ -613,6 +623,7 @@ class _Planner:
             self.spec.hooks.before_load or self.spec.hooks.after_transform
         ):
             self.problems.append(f"the {self.catalog.engine} adapter does not run hooks")
+        omitted = self.omitted()
         formats = self.formats()
         strategy = self.strategy(graph)
         paths_from = self.paths_from(excluded)
@@ -636,10 +647,25 @@ class _Planner:
             rewrites=rewrites,
             pii_allow=pii_allow,
             assertions=self.spec.verify.assertions,
-            catalog=self.catalog.without(excluded),
+            catalog=self.catalog.without(excluded).model_copy(
+                update={
+                    "requirements": tuple(r for r in self.catalog.requirements if r not in omitted)
+                }
+            ),
+            omitted=omitted,
             warnings=tuple(self.warnings),
             paths_from=paths_from,
         )
+
+    def omitted(self) -> tuple[Requirement, ...]:
+        found: list[Requirement] = []
+        for name in self.spec.source.omit:
+            requirement = self.catalog.requirement(name)
+            if requirement is None:
+                self.problems.append(f"source.omit names {name!r}, which the source does not use")
+            else:
+                found.append(requirement)
+        return tuple(found)
 
     def placeholders(self, table: Table, template: str) -> dict[str, ColumnName]:
         names: dict[str, ColumnName] = {}

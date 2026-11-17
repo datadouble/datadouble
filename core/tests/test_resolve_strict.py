@@ -3,7 +3,7 @@
 
 import pytest
 
-from datadouble.catalog import Catalog, CatalogLock, Table
+from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind, Table
 from datadouble.names import ColumnName, TableName
 from datadouble.resolve import ResolveError, Resolver
 from datadouble.spec import StrictLevel
@@ -169,3 +169,27 @@ def test_clean_report() -> None:
     assert not report.failed()
     assert report.findings == ()
     assert ColumnName("id") in USERS.primary_key
+
+
+def _requiring(*requirements: Requirement) -> Catalog:
+    return catalog(USERS).model_copy(update={"requirements": requirements})
+
+
+@pytest.mark.parametrize(
+    ("level", "severity"),
+    [(StrictLevel.OFF, "warn"), (StrictLevel.TABLES, "fail"), (StrictLevel.COLUMNS, "fail")],
+)
+def test_requirement_drift(level: StrictLevel, severity: str) -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+    cube = Requirement(kind=RequirementKind.EXTENSION, name="cube", version="1.5")
+    hstore = Requirement(kind=RequirementKind.EXTENSION, name="hstore", version="1.8")
+    lock = CatalogLock.of(_requiring(vector, cube))
+    live = _requiring(vector.model_copy(update={"version": "0.8.7"}), hstore)
+    report = check_strict(live, lock.catalog, lock.fingerprint, frozenset(), level)
+    assert {(f.difference.value, f.severity.value, f.object) for f in report.findings} == {
+        ("requirement-changed", "fail", "extension vector 0.8.7"),
+        ("requirement-removed", "fail", "extension cube 1.5"),
+        ("new-requirement", severity, "extension hstore 1.8"),
+    }
+    new = next(f for f in report.findings if f.difference is Difference.NEW_REQUIREMENT)
+    assert "source.omit" in new.resolutions[1]

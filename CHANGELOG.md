@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Source requirements.** The catalog lists the add-ons a source uses
+  beyond its server, starting with PostgreSQL extensions, at the source's
+  versions. The lock records them and strict mode treats a change like a
+  table change. A build checks that the working image has each one before
+  it reads the source, and fails with `requirement_unmet` naming every gap.
+  PostgreSQL copies create extensions at the source's versions.
+  `source.omit` leaves named ones out, and PostgreSQL's `source.server`
+  takes `shared_preload_libraries`.
+
 - **Using Datadouble documentation.** The site gains a quickstart, a spec
   reference generated from the JSON Schema, a CLI reference generated from
   the CLI, and guides to the CI/CD libraries, the agent skills and the

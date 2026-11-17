@@ -40,7 +40,7 @@ from datadouble.ci import (
     Side,
     pipeline,
 )
-from datadouble.engine import EngineError
+from datadouble.engine import EngineError, RequirementError
 from datadouble.images import ImageError
 from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
@@ -124,6 +124,7 @@ class ErrorCode(StrEnum):
     PRUNE_FAILED = "prune_failed"
     OUTSIDE_BOUNDARY = "outside_boundary"
     CI_FAILED = "ci_failed"
+    REQUIREMENT_UNMET = "requirement_unmet"
 
 
 class _Message(BaseModel):
@@ -527,6 +528,7 @@ _ERRORS: tuple[tuple[type[Exception], ErrorCode], ...] = (
 )
 _HANDLED: tuple[type[Exception], ...] = (
     SpecError,
+    RequirementError,
     PlanError,
     PromoteError,
     *(kind for kind, _ in _ERRORS),
@@ -547,6 +549,14 @@ def _error(error: Exception) -> ErrorResponse:
                 message=str(error),
                 details=tuple(ErrorDetail(location="plan", problem=p) for p in error.problems),
                 strict=error.strict,
+            )
+        case RequirementError():
+            return ErrorResponse(
+                error=ErrorCode.REQUIREMENT_UNMET,
+                message=str(error),
+                details=tuple(
+                    ErrorDetail(location="source.image", problem=p) for p in error.problems
+                ),
             )
         case PromoteError():
             return ErrorResponse(

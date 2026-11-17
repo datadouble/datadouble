@@ -28,6 +28,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from datadouble.catalog import Requirement
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -175,6 +176,10 @@ class RedisWorking:
         if self._version is None:
             self._version = self.tools.version(self.scratch)
         return self._version
+
+    def available(self) -> tuple[Requirement, ...]:
+        """Nothing yet: this adapter reports no requirements of its sources."""
+        return ()
 
     @contextmanager
     def _open(self, data: Path, owner: Path, layout: Layout) -> Generator[Keyspace]:

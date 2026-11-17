@@ -26,7 +26,7 @@ from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
 from datadouble_postgres.cluster import Tools, default_image
 from datadouble_postgres.errors import database_error
-from datadouble_postgres.introspect import Physical, introspect
+from datadouble_postgres.introspect import Extension, Physical, introspect
 from datadouble_postgres.render import Renderer, Statement
 
 type Connection = psycopg.Connection[tuple[object, ...]]
@@ -107,6 +107,8 @@ class ExtractIndex(BaseModel):
     """Views that depend on excluded tables, left out of every working database."""
     constraints: tuple[Constraint, ...]
     """Every foreign-key constraint, including those declared only on partitions."""
+    extensions: tuple[Extension, ...] = ()
+    """Installed extensions, which ``load`` creates at the source's versions."""
 
     def table(self, name: TableName) -> ExtractedTable | None:
         """The extracted table called ``name``."""
@@ -192,6 +194,7 @@ class PostgresSnapshot:
             partitioned=tuple(sorted(physical.partitioned)),
             omitted_views=omitted,
             constraints=constraints,
+            extensions=physical.extensions,
         )
         (directory / "index.json").write_text(index_file.model_dump_json(indent=2), "utf-8")
         return ExtractResult(

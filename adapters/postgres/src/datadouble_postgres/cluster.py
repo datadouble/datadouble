@@ -58,6 +58,8 @@ class Tools:
     runtime: ContainerRuntime
     image: str
     home: Path
+    preload: tuple[str, ...] = ()
+    """``shared_preload_libraries`` for every cluster the tools create."""
 
     def _environment(self) -> dict[str, str]:
         passwd = self.home / "passwd"
@@ -159,6 +161,9 @@ class Cluster:
             self.owner,
             [self.datadir.parent],
         )
+        if self.tools.preload:
+            with (self.datadir / "postgresql.conf").open("a", encoding="utf-8") as conf:
+                conf.write(f"shared_preload_libraries = '{','.join(self.tools.preload)}'\n")
 
     @property
     def server(self) -> Server:

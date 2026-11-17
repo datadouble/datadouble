@@ -337,6 +337,7 @@ The system to extract from. `connection` is checked by the engine adapter, which
 | `connection` | map of JSON |  |  |
 | `image` | string |  | The vendor image working databases and engine tools run in; by default the engine adapter picks the official image of the source's version. |
 | `server` | map of JSON |  | Settings for the engine's working servers, checked by the engine adapter. |
+| `omit` | list of string |  | Requirements (extensions, plugins, modules) the source uses that copies leave out, by name. Anything that uses one must be excluded too, or the build fails. |
 
 ### Strategy
 

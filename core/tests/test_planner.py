@@ -5,7 +5,7 @@ import datetime as dt
 
 import pytest
 
-from datadouble.catalog import Catalog, CatalogLock
+from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind
 from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import Capabilities, Plan, PlanError, PlanOptions, plan
 from datadouble.spec import ImageFormat, Strategy, StrictLevel, parse_spec
@@ -505,3 +505,20 @@ def test_plan_error_message() -> None:
     error = PlanError(("one",))
     assert str(error) == "the plan has 1 problem"
     assert str(PlanError(("a", "b"))) == "the plan has 2 problems"
+
+
+def test_omitted_requirements() -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+    cube = Requirement(kind=RequirementKind.EXTENSION, name="cube", version="1.5")
+    live = shop().model_copy(update={"requirements": (vector, cube)})
+
+    def plan_omitting(names: str) -> Plan:
+        spec = parse_spec(f"name: shop\nsource: {{engine: fake, omit: [{names}]}}\n" + CYCLE_FREE)
+        return plan(spec, live, CatalogLock.of(live), CAPABILITIES, PlanOptions(now=NOW))
+
+    result = plan_omitting("vector")
+    assert result.omitted == (vector,)
+    assert result.catalog.requirements == (cube,)
+    with pytest.raises(PlanError) as caught:
+        plan_omitting("vector, nope")
+    assert "source.omit names 'nope', which the source does not use" in caught.value.problems
