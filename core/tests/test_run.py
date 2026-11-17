@@ -598,3 +598,21 @@ def test_omitted_requirements_are_not_checked(
     build = json.loads(manifest)
     assert build["omitted"] == [{"kind": "extension", "name": "vector", "version": "0.8.2"}]
     assert build["requirements"] == []
+
+
+def test_a_resumed_build_checks_the_image_too(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
+    engine.catalog = shop().model_copy(update={"requirements": (vector,)})
+    engine.available = (vector,)
+    extracted = run(tmp_path, registry, stages=(Stage.PLAN, Stage.EXTRACT), lock=engine.catalog)
+    engine.available = ()
+    with pytest.raises(RequirementError):
+        run(
+            tmp_path,
+            registry,
+            stages=(Stage.LOAD,),
+            resume=extracted.generation,
+            lock=engine.catalog,
+        )
