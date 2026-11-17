@@ -12,7 +12,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Tight Line LLC" }]
 requires-python = ">=3.13"
-dependencies = ["datadouble", "pymongo>=4.19"]
+dependencies = ["datadouble", "pymongo>=4.20.0"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3 :: Only",
