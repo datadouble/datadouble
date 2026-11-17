@@ -210,6 +210,8 @@ def test_source_failures(source: MongoScratch, monkeypatch: pytest.MonkeyPatch) 
         pytest.raises(EngineError, match="reading the catalog failed"),
     ):
         MongoSource(unreachable, "x", 10).catalog()
+    with pytest.raises(EngineError, match="reading the server version failed"):
+        MongoSource(unreachable, "x", 10).server_version()
 
 
 def test_schema_changes_after_planning(source: MongoScratch, tmp_path: Path) -> None:

@@ -253,8 +253,6 @@ class PostgresWorking:
                 rows = connection.execute(
                     "SELECT name, version FROM pg_catalog.pg_available_extension_versions"
                 ).fetchall()
-        except psycopg.Error as error:
-            raise database_error(error, "listing the image's extensions") from None
         finally:
             shutil.rmtree(directory, ignore_errors=True)
         return tuple(

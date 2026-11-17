@@ -28,7 +28,7 @@ import pytest
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from datadouble.catalog import CatalogLock, write_lock
-from datadouble.engine import EngineAdapter, ExtractResult, Tooling
+from datadouble.engine import EngineAdapter, ExtractResult, Tooling, unmet
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
 from datadouble.planner import Plan, PlanError, PlanOptions
@@ -237,6 +237,25 @@ class EngineConformance:
                 assert target is not None, fk
                 assert set(fk.columns) <= names
                 assert set(fk.target_columns) <= {c.name for c in target.columns}
+
+    def test_the_image_provides_the_sources_requirements(
+        self, harness: EngineHarness, tmp_path: Path
+    ) -> None:
+        """The sample spec's working image has every add-on the sample source uses."""
+        builds = _Builds(harness, tmp_path)
+        spec = builds.sample()
+        with harness.engine.connect(spec.source.connection) as session:
+            version = session.server_version()
+            catalog = session.catalog()
+        assert version
+        ((kind, settings),) = harness.runtime.items()
+        tooling = Tooling(
+            runtime=builds.registry.runtime(kind, settings),
+            image=spec.source.image,
+            server=spec.source.server,
+        )
+        working = harness.engine.working(tmp_path / "scratch", tooling, version)
+        assert unmet(catalog.requirements, working.available()) == ()
 
     def test_snapshot_is_consistent(self, harness: EngineHarness) -> None:
         """Rows committed after the snapshot opens are not seen through it.
