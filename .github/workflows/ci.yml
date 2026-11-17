@@ -143,10 +143,13 @@ jobs:
         with:
           persist-credentials: false
 
+      # The lockfile pins the release. Its install script only links the
+      # platform's binary, so CI skips it and puts the binary on PATH itself.
       - name: Install Claude Code
-        env:
-          CLAUDE_CODE_VERSION: 2.1.316
-        run: npm install --global --ignore-scripts "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+        working-directory: .github/claude-code
+        run: |
+          npm ci --ignore-scripts
+          echo "$PWD/node_modules/@anthropic-ai/claude-code-linux-x64" >> "$GITHUB_PATH"
 
       - name: Validate the plugin
         run: make validate-plugin

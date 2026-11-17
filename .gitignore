@@ -17,3 +17,4 @@ site/
 
 # The default work directory of `datadouble run`.
 .datadouble/
+node_modules/
