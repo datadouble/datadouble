@@ -46,8 +46,8 @@ if DSN_VARIABLE in os.environ:
 
 # Pagila's film_embedding table needs pgvector, which the plain image lacks.
 PGVECTOR = (
-    "pgvector/pgvector:0.8.2-pg18-trixie"
-    "@sha256:b7337db8fe39d12fe8ecb0003c72680f24479813a744b43154eee6f2eab5a5f3"
+    "pgvector/pgvector:0.8.7-pg18-trixie"
+    "@sha256:ab49524d18df7200b74ac9a475e1db6297fc1eb57da4c214c63d10ecc4b754fa"
 )
 
 # Customers 1-40 with their rentals, those rentals' payments, referrals and

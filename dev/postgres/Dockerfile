@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-# PostgreSQL 18.4 with the Pagila sample database and the awkward cases the
+# PostgreSQL 18.7 with the Pagila sample database and the awkward cases the
 # subset planner must handle. Pagila is fetched at a pinned commit and checked
 # against its SHA-256; see PAGILA-LICENSE.txt for its licence.
 
