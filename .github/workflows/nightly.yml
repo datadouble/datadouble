@@ -88,6 +88,7 @@ jobs:
         env:
           RUNNER_ADMIN_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
         run: |
+          set -o pipefail
           mkdir "$RUNNER_TEMP/runner" && cd "$RUNNER_TEMP/runner"
           file="actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
           curl -fsSLO "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${file}"

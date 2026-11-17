@@ -79,3 +79,12 @@ def test_names() -> None:
     assert check_name("spec name", "pagila-1") == "pagila-1"
     with pytest.raises(ValueError, match="lowercase"):
         check_name("spec name", "Pagila")
+
+
+def test_a_lock_it_cannot_write(tmp_path: Path) -> None:
+    (tmp_path / "taken").write_text("not a directory", encoding="utf-8")
+    with pytest.raises(CatalogError, match=r"cannot write the catalog lock .*taken/catalog.lock"):
+        write_lock(
+            CatalogLock.of(catalog(table("public.items", "id"))),
+            tmp_path / "taken" / "catalog.lock",
+        )

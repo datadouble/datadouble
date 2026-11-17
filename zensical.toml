@@ -29,6 +29,15 @@ nav = [
     { "Local development" = "local-development.md" },
     { "Prior art" = "prior-art.md" },
   ] },
+  { "Using Datadouble" = [
+    "using/index.md",
+    { "Quickstart" = "using/quickstart.md" },
+    { "Spec reference" = "using/spec-reference.md" },
+    { "CLI reference" = "using/cli-reference.md" },
+    { "CI/CD libraries" = "using/ci-cd-libraries.md" },
+    { "Agent skills" = "using/agent-skills.md" },
+    { "Example repository" = "using/example-repository.md" },
+  ] },
   { "Project" = [
     { "Decisions" = "decisions.md" },
     { "Version 1 plan" = "v1-plan.md" },

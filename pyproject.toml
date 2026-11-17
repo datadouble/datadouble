@@ -159,6 +159,7 @@ known-first-party = [
     "check_coverage",
     "check_workflows",
     "nightly",
+    "reference",
     "sakila_bulk",
     "fakes",
     "fake_engine",

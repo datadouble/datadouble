@@ -39,7 +39,9 @@ class SpecError(Exception):
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+    model_config = ConfigDict(
+        strict=True, frozen=True, extra="forbid", use_attribute_docstrings=True
+    )
 
 
 class StrictLevel(StrEnum):
@@ -389,7 +391,13 @@ class Promote(_Model):
 class Fetch(_Model):
     """Where ``fetch`` reads images from and keeps them."""
 
-    model_config = ConfigDict(strict=True, frozen=True, extra="forbid", validate_by_name=True)
+    model_config = ConfigDict(
+        strict=True,
+        frozen=True,
+        extra="forbid",
+        validate_by_name=True,
+        use_attribute_docstrings=True,
+    )
 
     source: AdapterSettings = Field(alias="from")
     staging: Path
@@ -498,31 +506,55 @@ class Spec(_Model):
     model_config = ConfigDict(title="Datadouble spec")
 
     name: SpecName
+    """The spec's name: the first part of its images' identity."""
     source: Source
+    """The system to copy from: its engine and connection."""
     exclude: tuple[str, ...] = ()
+    """Tables left out of every image, as ``namespace.table`` globs."""
     structure_only: tuple[str, ...] = ()
+    """Tables copied without their rows, as globs."""
     case_sensitive: bool = False
+    """Whether table and column names match case-sensitively."""
     strict: StrictLevel = StrictLevel.COLUMNS
+    """How new objects in the catalog fail the plan: ``off``, ``tables`` or ``columns``."""
     subset: Subset = Subset()
+    """Which rows to copy: seeds, followed references and conditions."""
     anonymize: dict[str, dict[str, Rule]] = Field(default_factory=dict[str, dict[str, Rule]])
+    """Rules per table and column: ``faker``, ``hash``, ``null``, ``format_preserving``
+    or ``expression``."""
     hooks: Hooks = Hooks()
+    """Commands run before load and after transform."""
     files: Files | None = None
+    """File trees copied with the rows, as a second source."""
     images: dict[GroupName, ImageGroup] = Field(
         default_factory=lambda: {DEFAULT_GROUP: ImageGroup(include=("*",))}
     )
+    """Named images built from one extract; one image of every table by default."""
     package: Package = Package()
+    """The image formats to produce."""
     verify: Verify = Verify()
+    """Checks every image must pass: PII scan, row counts, assertions."""
     runtime: AdapterSettings | None = None
     """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
+    """Where images are stored after the build, one adapter each: ``{filesystem: ...}``,
+    ``{s3: ...}``."""
     signing: Signing | None = None
+    """How the build signs its images."""
     trust: Trust | None = None
+    """Which signatures ``promote`` and ``fetch`` accept."""
     promote: Promote | None = None
+    """The export stores ``promote`` copies verified images to."""
     fetch: Fetch | None = None
+    """Where ``fetch`` reads promoted images, and the staging directory it fills."""
     replicate: Replicate | None = None
+    """How copies are made: the adapter, pool or on-demand, and how many."""
     announce: tuple[AdapterSettings, ...] = ()
+    """Where copies are announced to consumers, one adapter each."""
     prune: Retention = Retention()
+    """How many images and how much time ``prune`` keeps."""
     secrets: Secrets = Secrets()
+    """Secrets the build needs, by reference."""
 
     def files_spec(self) -> "Spec | None":
         """The spec of the ``files`` section's build, sharing this one's images and storage."""

@@ -10,6 +10,7 @@ lint:
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run python scripts/check_source.py
+	uv run python scripts/reference.py check
 
 # GitHub workflows: actionlint for syntax and shell, zizmor for security; the
 # workflows the GitHub Actions adapter writes (its golden files); and that the
