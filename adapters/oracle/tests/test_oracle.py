@@ -427,9 +427,10 @@ def test_domain_indexes_need_their_index_types(source: OracleScratch, tmp_path: 
         catalog = session.catalog()
     assert [str(r) for r in catalog.requirements] == ["option CTXSYS.CONTEXT"]
     working = working_databases(tmp_path / "scratch")
-    assert "option CTXSYS.CONTEXT" in {str(r) for r in working.available()}
-    # The second answer comes from the first server, without starting another.
-    assert working.available() == working.available()
+    first = working.available()
+    assert "option CTXSYS.CONTEXT" in {str(r) for r in first}
+    # Asked again, it answers from the first server without starting another.
+    assert working.available() == first
     for omit in ([], ["CTXSYS.CONTEXT"]):
         work = tmp_path / str(len(omit))
         result = build(
