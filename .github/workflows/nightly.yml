@@ -33,10 +33,8 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      actions: write  # starts the generated workflows and follows their runs
     env:
       DATADOUBLE_NIGHTLY_DSN: ${{ secrets.DATADOUBLE_NIGHTLY_DSN }}
-      GH_TOKEN: ${{ github.token }}
       RUNNER_VERSION: 2.338.1
       RUNNER_SHA256: 08e9ccb3604d2462c24b5e33604dc30810296ca15cc65f23cffd4317eb144c37
     steps:
@@ -106,6 +104,11 @@ jobs:
           nohup env -i "HOME=${HOME}" "PATH=${PATH}" ./run.sh > runner.log 2>&1 &
 
       - name: Run the generated workflows
+        env:
+          # Not the job's own token: GitHub starts no workflow_run follow-on
+          # (promote after build, provision after fetch) for a run that token
+          # started, and the night must test those as a consumer's run them.
+          GH_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
         run: tests/nightly/run.sh pipeline
 
       - name: Check a GitHub-hosted machine is refused, even marked inside
