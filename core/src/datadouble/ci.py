@@ -127,6 +127,10 @@ class Pipeline:
     """The ``uid:gid`` Datadouble runs as: the engine's owner (decision 86)."""
     identity_token: bool = False
     """Whether jobs need the CI system's identity token, for keyless signing in ``build``."""
+    spec_text: str = ""
+    """The spec file's text, for systems whose configuration carries it (Argo CD)."""
+    lock_text: str = ""
+    """The catalog lock's text, empty when there is none."""
 
     def environment(self) -> tuple[str, ...]:
         """Every environment variable a job reads a secret from."""
@@ -457,6 +461,8 @@ class PipelineOptions:
     runner: str | None = None
     work: Path | None = None
     side: Side | None = None
+    spec_text: str = ""
+    lock_text: str = ""
     environment: tuple[str, ...] = ()
     """More environment variables every job passes on, for credentials adapters read
     from the environment rather than the spec, such as ``AWS_ACCESS_KEY_ID``."""
@@ -514,4 +520,6 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         identity_token=(
             JobKind.BUILD in chosen and spec.signing is not None and spec.signing.cosign.keyless
         ),
+        spec_text=options.spec_text,
+        lock_text=options.lock_text,
     )

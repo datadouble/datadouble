@@ -1,0 +1,83 @@
+{
+  "catalog": {
+    "engine": "postgres",
+    "tables": [
+      {
+        "columns": [
+          {
+            "kind": "integer",
+            "name": "id",
+            "nullable": false,
+            "type": "integer"
+          },
+          {
+            "kind": "text",
+            "name": "name",
+            "nullable": false,
+            "type": "text"
+          },
+          {
+            "kind": "text",
+            "name": "email",
+            "nullable": false,
+            "type": "text"
+          }
+        ],
+        "foreign_keys": [],
+        "name": {
+          "name": "customer",
+          "namespace": "public"
+        },
+        "primary_key": [
+          "id"
+        ]
+      },
+      {
+        "columns": [
+          {
+            "kind": "integer",
+            "name": "id",
+            "nullable": false,
+            "type": "integer"
+          },
+          {
+            "kind": "integer",
+            "name": "customer_id",
+            "nullable": false,
+            "type": "integer"
+          },
+          {
+            "kind": "decimal",
+            "name": "total",
+            "nullable": true,
+            "type": "numeric"
+          }
+        ],
+        "foreign_keys": [
+          {
+            "columns": [
+              "customer_id"
+            ],
+            "name": "orders_customer_id_fkey",
+            "target": {
+              "name": "customer",
+              "namespace": "public"
+            },
+            "target_columns": [
+              "id"
+            ]
+          }
+        ],
+        "name": {
+          "name": "orders",
+          "namespace": "public"
+        },
+        "primary_key": [
+          "id"
+        ]
+      }
+    ]
+  },
+  "fingerprint": "sha256:6434f980b2ebabb8e0d2dc0cab00f7ce430967d22f6ce92021d188dadd5ba3a8",
+  "format": 1
+}

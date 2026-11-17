@@ -17,13 +17,13 @@ How Datadouble is checked, locally and in CI. Every pull request must pass
 |---|---|---|
 | `make check` | Everything below except the integration suite and the docs | Host |
 | `make lint` | `ruff format --check`, `ruff check`, and `scripts/check_source.py` (copyright and SPDX headers, suppression reasons and budget) | Host |
-| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, `scripts/check_workflows.py` (every job sets `timeout-minutes`), and `actionlint` over the workflows the GitHub Actions adapter writes (its golden files) | Host |
+| `make lint-workflows` | `actionlint` and `zizmor` over `.github/workflows`, `scripts/check_workflows.py` (every job sets `timeout-minutes`), `actionlint` over the workflows the GitHub Actions adapter writes (its golden files), and `scripts/nightly.py check` (the nightly run's generated workflows are current) | Host |
 | `make typecheck` | `mypy --strict` and `pyright` in strict mode | Host |
 | `make test` | Unit tests, with the 100% branch coverage gate on the core, the CI/CD adapters and scripts | Host |
 | `make test-integration` | The whole suite, integration and conformance tests included: every integration group in turn, then their combined coverage with the 100% gate on every package | Containers |
 | `make test-group GROUP=<name>` | One integration group, as its CI job runs it (`DOCKER=host` uses the host's Docker daemon) | Containers |
 | `make test-k8s`, `make test-btrfs` | The Kubernetes and btrfs adapters against k3s and a real btrfs filesystem (privileged) | Containers |
-| `make test-ci SYSTEM=<name>` | The CI/CD conformance suite for one system: builds the Datadouble image, then runs the jobs `ci init` writes in the system's local runtime (`act` for GitHub Actions; GitLab CE and a runner, about 3 GB of memory and up to ten minutes to start, for GitLab; Jenkins, about a minute, for Jenkins) | Host and containers |
+| `make test-ci SYSTEM=<name>` | The CI/CD conformance suite for one system: builds the Datadouble image, then runs the jobs `ci init` writes in the system's local runtime (`act` for GitHub Actions; GitLab CE and a runner, about 3 GB of memory and up to ten minutes to start, for GitLab; Jenkins, about a minute, for Jenkins; kind with Argo CD, with `kind`, `helm` and `kubeconform`, for `kubernetes`) | Host and containers |
 | `make docs` | Builds the documentation site in strict mode, which fails on broken links and anchors | Host |
 
 ## Test layers

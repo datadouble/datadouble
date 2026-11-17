@@ -13,7 +13,7 @@
 # it runs in the engine vendor's own images, through a container runtime.
 # Base images are pinned by digest; Dependabot keeps them current.
 
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS base
 COPY --from=uv /uv /uvx /usr/local/bin/
@@ -33,7 +33,7 @@ COPY conformance/ conformance/
 RUN uv sync --no-dev --no-editable --package datadouble \
         --package datadouble-btrfs --package datadouble-docker --package datadouble-kubernetes \
         --package datadouble-mongodb --package datadouble-mssql --package datadouble-mysql --package datadouble-oracle --package datadouble-postgres --package datadouble-redis --package datadouble-elasticsearch --package datadouble-opensearch --package datadouble-files --package datadouble-s3 \
-        --package datadouble-vault --package datadouble-github-actions --package datadouble-gitlab --package datadouble-jenkins
+        --package datadouble-vault --package datadouble-github-actions --package datadouble-gitlab --package datadouble-jenkins --package datadouble-argocd
 
 FROM base AS tools
 # The docker command (static), kubectl and cosign, all pinned.
@@ -80,6 +80,7 @@ COPY --chown=tester:tester adapters/vault/pyproject.toml adapters/vault/README.m
 COPY --chown=tester:tester ci/github-actions/pyproject.toml ci/github-actions/README.md ci/github-actions/LICENSE ci/github-actions/
 COPY --chown=tester:tester ci/gitlab/pyproject.toml ci/gitlab/README.md ci/gitlab/LICENSE ci/gitlab/
 COPY --chown=tester:tester ci/jenkins/pyproject.toml ci/jenkins/README.md ci/jenkins/LICENSE ci/jenkins/
+COPY --chown=tester:tester ci/kubernetes/pyproject.toml ci/kubernetes/README.md ci/kubernetes/LICENSE ci/kubernetes/
 COPY --chown=tester:tester conformance/pyproject.toml conformance/README.md conformance/LICENSE conformance/
 RUN uv sync --no-install-workspace
 COPY --chown=tester:tester . .

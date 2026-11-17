@@ -31,6 +31,7 @@ from typing import Protocol
 from unittest.mock import patch
 
 import pytest
+from pydantic import JsonValue
 
 from datadouble import api
 from datadouble.ci import JobKind, Side
@@ -62,7 +63,7 @@ name: shop
 source:
   engine: postgres
   connection: {{dsn: {{env: DDCI_SOURCE_DSN}}}}
-runtime: {{docker: {{network: {network}}}}}
+runtime: {runtime}
 strict: {strict}
 subset:
   seeds: {{customer: "id <= 5"}}
@@ -157,6 +158,14 @@ class CiHarness(Protocol):
         """Files jobs uploaded to the system's own artifact storage."""
         ...
 
+    def runtime(self, network: str, base: Path) -> Mapping[str, JsonValue]:
+        """The container runtime jobs use, for a world on ``network`` with files in ``base``."""
+        ...
+
+    def runner(self, side: Side, base: Path) -> str:
+        """Where one side's jobs run (a runner label, an agent label, a namespace)."""
+        ...
+
     def owner(self, repository: Path, request: int) -> str:
         """Who a request's on-demand copies are for (``pr-7``, ``mr-1``)."""
         ...
@@ -181,6 +190,9 @@ class World:
     image: str
     network: str
     secrets: dict[str, str]
+    runtime: Mapping[str, JsonValue]
+    """The spec's container runtime, as the harness's system runs jobs."""
+    runners: Mapping[Side, str]
 
     @property
     def store(self) -> Path:
@@ -196,7 +208,12 @@ class World:
         path = self.spec(mode)
         size = 1 if mode == "on-demand" else 2
         text = _SPEC.format(
-            base=self.base, network=self.network, mode=mode, size=size, limit=limit, strict=strict
+            base=self.base,
+            runtime=json.dumps(self.runtime),
+            mode=mode,
+            size=size,
+            limit=limit,
+            strict=strict,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -250,7 +267,7 @@ class World:
 
 
 @contextmanager
-def world(system: str, repository: Path) -> Generator[World]:
+def world(harness: CiHarness, repository: Path) -> Generator[World]:
     """A fresh world: a source, directories, keys and generated jobs; removed afterwards."""
     image = os.environ[IMAGE_VARIABLE]
     name = f"ddci-{uuid.uuid4().hex[:10]}"
@@ -272,7 +289,10 @@ def world(system: str, repository: Path) -> Generator[World]:
             f" {base}/on-demand/staging {base}/on-demand/copies {base}/pool/staging"
             f" {base}/pool/copies && install -d -m 0777 {base}/keys",
         )  # fmt: skip
-        built = World(name, base, repository, image, network, {})
+        runners = {side: harness.runner(side, base) for side in Side}
+        built = World(
+            name, base, repository, image, network, {}, harness.runtime(network, base), runners
+        )
         try:
             _wait_for_source(name)
             address = docker(
@@ -283,12 +303,19 @@ def world(system: str, repository: Path) -> Generator[World]:
             built.secrets["DDCI_SOURCE_DSN"] = (
                 f"postgresql://postgres:{password}@{address}:5432/postgres"
             )
-            _generate(built, system)
+            _generate(built, harness.system)
             yield built
         finally:
             built.as_root(f"rm -rf {base}")
     finally:
         docker("rm", "--force", "--volumes", name)
+        # A harness may have joined its own containers to the network, such as a
+        # cluster's node; they leave it with the world.
+        joined = docker(
+            "network", "inspect", "--format", "{{range .Containers}}{{.Name}} {{end}}", network
+        )
+        for container in joined.split():
+            docker("network", "disconnect", "--force", network, container)
         docker("network", "rm", network)
 
 
@@ -344,12 +371,13 @@ def _generate(built: World, system: str) -> None:
     assert isinstance(locked, api.LockResponse), locked
     production = ci_init(
         built, system, on_demand, JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE,
-        runner=RUNNERS[Side.PRODUCTION], work=str(built.base / "work"),
+        runner=built.runners[Side.PRODUCTION], work=str(built.base / "work"),
     )  # fmt: skip
     assert isinstance(production, api.CiInitResponse), production
     assert set(production.environment) == set(built.secrets)
     others = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
-    non_production = ci_init(built, system, on_demand, *others, runner=RUNNERS[Side.NON_PRODUCTION])
+    runner = built.runners[Side.NON_PRODUCTION]
+    non_production = ci_init(built, system, on_demand, *others, runner=runner)
     assert isinstance(non_production, api.CiInitResponse), non_production
     assert "DDCI_SOURCE_DSN" not in non_production.environment
 
@@ -360,7 +388,7 @@ class CiConformance:
     @pytest.fixture
     def shop(self, ci_harness: CiHarness, tmp_path: Path) -> Generator[World]:
         """A fresh world, with the harness's local wiring in its repository."""
-        with world(ci_harness.system, tmp_path / "repository") as built:
+        with world(ci_harness, tmp_path / "repository") as built:
             ci_harness.prepare(built.repository)
             yield built
 
@@ -439,7 +467,7 @@ class CiConformance:
         pool.write_bytes(shop.spec("pool").read_bytes())
         made = ci_init(
             shop, ci_harness.system, pool, JobKind.FETCH, JobKind.PROVISION,
-            runner=RUNNERS[Side.NON_PRODUCTION], output=str(pool_repository),
+            runner=shop.runners[Side.NON_PRODUCTION], output=str(pool_repository),
         )  # fmt: skip
         assert isinstance(made, api.CiInitResponse), made
         ci_harness.prepare(pool_repository)

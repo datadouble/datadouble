@@ -1,0 +1,122 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The nightly hosted run: the jobs `ci init` writes, run on GitHub itself.
+#
+# This job starts the night's source database and a self-hosted runner on its
+# own GitHub-hosted machine, marked inside the production boundary, then runs
+# the generated workflows (datadouble-nightly-*.yml, from scripts/nightly.py)
+# in order on that runner: build, promote by workflow_run, fetch, provision
+# by workflow_run, and prune on both sides. The build signs its image without
+# keys through GitHub's identity, so Sigstore's public services are part of
+# the test. It catches what local runtimes like act do not reproduce: the
+# runner, its service, workflow_run and the identity token as GitHub runs them.
+
+name: Nightly hosted run
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  github-actions:
+    name: GitHub Actions, hosted
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write  # starts the generated workflows and follows their runs
+    env:
+      DATADOUBLE_NIGHTLY_DSN: ${{ secrets.DATADOUBLE_NIGHTLY_DSN }}
+      GH_TOKEN: ${{ github.token }}
+      RUNNER_VERSION: 2.338.1
+      RUNNER_SHA256: 08e9ccb3604d2462c24b5e33604dc30810296ca15cc65f23cffd4317eb144c37
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          # GitHub, its runner service and storage for the night's runner and
+          # the jobs it runs; Docker Hub, GHCR, PyPI, Astral and dl.k8s.io to
+          # build the image; Sigstore's services for keyless signing.
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            raw.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            production.cloudfront.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            releases.astral.sh:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            dl.k8s.io:443
+            cdn.dl.k8s.io:443
+            fulcio.sigstore.dev:443
+            rekor.sigstore.dev:443
+            timestamp.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+            oauth2.sigstore.dev:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the Datadouble image
+        run: docker build --target runtime --tag datadouble:nightly .
+
+      - name: Start the source and the spec's directories
+        run: tests/nightly/run.sh source
+
+      - name: Start the night's self-hosted runner, marked inside the boundary
+        env:
+          RUNNER_ADMIN_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+        run: |
+          mkdir "$RUNNER_TEMP/runner" && cd "$RUNNER_TEMP/runner"
+          file="actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz"
+          curl -fsSLO "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${file}"
+          echo "${RUNNER_SHA256}  ${file}" | sha256sum --check
+          tar xzf "${file}"
+          token=$(curl -fsS -X POST -H "Authorization: Bearer ${RUNNER_ADMIN_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runners/registration-token" | jq -r .token)
+          echo "::add-mask::${token}"
+          ./config.sh --unattended --replace --url "https://github.com/${GITHUB_REPOSITORY}" \
+            --token "${token}" --name "nightly-${GITHUB_RUN_ID}" --labels datadouble-nightly \
+            --work _work
+          echo "DATADOUBLE_BOUNDARY=inside" >> .env
+          # A clean environment: nothing of this hosted job, such as its token or
+          # RUNNER_ENVIRONMENT, reaches the jobs the night's runner runs.
+          nohup env -i "HOME=${HOME}" "PATH=${PATH}" ./run.sh > runner.log 2>&1 &
+
+      - name: Run the generated workflows
+        run: tests/nightly/run.sh pipeline
+
+      - name: Check a GitHub-hosted machine is refused, even marked inside
+        run: tests/nightly/run.sh refusal
+
+      - name: Remove the night's runner
+        if: ${{ always() }}
+        env:
+          RUNNER_ADMIN_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+        run: |
+          cd "$RUNNER_TEMP/runner" 2> /dev/null || exit 0
+          token=$(curl -fsS -X POST -H "Authorization: Bearer ${RUNNER_ADMIN_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runners/remove-token" | jq -r .token)
+          echo "::add-mask::${token}"
+          ./config.sh remove --token "${token}" || true

@@ -4,7 +4,7 @@ name: Datadouble shop provision
 on:
   schedule:
     - cron: 0 * * * *
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows:
       - Datadouble shop fetch
     types:

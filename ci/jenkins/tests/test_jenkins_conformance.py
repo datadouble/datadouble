@@ -32,8 +32,10 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from datadouble import __version__
+from datadouble.ci import Side
 from datadouble.programs import run_program
 from datadouble_conformance.ci import (
+    RUNNERS,
     WORK_VARIABLE,
     CiConformance,
     CiHarness,
@@ -366,6 +368,14 @@ class JenkinsContainer:
     def owner(self, repository: Path, request: int) -> str:
         del repository
         return f"pr-{request}"
+
+    def runtime(self, network: str, base: Path) -> Mapping[str, JsonValue]:
+        del base
+        return {"docker": {"network": network}}
+
+    def runner(self, side: Side, base: Path) -> str:
+        del base
+        return RUNNERS[side]
 
     def uploaded(self) -> list[Path]:
         found: list[Path] = []
