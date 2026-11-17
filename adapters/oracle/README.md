@@ -15,3 +15,14 @@ source:
     url: {env: SHOP_ORACLE_URL}   # oracle://user:password@host:1521/service, by reference
     schemas: [SHOP]               # the schemas to copy; the connecting user's by default
 ```
+
+## Options
+
+The schemas' domain indexes are the requirements: each index type they use
+from outside the copied schemas, such as Oracle Text's `CTXSYS.CONTEXT` or
+Spatial's `MDSYS.SPATIAL_INDEX_V2`, is an option, listed in the lock as
+`option CTXSYS.CONTEXT`. The working image provides those in
+`DBA_INDEXTYPES`. Oracle Database Free's full image includes Oracle Text; its
+`-lite` image leaves components out. `source.omit` names an
+index type to leave out, and the copies then have no indexes of that type;
+the rows are the same.

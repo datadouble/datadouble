@@ -408,3 +408,39 @@ def test_instances_take_only_their_password(tmp_path: Path) -> None:
         server.running(),
     ):
         raise Error(1)
+
+
+TEXT_SPEC = """
+name: scratch
+source: {engine: oracle, connection: CONNECTION, omit: OMIT}
+exclude: ["items", "parent", "child", "files", "child_log"]
+subset:
+  seeds: {notes: "id > 0"}
+"""
+
+
+def test_domain_indexes_need_their_index_types(source: OracleScratch, tmp_path: Path) -> None:
+    source.execute("CREATE TABLE notes (id NUMBER PRIMARY KEY, body VARCHAR2(100))")
+    source.execute("INSERT INTO notes VALUES (1, 'hello world')")
+    source.execute("CREATE INDEX ix_notes_body ON notes (body) INDEXTYPE IS CTXSYS.CONTEXT")
+    with OracleEngine().connect(source.connection) as session:
+        catalog = session.catalog()
+    assert [str(r) for r in catalog.requirements] == ["option CTXSYS.CONTEXT"]
+    assert "option CTXSYS.CONTEXT" in {
+        str(r) for r in working_databases(tmp_path / "scratch").available()
+    }
+    for omit in ([], ["CTXSYS.CONTEXT"]):
+        work = tmp_path / str(len(omit))
+        result = build(
+            source,
+            work,
+            spec=TEXT_SPEC.replace("OMIT", json.dumps(omit)),
+            stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD),
+        )
+        assert not result.failed(), result.verification
+        loaded = [
+            (info.parent / "schema.json").read_text("utf-8")
+            for info in (work / "work").rglob("database.json")
+        ]
+        assert loaded
+        assert all(("IX_NOTES_BODY" in schema) == (not omit) for schema in loaded)

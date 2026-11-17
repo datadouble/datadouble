@@ -166,6 +166,15 @@ class OracleServer:
             ((version,),) = cursor.fetchall()
         return str(version)
 
+    def index_types(self) -> tuple[str, ...]:
+        """The index types the server provides, as ``OWNER.NAME``.
+
+        A new pluggable database is a copy of the seed, so it has the root's.
+        """
+        with self.connect("CDB$ROOT") as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT owner || '.' || indextype_name FROM dba_indextypes ORDER BY 1")
+            return tuple(str(name) for (name,) in cursor.fetchall())
+
     def _root(self, *statements: str) -> None:
         with self.connect("CDB$ROOT") as connection, connection.cursor() as cursor:
             for statement in statements:

@@ -21,7 +21,8 @@ Loading runs a statement only when its table and everything it needs exist,
 so a view over an excluded table is left out rather than failing. PL/SQL
 compiles even when what it names is missing, and the schema is recompiled at
 the end. Users, grants and roles are not copied: each schema becomes a user
-without a password in the copy.
+without a password in the copy, allowed only to create tables, which domain
+indexes such as Oracle Text's do in their owner's schema.
 """
 
 from collections import defaultdict
@@ -61,6 +62,8 @@ class Statement(BaseModel):
     """The table it belongs to; it runs only if the table exists."""
     needs: tuple[str, ...] = ()
     """Tables and views (as ``OWNER.NAME``) that must exist for it to run."""
+    requires: str | None = None
+    """The index type (as ``OWNER.NAME``) of a domain index, when the schemas don't define it."""
 
 
 class Identity(BaseModel):
@@ -86,6 +89,11 @@ class Schema(BaseModel):
     def phase(self, phase: Phase) -> tuple[Statement, ...]:
         """The statements of one phase, in order."""
         return tuple(s for s in self.statements if s.phase is phase)
+
+    def without(self, omitted: frozenset[str]) -> "Schema":
+        """This schema without the indexes of the ``omitted`` index types."""
+        statements = tuple(s for s in self.statements if s.requires not in omitted)
+        return self.model_copy(update={"statements": statements})
 
 
 _TRANSFORMS = """
@@ -115,15 +123,20 @@ WHERE o.owner IN ({}) AND o.generated = 'N' AND o.object_name NOT LIKE 'BIN$%'
   AND o.object_type IN ('TYPE', 'SEQUENCE', 'TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE',
                         'PACKAGE', 'PACKAGE BODY', 'TYPE BODY', 'SYNONYM', 'TRIGGER')
   AND NOT EXISTS (SELECT 1 FROM all_tables t WHERE t.owner = o.owner
-                  AND t.table_name = o.object_name AND (t.temporary = 'Y' OR t.nested = 'YES'))
+                  AND t.table_name = o.object_name
+                  AND (t.temporary = 'Y' OR t.nested = 'YES' OR t.secondary = 'Y'))
 ORDER BY o.owner, o.object_id
 """
 
 _INDEXES = """
-SELECT i.owner, i.index_name, i.table_owner, i.table_name
+SELECT i.owner, i.index_name, i.table_owner, i.table_name,
+       CASE WHEN i.index_type = 'DOMAIN' AND i.ityp_owner NOT IN ({0})
+            THEN i.ityp_owner || '.' || i.ityp_name END
 FROM all_indexes i
-WHERE i.table_owner IN ({}) AND i.generated = 'N' AND i.index_type NOT LIKE 'IOT%'
-  AND i.index_type <> 'LOB'
+WHERE i.table_owner IN ({0}) AND i.generated = 'N' AND i.index_type NOT LIKE 'IOT%'
+  AND i.index_type <> 'LOB' AND i.secondary = 'N'
+  AND NOT EXISTS (SELECT 1 FROM all_tables t WHERE t.owner = i.table_owner
+                  AND t.table_name = i.table_name AND t.secondary = 'Y')
   AND NOT EXISTS (SELECT 1 FROM all_constraints c
                   WHERE c.owner = i.table_owner AND c.index_name = i.index_name)
 ORDER BY i.owner, i.index_name
@@ -303,7 +316,7 @@ def _script(connection: Connection, schemas: tuple[str, ...]) -> Schema:
                 )
             )
     for row in _rows(connection, _INDEXES, schemas):
-        index_owner, index_name, table_owner, table_name = (str(v) for v in row)
+        index_owner, index_name, table_owner, table_name = (str(v) for v in row[:4])
         target = TableName.of(table_owner, table_name)
         statements.append(
             Statement(
@@ -312,6 +325,7 @@ def _script(connection: Connection, schemas: tuple[str, ...]) -> Schema:
                 name=object_name(index_owner, index_name),
                 sql=_ddl(connection, "INDEX", index_name, index_owner),
                 table=target,
+                requires=None if row[4] is None else str(row[4]),
             )
         )
     statements.extend(_foreign_keys(connection, schemas))

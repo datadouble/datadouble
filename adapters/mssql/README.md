@@ -16,3 +16,10 @@ source:
     url: {env: SHOP_MSSQL_URL}   # mssql://user:password@host:1433/database, by reference
     accept_eula: true            # you accept the SQL Server licence for working databases
 ```
+
+## Requirements
+
+The adapter reports none. The add-ons a SQL Server database could need in its
+copies are CLR assemblies and Full-Text Search, which Microsoft's Linux image
+leaves out, and the adapter refuses the tables that use them (columns of a CLR
+type, full-text indexes) as not supported yet. Exclude those tables to build.
