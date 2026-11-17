@@ -10,7 +10,9 @@
 #   run.sh refusal     check this hosted machine is refused even when marked inside
 #
 # The generated workflows (scripts/nightly.py) run on the self-hosted runner;
-# `gh` starts them with the job's own token and follows their runs.
+# `gh` starts them and follows their runs with RUNNER_ADMIN_TOKEN, since
+# GitHub starts no workflow_run follow-on for a run the job's own token
+# started.
 set -euo pipefail
 
 network=datadouble-nightly

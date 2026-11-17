@@ -15,7 +15,7 @@ variables → Actions**.
 | `GITLAB_MIRROR_SSH_KEY` | Pushing this repository to its GitLab mirror | [GitLab](#gitlabcom) |
 | `GITLAB_RUNNER_TOKEN` | Registering the ephemeral runner for nightly GitLab tests | [GitLab](#gitlabcom) |
 | `GITLAB_TRIGGER_TOKEN` | Starting the nightly GitLab pipeline | [GitLab](#gitlabcom) |
-| `RUNNER_ADMIN_TOKEN` | Registering ephemeral self-hosted GitHub runners for nightly tests | [GitHub](#github) |
+| `RUNNER_ADMIN_TOKEN` | Registering the nightly tests' ephemeral self-hosted GitHub runner, and starting the workflows it runs | [GitHub](#github) |
 | `DATADOUBLE_NIGHTLY_DSN` | The nightly run's throwaway source database, which the nightly job starts with this DSN's password; any random password will do | `gh secret set` |
 
 Codecov, GitHub Container Registry and PyPI use OpenID Connect and need no
@@ -75,16 +75,20 @@ Create an empty public repository, `datadouble/example-pipeline`.
 
 ### Runner registration token
 
-The nightly hosted tests register ephemeral self-hosted runners, which needs a
-token that can create runner registration tokens.
+The nightly hosted tests register an ephemeral self-hosted runner, which needs
+a token that can create runner registration tokens, and starts the generated
+workflows with it. The job's own token could start build and fetch, but not
+what follows them: GitHub starts no `workflow_run` follow-on, such as promote
+after build, for a run that token started.
 
 1. **Your settings → Developer settings → Fine-grained personal access
    tokens → Generate new token.**
 2. Resource owner `datadouble`, repository access only `datadouble/datadouble`,
-   permission **Administration: read and write**, expiry one year.
+   permissions **Administration: read and write** and **Actions: read and
+   write**, expiry one year.
 3. Save it as `RUNNER_ADMIN_TOKEN`, and note the expiry date.
 
-A GitHub App with the same permission is the stronger alternative and can
+A GitHub App with the same permissions is the stronger alternative and can
 replace the token later.
 
 ### Container images
