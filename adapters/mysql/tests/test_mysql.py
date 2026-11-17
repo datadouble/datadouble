@@ -345,6 +345,21 @@ def test_plugins_the_data_needs_are_installed(source: MysqlScratch, tmp_path: Pa
             for r in working_databases(tmp_path / "scratch").available()
             if r.name == "mypluglib.so"
         ) == ("mypluglib.so",)
+        # Omitted, the plugin is not installed, and the table using it must go.
+        omitted = (
+            PLUGIN_SPEC.replace(
+                "connection: CONNECTION}", "connection: CONNECTION, omit: [mypluglib.so]}"
+            )
+            .replace('["items"]', '["items", "notes"]')
+            .replace('notes: "id > 0"', 'files: "id > 0"')
+        )
+        result = build(
+            source,
+            tmp_path / "omitted",
+            spec=omitted,
+            stages=(Stage.PLAN, Stage.EXTRACT, Stage.LOAD),
+        )
+        assert not result.failed()
     finally:
         source.execute("DROP TABLE IF EXISTS notes")
         admin("UNINSTALL PLUGIN simple_parser")

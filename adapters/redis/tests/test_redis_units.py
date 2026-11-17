@@ -52,6 +52,7 @@ from datadouble_redis.keys import (
 from datadouble_redis.server import RedisServer, Tools, default_image, start_command
 from datadouble_redis.source import (
     database_of,
+    key_row,
     namespace,
     read_records,
     server_version,
@@ -236,3 +237,7 @@ class _Silent:
 def test_a_server_must_report_its_version() -> None:
     with pytest.raises(EngineError, match="did not report its version"):
         server_version(Client(_Silent({})))
+
+
+def test_keys_gone_since_listing_have_only_their_name() -> None:
+    assert key_row("gone", "none", None) == {ColumnName("_key"): ["gone"]}

@@ -145,12 +145,12 @@ def read_rows(client: Client, keys: Sequence[tuple[bytes, str]]) -> list[tuple[s
         calls.append((command, key, *extra))
     replies = client.commands(calls)
     return [
-        (kind, _row(name, kind, reply))
+        (kind, key_row(name, kind, reply))
         for (_, name), kind, reply in zip(keys, types, replies, strict=True)
     ]
 
 
-def _row(name: str, kind: str, reply: object) -> Row:
+def key_row(name: str, kind: str, reply: object) -> Row:
     """A key's values by column, from the reply that read it."""
     row: dict[ColumnName, list[str]] = {KEY: [name]}
     match kind:
