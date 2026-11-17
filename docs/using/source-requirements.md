@@ -12,11 +12,14 @@ requirement the source uses, at the version the source runs.
 | MySQL | Storage engine and full-text parser plugins, by library | The plugin directory |
 | Redis | Modules, at the source's version | `MODULE LIST` on a server that loads the image's modules |
 | Elasticsearch, OpenSearch | Plugins, at the source's version | `elasticsearch-plugin list` or `opensearch-plugin list` |
+| Oracle | Options: the index types of domain indexes, such as Oracle Text's `CTXSYS.CONTEXT` | `DBA_INDEXTYPES` |
+| SQL Server, MongoDB | None: nothing they copy needs an add-on | |
 
-SQL Server, Oracle and MongoDB follow, and Salesforce's managed packages
-come with the Salesforce adapter (see the [v1 plan](../v1-plan.md)). Each
-adapter's README says what it reports and which images provide common
-add-ons.
+SQL Server refuses tables that would need one (CLR types, full-text
+indexes) as not supported yet, and MongoDB loads nothing into its server.
+Salesforce's managed packages come with the Salesforce adapter (see the
+[v1 plan](../v1-plan.md)). Each adapter's README says what it reports and
+which images provide common add-ons.
 
 ## What Datadouble does
 

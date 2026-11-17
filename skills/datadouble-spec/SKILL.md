@@ -39,7 +39,8 @@ the current catalog after they have.
 ## Extensions, plugins and modules
 
 The lock lists the add-ons the source uses beyond its server (its
-requirements, such as PostgreSQL extensions), each at the source's version.
+requirements: PostgreSQL extensions, MySQL plugins, Redis modules, search
+plugins, Oracle index types), each at the source's version where it has one.
 Strict mode fails the plan when one is new, removed or upgraded, and a build
 fails with `requirement_unmet` when the working image lacks one.
 

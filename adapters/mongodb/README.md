@@ -25,3 +25,9 @@ subset:
 MongoDB declares no references, so every reference is virtual; subsets use
 the keys strategy. Snapshot reads must finish within the server's
 `minSnapshotHistoryWindowInSeconds` (300 seconds by default).
+
+## Requirements
+
+The adapter reports none: MongoDB loads nothing into its server, and copies
+get the collections, their options and their ordinary indexes. Atlas Search
+and Vector Search indexes live outside the database and are not copied.

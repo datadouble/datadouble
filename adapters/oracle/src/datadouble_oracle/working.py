@@ -26,7 +26,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Column, ColumnKind, Requirement
+from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
 from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -238,7 +238,11 @@ class _Builder:
         self.present: set[str] = set()
 
     def users(self) -> None:
-        """A user without a password for each schema, owning its objects."""
+        """A user without a password for each schema, owning its objects.
+
+        Each may create tables, as domain indexes such as Oracle Text's do in
+        their owner's schema when they are created.
+        """
         for owner in self.schema.schemas:
             _execute(
                 self.connection,
@@ -248,6 +252,11 @@ class _Builder:
                     quote(owner),
                     quote("DATADOUBLE_DATA"),
                 ),
+            )
+            _execute(
+                self.connection,
+                f"creating schema {owner}",
+                compose("GRANT CREATE TABLE TO {}", quote(owner)),
             )
 
     def run(self, phase: Phase, tables: frozenset[TableName] | None = None) -> None:
@@ -354,22 +363,30 @@ class OracleWorking:
         self.tools = tools
         self.scratch = scratch
         self._version: str | None = None
+        self._index_types: tuple[str, ...] | None = None
 
-    def server_version(self) -> str:
-        """The version of the image's server, which images are built for."""
-        if self._version is None:
+    def _probe(self) -> tuple[str, tuple[str, ...]]:
+        """The image's version and index types, from one throwaway server."""
+        if self._version is None or self._index_types is None:
             directory = self.scratch / ".version"
             directory.mkdir(parents=True, exist_ok=True)
             try:
                 with OracleServer(self.tools, directory, self.scratch).running() as server:
                     self._version = server.version()
+                    self._index_types = server.index_types()
             finally:
                 shutil.rmtree(directory, ignore_errors=True)
-        return self._version
+        return self._version, self._index_types
+
+    def server_version(self) -> str:
+        """The version of the image's server, which images are built for."""
+        return self._version if self._version is not None else self._probe()[0]
 
     def available(self) -> tuple[Requirement, ...]:
-        """Nothing yet: this adapter reports no requirements of its sources."""
-        return ()
+        """The image's index types, the options a source's domain indexes need."""
+        return tuple(
+            Requirement(kind=RequirementKind.OPTION, name=name) for name in self._probe()[1]
+        )
 
     def _check_version(self, server: OracleServer, source_version: str) -> str:
         version = server.version()
@@ -396,6 +413,7 @@ class OracleWorking:
         """Build the group's working database."""
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         schema = Schema.model_validate_json((extract / "schema.json").read_bytes())
+        schema = schema.without(frozenset(r.name for r in plan.omitted))
         members = frozenset(group.tables)
         server = OracleServer(self.tools, directory, directory, (extract,))
         with server.running():
@@ -423,7 +441,7 @@ class OracleWorking:
         info = DatabaseInfo(schemas=index.schemas, server_version=version, unplugged_from=unplugged)
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         # The logical image is this schema and the rows; transform copies it along.
-        shutil.copyfile(extract / "schema.json", directory / "schema.json")
+        (directory / "schema.json").write_text(schema.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod

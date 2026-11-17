@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Requirements for Oracle.** The index types of the schemas' domain
+  indexes, such as Oracle Text's `CTXSYS.CONTEXT`, are options the working
+  image must provide. Omitting one leaves its indexes out of the copies. SQL
+  Server and MongoDB report none, as their READMEs explain.
 - **Requirements for MySQL, Redis, Elasticsearch and OpenSearch.** MySQL
   reports storage engine and full-text parser plugins and installs them in
   working servers; Redis reports modules; Elasticsearch and OpenSearch

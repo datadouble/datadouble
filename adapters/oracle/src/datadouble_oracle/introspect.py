@@ -17,7 +17,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
+from datadouble.catalog import (
+    Catalog,
+    Column,
+    ColumnKind,
+    ForeignKey,
+    Requirement,
+    RequirementKind,
+    Table,
+)
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble_oracle.driver import Connection, Cursor, Value
 
@@ -25,8 +33,7 @@ ENGINE = EngineName("oracle")
 
 _TABLES = """
 SELECT t.owner, t.table_name,
-       CASE WHEN t.iot_type = 'IOT_OVERFLOW' OR t.nested = 'YES' OR t.secondary = 'Y'
-            THEN 1 ELSE 0 END,
+       CASE WHEN t.iot_type = 'IOT_OVERFLOW' OR t.nested = 'YES' THEN 1 ELSE 0 END,
        CASE WHEN EXISTS (SELECT 1 FROM all_external_tables e
                          WHERE e.owner = t.owner AND e.table_name = t.table_name)
             THEN 1 ELSE 0 END,
@@ -36,6 +43,8 @@ SELECT t.owner, t.table_name,
             THEN 1 ELSE 0 END
 FROM all_tables t
 WHERE t.owner IN ({}) AND t.temporary = 'N' AND t.dropped = 'NO'
+  -- A domain index's own tables (Oracle Text's DR$...$), which it remakes.
+  AND t.secondary = 'N'
 ORDER BY t.owner, t.table_name
 """
 
@@ -237,6 +246,28 @@ def type_text(declared: Declared) -> str:
     return f"RAW({declared.length})" if data_type == "RAW" else data_type
 
 
+_INDEX_TYPES = """
+SELECT DISTINCT i.ityp_owner, i.ityp_name
+FROM all_indexes i
+WHERE i.table_owner IN ({0}) AND i.index_type = 'DOMAIN' AND i.ityp_owner NOT IN ({0})
+ORDER BY i.ityp_owner, i.ityp_name
+"""
+
+
+def index_types(cursor: Cursor, schemas: tuple[str, ...]) -> tuple[Requirement, ...]:
+    """The domain index types, such as Oracle Text's ``CTXSYS.CONTEXT``, the schemas' indexes use.
+
+    Each is an option the working image must provide; index types the schemas
+    define themselves come with them.
+    """
+    params: dict[str, Value] = {f"s{i}": schema for i, schema in enumerate(schemas)}
+    cursor.execute(_INDEX_TYPES.format(binds(len(schemas))), params)
+    return tuple(
+        Requirement(kind=RequirementKind.OPTION, name=f"{owner}.{name}")
+        for owner, name in cursor.fetchall()
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Physical:
     """What the adapter needs beyond the engine-neutral catalog."""
@@ -263,7 +294,7 @@ class Physical:
 def table_problem(flags: tuple[object, ...]) -> str | None:
     """Why a table with these flags (from ``_TABLES``) cannot be copied, if it cannot."""
     names = (
-        "is a nested table, an overflow segment or a secondary object",
+        "is a nested table or an overflow segment",
         "is an external table",
         "is a partitioned table",
         "holds a materialized view",
@@ -322,6 +353,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
             if row[12] == "YES":
                 identity[name] = column_name
         primary, references = keys(cursor, schemas)
+        requirements = index_types(cursor, schemas)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -342,6 +374,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
             )
             for name in tables
         ),
+        requirements=requirements,
     )
     physical = Physical(
         types=dict(types),
