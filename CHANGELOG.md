@@ -213,6 +213,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modules, so a source with JSON, search, time series or Bloom keys could
   not load. They now load every module in the image's module directory, and
   a key of a module's type gets a column strict mode asks about.
+- OpenSearch's query insights plugin writes a `top_queries-*` index each
+  day, which the catalog counted as a consumer's index, so strict mode and
+  the point-in-time check failed builds that crossed one being made. The
+  catalog now leaves out indices whose mapping marks them as the plugin's.
 
 - A catalog lock Datadouble could not write ended with a generic file error;
   the error now names the lock file.

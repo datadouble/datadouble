@@ -143,6 +143,20 @@ def is_open(mappings: Mapping[str, object]) -> bool:
     return any(is_open(as_document(field) or {}) for field in properties.values())
 
 
+_SERVER_MARKERS = ("query_insights_feature_space",)
+"""``_meta`` keys of indices a server plugin writes for itself."""
+
+
+def server_owned(mappings: Mapping[str, object]) -> bool:
+    """Whether a plugin made the index for itself, such as OpenSearch's ``top_queries-*``.
+
+    Query insights writes one a day with no leading dot and without hiding it,
+    so only its mapping's ``_meta`` tells it from consumers' indices.
+    """
+    meta = as_document(mappings.get("_meta")) or {}
+    return any(marker in meta for marker in _SERVER_MARKERS)
+
+
 def _source_kept(index: str, mappings: Mapping[str, object]) -> None:
     source = as_document(mappings.get("_source")) or {}
     if source.get("enabled") is False or source.get("includes") or source.get("excludes"):
@@ -225,6 +239,8 @@ def introspect(client: Client, layout: Layout) -> Catalog:
         what = f"reading the mapping of {index}"
         reply = client.request("GET", path(index, "_mapping"), what)
         mappings = document(document(reply.get(index), what).get("mappings") or {}, what)
+        if server_owned(mappings):
+            continue
         sampled: list[object] = []
         if is_open(mappings):
             found = client.request(

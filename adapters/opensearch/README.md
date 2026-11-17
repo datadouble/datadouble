@@ -29,3 +29,7 @@ listed in the image with `opensearch-plugin list`. The official image
 bundles the project's plugins (security, k-NN, alerting and the rest) at the
 source version's own release, so a source running the same bundle needs
 nothing more; any others need an image built `FROM` the official one.
+
+The catalog leaves out the indices plugins write for themselves: those
+starting with a dot, and query insights' daily `top_queries-*` indices,
+which its mapping's `_meta` marks.

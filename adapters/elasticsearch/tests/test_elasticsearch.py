@@ -351,6 +351,15 @@ def test_source_failures(source: Scratch, monkeypatch: pytest.MonkeyPatch, tmp_p
     assert tmp_path.exists()
 
 
+def test_plugins_own_indices_are_left_out(source: Scratch) -> None:
+    # OpenSearch's query insights writes top_queries-* indices like this one.
+    source.client.request("DELETE", path("gone"), "deleting")
+    meta: JsonValue = {"_meta": {"query_insights_feature_space": "top_n_queries"}}
+    source.client.request("PUT", path("gone"), "creating", body={"mappings": meta})
+    catalog = ElasticSource(source.client, Layout(indices=("gone", "parent"), sample=10)).catalog()
+    assert [t.name for t in catalog.tables] == [table("parent")]
+
+
 def test_large_indices_load_in_batches(source: Scratch) -> None:
     lines: list[Document] = [{"_id": str(n), "_source": {"n": n}} for n in range(1200)]
     assert put(source.client, "gone", lines, "loading") == 1200
