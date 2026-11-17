@@ -207,3 +207,41 @@ def test_default_runner_and_root(monkeypatch: pytest.MonkeyPatch, repo: Path) ->
     with pytest.raises(subprocess.CalledProcessError):
         make_tag.run("false")
     assert make_tag.main(["tag", "9.9.9"], runner=FakeRunner()) == 1
+
+
+def test_prepare_sets_the_plugin_and_chart_versions(repo: Path) -> None:
+    (repo / ".claude-plugin").mkdir()
+    (repo / ".claude-plugin" / "plugin.json").write_text(
+        '{"name": "datadouble", "version": "0.1.0"}\n', encoding="utf-8"
+    )
+    chart = repo / "ci" / "kubernetes" / "chart"
+    chart.mkdir(parents=True)
+    (chart / "Chart.yaml").write_text(
+        "name: datadouble\nversion: 0.1.0\nappVersion: 0.1.0\n", encoding="utf-8"
+    )
+    (chart / "values.yaml").write_text(
+        "image: ghcr.io/datadouble/datadouble:v0.1.0\nname: x\n", encoding="utf-8"
+    )
+    runner = FakeRunner()
+
+    assert make_tag.main(["prepare", "0.2.0"], root=repo, runner=runner, day=DAY) == 0
+    assert make_tag.plugin_version(repo) == "0.2.0"
+    assert (chart / "Chart.yaml").read_text(encoding="utf-8") == (
+        "name: datadouble\nversion: 0.2.0\nappVersion: 0.2.0\n"
+    )
+    assert (
+        (chart / "values.yaml")
+        .read_text(encoding="utf-8")
+        .startswith("image: ghcr.io/datadouble/datadouble:v0.2.0\n")
+    )
+    assert ("uv", "run", "python", "scripts/nightly.py", "write") in runner.calls
+    assert make_tag.main(["tag", "0.2.0"], root=repo, runner=FakeRunner()) == 0
+
+
+def test_tag_refuses_an_unreleased_plugin(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    make_tag.main(["prepare", "0.2.0"], root=repo, runner=FakeRunner(), day=DAY)
+    (repo / ".claude-plugin").mkdir()
+    (repo / ".claude-plugin" / "plugin.json").write_text('{"version": "0.1.0"}', "utf-8")
+
+    assert make_tag.main(["tag", "0.2.0"], root=repo, runner=FakeRunner()) == 1
+    assert "plugin.json is at 0.1.0, not 0.2.0" in capsys.readouterr().err

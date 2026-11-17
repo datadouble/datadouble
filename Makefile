@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs test-ci docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs test-ci validate-plugin test-skills docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -115,6 +115,22 @@ test-ci:
 	DATADOUBLE_TEST_CI_IMAGE=$(CI_IMAGE) DATADOUBLE_TEST_CI_WORK=$(CI_WORK) \
 		$(if $(COVERAGE_FILE),COVERAGE_FILE=$(COVERAGE_FILE)) \
 		uv run pytest -p no:cacheprovider -m ci_conformance ci/$(SYSTEM)/tests $(PYTEST_ARGS)
+
+# The Claude Code plugin: its manifests and skills, and the skill scenarios
+# (evals/), run by `claude plugin eval` against a copy of only the plugin's
+# files, since the scenarios' sandbox reads the whole plugin directory. The
+# scenarios run Claude on your own credential, and `datadouble` from this
+# checkout; EVAL_ARGS adds options, such as `--case build-github --runs 1`.
+validate-plugin:
+	claude plugin validate . --strict
+
+test-skills:
+	copy=$$(mktemp -d /tmp/datadouble-plugin.XXXXXX); \
+	cp -R .claude-plugin skills evals README.md LICENSE "$$copy"/ && \
+	PATH="$(CURDIR)/.venv/bin:$$PATH" claude plugin eval "$$copy" --scaffold \
+		--allow-tools Bash --trust-plugin --no-publish --ablation none \
+		--output-dir $(CURDIR)/.reports/skills $(EVAL_ARGS); \
+	status=$$?; rm -rf "$$copy"; exit $$status
 
 docs:
 	uv run --group docs zensical build --strict

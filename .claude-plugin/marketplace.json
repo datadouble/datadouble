@@ -1,0 +1,12 @@
+{
+  "name": "datadouble",
+  "owner": {"name": "Tight Line LLC", "url": "https://www.tightlinesoftware.com"},
+  "metadata": {"description": "Datadouble's agent skills, released with Datadouble itself."},
+  "plugins": [
+    {
+      "name": "datadouble",
+      "source": "./",
+      "description": "Set up Datadouble pipelines and their jobs in a team's own CI/CD system."
+    }
+  ]
+}

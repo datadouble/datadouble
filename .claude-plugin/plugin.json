@@ -1,0 +1,19 @@
+{
+  "name": "datadouble",
+  "version": "0.0.0",
+  "description": "Set up Datadouble pipelines: specs, and the jobs that build, promote, fetch, copy, release, prune and roll back golden images, in a team's own CI/CD system.",
+  "author": {
+    "name": "Tight Line LLC",
+    "url": "https://www.tightlinesoftware.com"
+  },
+  "homepage": "https://datadouble.tightlinesoftware.com/",
+  "repository": "https://github.com/datadouble/datadouble",
+  "license": "MIT",
+  "keywords": [
+    "datadouble",
+    "test data",
+    "anonymization",
+    "ci",
+    "golden images"
+  ]
+}

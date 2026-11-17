@@ -41,6 +41,9 @@ plan → extract → load → transform → package → verify → store → pro
 - **JSON in, JSON out** is the primary interface; the CLI is a thin layer over it.
 - **Jailer extraction models (`.jm`) are supported natively**, so subsets can be
   designed in Jailer's GUI and run repeatedly by Datadouble.
+- **Agent skills** that set up a pipeline in a team's own repositories, as a
+  Claude Code plugin: `/plugin install datadouble --marketplace
+  datadouble/datadouble`.
 - **Ready-made CI/CD integrations** for GitHub Actions, GitLab CI, Jenkins and
   Argo CD. Golden images are built inside production, and only a verified,
   anonymized image ever leaves it.

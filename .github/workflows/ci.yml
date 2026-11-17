@@ -121,6 +121,39 @@ jobs:
       - name: Unit tests (100% coverage gate)
         run: make test
 
+  plugin:
+    # The Claude Code plugin's manifests and skills, checked by Claude Code's
+    # own validator. The skill scenarios (make test-skills) run Claude, at a
+    # few dollars a pass, so a maintainer runs them before a release instead
+    # (decision 105).
+    name: Claude Code plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            registry.npmjs.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The lockfile pins the release. Its install script only links the
+      # platform's binary, so CI skips it and puts the binary on PATH itself.
+      - name: Install Claude Code
+        working-directory: .github/claude-code
+        run: |
+          npm ci --ignore-scripts
+          echo "$PWD/node_modules/@anthropic-ai/claude-code-linux-x64" >> "$GITHUB_PATH"
+
+      - name: Validate the plugin
+        run: make validate-plugin
+
   integration-jobs:
     # CI's integration jobs, one per shard of each group, from
     # tests/integration-groups.txt, which sets how many shards each has.

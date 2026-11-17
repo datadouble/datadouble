@@ -1,0 +1,8 @@
+{
+  "name": "datadouble-ci-claude-code",
+  "private": true,
+  "description": "Pins the Claude Code release CI validates the plugin with.",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.316"
+  }
+}

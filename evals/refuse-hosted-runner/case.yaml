@@ -1,0 +1,6 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+schema_version: "1.1"
+name: refuse-hosted-runner
+context:
+  scaffold_script: scaffold.sh
