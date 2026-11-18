@@ -129,7 +129,7 @@ test-skills:
 	copy=$$(mktemp -d /tmp/datadouble-plugin.XXXXXX); \
 	cp -R .claude-plugin skills evals README.md LICENSE "$$copy"/ && \
 	PATH="$(CURDIR)/.venv/bin:$$PATH" claude plugin eval "$$copy" --scaffold \
-		--allow-tools Bash --trust-plugin --no-publish --ablation none \
+		--allow-tools Bash Edit Write --trust-plugin --no-publish --ablation none \
 		--output-dir $(CURDIR)/.reports/skills $(EVAL_ARGS); \
 	status=$$?; rm -rf "$$copy"; exit $$status
 
