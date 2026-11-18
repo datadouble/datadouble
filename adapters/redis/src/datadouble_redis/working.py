@@ -178,6 +178,9 @@ class RedisWorking:
             self._version = self.tools.version(self.scratch)
         return self._version
 
+    def close(self) -> None:
+        """Nothing to stop: each call starts and stops its own servers."""
+
     def available(self) -> tuple[Requirement, ...]:
         """The modules a server in the image loads, from a throwaway server."""
         directory = self.scratch / "available"

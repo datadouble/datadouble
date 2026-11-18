@@ -19,7 +19,7 @@ import sys
 import tarfile
 import time
 from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -174,7 +174,7 @@ class _Builds:
             _Built.model_validate_json(manifest).working_server_version,
         )
         found: dict[str, set[str]] = {}
-        with working.restore(image, archive.format, scratch / "db") as restored:
+        with closing(working), working.restore(image, archive.format, scratch / "db") as restored:
             tables = sorted({column.table for column in columns})
             for table, rows in restored.counts(tables).items():
                 found[f"{table} rows"] = {str(rows)}
@@ -254,8 +254,8 @@ class EngineConformance:
             image=spec.source.image,
             server=spec.source.server,
         )
-        working = harness.engine.working(tmp_path / "scratch", tooling, version)
-        assert unmet(catalog.requirements, working.available()) == ()
+        with closing(harness.engine.working(tmp_path / "scratch", tooling, version)) as working:
+            assert unmet(catalog.requirements, working.available()) == ()
 
     def test_snapshot_is_consistent(self, harness: EngineHarness) -> None:
         """Rows committed after the snapshot opens are not seen through it.

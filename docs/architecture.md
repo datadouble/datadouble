@@ -162,7 +162,11 @@ scratch space, like the working databases.
 Working space and storage are separate concerns. Live database files are only
 ever written to scratch space suited to them (local disk or strongly consistent
 volumes). Working databases are throwaway servers the engine adapter starts there,
-one per image group. Storage adapters only handle finished, immutable artifacts.
+one per image group. An adapter may keep one server for a whole run and serve
+each stage's database on it in turn, as Oracle does, whose start takes most of
+a minute; the run closes its working databases when its builds end, even after
+a failure (decision 110). Storage adapters only handle finished, immutable
+artifacts.
 
 ### Engine software runs in the vendor's images
 

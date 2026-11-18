@@ -321,6 +321,9 @@ class ElasticWorking:
             self._version = self.tools.version(self.scratch)
         return self._version
 
+    def close(self) -> None:
+        """Nothing to stop: each call starts and stops its own servers."""
+
     def available(self) -> tuple[Requirement, ...]:
         """The plugins installed in the image."""
         return self.tools.plugins(self.scratch)

@@ -205,6 +205,9 @@ class FakeWorking:
     def available(self) -> tuple[Requirement, ...]:
         return self.engine.available
 
+    def close(self) -> None:
+        self.engine.closed += 1
+
     def load(
         self,
         plan: Plan,
@@ -291,6 +294,7 @@ class FakeEngine:
     hooks: list[str] = field(default_factory=list[str])
     snapshots: int = 0
     transforms: int = 0
+    closed: int = 0
     owner_: str = field(default_factory=identity)
     available: tuple[Requirement, ...] = ()
     name_: EngineName = _FAKE

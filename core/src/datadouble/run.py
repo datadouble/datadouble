@@ -756,12 +756,15 @@ class Run:
             files_planned = files.plan() if files is not None else None
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
-                builds: list[tuple[Run, _Context]] = [(self, self.extracted(planned))]
-                if files is not None and files_planned is not None:
-                    builds.append((files, files.extracted(files_planned)))
-                for run, context in builds:
-                    for group in context.planned.groups:
-                        run.build(context, group, outputs)
+                with ExitStack() as opened:
+                    builds: list[tuple[Run, _Context]] = [(self, self.extracted(planned))]
+                    opened.callback(builds[0][1].working.close)
+                    if files is not None and files_planned is not None:
+                        builds.append((files, files.extracted(files_planned)))
+                        opened.callback(builds[1][1].working.close)
+                    for run, context in builds:
+                        for group in context.planned.groups:
+                            run.build(context, group, outputs)
                 if self.resumed:
                     # The interrupted attempt may have started a server after this one
                     # released its stage; every server of this run has stopped by now.
@@ -800,7 +803,11 @@ class Run:
         checked = bool(planned.catalog.requirements) and self._wanted(Stage.EXTRACT)
         if checked:
             version = self.session().server_version()
-            _require(self.engine.working(scratch, self.tooling(), version), planned)
+            checking = self.engine.working(scratch, self.tooling(), version)
+            try:
+                _require(checking, planned)
+            finally:
+                checking.close()
         extracted = self.extract(planned)
         working = self.engine.working(scratch, self.tooling(), extracted.server_version)
         if planned.catalog.requirements and not checked:

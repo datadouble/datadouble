@@ -187,6 +187,14 @@ class WorkingDatabases(Protocol):
         """
         ...
 
+    def close(self) -> None:
+        """Stop whatever the working databases kept running between calls.
+
+        A run calls it once it has finished with them, even after a failure;
+        nothing is called afterwards.
+        """
+        ...
+
     def load(
         self,
         plan: Plan,

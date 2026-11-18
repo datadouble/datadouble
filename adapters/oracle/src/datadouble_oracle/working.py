@@ -14,13 +14,19 @@ view that needs a table the database does not have is left out.
 with its triggers disabled, the rules and hooks in one transaction.
 ``package`` writes the datafiles and manifest (physical) or the schema and
 rows in extract's format (logical); ``restore`` plugs or loads them.
+
+Each of these runs on one container the working databases keep for their
+lifetime, plugging one pluggable database in and out after another, since
+starting Oracle takes most of a minute. The container mounts the scratch
+directory's parent (a run's directory), so a call whose paths lie outside it
+gets a container of its own.
 """
 
 import datetime as dt
 import shutil
 import struct
 from collections.abc import Generator, Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from itertools import batched
 from pathlib import Path
 
@@ -364,14 +370,57 @@ class OracleWorking:
         self.scratch = scratch
         self._version: str | None = None
         self._index_types: tuple[str, ...] | None = None
+        self._shared: OracleServer | None = None
+        self._running = ExitStack()
+
+    def close(self) -> None:
+        """Stop the shared container, if one is running."""
+        self._shared = None
+        self._running.close()
+
+    def _shared_server(self) -> OracleServer:
+        if self._shared is None:
+            owner = self.scratch / "server"
+            # A killed run's container would hold on to its files.
+            self.tools.runtime.release(owner)
+            server = OracleServer(self.tools, owner, owner, (self.scratch.parent,))
+            self._running.enter_context(server.running())
+            self._shared = server
+        return self._shared
+
+    @contextmanager
+    def _serving(
+        self, directory: Path, owner: Path, mounts: tuple[Path, ...] = ()
+    ) -> Generator[OracleServer]:
+        """A server for the pluggable database in ``directory``, for the block.
+
+        It is the shared one when that can see every path, which leaves no
+        database plugged in afterwards; after a failure it is stopped, so the
+        next block starts on a fresh one.
+        """
+        root = self.scratch.parent.resolve()
+        if not all(path.resolve().is_relative_to(root) for path in (directory, *mounts)):
+            with OracleServer(self.tools, directory, owner, mounts).running() as own:
+                yield own
+            return
+        server = self._shared_server()
+        server.directory = directory
+        server.data.mkdir(parents=True, exist_ok=True)
+        try:
+            yield server
+            server.drop()
+        except BaseException as error:
+            self.close()
+            if isinstance(error, Error):
+                raise database_error(error, "using the working database") from None
+            raise
 
     def _probe(self) -> tuple[str, tuple[str, ...]]:
-        """The image's version and index types, from one throwaway server."""
+        """The image's version and index types."""
         if self._version is None or self._index_types is None:
             directory = self.scratch / ".version"
-            directory.mkdir(parents=True, exist_ok=True)
             try:
-                with OracleServer(self.tools, directory, self.scratch).running() as server:
+                with self._serving(directory, self.scratch) as server:
                     self._version = server.version()
                     self._index_types = server.index_types()
             finally:
@@ -415,8 +464,7 @@ class OracleWorking:
         schema = Schema.model_validate_json((extract / "schema.json").read_bytes())
         schema = schema.without(frozenset(r.name for r in plan.omitted))
         members = frozenset(group.tables)
-        server = OracleServer(self.tools, directory, directory, (extract,))
-        with server.running():
+        with self._serving(directory, directory, (extract,)) as server:
             version = self._check_version(server, index.server_version)
             server.create()
             with server.connect() as connection:
@@ -506,8 +554,7 @@ class OracleWorking:
         directory.parent.mkdir(parents=True, exist_ok=True)
         _copy_tree(source, directory)
         info = DatabaseInfo.model_validate_json((directory / _INFO).read_bytes())
-        server = OracleServer(self.tools, directory, directory)
-        with server.running():
+        with self._serving(directory, directory) as server:
             server.plug(info.unplugged_from)
             with server.connect() as connection:
                 use_schemas(connection, info.schemas)
@@ -573,9 +620,8 @@ class OracleWorking:
         scratch = directory.parent / f".{directory.name}-instance"
         scratch.mkdir(parents=True, exist_ok=True)
         _copy_tree(source / DATA, scratch / DATA)
-        server = OracleServer(self.tools, scratch, directory, (directory,))
         try:
-            with server.running():
+            with self._serving(scratch, directory, (directory,)) as server:
                 server.plug(info.unplugged_from)
                 with server.connect() as connection:
                     self._write_logical(connection, info, source, directory)
@@ -611,10 +657,9 @@ class OracleWorking:
         """Bring an image up in a scratch container for checks."""
         info = DatabaseInfo.model_validate_json((image / _INFO).read_bytes())
         directory.mkdir(parents=True, exist_ok=True)
-        server = OracleServer(self.tools, directory, directory, (image,))
         if image_format is ImageFormat.PHYSICAL:
             _copy_tree(image / DATA, directory / DATA)
-        with server.running():
+        with self._serving(directory, directory, (image,)) as server:
             if image_format is ImageFormat.PHYSICAL:
                 server.plug(info.unplugged_from)
             else:

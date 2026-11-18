@@ -5,7 +5,8 @@
 
 import datetime as dt
 import struct
-from contextlib import AbstractContextManager
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from datadouble.catalog import Column, ColumnKind
 from datadouble.engine import EngineError, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.registry import installed
-from datadouble.runtime import Completed, Container, Server
+from datadouble.runtime import Completed, Container, Endpoint, Server
 from datadouble.settings import SettingsError
 from datadouble.subset import (
     AllOf,
@@ -28,7 +29,7 @@ from datadouble.subset import (
     ValuesIn,
 )
 from datadouble_oracle import OracleEngine, parse_url
-from datadouble_oracle.driver import read
+from datadouble_oracle.driver import Error, read
 from datadouble_oracle.errors import redact
 from datadouble_oracle.introspect import (
     Declared,
@@ -230,6 +231,64 @@ class IdleRuntime:
 
     def release(self, owner: Path) -> None:
         raise NotImplementedError
+
+
+class IdleServer:
+    """A server that is never asked to run anything."""
+
+    endpoint = Endpoint("localhost", 1521)
+
+    def execute(self, command: Sequence[str], env: Mapping[str, str] | None = None) -> Completed:
+        raise NotImplementedError
+
+
+@dataclass
+class ServingRuntime(IdleRuntime):
+    """A runtime that only starts and stops servers, noting whose."""
+
+    served: list[Path]
+
+    @contextmanager
+    def _serve(self, container: Container) -> Generator[Server]:
+        self.served.append(container.owner)
+        yield IdleServer()
+
+    def serve(self, container: Container) -> AbstractContextManager[Server]:
+        return self._serve(container)
+
+    def release(self, owner: Path) -> None:
+        pass
+
+
+def test_containers_for_paths_outside_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def version(_server: OracleServer) -> str:
+        return "23.26.3.0.0"
+
+    def index_types(_server: OracleServer) -> tuple[str, ...]:
+        return ()
+
+    monkeypatch.setattr(OracleServer, "version", version)
+    monkeypatch.setattr(OracleServer, "index_types", index_types)
+    runtime = ServingRuntime([])
+    # The scratch directory resolves outside the run's, so the probe gets its own container.
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run" / "scratch").symlink_to(tmp_path / "elsewhere")
+    working = OracleWorking(Tools(runtime, "image"), tmp_path / "run" / "scratch")
+    assert working.server_version() == "23.26.3.0.0"
+    assert runtime.served == [tmp_path / "run" / "scratch"]
+    working.close()
+
+    def failing(_server: OracleServer) -> str:
+        raise Error(1)
+
+    monkeypatch.setattr(OracleServer, "version", failing)
+    shared = OracleWorking(Tools(runtime, "image"), tmp_path / "run" / "other")
+    with pytest.raises(EngineError, match="using the working database failed"):
+        shared.server_version()
+    assert runtime.served[1:] == [tmp_path / "run" / "other" / "server"]
 
 
 def test_engine(tmp_path: Path) -> None:
