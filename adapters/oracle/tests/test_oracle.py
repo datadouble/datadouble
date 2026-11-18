@@ -124,8 +124,21 @@ def tooling(image: str | None = None) -> Tooling:
     return Tooling(runtime=installed().runtime(kind, settings), image=image)
 
 
-def working_databases(scratch_dir: Path) -> WorkingDatabases:
-    return OracleEngine().working(scratch_dir, tooling(), VERSION)
+_OPENED: list[WorkingDatabases] = []
+
+
+def working_databases(scratch_dir: Path, image: str | None = None) -> WorkingDatabases:
+    """Working databases a test uses, closed after it: their server outlives a call."""
+    working = OracleEngine().working(scratch_dir, tooling(image), VERSION)
+    _OPENED.append(working)
+    return working
+
+
+@pytest.fixture(autouse=True)
+def _close_working_databases() -> Generator[None]:
+    yield
+    while _OPENED:
+        _OPENED.pop().close()
 
 
 def build(
@@ -388,7 +401,7 @@ def test_working_images_must_match_the_source(source: OracleScratch, tmp_path: P
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
     index = work / "extract" / "data" / "index.json"
     index.write_text(index.read_text("utf-8").replace(VERSION, "23.26.0.0.0"), "utf-8")
-    working = OracleEngine().working(tmp_path / "w", tooling(default_image(VERSION)), VERSION)
+    working = working_databases(tmp_path / "w", default_image(VERSION))
     with pytest.raises(EngineError, match=r"the source runs 23\.26\.0\.0\.0"):
         working.load(plan, plan.groups[0], work / "extract" / "data", tmp_path / "db", ())
     assert working.server_version() == VERSION

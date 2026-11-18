@@ -102,6 +102,9 @@ class FilesWorking:
         """The tree layout's version; there is no server."""
         return VERSION
 
+    def close(self) -> None:
+        """Nothing to stop: it runs no servers."""
+
     def available(self) -> tuple[Requirement, ...]:
         """Nothing yet: this adapter reports no requirements of its sources."""
         return ()

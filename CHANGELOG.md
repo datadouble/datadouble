@@ -208,6 +208,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Oracle builds run every stage on one Oracle container, plugging each
+  stage's database in and out, instead of starting a container per stage;
+  each start takes about 35 seconds before any work.
+- Engine adapters' working databases have a `close()`, which a run calls
+  when its builds end, even after a failure. An adapter that keeps nothing
+  running between calls implements it as doing nothing.
 - On-demand `replicate` makes copies up to the spec's `size` for an owner,
   rather than `size` more each time, so repeating a request makes none.
 

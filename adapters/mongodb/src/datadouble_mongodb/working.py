@@ -157,6 +157,9 @@ class MongoWorking:
             self._version = self.tools.version(self.scratch)
         return self._version
 
+    def close(self) -> None:
+        """Nothing to stop: each call starts and stops its own servers."""
+
     def available(self) -> tuple[Requirement, ...]:
         """Nothing yet: this adapter reports no requirements of its sources."""
         return ()

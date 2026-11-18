@@ -216,9 +216,12 @@ def test_resume_after_a_failure(
     engine.fail_load = True
     with pytest.raises(EngineError, match="told to fail"):
         run(tmp_path, registry)
+    # A failed build still closes its working databases.
+    assert engine.closed == 1
     (generation,) = [p.name for p in (tmp_path / "work" / "shop").iterdir()]
     engine.fail_load = False
     resumed = run(tmp_path, registry, resume=Generation(generation))
+    assert engine.closed == 2
     assert resumed.generation == generation
     assert statuses(resumed)["plan"] == "reused"
     assert statuses(resumed)["extract"] == "reused"
@@ -573,8 +576,9 @@ def test_the_image_must_provide_the_source_requirements(
     with pytest.raises(RequirementError) as missing:
         run(tmp_path / "a", registry, lock=engine.catalog)
     assert missing.value.problems == ("extension vector is not in the working image",)
-    # The image is checked before the snapshot opens.
+    # The image is checked before the snapshot opens, by working databases it closes.
     assert engine.snapshots == 0
+    assert engine.closed == 1
     engine.available = (vector.model_copy(update={"version": "0.8.7"}),)
     with pytest.raises(RequirementError) as other:
         run(tmp_path / "b", registry, lock=engine.catalog)

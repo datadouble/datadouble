@@ -1,16 +1,17 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-"""Throwaway Oracle containers holding one pluggable database each.
+"""Throwaway Oracle containers holding one pluggable database at a time.
 
 A working database is a pluggable database (PDB) whose datafiles live in the
-stage directory's ``data/``. Each start runs a new container from Oracle's
-Database Free image, whose own container database (CDB) lives and dies inside
-it, and plugs the PDB in from its manifest (``pdb.xml``); before the
-container stops the PDB is unplugged again, leaving consistent datafiles and
-a manifest naming where they were. An image is just those files: no CDB, no
-other users' passwords. ``SYS`` gets a password generated for that start, and
-Datadouble connects with it over the network.
+stage directory's ``data/``. A container runs Oracle's Database Free image,
+whose own container database (CDB) lives and dies inside it, and plugs a PDB
+in from its manifest (``pdb.xml``); before the next is plugged in, or the
+container stops, the PDB is unplugged again, leaving consistent datafiles and
+a manifest naming where they were, or dropped with its files kept. An image
+is just those files: no CDB, no other users' passwords. ``SYS`` gets a
+password generated for each start, and Datadouble connects with it over the
+network.
 
 The image runs Oracle as its ``oracle`` user, uid and gid 54321, which is the
 user Datadouble runs as for Oracle (decision 86).
@@ -92,7 +93,11 @@ class Tools:
 
 
 class OracleServer:
-    """One container serving the pluggable database in ``directory``."""
+    """One container serving the pluggable database in ``directory``.
+
+    A shared container serves one directory after another: ``directory`` is
+    set before each.
+    """
 
     def __init__(
         self, tools: Tools, directory: Path, owner: Path, mounts: tuple[Path, ...] = ()
@@ -222,6 +227,14 @@ class OracleServer:
             ),
             compose("ALTER PLUGGABLE DATABASE {} OPEN", quote(PDB)),
         )
+
+    def drop(self) -> None:
+        """Unplug the pluggable database, if one is still plugged in, keeping its files."""
+        with self.connect("CDB$ROOT") as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM v$pdbs WHERE name = :name", {"name": PDB})
+            ((count,),) = cursor.fetchall()
+        if int(str(count)):
+            self.unplug()
 
     def unplug(self) -> str:
         """Unplug the database into ``data/``, leaving consistent files; return where it was."""
