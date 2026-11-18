@@ -128,7 +128,9 @@ the agent actually did:
       extension, the agent proposes an image that has it and leaves
       `source.omit` to the person.
 - **Runs** through Claude Code's plugin evaluation (`claude plugin eval`), with
-  `make test-skills`, against a copy of the plugin's files. The scenarios are
+  `make test-skills`, against a copy of the plugin's files and a copy of
+  `datadouble` installed with its own Python in a temporary directory, since
+  the evaluation's sandbox hides the home directory. The scenarios are
   outside the standard CI pipeline because of their cost: each runs Claude
   several times, a few dollars a pass. A maintainer runs them before a release
   and after changing skills; CI only validates the plugin with `claude plugin

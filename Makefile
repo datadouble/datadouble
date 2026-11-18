@@ -121,17 +121,22 @@ test-ci:
 # (evals/), run by `claude plugin eval` against a copy of only the plugin's
 # files, since the scenarios' sandbox reads the whole plugin directory. The
 # scenarios run Claude on your own credential, and `datadouble` from this
-# checkout; EVAL_ARGS adds options, such as `--case build-github --runs 1`.
+# checkout, installed with its own Python in a temporary directory: the
+# sandbox hides the home directory, where uv keeps .venv's Python. EVAL_ARGS
+# adds options, such as `--case build-github --runs 1`.
 validate-plugin:
 	claude plugin validate . --strict
 
 test-skills:
 	copy=$$(mktemp -d /tmp/datadouble-plugin.XXXXXX); \
+	env=$$(mktemp -d /tmp/datadouble-eval-env.XXXXXX); \
 	cp -R .claude-plugin skills evals README.md LICENSE "$$copy"/ && \
-	PATH="$(CURDIR)/.venv/bin:$$PATH" claude plugin eval "$$copy" --scaffold \
+	UV_PYTHON_INSTALL_DIR="$$env/python" UV_PROJECT_ENVIRONMENT="$$env/venv" \
+		uv sync --frozen --all-packages --no-dev --no-editable --managed-python --quiet && \
+	PATH="$$env/venv/bin:$$PATH" claude plugin eval "$$copy" --scaffold \
 		--allow-tools Bash Edit Write --trust-plugin --no-publish --ablation none \
 		--output-dir $(CURDIR)/.reports/skills $(EVAL_ARGS); \
-	status=$$?; rm -rf "$$copy"; exit $$status
+	status=$$?; rm -rf "$$copy" "$$env"; exit $$status
 
 docs:
 	uv run --group docs zensical build --strict
