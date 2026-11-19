@@ -123,15 +123,17 @@ test-ci:
 # scenarios run Claude on your own credential, and `datadouble` from this
 # checkout, installed with its own Python inside the copy: the sandbox reads
 # only the copy and the directories on PATH, not the home directory, where uv
-# keeps .venv's Python. The judge model is pinned because with the default
-# model the judge failed on an expired claude.ai login, though
+# keeps .venv's Python. The copy's path is resolved first (macOS's /tmp is a
+# symlink to /private/tmp), since the sandbox matches the paths the venv's
+# scripts and links name literally. The judge model is pinned because with
+# the default model the judge failed on an expired claude.ai login, though
 # ANTHROPIC_API_KEY was set. EVAL_ARGS adds options, such as `--case
 # build-github --runs 1`.
 validate-plugin:
 	claude plugin validate . --strict
 
 test-skills:
-	copy=$$(mktemp -d /tmp/datadouble-plugin.XXXXXX); \
+	copy=$$(cd "$$(mktemp -d /tmp/datadouble-plugin.XXXXXX)" && pwd -P); \
 	cp -R .claude-plugin skills evals README.md LICENSE "$$copy"/ && \
 	UV_PYTHON_INSTALL_DIR="$$copy/.python" UV_PROJECT_ENVIRONMENT="$$copy/.venv" \
 		uv sync --frozen --all-packages --no-dev --no-editable --managed-python --quiet && \
