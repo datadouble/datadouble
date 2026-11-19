@@ -62,13 +62,19 @@ test-group:
 	@test -n "$(GROUP)" || { echo "name a group: make test-group GROUP=<$$(scripts/integration.sh groups | tr '\n' '|')>"; exit 2; }
 	@$(MAKE) --no-print-directory integration RUN_GROUPS="$(GROUP)"
 
+# A group may need no services (salesforce), and `up` with none would start
+# them all, so `up` runs only when there are some.
 integration:
 	mkdir -p .reports
 	$(if $(filter host,$(DOCKER)),install -d -m 1777 $(HOST_WORK))
 	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) build test
 	$(if $(filter host,$(DOCKER)),$(MAKE) --no-print-directory clean-work)
-	DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) up -d --wait $(DAEMON) $$(scripts/integration.sh services $(RUN_GROUPS)); \
-	status=$$?; \
+	services="$(DAEMON) $$(scripts/integration.sh services $(RUN_GROUPS))"; \
+	status=0; \
+	if [ -n "$$(echo $$services)" ]; then \
+		DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) up -d --wait $$services; \
+		status=$$?; \
+	fi; \
 	if [ $$status -eq 0 ]; then \
 		DATADOUBLE_HOST_WORK=$(HOST_WORK) $(COMPOSE) run --name $${COMPOSE_PROJECT_NAME:-datadouble}-tests --no-deps test \
 			bash -c '/src/scripts/integration.sh test $(RUN_GROUPS)'; \
