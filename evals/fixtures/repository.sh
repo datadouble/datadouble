@@ -45,7 +45,8 @@ esac
 mkdir -p sample-uploads/avatars sample-uploads/documents
 printf 'jpeg\n' > sample-uploads/avatars/1.jpg
 printf 'jpeg\n' > sample-uploads/avatars/2.jpg
-touch -d '90 days ago' sample-uploads/avatars/2.jpg
+# Long unchanged; POSIX -t, which macOS and GNU touch both take.
+touch -t 202001010000 sample-uploads/avatars/2.jpg
 printf 'pdf\n' > sample-uploads/documents/1.pdf
 git init --quiet
 git add --all
