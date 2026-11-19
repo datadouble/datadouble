@@ -7,9 +7,10 @@
 display --json`` prints for an org you have logged in to with ``sf org login
 web``; the access token never leaves this process. ``--fake PATH`` records
 against a fake org instead, which is how the committed cassette was first
-made; both paths must be under the current directory. The calls are :func:`exercise`'s: the API versions, the catalog of the
-chosen objects with the installed packages, and each object's records read
-both ways the adapter reads them, a REST query and a Bulk API export.
+made; both paths must be under the current directory. The calls are
+:func:`exercise`'s: the API versions, the catalog of the chosen objects with
+the installed packages, and each object's records read both ways the adapter
+reads them, a REST query and a Bulk API export.
 """
 
 import argparse
