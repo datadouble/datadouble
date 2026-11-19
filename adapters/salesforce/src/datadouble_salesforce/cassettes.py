@@ -65,9 +65,9 @@ class Cassette(_Model):
     format: Literal[1] = 1
     interactions: tuple[Interaction, ...]
 
-    def write(self, path: Path) -> None:
-        """Write the cassette as indented JSON."""
-        path.write_text(self.model_dump_json(indent=1) + "\n", "utf-8")
+    def text(self) -> str:
+        """The cassette as indented JSON, as it is committed."""
+        return self.model_dump_json(indent=1) + "\n"
 
     @classmethod
     def read(cls, path: Path) -> "Cassette":

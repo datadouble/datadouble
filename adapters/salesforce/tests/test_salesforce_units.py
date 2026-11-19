@@ -285,7 +285,7 @@ def test_recordings_replay(tmp_path: Path) -> None:
     with _org(tmp_path / "org.sqlite", recording) as client:
         first = list(client.export("SELECT Id FROM Contact"))
     cassette = scrub(recording.cassette(), FAKE_URL)
-    cassette.write(tmp_path / "cassette.json")
+    (tmp_path / "cassette.json").write_text(cassette.text(), "utf-8")
     replay = ReplayTransport(Cassette.read(tmp_path / "cassette.json"))
     with _org(tmp_path / "org.sqlite", replay) as replayed:
         assert list(replayed.export("SELECT Id FROM Contact")) == first
@@ -386,12 +386,10 @@ def test_the_scrubber_removes_credentials_hosts_and_org_ids() -> None:
 def test_the_recorder(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    sample_org(tmp_path / "org.sqlite")
-    out = tmp_path / "fake.json"
-    assert recorder.main(["fake.json", "--fake", "org.sqlite", "--objects", "Case"]) == 0
-    assert "over 1 objects" in capsys.readouterr().out
-    assert Cassette.read(out).interactions
+    assert recorder.main(["--fake", "--objects", "Case"]) == 0
+    output = capsys.readouterr()
+    assert "over 1 objects" in output.err
+    assert Cassette.model_validate_json(output.out).interactions
     login = {
         "status": 0,
         "result": {
@@ -401,23 +399,18 @@ def test_the_recorder(
         },
     }
     monkeypatch.setattr("sys.stdin", io.StringIO('{"result": {"accessToken": "secret-ish"}}'))
-    assert recorder.main([str(tmp_path / "none.json")]) == 2
+    assert recorder.main([]) == 2
     assert "secret-ish" not in capsys.readouterr().err
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(login)))
-    org = FakeOrg(tmp_path / "org.sqlite")
 
     def transport(**_: object) -> FakeTransport:
-        return FakeTransport(org)
+        return FakeTransport(sample_org(tmp_path / "org.sqlite"))
 
     monkeypatch.setattr(httpx, "HTTPTransport", transport)
-    assert recorder.main([str(tmp_path / "org.json"), "--objects", "Lead"]) == 0
-    text = (tmp_path / "org.json").read_text()
+    assert recorder.main(["--objects", "Lead"]) == 0
+    text = capsys.readouterr().out
     assert "AQ4AQSecret" not in text
     assert "00D5e000000AbCdEAG" not in text
-    # It reads and writes only under the current directory.
-    with pytest.raises(SystemExit):
-        recorder.main(["../elsewhere.json"])
-    assert "outside the current directory" in capsys.readouterr().err
 
 
 # The source

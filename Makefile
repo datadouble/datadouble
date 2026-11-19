@@ -153,8 +153,9 @@ SF_OBJECTS ?= Account,Contact,Opportunity,Case
 record-salesforce:
 	@test -n "$(ORG)" || { echo "name an org: make record-salesforce ORG=<alias>"; exit 2; }
 	sf org display --target-org "$(ORG)" --json \
-		| uv run python -m datadouble_salesforce.record adapters/salesforce/tests/cassettes/org.json \
-			--objects "$(SF_OBJECTS)"
+		| uv run python -m datadouble_salesforce.record --objects "$(SF_OBJECTS)" \
+			> adapters/salesforce/tests/cassettes/org.json.partial
+	mv adapters/salesforce/tests/cassettes/org.json.partial adapters/salesforce/tests/cassettes/org.json
 
 docs:
 	uv run --group docs zensical build --strict
