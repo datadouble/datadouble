@@ -29,3 +29,5 @@ stops and tells the person why.
    or store passwords, keys or tokens, and do not connect to a production
    system. Specs name secrets by reference (`{env: NAME}`); `ci init` lists
    the variables to define, and you tell the person where to define them.
+   If someone gives you a secret anyway, never repeat it, not even inside an
+   example or a placeholder; call it "the password you gave" instead.
