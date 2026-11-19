@@ -1,6 +1,6 @@
 ---
 name: datadouble-spec
-description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks and verification - and check it with datadouble plan. Use for a new spec, a strict-mode failure, a Jailer model to import, or questions about what a spec does.
+description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks and verification - and check it with datadouble plan. Use for a new spec, a strict-mode failure, a Jailer model to import, putting a connection's password, key or other credential into a spec, or questions about what a spec does.
 ---
 
 # The Datadouble spec
