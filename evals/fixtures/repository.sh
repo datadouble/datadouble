@@ -2,13 +2,22 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-# A team's repository for the skill scenarios: a GitHub Actions CI workflow
-# and a Datadouble spec, with secrets named by reference only. The first
+# A team's repository for the skill scenarios: a CI configuration and a
+# Datadouble spec, with secrets named by reference only. The first
 # argument picks the CI system's files: github (default), gitlab or none.
 set -euo pipefail
 system=${1:-github}
+# The keyless signer the spec trusts is the CI system's own.
+case $system in
+    gitlab)
+        identity=https://gitlab.example.com/example/shop//.gitlab-ci.yml@refs/heads/main
+        issuer=https://gitlab.example.com ;;
+    *)
+        identity=https://github.com/example/shop/.github/workflows/datadouble-shop-build.yml@refs/heads/main
+        issuer=https://token.actions.githubusercontent.com ;;
+esac
 mkdir -p datadouble
-cat > datadouble/shop.yml <<'SPEC'
+cat > datadouble/shop.yml <<SPEC
 name: shop
 source:
   engine: postgres
@@ -23,8 +32,8 @@ store: [{filesystem: {path: /srv/datadouble/store}}]
 signing: {cosign: {keyless: true}}
 trust:
   cosign:
-    identity: https://github.com/example/shop/.github/workflows/datadouble-shop-build.yml@refs/heads/main
-    issuer: https://token.actions.githubusercontent.com
+    identity: $identity
+    issuer: $issuer
 promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
 fetch:
   from: {filesystem: {path: /srv/datadouble/export}}
