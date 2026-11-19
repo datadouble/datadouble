@@ -13,13 +13,16 @@ requirement the source uses, at the version the source runs.
 | Redis | Modules, at the source's version | `MODULE LIST` on a server that loads the image's modules |
 | Elasticsearch, OpenSearch | Plugins, at the source's version | `elasticsearch-plugin list` or `opensearch-plugin list` |
 | Oracle | Options: the index types of domain indexes, such as Oracle Text's `CTXSYS.CONTEXT` | `DBA_INDEXTYPES` |
+| Salesforce | Installed packages, by namespace, at the installed version | Not checked: copies are local databases that need none |
 | SQL Server, MongoDB | None: nothing they copy needs an add-on | |
 
 SQL Server refuses tables that would need one (CLR types, full-text
 indexes) as not supported yet, and MongoDB loads nothing into its server.
-Salesforce's managed packages come with the Salesforce adapter (see the
-[v1 plan](../v1-plan.md)). Each adapter's README says what it reports and
-which images provide common add-ons.
+A Salesforce copy holds a package's objects and fields as ordinary tables
+and columns, so its packages are recorded in the lock, where strict mode
+notices one installed, removed or upgraded, but the build does not check
+them. Each adapter's README says what it reports and which images provide
+common add-ons.
 
 ## What Datadouble does
 

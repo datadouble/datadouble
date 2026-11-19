@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
+  org through its REST, Tooling and Bulk API 2.0 interfaces, with an
+  instance URL and access token by reference. Each object is a table and
+  `Id` its key; references to one object are foreign keys, and polymorphic
+  ones are declared as virtual foreign keys. Seeds, `when` clauses and
+  assertions are SOQL. Working copies, anonymization and checks run locally
+  in SQLite, and images are logical: each object's records as JSON lines.
+  Installed packages are reported as `package` requirements, which the copies
+  do not need. A fake org, a SQLite file served over the same APIs
+  (`connection: {fake: path}`), runs the adapter without an org, and
+  `make record-salesforce` records a scrubbed cassette of its calls from a
+  development org.
 - **Requirements for Oracle.** The index types of the schemas' domain
   indexes, such as Oracle Text's `CTXSYS.CONTEXT`, are options the working
   image must provide. Omitting one leaves its indexes out of the copies. SQL

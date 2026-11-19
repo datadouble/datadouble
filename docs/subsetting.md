@@ -152,7 +152,11 @@ strategy B.
   whose mappings let documents hold undeclared fields are sampled as for
   MongoDB, and the extract fails on any field the catalog does not list.
 - **Salesforce:** objects and lookup/master-detail relationships form a natural
-  graph; filters are SOQL.
+  graph; filters are SOQL, with `":as_of"` for the plan's anchor time. A
+  semi-join reaches only one level and cannot be combined with `OR`, so only
+  strategy B is available; long value lists are split across queries.
+  Polymorphic references (`WhoId`, `WhatId`) are declared as virtual foreign
+  keys.
 - **Redis:** each key pattern is a table. ID-like segments of a key (numbers,
   UUIDs, long hex strings) become `{}`, so `user:42` belongs to `user:{}` and
   `user:42:sessions` to `user:{}:sessions`; patterns the inference gets wrong

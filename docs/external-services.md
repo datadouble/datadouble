@@ -17,6 +17,7 @@ variables → Actions**.
 | `GITLAB_TRIGGER_TOKEN` | Starting the nightly GitLab pipeline | [GitLab](#gitlabcom) |
 | `RUNNER_ADMIN_TOKEN` | Registering the nightly tests' ephemeral self-hosted GitHub runner, and starting the workflows it runs | [GitHub](#github) |
 | `DATADOUBLE_NIGHTLY_DSN` | The nightly run's throwaway source database, which the nightly job starts with this DSN's password; any random password will do | `gh secret set` |
+| `SF_CLIENT_ID`, `SF_JWT_KEY`, `SF_USERNAME` | Re-recording the Salesforce cassette on a schedule (not wired up yet) | [Salesforce](#salesforce) |
 
 Codecov, GitHub Container Registry and PyPI use OpenID Connect and need no
 secret.
@@ -207,3 +208,36 @@ directly.
 5. **CI/CD Catalog.** After the first mirror push (the project then has a
    README), **Settings → General → Visibility, project features, permissions**:
    turn on "CI/CD Catalog project".
+
+## Salesforce
+
+The Salesforce adapter's tests replay a cassette and run against a fake org,
+so CI needs no org (decision 111). These steps are for a scheduled
+re-recording, which catches API changes and cassette drift; until it is
+wired up, a maintainer re-records by hand with `make record-salesforce
+ORG=<alias>` (see [local development](local-development.md#salesforce)).
+Use a Developer Edition or scratch org holding only made-up records, never a
+production org.
+
+1. **Org.** Sign up for a free Developer Edition org, and create a dedicated
+   user for recording with a profile or permission set that can read the
+   recorded objects and has "View Setup and Configuration" (for the installed
+   packages).
+2. **Certificate.** The CI job logs in with the JWT bearer flow, which needs
+   no password: generate a key pair and a self-signed certificate locally,
+   `openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj '/CN=datadouble-recorder' -keyout recorder.key -out recorder.crt`.
+3. **Connected app.** In Setup, create an external client app (or a
+   connected app) named `datadouble-recorder`, with OAuth enabled, the
+   callback URL `http://localhost:1717/OAuthRedirect`, the scopes "Manage user
+   data via APIs (api)" and "Perform requests at any time (refresh_token,
+   offline_access)", "Use digital signatures" with `recorder.crt`, and the
+   JWT bearer flow allowed. Under its policies, set permitted users to
+   "Admin approved users are pre-authorized" and add the recording user's
+   profile or permission set.
+4. **Secrets.** Save the app's consumer key as `SF_CLIENT_ID`, the contents
+   of `recorder.key` as `SF_JWT_KEY` and the recording user's username as
+   `SF_USERNAME`, with `gh secret set` so the values are never echoed, then
+   delete both files. The job will log in with
+   `sf org login jwt --client-id "$SF_CLIENT_ID" --jwt-key-file <file> --username "$SF_USERNAME" --alias recorder`
+   and run `make record-salesforce ORG=recorder`, opening a pull request if
+   the cassette changed.

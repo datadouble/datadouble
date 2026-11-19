@@ -20,3 +20,4 @@ redis | 999:999 | 1 | redis | adapters/redis/tests
 elasticsearch | 1000:0 | 2 | elasticsearch | adapters/elasticsearch/tests
 opensearch | 1000:1000 | 2 | opensearch | adapters/opensearch/tests
 files | 999:999 | 1 | postgres | adapters/files/tests
+salesforce | 999:999 | 1 |  | adapters/salesforce/tests

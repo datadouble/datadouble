@@ -241,7 +241,10 @@ class EngineConformance:
     def test_the_image_provides_the_sources_requirements(
         self, harness: EngineHarness, tmp_path: Path
     ) -> None:
-        """The sample spec's working image has every add-on the sample source uses."""
+        """The sample spec's working image has every add-on the sample source uses.
+
+        Working databases that need no add-ons (``available()`` is None) pass.
+        """
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
         with harness.engine.connect(spec.source.connection) as session:
@@ -255,7 +258,8 @@ class EngineConformance:
             server=spec.source.server,
         )
         with closing(harness.engine.working(tmp_path / "scratch", tooling, version)) as working:
-            assert unmet(catalog.requirements, working.available()) == ()
+            available = working.available()
+            assert available is None or unmet(catalog.requirements, available) == ()
 
     def test_snapshot_is_consistent(self, harness: EngineHarness) -> None:
         """Rows committed after the snapshot opens are not seen through it.

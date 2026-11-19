@@ -1,0 +1,279 @@
+{
+ "format": 1,
+ "interactions": [
+  {
+   "method": "GET",
+   "url": "/services/data/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "[{\"version\":\"60.0\",\"url\":\"/services/data/v60.0\"},{\"version\":\"61.0\",\"url\":\"/services/data/v61.0\"},{\"version\":\"62.0\",\"url\":\"/services/data/v62.0\"},{\"version\":\"63.0\",\"url\":\"/services/data/v63.0\"},{\"version\":\"64.0\",\"url\":\"/services/data/v64.0\"}]"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"sobjects\":[{\"name\":\"Account\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"001\"},{\"name\":\"AccountHistory\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":false,\"replicateable\":false,\"keyPrefix\":\"a07\"},{\"name\":\"AppMenuItem\",\"custom\":false,\"queryable\":false,\"retrieveable\":false,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a08\"},{\"name\":\"Case\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"500\"},{\"name\":\"Contact\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"003\"},{\"name\":\"dd_ratings__Rating__c\",\"custom\":true,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a06\"},{\"name\":\"Lead\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a05\"},{\"name\":\"Opportunity\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"006\"},{\"name\":\"Task\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a04\"}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Account/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Account\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Name\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Industry\",\"type\":\"picklist\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Phone\",\"type\":\"phone\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Website\",\"type\":\"url\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"AnnualRevenue\",\"type\":\"currency\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"NumberOfEmployees\",\"type\":\"int\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"BillingAddress\",\"type\":\"address\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"BillingCity\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"ParentId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"CreatedDate\",\"type\":\"datetime\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Case/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Case\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"ContactId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Contact\"]},{\"name\":\"Subject\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Status\",\"type\":\"picklist\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Description\",\"type\":\"textarea\",\"nillable\":true,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Contact/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Contact\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"FirstName\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"LastName\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Email\",\"type\":\"email\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Phone\",\"type\":\"phone\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Birthdate\",\"type\":\"date\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"HasOptedOutOfEmail\",\"type\":\"boolean\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"CreatedDate\",\"type\":\"datetime\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Opportunity/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Opportunity\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"Name\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"StageName\",\"type\":\"picklist\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Amount\",\"type\":\"currency\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Probability\",\"type\":\"percent\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"CloseDate\",\"type\":\"date\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/tooling/query/?q=SELECT%20SubscriberPackage.NamespacePrefix%2C%20SubscriberPackage.Name%2C%20SubscriberPackageVersion.MajorVersion%2C%20SubscriberPackageVersion.MinorVersion%2C%20SubscriberPackageVersion.PatchVersion%20FROM%20InstalledSubscriberPackage",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":1,\"done\":true,\"records\":[{\"SubscriberPackage\":{\"NamespacePrefix\":\"dd_ratings\",\"Name\":\"Datadouble Ratings\"},\"SubscriberPackageVersion\":{\"MajorVersion\":1,\"MinorVersion\":4,\"PatchVersion\":0}}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/query/?q=SELECT%20Id%20FROM%20Account",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":30,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000001AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000002AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000003AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000004AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000005AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000006AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000007AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000008AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000009AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000010AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000011AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000012AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000013AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000014AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000015AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000016AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000017AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000018AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000019AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000020AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000021AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000022AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000023AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000024AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000025AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000026AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000027AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000028AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000029AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"001000000000030AAA\"}]}"
+  },
+  {
+   "method": "POST",
+   "url": "/services/data/v62.0/jobs/query",
+   "body": "{\"operation\":\"query\",\"query\":\"SELECT Id, Name, Industry, Phone, Website, AnnualRevenue, NumberOfEmployees, BillingCity, ParentId, CreatedDate FROM Account\"}",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"6c546b06-cc3c-467d-b79b-21ad56305995\",\"state\":\"UploadComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/6c546b06-cc3c-467d-b79b-21ad56305995",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"6c546b06-cc3c-467d-b79b-21ad56305995\",\"state\":\"InProgress\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/6c546b06-cc3c-467d-b79b-21ad56305995",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"6c546b06-cc3c-467d-b79b-21ad56305995\",\"state\":\"JobComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/6c546b06-cc3c-467d-b79b-21ad56305995/results?maxRecords=50000",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "text/csv",
+    "sforce-locator": "null"
+   },
+   "response": "Id,Name,Industry,Phone,Website,AnnualRevenue,NumberOfEmployees,BillingCity,ParentId,CreatedDate\n001000000000001AAA,Account 00,Technology,212-555-0100,https://account00.example.com,0.0,0,Springfield,,2024-01-01T00:00:00.000Z\n001000000000002AAA,Account 01,Retail,212-555-0101,https://account01.example.com,10000.5,10,Springfield,,2024-01-02T00:00:00.000Z\n001000000000003AAA,Account 02,Energy,212-555-0102,https://account02.example.com,20001.0,20,Springfield,,2024-01-03T00:00:00.000Z\n001000000000004AAA,Account 03,Technology,212-555-0103,https://account03.example.com,30001.5,30,Springfield,001000000000001AAA,2024-01-04T00:00:00.000Z\n001000000000005AAA,Account 04,Retail,212-555-0104,https://account04.example.com,40002.0,40,Springfield,,2024-01-05T00:00:00.000Z\n001000000000006AAA,Account 05,Energy,212-555-0105,https://account05.example.com,50002.5,50,Springfield,,2024-01-06T00:00:00.000Z\n001000000000007AAA,Account 06,Technology,212-555-0106,https://account06.example.com,60003.0,60,Springfield,,2024-01-07T00:00:00.000Z\n001000000000008AAA,Account 07,Retail,212-555-0107,https://account07.example.com,70003.5,70,Springfield,001000000000002AAA,2024-01-08T00:00:00.000Z\n001000000000009AAA,Account 08,Energy,212-555-0108,https://account08.example.com,80004.0,80,Springfield,,2024-01-09T00:00:00.000Z\n001000000000010AAA,Account 09,Technology,212-555-0109,https://account09.example.com,90004.5,90,Springfield,,2024-01-10T00:00:00.000Z\n001000000000011AAA,Account 10,Retail,212-555-0110,https://account10.example.com,100005.0,100,Springfield,,2024-01-11T00:00:00.000Z\n001000000000012AAA,Account 11,Energy,212-555-0111,https://account11.example.com,110005.5,110,Springfield,001000000000003AAA,2024-01-12T00:00:00.000Z\n001000000000013AAA,Account 12,Technology,212-555-0112,https://account12.example.com,120006.0,120,Springfield,,2024-01-13T00:00:00.000Z\n001000000000014AAA,Account 13,Retail,212-555-0113,https://account13.example.com,130006.5,130,Springfield,,2024-01-14T00:00:00.000Z\n001000000000015AAA,Account 14,Energy,212-555-0114,https://account14.example.com,140007.0,140,Springfield,,2024-01-15T00:00:00.000Z\n001000000000016AAA,Account 15,Technology,212-555-0115,https://account15.example.com,150007.5,150,Springfield,001000000000004AAA,2024-01-16T00:00:00.000Z\n001000000000017AAA,Account 16,Retail,212-555-0116,https://account16.example.com,160008.0,160,Springfield,,2024-01-17T00:00:00.000Z\n001000000000018AAA,Account 17,Energy,212-555-0117,https://account17.example.com,170008.5,170,Springfield,,2024-01-18T00:00:00.000Z\n001000000000019AAA,Account 18,Technology,212-555-0118,https://account18.example.com,180009.0,180,Springfield,,2024-01-19T00:00:00.000Z\n001000000000020AAA,Account 19,Retail,212-555-0119,https://account19.example.com,190009.5,190,Springfield,001000000000005AAA,2024-01-20T00:00:00.000Z\n001000000000021AAA,Account 20,Energy,212-555-0120,https://account20.example.com,200010.0,200,Springfield,,2024-01-21T00:00:00.000Z\n001000000000022AAA,Account 21,Technology,212-555-0121,https://account21.example.com,210010.5,210,Springfield,,2024-01-22T00:00:00.000Z\n001000000000023AAA,Account 22,Retail,212-555-0122,https://account22.example.com,220011.0,220,Springfield,,2024-01-23T00:00:00.000Z\n001000000000024AAA,Account 23,Energy,212-555-0123,https://account23.example.com,230011.5,230,Springfield,001000000000006AAA,2024-01-24T00:00:00.000Z\n001000000000025AAA,Account 24,Technology,212-555-0124,https://account24.example.com,240012.0,240,Springfield,,2024-01-25T00:00:00.000Z\n001000000000026AAA,Account 25,Retail,212-555-0125,https://account25.example.com,250012.5,250,Springfield,,2024-01-26T00:00:00.000Z\n001000000000027AAA,Account 26,Energy,212-555-0126,https://account26.example.com,260013.0,260,Springfield,,2024-01-27T00:00:00.000Z\n001000000000028AAA,Account 27,Technology,212-555-0127,https://account27.example.com,270013.5,270,Springfield,001000000000007AAA,2024-01-28T00:00:00.000Z\n001000000000029AAA,Account 28,Retail,212-555-0128,https://account28.example.com,280014.0,280,Springfield,,2024-01-29T00:00:00.000Z\n001000000000030AAA,Account 29,Energy,212-555-0129,https://account29.example.com,290014.5,290,Springfield,,2024-01-30T00:00:00.000Z\n"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/query/?q=SELECT%20Id%20FROM%20Case",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":25,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000001AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000002AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000003AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000004AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000005AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000006AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000007AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000008AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000009AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000010AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000011AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000012AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000013AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000014AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000015AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000016AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000017AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000018AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000019AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000020AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000021AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000022AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000023AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000024AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"500000000000025AAA\"}]}"
+  },
+  {
+   "method": "POST",
+   "url": "/services/data/v62.0/jobs/query",
+   "body": "{\"operation\":\"query\",\"query\":\"SELECT Id, AccountId, ContactId, Subject, Status, Description FROM Case\"}",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"7a6060e8-07f7-438c-a89a-e6f25988d114\",\"state\":\"UploadComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/7a6060e8-07f7-438c-a89a-e6f25988d114",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"7a6060e8-07f7-438c-a89a-e6f25988d114\",\"state\":\"InProgress\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/7a6060e8-07f7-438c-a89a-e6f25988d114",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"7a6060e8-07f7-438c-a89a-e6f25988d114\",\"state\":\"JobComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/7a6060e8-07f7-438c-a89a-e6f25988d114/results?maxRecords=50000",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "text/csv",
+    "sforce-locator": "null"
+   },
+   "response": "Id,AccountId,ContactId,Subject,Status,Description\n500000000000001AAA,001000000000001AAA,003000000000001AAA,Question 00,Closed,The customer asked about an invoice.\n500000000000002AAA,001000000000004AAA,003000000000003AAA,Question 01,New,The customer asked about an invoice.\n500000000000003AAA,001000000000007AAA,003000000000005AAA,Question 02,Closed,The customer asked about an invoice.\n500000000000004AAA,001000000000010AAA,003000000000007AAA,Question 03,New,The customer asked about an invoice.\n500000000000005AAA,001000000000013AAA,003000000000009AAA,Question 04,Closed,The customer asked about an invoice.\n500000000000006AAA,001000000000016AAA,003000000000011AAA,Question 05,New,The customer asked about an invoice.\n500000000000007AAA,001000000000019AAA,003000000000013AAA,Question 06,Closed,The customer asked about an invoice.\n500000000000008AAA,001000000000022AAA,003000000000015AAA,Question 07,New,The customer asked about an invoice.\n500000000000009AAA,001000000000025AAA,003000000000017AAA,Question 08,Closed,The customer asked about an invoice.\n500000000000010AAA,001000000000028AAA,003000000000019AAA,Question 09,New,The customer asked about an invoice.\n500000000000011AAA,001000000000001AAA,003000000000021AAA,Question 10,Closed,The customer asked about an invoice.\n500000000000012AAA,001000000000004AAA,003000000000023AAA,Question 11,New,The customer asked about an invoice.\n500000000000013AAA,001000000000007AAA,003000000000025AAA,Question 12,Closed,The customer asked about an invoice.\n500000000000014AAA,001000000000010AAA,003000000000027AAA,Question 13,New,The customer asked about an invoice.\n500000000000015AAA,001000000000013AAA,003000000000029AAA,Question 14,Closed,The customer asked about an invoice.\n500000000000016AAA,001000000000016AAA,003000000000031AAA,Question 15,New,The customer asked about an invoice.\n500000000000017AAA,001000000000019AAA,003000000000033AAA,Question 16,Closed,The customer asked about an invoice.\n500000000000018AAA,001000000000022AAA,003000000000035AAA,Question 17,New,The customer asked about an invoice.\n500000000000019AAA,001000000000025AAA,003000000000037AAA,Question 18,Closed,The customer asked about an invoice.\n500000000000020AAA,001000000000028AAA,003000000000039AAA,Question 19,New,The customer asked about an invoice.\n500000000000021AAA,001000000000001AAA,003000000000041AAA,Question 20,Closed,The customer asked about an invoice.\n500000000000022AAA,001000000000004AAA,003000000000043AAA,Question 21,New,The customer asked about an invoice.\n500000000000023AAA,001000000000007AAA,003000000000045AAA,Question 22,Closed,The customer asked about an invoice.\n500000000000024AAA,001000000000010AAA,003000000000047AAA,Question 23,New,The customer asked about an invoice.\n500000000000025AAA,001000000000013AAA,003000000000049AAA,Question 24,Closed,The customer asked about an invoice.\n"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/query/?q=SELECT%20Id%20FROM%20Contact",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":60,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000001AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000002AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000003AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000004AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000005AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000006AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000007AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000008AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000009AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000010AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000011AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000012AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000013AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000014AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000015AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000016AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000017AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000018AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000019AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000020AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000021AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000022AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000023AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000024AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000025AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000026AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000027AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000028AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000029AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000030AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000031AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000032AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000033AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000034AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000035AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000036AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000037AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000038AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000039AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000040AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000041AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000042AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000043AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000044AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000045AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000046AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000047AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000048AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000049AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000050AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000051AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000052AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000053AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000054AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000055AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000056AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000057AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000058AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000059AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"003000000000060AAA\"}]}"
+  },
+  {
+   "method": "POST",
+   "url": "/services/data/v62.0/jobs/query",
+   "body": "{\"operation\":\"query\",\"query\":\"SELECT Id, AccountId, FirstName, LastName, Email, Phone, Birthdate, HasOptedOutOfEmail, CreatedDate FROM Contact\"}",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"521bc837-290d-4b25-8441-e76291a3759e\",\"state\":\"UploadComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/521bc837-290d-4b25-8441-e76291a3759e",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"521bc837-290d-4b25-8441-e76291a3759e\",\"state\":\"InProgress\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/521bc837-290d-4b25-8441-e76291a3759e",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"521bc837-290d-4b25-8441-e76291a3759e\",\"state\":\"JobComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/521bc837-290d-4b25-8441-e76291a3759e/results?maxRecords=50000",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "text/csv",
+    "sforce-locator": "null"
+   },
+   "response": "Id,AccountId,FirstName,LastName,Email,Phone,Birthdate,HasOptedOutOfEmail,CreatedDate\n003000000000001AAA,,Ada,Lovelace,ada.lovelace0@example.com,312-555-0100,1960-01-10,true,2024-01-01T00:00:00.000Z\n003000000000002AAA,001000000000002AAA,Grace,Lovelace,grace.lovelace1@example.com,312-555-0101,1961-02-11,false,2024-01-01T01:00:00.000Z\n003000000000003AAA,001000000000003AAA,Alan,Lovelace,alan.lovelace2@example.com,312-555-0102,1962-03-12,false,2024-01-01T02:00:00.000Z\n003000000000004AAA,001000000000004AAA,Edsger,Lovelace,edsger.lovelace3@example.com,312-555-0103,1963-04-13,true,2024-01-01T03:00:00.000Z\n003000000000005AAA,001000000000005AAA,Barbara,Lovelace,barbara.lovelace4@example.com,312-555-0104,1964-05-14,false,2024-01-01T04:00:00.000Z\n003000000000006AAA,001000000000006AAA,Donald,Lovelace,donald.lovelace5@example.com,312-555-0105,1965-06-15,false,2024-01-01T05:00:00.000Z\n003000000000007AAA,001000000000007AAA,Frances,Lovelace,frances.lovelace6@example.com,312-555-0106,1966-07-16,true,2024-01-01T06:00:00.000Z\n003000000000008AAA,001000000000008AAA,Ken,Lovelace,ken.lovelace7@example.com,312-555-0107,1967-08-17,false,2024-01-01T07:00:00.000Z\n003000000000009AAA,001000000000009AAA,Ada,Hopper,ada.hopper8@example.com,312-555-0108,1968-09-18,false,2024-01-01T08:00:00.000Z\n003000000000010AAA,001000000000010AAA,Grace,Hopper,grace.hopper9@example.com,312-555-0109,1969-01-19,true,2024-01-01T09:00:00.000Z\n003000000000011AAA,,Alan,Hopper,alan.hopper10@example.com,312-555-0110,1970-02-10,false,2024-01-01T10:00:00.000Z\n003000000000012AAA,001000000000012AAA,Edsger,Hopper,edsger.hopper11@example.com,312-555-0111,1971-03-11,false,2024-01-01T11:00:00.000Z\n003000000000013AAA,001000000000013AAA,Barbara,Hopper,barbara.hopper12@example.com,312-555-0112,1972-04-12,true,2024-01-01T12:00:00.000Z\n003000000000014AAA,001000000000014AAA,Donald,Hopper,donald.hopper13@example.com,312-555-0113,1973-05-13,false,2024-01-01T13:00:00.000Z\n003000000000015AAA,001000000000015AAA,Frances,Hopper,frances.hopper14@example.com,312-555-0114,1974-06-14,false,2024-01-01T14:00:00.000Z\n003000000000016AAA,001000000000016AAA,Ken,Hopper,ken.hopper15@example.com,312-555-0115,1975-07-15,true,2024-01-01T15:00:00.000Z\n003000000000017AAA,001000000000017AAA,Ada,Turing,ada.turing16@example.com,312-555-0116,1976-08-16,false,2024-01-01T16:00:00.000Z\n003000000000018AAA,001000000000018AAA,Grace,Turing,grace.turing17@example.com,312-555-0117,1977-09-17,false,2024-01-01T17:00:00.000Z\n003000000000019AAA,001000000000019AAA,Alan,Turing,alan.turing18@example.com,312-555-0118,1978-01-18,true,2024-01-01T18:00:00.000Z\n003000000000020AAA,001000000000020AAA,Edsger,Turing,edsger.turing19@example.com,312-555-0119,1979-02-19,false,2024-01-01T19:00:00.000Z\n003000000000021AAA,,Barbara,Turing,barbara.turing20@example.com,312-555-0120,1980-03-10,false,2024-01-01T20:00:00.000Z\n003000000000022AAA,001000000000022AAA,Donald,Turing,donald.turing21@example.com,312-555-0121,1981-04-11,true,2024-01-01T21:00:00.000Z\n003000000000023AAA,001000000000023AAA,Frances,Turing,frances.turing22@example.com,312-555-0122,1982-05-12,false,2024-01-01T22:00:00.000Z\n003000000000024AAA,001000000000024AAA,Ken,Turing,ken.turing23@example.com,312-555-0123,1983-06-13,false,2024-01-01T23:00:00.000Z\n003000000000025AAA,001000000000025AAA,Ada,Dijkstra,ada.dijkstra24@example.com,312-555-0124,1984-07-14,true,2024-01-02T00:00:00.000Z\n003000000000026AAA,001000000000026AAA,Grace,Dijkstra,grace.dijkstra25@example.com,312-555-0125,1985-08-15,false,2024-01-02T01:00:00.000Z\n003000000000027AAA,001000000000027AAA,Alan,Dijkstra,alan.dijkstra26@example.com,312-555-0126,1986-09-16,false,2024-01-02T02:00:00.000Z\n003000000000028AAA,001000000000028AAA,Edsger,Dijkstra,edsger.dijkstra27@example.com,312-555-0127,1987-01-17,true,2024-01-02T03:00:00.000Z\n003000000000029AAA,001000000000029AAA,Barbara,Dijkstra,barbara.dijkstra28@example.com,312-555-0128,1988-02-18,false,2024-01-02T04:00:00.000Z\n003000000000030AAA,001000000000030AAA,Donald,Dijkstra,donald.dijkstra29@example.com,312-555-0129,1989-03-19,false,2024-01-02T05:00:00.000Z\n003000000000031AAA,,Frances,Dijkstra,frances.dijkstra30@example.com,312-555-0130,1960-04-10,true,2024-01-02T06:00:00.000Z\n003000000000032AAA,001000000000002AAA,Ken,Dijkstra,ken.dijkstra31@example.com,312-555-0131,1961-05-11,false,2024-01-02T07:00:00.000Z\n003000000000033AAA,001000000000003AAA,Ada,Liskov,ada.liskov32@example.com,312-555-0132,1962-06-12,false,2024-01-02T08:00:00.000Z\n003000000000034AAA,001000000000004AAA,Grace,Liskov,grace.liskov33@example.com,312-555-0133,1963-07-13,true,2024-01-02T09:00:00.000Z\n003000000000035AAA,001000000000005AAA,Alan,Liskov,alan.liskov34@example.com,312-555-0134,1964-08-14,false,2024-01-02T10:00:00.000Z\n003000000000036AAA,001000000000006AAA,Edsger,Liskov,edsger.liskov35@example.com,312-555-0135,1965-09-15,false,2024-01-02T11:00:00.000Z\n003000000000037AAA,001000000000007AAA,Barbara,Liskov,barbara.liskov36@example.com,312-555-0136,1966-01-16,true,2024-01-02T12:00:00.000Z\n003000000000038AAA,001000000000008AAA,Donald,Liskov,donald.liskov37@example.com,312-555-0137,1967-02-17,false,2024-01-02T13:00:00.000Z\n003000000000039AAA,001000000000009AAA,Frances,Liskov,frances.liskov38@example.com,312-555-0138,1968-03-18,false,2024-01-02T14:00:00.000Z\n003000000000040AAA,001000000000010AAA,Ken,Liskov,ken.liskov39@example.com,312-555-0139,1969-04-19,true,2024-01-02T15:00:00.000Z\n003000000000041AAA,,Ada,Knuth,ada.knuth40@example.com,312-555-0140,1970-05-10,false,2024-01-02T16:00:00.000Z\n003000000000042AAA,001000000000012AAA,Grace,Knuth,grace.knuth41@example.com,312-555-0141,1971-06-11,false,2024-01-02T17:00:00.000Z\n003000000000043AAA,001000000000013AAA,Alan,Knuth,alan.knuth42@example.com,312-555-0142,1972-07-12,true,2024-01-02T18:00:00.000Z\n003000000000044AAA,001000000000014AAA,Edsger,Knuth,edsger.knuth43@example.com,312-555-0143,1973-08-13,false,2024-01-02T19:00:00.000Z\n003000000000045AAA,001000000000015AAA,Barbara,Knuth,barbara.knuth44@example.com,312-555-0144,1974-09-14,false,2024-01-02T20:00:00.000Z\n003000000000046AAA,001000000000016AAA,Donald,Knuth,donald.knuth45@example.com,312-555-0145,1975-01-15,true,2024-01-02T21:00:00.000Z\n003000000000047AAA,001000000000017AAA,Frances,Knuth,frances.knuth46@example.com,312-555-0146,1976-02-16,false,2024-01-02T22:00:00.000Z\n003000000000048AAA,001000000000018AAA,Ken,Knuth,ken.knuth47@example.com,312-555-0147,1977-03-17,false,2024-01-02T23:00:00.000Z\n003000000000049AAA,001000000000019AAA,Ada,Allen,ada.allen48@example.com,312-555-0148,1978-04-18,true,2024-01-03T00:00:00.000Z\n003000000000050AAA,001000000000020AAA,Grace,Allen,grace.allen49@example.com,312-555-0149,1979-05-19,false,2024-01-03T01:00:00.000Z\n003000000000051AAA,,Alan,Allen,alan.allen50@example.com,312-555-0150,1980-06-10,false,2024-01-03T02:00:00.000Z\n003000000000052AAA,001000000000022AAA,Edsger,Allen,edsger.allen51@example.com,312-555-0151,1981-07-11,true,2024-01-03T03:00:00.000Z\n003000000000053AAA,001000000000023AAA,Barbara,Allen,barbara.allen52@example.com,312-555-0152,1982-08-12,false,2024-01-03T04:00:00.000Z\n003000000000054AAA,001000000000024AAA,Donald,Allen,donald.allen53@example.com,312-555-0153,1983-09-13,false,2024-01-03T05:00:00.000Z\n003000000000055AAA,001000000000025AAA,Frances,Allen,frances.allen54@example.com,312-555-0154,1984-01-14,true,2024-01-03T06:00:00.000Z\n003000000000056AAA,001000000000026AAA,Ken,Allen,ken.allen55@example.com,312-555-0155,1985-02-15,false,2024-01-03T07:00:00.000Z\n003000000000057AAA,001000000000027AAA,Ada,Thompson,ada.thompson56@example.com,312-555-0156,1986-03-16,false,2024-01-03T08:00:00.000Z\n003000000000058AAA,001000000000028AAA,Grace,Thompson,grace.thompson57@example.com,312-555-0157,1987-04-17,true,2024-01-03T09:00:00.000Z\n003000000000059AAA,001000000000029AAA,Alan,Thompson,alan.thompson58@example.com,312-555-0158,1988-05-18,false,2024-01-03T10:00:00.000Z\n003000000000060AAA,001000000000030AAA,Edsger,Thompson,edsger.thompson59@example.com,312-555-0159,1989-06-19,false,2024-01-03T11:00:00.000Z\n"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/query/?q=SELECT%20Id%20FROM%20Opportunity",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":40,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000001AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000002AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000003AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000004AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000005AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000006AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000007AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000008AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000009AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000010AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000011AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000012AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000013AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000014AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000015AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000016AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000017AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000018AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000019AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000020AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000021AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000022AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000023AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000024AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000025AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000026AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000027AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000028AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000029AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000030AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000031AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000032AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000033AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000034AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000035AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000036AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000037AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000038AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000039AAA\"},{\"attributes\":{\"type\":\"record\"},\"Id\":\"006000000000040AAA\"}]}"
+  },
+  {
+   "method": "POST",
+   "url": "/services/data/v62.0/jobs/query",
+   "body": "{\"operation\":\"query\",\"query\":\"SELECT Id, AccountId, Name, StageName, Amount, Probability, CloseDate FROM Opportunity\"}",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"4a4f1bce-4708-40be-a952-0d61f29764ea\",\"state\":\"UploadComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/4a4f1bce-4708-40be-a952-0d61f29764ea",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"4a4f1bce-4708-40be-a952-0d61f29764ea\",\"state\":\"InProgress\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/4a4f1bce-4708-40be-a952-0d61f29764ea",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"id\":\"4a4f1bce-4708-40be-a952-0d61f29764ea\",\"state\":\"JobComplete\"}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/jobs/query/4a4f1bce-4708-40be-a952-0d61f29764ea/results?maxRecords=50000",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "text/csv",
+    "sforce-locator": "null"
+   },
+   "response": "Id,AccountId,Name,StageName,Amount,Probability,CloseDate\n006000000000001AAA,001000000000001AAA,Deal 00,Prospecting,1500.25,0.0,2025-01-15\n006000000000002AAA,001000000000008AAA,Deal 01,Negotiation,3000.5,10.0,2025-02-15\n006000000000003AAA,001000000000015AAA,Deal 02,Closed Won,4500.75,20.0,2025-03-15\n006000000000004AAA,001000000000022AAA,Deal 03,Prospecting,6001.0,30.0,2025-04-15\n006000000000005AAA,001000000000029AAA,Deal 04,Negotiation,7501.25,40.0,2025-05-15\n006000000000006AAA,001000000000006AAA,Deal 05,Closed Won,9001.5,50.0,2025-06-15\n006000000000007AAA,001000000000013AAA,Deal 06,Prospecting,10501.75,60.0,2025-07-15\n006000000000008AAA,001000000000020AAA,Deal 07,Negotiation,12002.0,70.0,2025-08-15\n006000000000009AAA,001000000000027AAA,Deal 08,Closed Won,13502.25,80.0,2025-09-15\n006000000000010AAA,001000000000004AAA,Deal 09,Prospecting,15002.5,90.0,2025-01-15\n006000000000011AAA,001000000000011AAA,Deal 10,Negotiation,16502.75,0.0,2025-02-15\n006000000000012AAA,001000000000018AAA,Deal 11,Closed Won,18003.0,10.0,2025-03-15\n006000000000013AAA,001000000000025AAA,Deal 12,Prospecting,19503.25,20.0,2025-04-15\n006000000000014AAA,001000000000002AAA,Deal 13,Negotiation,21003.5,30.0,2025-05-15\n006000000000015AAA,001000000000009AAA,Deal 14,Closed Won,22503.75,40.0,2025-06-15\n006000000000016AAA,001000000000016AAA,Deal 15,Prospecting,24004.0,50.0,2025-07-15\n006000000000017AAA,001000000000023AAA,Deal 16,Negotiation,25504.25,60.0,2025-08-15\n006000000000018AAA,001000000000030AAA,Deal 17,Closed Won,27004.5,70.0,2025-09-15\n006000000000019AAA,001000000000007AAA,Deal 18,Prospecting,28504.75,80.0,2025-01-15\n006000000000020AAA,001000000000014AAA,Deal 19,Negotiation,30005.0,90.0,2025-02-15\n006000000000021AAA,001000000000021AAA,Deal 20,Closed Won,31505.25,0.0,2025-03-15\n006000000000022AAA,001000000000028AAA,Deal 21,Prospecting,33005.5,10.0,2025-04-15\n006000000000023AAA,001000000000005AAA,Deal 22,Negotiation,34505.75,20.0,2025-05-15\n006000000000024AAA,001000000000012AAA,Deal 23,Closed Won,36006.0,30.0,2025-06-15\n006000000000025AAA,001000000000019AAA,Deal 24,Prospecting,37506.25,40.0,2025-07-15\n006000000000026AAA,001000000000026AAA,Deal 25,Negotiation,39006.5,50.0,2025-08-15\n006000000000027AAA,001000000000003AAA,Deal 26,Closed Won,40506.75,60.0,2025-09-15\n006000000000028AAA,001000000000010AAA,Deal 27,Prospecting,42007.0,70.0,2025-01-15\n006000000000029AAA,001000000000017AAA,Deal 28,Negotiation,43507.25,80.0,2025-02-15\n006000000000030AAA,001000000000024AAA,Deal 29,Closed Won,45007.5,90.0,2025-03-15\n006000000000031AAA,001000000000001AAA,Deal 30,Prospecting,46507.75,0.0,2025-04-15\n006000000000032AAA,001000000000008AAA,Deal 31,Negotiation,48008.0,10.0,2025-05-15\n006000000000033AAA,001000000000015AAA,Deal 32,Closed Won,49508.25,20.0,2025-06-15\n006000000000034AAA,001000000000022AAA,Deal 33,Prospecting,51008.5,30.0,2025-07-15\n006000000000035AAA,001000000000029AAA,Deal 34,Negotiation,52508.75,40.0,2025-08-15\n006000000000036AAA,001000000000006AAA,Deal 35,Closed Won,54009.0,50.0,2025-09-15\n006000000000037AAA,001000000000013AAA,Deal 36,Prospecting,55509.25,60.0,2025-01-15\n006000000000038AAA,001000000000020AAA,Deal 37,Negotiation,57009.5,70.0,2025-02-15\n006000000000039AAA,001000000000027AAA,Deal 38,Closed Won,58509.75,80.0,2025-03-15\n006000000000040AAA,001000000000004AAA,Deal 39,Prospecting,60010.0,90.0,2025-04-15\n"
+  }
+ ]
+}

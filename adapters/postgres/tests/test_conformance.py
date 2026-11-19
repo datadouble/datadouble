@@ -212,7 +212,7 @@ def _tooling(tmp_path: Path) -> tuple[Registry, Tools]:
 def test_the_image_lists_every_extension_version(tmp_path: Path) -> None:
     _, tools = _tooling(tmp_path)
     tooling = Tooling(runtime=tools.runtime, image=PGVECTOR)
-    available = PostgresEngine().working(tmp_path / "scratch", tooling, "18.7").available()
+    available = PostgresEngine().working(tmp_path / "scratch", tooling, "18.7").available() or ()
     assert {("hstore", "1.4"), ("hstore", "1.8"), ("vector", "0.8.7")} <= {
         (r.name, r.version) for r in available
     }

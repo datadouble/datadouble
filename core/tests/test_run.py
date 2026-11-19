@@ -587,6 +587,9 @@ def test_the_image_must_provide_the_source_requirements(
     )
     engine.available = (vector,)
     assert not run(tmp_path / "c", registry, lock=engine.catalog).failed()
+    # Working databases that need no add-ons provide whatever the source uses.
+    engine.available = None
+    assert not run(tmp_path / "d", registry, lock=engine.catalog).failed()
 
 
 def test_omitted_requirements_are_not_checked(

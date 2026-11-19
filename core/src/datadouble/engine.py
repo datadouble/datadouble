@@ -180,10 +180,12 @@ class WorkingDatabases(Protocol):
         """The version of the server that builds and restores images."""
         ...
 
-    def available(self) -> tuple[Requirement, ...]:
+    def available(self) -> tuple[Requirement, ...] | None:
         """The requirements the working image can provide, one entry per version.
 
-        An entry without a version provides every version of it.
+        An entry without a version provides every version of it. None means the
+        working databases need none of the source's add-ons to hold its data,
+        such as Salesforce's local copies of an org's managed packages' objects.
         """
         ...
 

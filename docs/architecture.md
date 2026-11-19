@@ -122,7 +122,9 @@ engine-specific logic; engine quirks stay inside the adapter.
 Adapters declare their capabilities (supported formats, tool versions, whether
 they can share a snapshot across parallel workers) and the planner adapts to them.
 Where a mature tool already exists, an adapter wraps it rather than reimplementing
-it: native dump tools, and for Salesforce possibly SFDMU.
+it: native dump tools. Salesforce has none that fits a subset of one
+consistent read, so its adapter calls the org's own APIs, and SFDMU remains a
+candidate for loading copies back into an org (decision 111).
 
 Adapters are discovered through standard plugin entry points, so third-party
 adapters can be installed from anywhere.
@@ -201,7 +203,10 @@ working image that lacks one cannot load the data (decision 107).
   build asks the working image what it provides (the adapter's
   `available()`) and fails with `requirement_unmet`, listing every
   requirement it lacks or lacks at the source's version. The fix is an image
-  that has them, in `source.image`.
+  that has them, in `source.image`. An adapter whose working copies need no
+  add-ons to hold the data answers None, and the build skips the check:
+  Salesforce's copies are local databases, which keep a managed package's
+  objects and fields as ordinary tables and columns (decision 111).
 - **The working database runs the source's versions.** PostgreSQL creates
   each extension at the source's version, not the image's default.
 - **Leaving one out is explicit.** `source.omit` names requirements the
