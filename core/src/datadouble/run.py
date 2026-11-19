@@ -869,6 +869,9 @@ def _load[T](kind: type[T], value: JsonValue) -> T:
 
 def _require(working: WorkingDatabases, planned: Plan) -> None:
     """Fail unless the working image provides every requirement the copies keep."""
-    problems = unmet(planned.catalog.requirements, working.available())
+    available = working.available()
+    if available is None:
+        return
+    problems = unmet(planned.catalog.requirements, available)
     if problems:
         raise RequirementError(problems)

@@ -202,7 +202,7 @@ class FakeWorking:
     def server_version(self) -> str:
         return "1.0"
 
-    def available(self) -> tuple[Requirement, ...]:
+    def available(self) -> tuple[Requirement, ...] | None:
         return self.engine.available
 
     def close(self) -> None:
@@ -296,7 +296,7 @@ class FakeEngine:
     transforms: int = 0
     closed: int = 0
     owner_: str = field(default_factory=identity)
-    available: tuple[Requirement, ...] = ()
+    available: tuple[Requirement, ...] | None = ()
     name_: EngineName = _FAKE
 
     @property

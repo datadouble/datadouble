@@ -342,7 +342,7 @@ def test_plugins_the_data_needs_are_installed(source: MysqlScratch, tmp_path: Pa
         assert not result.failed()
         assert tuple(
             r.name
-            for r in working_databases(tmp_path / "scratch").available()
+            for r in working_databases(tmp_path / "scratch").available() or ()
             if r.name == "mypluglib.so"
         ) == ("mypluglib.so",)
         # Omitted, the plugin is not installed, and the table using it must go.
