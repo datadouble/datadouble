@@ -386,11 +386,10 @@ def test_the_scrubber_removes_credentials_hosts_and_org_ids() -> None:
 def test_the_recorder(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     sample_org(tmp_path / "org.sqlite")
     out = tmp_path / "fake.json"
-    assert (
-        recorder.main([str(out), "--fake", str(tmp_path / "org.sqlite"), "--objects", "Case"]) == 0
-    )
+    assert recorder.main(["fake.json", "--fake", "org.sqlite", "--objects", "Case"]) == 0
     assert "over 1 objects" in capsys.readouterr().out
     assert Cassette.read(out).interactions
     login = {
@@ -415,6 +414,10 @@ def test_the_recorder(
     text = (tmp_path / "org.json").read_text()
     assert "AQ4AQSecret" not in text
     assert "00D5e000000AbCdEAG" not in text
+    # It reads and writes only under the current directory.
+    with pytest.raises(SystemExit):
+        recorder.main(["../elsewhere.json"])
+    assert "outside the current directory" in capsys.readouterr().err
 
 
 # The source

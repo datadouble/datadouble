@@ -7,7 +7,7 @@
 display --json`` prints for an org you have logged in to with ``sf org login
 web``; the access token never leaves this process. ``--fake PATH`` records
 against a fake org instead, which is how the committed cassette was first
-made. The calls are :func:`exercise`'s: the API versions, the catalog of the
+made; both paths must be under the current directory. The calls are :func:`exercise`'s: the API versions, the catalog of the
 chosen objects with the installed packages, and each object's records read
 both ways the adapter reads them, a REST query and a Bulk API export.
 """
@@ -87,14 +87,24 @@ def record(
     return recording, exercised
 
 
+def _here(name: str) -> Path:
+    """A path under the current directory, the only place the recorder reads or writes."""
+    base = Path.cwd().resolve()
+    path = (base / name).resolve()
+    if not path.is_relative_to(base):
+        message = f"{name} is outside the current directory"
+        raise argparse.ArgumentTypeError(message)
+    return path
+
+
 def main(arguments: Sequence[str] | None = None) -> int:
     """Record a cassette; the org's login is read from standard input unless ``--fake``."""
     parser = argparse.ArgumentParser(
         description="Record a cassette of the adapter's calls to an org."
     )
-    parser.add_argument("cassette", type=Path)
+    parser.add_argument("cassette", type=_here)
     parser.add_argument("--objects", default="Account,Contact,Opportunity,Case")
-    parser.add_argument("--fake", type=Path)
+    parser.add_argument("--fake", type=_here)
     options = parser.parse_args(arguments)
     objects = tuple(name for name in options.objects.split(",") if name)
     secrets: tuple[str, ...]
