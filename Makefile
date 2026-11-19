@@ -123,8 +123,10 @@ test-ci:
 # scenarios run Claude on your own credential, and `datadouble` from this
 # checkout, installed with its own Python inside the copy: the sandbox reads
 # only the copy and the directories on PATH, not the home directory, where uv
-# keeps .venv's Python. EVAL_ARGS adds options, such as `--case build-github
-# --runs 1`.
+# keeps .venv's Python. The judge model is pinned because with the default
+# model the judge failed on an expired claude.ai login, though
+# ANTHROPIC_API_KEY was set. EVAL_ARGS adds options, such as `--case
+# build-github --runs 1`.
 validate-plugin:
 	claude plugin validate . --strict
 
@@ -135,6 +137,7 @@ test-skills:
 		uv sync --frozen --all-packages --no-dev --no-editable --managed-python --quiet && \
 	PATH="$$copy/.venv/bin:$$PATH" claude plugin eval "$$copy" --scaffold \
 		--allow-tools Bash Edit Write --trust-plugin --no-publish --ablation none \
+		--judge-model claude-haiku-4-5 \
 		--output-dir $(CURDIR)/.reports/skills $(EVAL_ARGS); \
 	status=$$?; rm -rf "$$copy"; exit $$status
 
