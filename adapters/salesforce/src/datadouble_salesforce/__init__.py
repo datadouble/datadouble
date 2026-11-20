@@ -26,9 +26,10 @@ import re
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Annotated
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 
 from datadouble.engine import EngineError, ServerPlan, SourceSession, Tooling, WorkingDatabases
 from datadouble.names import EngineName
@@ -47,6 +48,10 @@ FAKE_URL = "https://fake.example.com"
 _TIMEOUT = httpx.Timeout(120.0, connect=15.0)
 
 
+type HiddenField = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$")]
+"""A field as ``Object.Field``."""
+
+
 class OrgConnection(BaseModel):
     """The ``source.connection`` settings for an org."""
 
@@ -57,6 +62,8 @@ class OrgConnection(BaseModel):
     api_version: str = Field(default=DEFAULT_API_VERSION, pattern=re.compile(r"^\d+\.\d$"))
     objects: tuple[str, ...] = ()
     """Patterns (``*``, ``?``, ``[...]``) for the objects to read; all, when empty."""
+    hidden: tuple[HiddenField, ...] = ()
+    """Fields field-level security may hide from the user, which copies go without."""
 
 
 class FakeConnection(BaseModel):
@@ -67,6 +74,7 @@ class FakeConnection(BaseModel):
     fake: str
     api_version: str = Field(default=DEFAULT_API_VERSION, pattern=re.compile(r"^\d+\.\d$"))
     objects: tuple[str, ...] = ()
+    hidden: tuple[HiddenField, ...] = ()
 
 
 class SalesforceEngine:
@@ -113,7 +121,9 @@ class SalesforceEngine:
             base_url=url, headers=headers, transport=transport, timeout=_TIMEOUT
         ) as client:
             org = RestOrg(client, settings.api_version, poll_seconds=poll)
-            yield SalesforceSource(org, settings.api_version, settings.objects)
+            yield SalesforceSource(
+                org, settings.api_version, settings.objects, frozenset(settings.hidden)
+            )
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:  # noqa: ARG002 - copies are SQLite at every API version
         """SQLite copies under ``scratch``; no container image applies."""

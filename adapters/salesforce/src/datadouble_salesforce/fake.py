@@ -42,6 +42,9 @@ _INTEGER = {"int", "long"}
 _NUMBER = {"double", "currency", "percent"}
 _PREFIXES = {"Account": "001", "Contact": "003", "Opportunity": "006", "User": "005", "Case": "500"}
 _VERSION_PATH = re.compile(r"^/services/data/v(?P<version>\d+\.\d+)(?P<rest>/.*)$")
+_FIELD_DEFINITIONS = re.compile(r"^SELECT .* FROM FieldDefinition WHERE ", re.IGNORECASE)
+_FIELD_PERMISSIONS = re.compile(r"^SELECT .* FROM FieldPermissions WHERE ", re.IGNORECASE)
+_QUOTED = re.compile(r"'([^']*)'")
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +55,10 @@ class FakeField:
     type: str = "string"
     nillable: bool = True
     reference_to: tuple[str, ...] = ()
+    hidden: bool = False
+    """Hidden by field-level security: defined and granted, but not described or queryable."""
+    internal: bool = False
+    """Defined but granted to no one, like a field of a feature the org does not use."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +91,7 @@ class FakeOrg:
                     queryable INTEGER, createable INTEGER);
                 CREATE TABLE IF NOT EXISTS _fields (
                     object TEXT COLLATE NOCASE, name TEXT, type TEXT, nillable INTEGER,
-                    reference_to TEXT, position INTEGER);
+                    reference_to TEXT, position INTEGER, hidden INTEGER, internal INTEGER);
                 CREATE TABLE IF NOT EXISTS _packages (namespace TEXT, name TEXT, version TEXT);
                 """
             )
@@ -122,7 +129,7 @@ class FakeOrg:
                 "SELECT COUNT(*) FROM _fields WHERE object = ?", (object_name,)
             ).fetchone()[0]
             connection.execute(
-                "INSERT INTO _fields VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO _fields VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     object_name,
                     added.name,
@@ -130,6 +137,8 @@ class FakeOrg:
                     added.nillable,
                     ",".join(added.reference_to),
                     position,
+                    added.hidden,
+                    added.internal,
                 ),
             )
             if added.name != "Id":
@@ -161,16 +170,19 @@ class FakeOrg:
         with self._connect() as connection:
             rows = connection.execute("SELECT * FROM _objects ORDER BY name").fetchall()
             fields = connection.execute(
-                "SELECT object, name, type, nillable, reference_to FROM _fields ORDER BY position"
+                "SELECT object, name, type, nillable, reference_to, hidden, internal"
+                " FROM _fields ORDER BY position"
             ).fetchall()
         by_object: dict[str, list[FakeField]] = {}
-        for object_name, name, field_type, nillable, reference_to in fields:
+        for object_name, name, field_type, nillable, reference_to, hidden, internal in fields:
             by_object.setdefault(str(object_name).lower(), []).append(
                 FakeField(
                     str(name),
                     str(field_type),
                     bool(nillable),
                     tuple(str(reference_to).split(",")) if reference_to else (),
+                    hidden=bool(hidden),
+                    internal=bool(internal),
                 )
             )
         return [
@@ -198,7 +210,11 @@ class FakeOrg:
 
         def fields(name: str) -> Mapping[str, str] | None:
             found = objects.get(name.lower())
-            return None if found is None else {f.name.lower(): f.name for f in found.fields}
+            return (
+                None
+                if found is None
+                else {f.name.lower(): f.name for f in found.fields if _described(f)}
+            )
 
         translated: Translated = translate(query, fields)
         queried = objects[translated.object.lower()]
@@ -220,6 +236,11 @@ class FakeOrg:
                 (str(a), str(b), str(c))
                 for a, b, c in connection.execute("SELECT * FROM _packages ORDER BY namespace")
             ]
+
+
+def _described(found: FakeField) -> bool:
+    """Whether a field is in its object's description and can be queried."""
+    return not (found.hidden or found.internal)
 
 
 def _stored(value: Value | dt.datetime) -> Value:
@@ -296,15 +317,12 @@ class FakeTransport(httpx.BaseTransport):
             case "GET", ["sobjects", name, "describe"]:
                 answer = self._describe(name)
             case "GET", ["query"]:
-                _, rows = self.org.run(query["q"])
-                answer = self._page(version, str(uuid.uuid4()), rows, 0)
+                answer = self._page(version, str(uuid.uuid4()), self._query(query["q"]), 0)
             case "GET", ["query", cursor]:
                 key, offset = cursor.rsplit("-", 1)
                 answer = self._page(version, key, self._cursors[key], int(offset))
             case "GET", ["tooling", "query"]:
-                if "installedsubscriberpackage" not in query["q"].lower():
-                    return _failure(400, "INVALID_TYPE")
-                answer = self._packages()
+                return self._tooling(version, query["q"])
             case "POST", ["jobs", "query"]:
                 body = json.loads(request.content)
                 fields, rows = self.org.run(str(body["query"]))
@@ -320,6 +338,21 @@ class FakeTransport(httpx.BaseTransport):
             case _:
                 raise KeyError(rest)
         return httpx.Response(200, json=answer)
+
+    def _query(self, soql: str) -> list[dict[str, JsonValue]]:
+        if _FIELD_PERMISSIONS.match(soql):
+            return self._granted(soql)
+        _, rows = self.org.run(soql)
+        return rows
+
+    def _tooling(self, version: str, soql: str) -> httpx.Response:
+        if _FIELD_DEFINITIONS.match(soql):
+            return httpx.Response(
+                200, json=self._page(version, str(uuid.uuid4()), self._defined(soql), 0)
+            )
+        if "installedsubscriberpackage" not in soql.lower():
+            return _failure(400, "INVALID_TYPE")
+        return httpx.Response(200, json=self._packages())
 
     def _summaries(self) -> list[JsonValue]:
         return [
@@ -347,8 +380,29 @@ class FakeTransport(httpx.BaseTransport):
                     "referenceTo": list(f.reference_to),
                 }
                 for f in found.fields
+                if _described(f)
             ],
         }
+
+    def _named(self, query: str) -> list[_Object]:
+        """The objects a field query's ``IN`` list names."""
+        names = {name.lower() for name in _QUOTED.findall(query)}
+        return [o for o in self.org.objects() if o.name.lower() in names]
+
+    def _defined(self, query: str) -> list[dict[str, JsonValue]]:
+        return [
+            {"EntityDefinition": {"QualifiedApiName": o.name}, "QualifiedApiName": f.name}
+            for o in self._named(query)
+            for f in o.fields
+        ]
+
+    def _granted(self, query: str) -> list[dict[str, JsonValue]]:
+        return [
+            {"Field": f"{o.name}.{f.name}"}
+            for o in self._named(query)
+            for f in o.fields
+            if not f.internal and f.name != "Id" and (f.nillable or f.hidden)
+        ]
 
     def _page(
         self, version: str, key: str, rows: list[dict[str, JsonValue]], offset: int
@@ -425,6 +479,7 @@ def sample_org(path: Path) -> FakeOrg:
             FakeField("NumberOfEmployees", "int"),
             FakeField("BillingAddress", "address"),
             FakeField("BillingCity"),
+            FakeField("CompareName", internal=True),
             FakeField("ParentId", "reference", reference_to=("Account",)),
             FakeField("CreatedDate", "datetime", nillable=False),
         ),

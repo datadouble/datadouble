@@ -1,0 +1,95 @@
+{
+ "format": 1,
+ "interactions": [
+  {
+   "method": "GET",
+   "url": "/services/data/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "[{\"version\":\"60.0\",\"url\":\"/services/data/v60.0\"},{\"version\":\"61.0\",\"url\":\"/services/data/v61.0\"},{\"version\":\"62.0\",\"url\":\"/services/data/v62.0\"},{\"version\":\"63.0\",\"url\":\"/services/data/v63.0\"},{\"version\":\"64.0\",\"url\":\"/services/data/v64.0\"}]"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"sobjects\":[{\"name\":\"Account\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"001\"},{\"name\":\"AccountHistory\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":false,\"replicateable\":false,\"keyPrefix\":\"a07\"},{\"name\":\"AppMenuItem\",\"custom\":false,\"queryable\":false,\"retrieveable\":false,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a08\"},{\"name\":\"Case\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"500\"},{\"name\":\"Contact\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"003\"},{\"name\":\"dd_ratings__Rating__c\",\"custom\":true,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a06\"},{\"name\":\"Lead\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a05\"},{\"name\":\"Opportunity\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"006\"},{\"name\":\"Task\",\"custom\":false,\"queryable\":true,\"retrieveable\":true,\"createable\":true,\"replicateable\":true,\"keyPrefix\":\"a04\"}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Account/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Account\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Name\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Industry\",\"type\":\"picklist\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Phone\",\"type\":\"phone\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Website\",\"type\":\"url\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"AnnualRevenue\",\"type\":\"currency\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"NumberOfEmployees\",\"type\":\"int\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"BillingAddress\",\"type\":\"address\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"BillingCity\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"ParentId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"CreatedDate\",\"type\":\"datetime\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Case/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Case\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"ContactId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Contact\"]},{\"name\":\"Subject\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Status\",\"type\":\"picklist\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Description\",\"type\":\"textarea\",\"nillable\":true,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Contact/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Contact\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"FirstName\",\"type\":\"string\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"LastName\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Email\",\"type\":\"email\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Phone\",\"type\":\"phone\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Birthdate\",\"type\":\"date\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"HasOptedOutOfEmail\",\"type\":\"boolean\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"CreatedDate\",\"type\":\"datetime\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/Opportunity/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"Opportunity\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"AccountId\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"Name\",\"type\":\"string\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"StageName\",\"type\":\"picklist\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"Amount\",\"type\":\"currency\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"Probability\",\"type\":\"percent\",\"nillable\":true,\"referenceTo\":[]},{\"name\":\"CloseDate\",\"type\":\"date\",\"nillable\":false,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/sobjects/dd_ratings__Rating__c/describe/",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"name\":\"dd_ratings__Rating__c\",\"fields\":[{\"name\":\"Id\",\"type\":\"id\",\"nillable\":false,\"referenceTo\":[]},{\"name\":\"dd_ratings__Account__c\",\"type\":\"reference\",\"nillable\":true,\"referenceTo\":[\"Account\"]},{\"name\":\"dd_ratings__Score__c\",\"type\":\"double\",\"nillable\":true,\"referenceTo\":[]}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/tooling/query/?q=SELECT%20EntityDefinition.QualifiedApiName%2C%20QualifiedApiName%20FROM%20FieldDefinition%20WHERE%20EntityDefinition.QualifiedApiName%20IN%20%28%27Account%27%2C%20%27Case%27%2C%20%27Contact%27%2C%20%27Opportunity%27%2C%20%27dd_ratings__Rating__c%27%29",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":38,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"Id\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"Name\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"Industry\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"Phone\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"Website\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"AnnualRevenue\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"NumberOfEmployees\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"BillingAddress\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"BillingCity\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"CompareName\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"ParentId\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Account\"},\"QualifiedApiName\":\"CreatedDate\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"Id\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"AccountId\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"ContactId\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"Subject\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"Status\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Case\"},\"QualifiedApiName\":\"Description\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"Id\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"AccountId\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"FirstName\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"LastName\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"Email\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"Phone\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"Birthdate\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"HasOptedOutOfEmail\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"CreatedDate\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Contact\"},\"QualifiedApiName\":\"Pronouns\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"dd_ratings__Rating__c\"},\"QualifiedApiName\":\"Id\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"dd_ratings__Rating__c\"},\"QualifiedApiName\":\"dd_ratings__Account__c\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"dd_ratings__Rating__c\"},\"QualifiedApiName\":\"dd_ratings__Score__c\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"Id\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"AccountId\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"Name\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"StageName\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"Amount\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"Probability\"},{\"attributes\":{\"type\":\"record\"},\"EntityDefinition\":{\"QualifiedApiName\":\"Opportunity\"},\"QualifiedApiName\":\"CloseDate\"}]}"
+  },
+  {
+   "method": "GET",
+   "url": "/services/data/v62.0/query/?q=SELECT%20Field%20FROM%20FieldPermissions%20WHERE%20SobjectType%20IN%20%28%27Account%27%2C%20%27Case%27%2C%20%27Contact%27%2C%20%27Opportunity%27%2C%20%27dd_ratings__Rating__c%27%29%20GROUP%20BY%20Field",
+   "body": "",
+   "status": 200,
+   "headers": {
+    "content-type": "application/json"
+   },
+   "response": "{\"totalSize\":24,\"done\":true,\"records\":[{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.Industry\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.Phone\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.Website\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.AnnualRevenue\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.NumberOfEmployees\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.BillingAddress\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.BillingCity\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Account.ParentId\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Case.AccountId\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Case.ContactId\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Case.Subject\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Case.Status\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Case.Description\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.AccountId\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.FirstName\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.Email\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.Phone\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.Birthdate\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Contact.Pronouns\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"dd_ratings__Rating__c.dd_ratings__Account__c\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"dd_ratings__Rating__c.dd_ratings__Score__c\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Opportunity.AccountId\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Opportunity.Amount\"},{\"attributes\":{\"type\":\"record\"},\"Field\":\"Opportunity.Probability\"}]}"
+  }
+ ]
+}
