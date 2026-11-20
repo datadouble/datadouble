@@ -693,7 +693,11 @@ def test_the_seed_data_looks_real_and_is_complete() -> None:
     saved: set[str] = set()
     # Orgs' duplicate rules refuse records that look alike.
     seen: set[tuple[str, str]] = set()
-    for step in json.loads((folder / "plan.json").read_text("utf-8")):
+    standard = json.loads((folder / "plan.json").read_text("utf-8"))
+    # The plan for an org with the Subscription__c custom object adds a step.
+    custom = json.loads((folder / "plan-subscriptions.json").read_text("utf-8"))
+    assert custom[: len(standard)] == standard
+    for step in custom:
         for name in step["files"]:
             records = json.loads((folder / name).read_text("utf-8"))["records"]
             assert len(records) <= 200, "sf data import tree loads at most 200 records a file"

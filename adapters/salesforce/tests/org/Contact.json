@@ -11,7 +11,10 @@
    "Title": "Engineer",
    "Birthdate": "1955-01-01",
    "MailingCity": "Springfield",
-   "AccountId": "@Account0"
+   "AccountId": "@Account0",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": true
   },
   {
    "attributes": {
@@ -25,7 +28,11 @@
    "Title": "Buyer",
    "Birthdate": "1956-02-02",
    "MailingCity": "Riverton",
-   "AccountId": "@Account1"
+   "AccountId": "@Account1",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/Her"
   },
   {
    "attributes": {
@@ -39,7 +46,11 @@
    "Title": "Engineer",
    "Birthdate": "1957-03-03",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account2"
+   "AccountId": "@Account2",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Female"
   },
   {
    "attributes": {
@@ -53,7 +64,10 @@
    "Title": "Office Manager",
    "Birthdate": "1958-04-04",
    "MailingCity": "Fairview",
-   "AccountId": "@Account3"
+   "AccountId": "@Account3",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -67,7 +81,10 @@
    "Title": "Office Manager",
    "Birthdate": "1959-05-05",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account4"
+   "AccountId": "@Account4",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -81,7 +98,11 @@
    "Title": "CFO",
    "Birthdate": "1960-06-06",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account5"
+   "AccountId": "@Account5",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/Him"
   },
   {
    "attributes": {
@@ -95,7 +116,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1961-07-07",
    "MailingCity": "Springfield",
-   "AccountId": "@Account6"
+   "AccountId": "@Account6",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -109,7 +133,10 @@
    "Title": "CFO",
    "Birthdate": "1962-08-08",
    "MailingCity": "Riverton",
-   "AccountId": "@Account7"
+   "AccountId": "@Account7",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -123,7 +150,11 @@
    "Title": "Engineer",
    "Birthdate": "1963-09-09",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account8"
+   "AccountId": "@Account8",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Male"
   },
   {
    "attributes": {
@@ -136,7 +167,11 @@
    "Phone": "(312) 319-8996",
    "Title": "Engineer",
    "Birthdate": "1964-10-10",
-   "MailingCity": "Fairview"
+   "MailingCity": "Fairview",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "They/Them"
   },
   {
    "attributes": {
@@ -150,7 +185,10 @@
    "Title": "Buyer",
    "Birthdate": "1965-11-11",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account10"
+   "AccountId": "@Account10",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -164,7 +202,10 @@
    "Title": "CFO",
    "Birthdate": "1966-12-12",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account11"
+   "AccountId": "@Account11",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true
   },
   {
    "attributes": {
@@ -178,7 +219,10 @@
    "Title": "Office Manager",
    "Birthdate": "1967-01-13",
    "MailingCity": "Springfield",
-   "AccountId": "@Account12"
+   "AccountId": "@Account12",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -191,7 +235,11 @@
    "Title": "CFO",
    "Birthdate": "1968-02-14",
    "MailingCity": "Riverton",
-   "AccountId": "@Account13"
+   "AccountId": "@Account13",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/They"
   },
   {
    "attributes": {
@@ -205,7 +253,11 @@
    "Title": "Buyer",
    "Birthdate": "1969-03-15",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account14"
+   "AccountId": "@Account14",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false,
+   "GenderIdentity": "Nonbinary"
   },
   {
    "attributes": {
@@ -219,7 +271,10 @@
    "Title": "CFO",
    "Birthdate": "1970-04-16",
    "MailingCity": "Fairview",
-   "AccountId": "@Account15"
+   "AccountId": "@Account15",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -233,7 +288,10 @@
    "Title": "CFO",
    "Birthdate": "1971-05-17",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account16"
+   "AccountId": "@Account16",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -247,7 +305,11 @@
    "Title": "Office Manager",
    "Birthdate": "1972-06-18",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account17"
+   "AccountId": "@Account17",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/They"
   },
   {
    "attributes": {
@@ -261,7 +323,10 @@
    "Title": "Office Manager",
    "Birthdate": "1973-07-19",
    "MailingCity": "Springfield",
-   "AccountId": "@Account18"
+   "AccountId": "@Account18",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -274,7 +339,10 @@
    "Phone": "(512) 446-7564",
    "Title": "Director of Operations",
    "Birthdate": "1974-08-20",
-   "MailingCity": "Riverton"
+   "MailingCity": "Riverton",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -288,7 +356,11 @@
    "Title": "CFO",
    "Birthdate": "1975-09-21",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account20"
+   "AccountId": "@Account20",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Not Listed"
   },
   {
    "attributes": {
@@ -302,7 +374,11 @@
    "Title": "Engineer",
    "Birthdate": "1976-10-22",
    "MailingCity": "Fairview",
-   "AccountId": "@Account21"
+   "AccountId": "@Account21",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false,
+   "Pronouns": "She/Her"
   },
   {
    "attributes": {
@@ -316,7 +392,10 @@
    "Title": "Engineer",
    "Birthdate": "1977-11-23",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account22"
+   "AccountId": "@Account22",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true
   },
   {
    "attributes": {
@@ -330,7 +409,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1978-12-24",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account23"
+   "AccountId": "@Account23",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -344,7 +426,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1979-01-25",
    "MailingCity": "Springfield",
-   "AccountId": "@Account24"
+   "AccountId": "@Account24",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -358,7 +443,11 @@
    "Title": "Office Manager",
    "Birthdate": "1980-02-26",
    "MailingCity": "Riverton",
-   "AccountId": "@Account25"
+   "AccountId": "@Account25",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/Him"
   },
   {
    "attributes": {
@@ -371,7 +460,11 @@
    "Title": "CFO",
    "Birthdate": "1981-03-27",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account26"
+   "AccountId": "@Account26",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Female"
   },
   {
    "attributes": {
@@ -385,7 +478,10 @@
    "Title": "Engineer",
    "Birthdate": "1982-04-28",
    "MailingCity": "Fairview",
-   "AccountId": "@Account27"
+   "AccountId": "@Account27",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -399,7 +495,10 @@
    "Title": "Engineer",
    "Birthdate": "1983-05-01",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account28"
+   "AccountId": "@Account28",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -412,7 +511,11 @@
    "Phone": "(206) 289-7485",
    "Title": "Engineer",
    "Birthdate": "1984-06-02",
-   "MailingCity": "Port Ellis"
+   "MailingCity": "Port Ellis",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "They/Them"
   },
   {
    "attributes": {
@@ -426,7 +529,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1985-07-03",
    "MailingCity": "Springfield",
-   "AccountId": "@Account0"
+   "AccountId": "@Account0",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -440,7 +546,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1986-08-04",
    "MailingCity": "Riverton",
-   "AccountId": "@Account1"
+   "AccountId": "@Account1",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -454,7 +563,11 @@
    "Title": "Office Manager",
    "Birthdate": "1987-09-05",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account2"
+   "AccountId": "@Account2",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Male"
   },
   {
    "attributes": {
@@ -468,7 +581,11 @@
    "Title": "Director of Operations",
    "Birthdate": "1988-10-06",
    "MailingCity": "Fairview",
-   "AccountId": "@Account3"
+   "AccountId": "@Account3",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true,
+   "Pronouns": "She/They"
   },
   {
    "attributes": {
@@ -482,7 +599,10 @@
    "Title": "Buyer",
    "Birthdate": "1989-11-07",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account4"
+   "AccountId": "@Account4",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -496,7 +616,10 @@
    "Title": "Office Manager",
    "Birthdate": "1990-12-08",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account5"
+   "AccountId": "@Account5",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -510,7 +633,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1991-01-09",
    "MailingCity": "Springfield",
-   "AccountId": "@Account6"
+   "AccountId": "@Account6",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -524,7 +650,11 @@
    "Title": "CFO",
    "Birthdate": "1992-02-10",
    "MailingCity": "Riverton",
-   "AccountId": "@Account7"
+   "AccountId": "@Account7",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/They"
   },
   {
    "attributes": {
@@ -538,7 +668,11 @@
    "Title": "CFO",
    "Birthdate": "1993-03-11",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account8"
+   "AccountId": "@Account8",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Nonbinary"
   },
   {
    "attributes": {
@@ -550,7 +684,10 @@
    "Phone": "(602) 630-3147",
    "Title": "Buyer",
    "Birthdate": "1994-04-12",
-   "MailingCity": "Fairview"
+   "MailingCity": "Fairview",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -564,7 +701,10 @@
    "Title": "Engineer",
    "Birthdate": "1995-05-13",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account10"
+   "AccountId": "@Account10",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -578,7 +718,11 @@
    "Title": "Director of Operations",
    "Birthdate": "1996-06-14",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account11"
+   "AccountId": "@Account11",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/Her"
   },
   {
    "attributes": {
@@ -592,7 +736,10 @@
    "Title": "Engineer",
    "Birthdate": "1997-07-15",
    "MailingCity": "Springfield",
-   "AccountId": "@Account12"
+   "AccountId": "@Account12",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -606,7 +753,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1998-08-16",
    "MailingCity": "Riverton",
-   "AccountId": "@Account13"
+   "AccountId": "@Account13",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -620,7 +770,11 @@
    "Title": "Office Manager",
    "Birthdate": "1999-09-17",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account14"
+   "AccountId": "@Account14",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true,
+   "GenderIdentity": "Not Listed"
   },
   {
    "attributes": {
@@ -634,7 +788,11 @@
    "Title": "CFO",
    "Birthdate": "1955-10-18",
    "MailingCity": "Fairview",
-   "AccountId": "@Account15"
+   "AccountId": "@Account15",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/Him"
   },
   {
    "attributes": {
@@ -648,7 +806,10 @@
    "Title": "Buyer",
    "Birthdate": "1956-11-19",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account16"
+   "AccountId": "@Account16",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -662,7 +823,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1957-12-20",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account17"
+   "AccountId": "@Account17",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -676,7 +840,10 @@
    "Title": "Office Manager",
    "Birthdate": "1958-01-21",
    "MailingCity": "Springfield",
-   "AccountId": "@Account18"
+   "AccountId": "@Account18",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -689,7 +856,11 @@
    "Phone": "(404) 776-1456",
    "Title": "Buyer",
    "Birthdate": "1959-02-22",
-   "MailingCity": "Riverton"
+   "MailingCity": "Riverton",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false,
+   "Pronouns": "They/Them"
   },
   {
    "attributes": {
@@ -703,7 +874,11 @@
    "Title": "Office Manager",
    "Birthdate": "1960-03-23",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account20"
+   "AccountId": "@Account20",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Female"
   },
   {
    "attributes": {
@@ -717,7 +892,10 @@
    "Title": "Engineer",
    "Birthdate": "1961-04-24",
    "MailingCity": "Fairview",
-   "AccountId": "@Account21"
+   "AccountId": "@Account21",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -730,7 +908,10 @@
    "Title": "Office Manager",
    "Birthdate": "1962-05-25",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account22"
+   "AccountId": "@Account22",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -744,7 +925,11 @@
    "Title": "CFO",
    "Birthdate": "1963-06-26",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account23"
+   "AccountId": "@Account23",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/They"
   },
   {
    "attributes": {
@@ -758,7 +943,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1964-07-27",
    "MailingCity": "Springfield",
-   "AccountId": "@Account24"
+   "AccountId": "@Account24",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -772,7 +960,10 @@
    "Title": "Engineer",
    "Birthdate": "1965-08-28",
    "MailingCity": "Riverton",
-   "AccountId": "@Account25"
+   "AccountId": "@Account25",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true
   },
   {
    "attributes": {
@@ -786,7 +977,11 @@
    "Title": "Engineer",
    "Birthdate": "1966-09-01",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account26"
+   "AccountId": "@Account26",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false,
+   "GenderIdentity": "Male"
   },
   {
    "attributes": {
@@ -800,7 +995,11 @@
    "Title": "Buyer",
    "Birthdate": "1967-10-02",
    "MailingCity": "Fairview",
-   "AccountId": "@Account27"
+   "AccountId": "@Account27",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/They"
   },
   {
    "attributes": {
@@ -814,7 +1013,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1968-11-03",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account28"
+   "AccountId": "@Account28",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -827,7 +1029,10 @@
    "Phone": "(617) 341-8663",
    "Title": "Director of Operations",
    "Birthdate": "1969-12-04",
-   "MailingCity": "Port Ellis"
+   "MailingCity": "Port Ellis",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -841,7 +1046,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1970-01-05",
    "MailingCity": "Springfield",
-   "AccountId": "@Account0"
+   "AccountId": "@Account0",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -855,7 +1063,11 @@
    "Title": "Office Manager",
    "Birthdate": "1971-02-06",
    "MailingCity": "Riverton",
-   "AccountId": "@Account1"
+   "AccountId": "@Account1",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/Her"
   },
   {
    "attributes": {
@@ -869,7 +1081,11 @@
    "Title": "Director of Operations",
    "Birthdate": "1972-03-07",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account2"
+   "AccountId": "@Account2",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Nonbinary"
   },
   {
    "attributes": {
@@ -883,7 +1099,10 @@
    "Title": "CFO",
    "Birthdate": "1973-04-08",
    "MailingCity": "Fairview",
-   "AccountId": "@Account3"
+   "AccountId": "@Account3",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -897,7 +1116,10 @@
    "Title": "Engineer",
    "Birthdate": "1974-05-09",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account4"
+   "AccountId": "@Account4",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -910,7 +1132,11 @@
    "Title": "Office Manager",
    "Birthdate": "1975-06-10",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account5"
+   "AccountId": "@Account5",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "He/Him"
   },
   {
    "attributes": {
@@ -924,7 +1150,10 @@
    "Title": "Buyer",
    "Birthdate": "1976-07-11",
    "MailingCity": "Springfield",
-   "AccountId": "@Account6"
+   "AccountId": "@Account6",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": true
   },
   {
    "attributes": {
@@ -938,7 +1167,10 @@
    "Title": "Buyer",
    "Birthdate": "1977-08-12",
    "MailingCity": "Riverton",
-   "AccountId": "@Account7"
+   "AccountId": "@Account7",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -952,7 +1184,11 @@
    "Title": "Director of Operations",
    "Birthdate": "1978-09-13",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account8"
+   "AccountId": "@Account8",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Not Listed"
   },
   {
    "attributes": {
@@ -965,7 +1201,11 @@
    "Phone": "(617) 974-3122",
    "Title": "Engineer",
    "Birthdate": "1979-10-14",
-   "MailingCity": "Fairview"
+   "MailingCity": "Fairview",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "They/Them"
   },
   {
    "attributes": {
@@ -979,7 +1219,10 @@
    "Title": "Office Manager",
    "Birthdate": "1980-11-15",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account10"
+   "AccountId": "@Account10",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -993,7 +1236,10 @@
    "Title": "CFO",
    "Birthdate": "1981-12-16",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account11"
+   "AccountId": "@Account11",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -1007,7 +1253,10 @@
    "Title": "Director of Operations",
    "Birthdate": "1982-01-17",
    "MailingCity": "Springfield",
-   "AccountId": "@Account12"
+   "AccountId": "@Account12",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -1021,7 +1270,11 @@
    "Title": "Buyer",
    "Birthdate": "1983-02-18",
    "MailingCity": "Riverton",
-   "AccountId": "@Account13"
+   "AccountId": "@Account13",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "Pronouns": "She/They"
   },
   {
    "attributes": {
@@ -1035,7 +1288,11 @@
    "Title": "Office Manager",
    "Birthdate": "1984-03-19",
    "MailingCity": "Lakeside",
-   "AccountId": "@Account14"
+   "AccountId": "@Account14",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false,
+   "GenderIdentity": "Female"
   },
   {
    "attributes": {
@@ -1049,7 +1306,10 @@
    "Title": "Buyer",
    "Birthdate": "1985-04-20",
    "MailingCity": "Fairview",
-   "AccountId": "@Account15"
+   "AccountId": "@Account15",
+   "HasOptedOutOfEmail": true,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -1063,7 +1323,10 @@
    "Title": "Office Manager",
    "Birthdate": "1986-05-21",
    "MailingCity": "Mill Creek",
-   "AccountId": "@Account16"
+   "AccountId": "@Account16",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -1077,7 +1340,11 @@
    "Title": "Buyer",
    "Birthdate": "1987-06-22",
    "MailingCity": "Port Ellis",
-   "AccountId": "@Account17"
+   "AccountId": "@Account17",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": true,
+   "DoNotCall": true,
+   "Pronouns": "He/They"
   },
   {
    "attributes": {
@@ -1090,7 +1357,10 @@
    "Title": "Buyer",
    "Birthdate": "1988-07-23",
    "MailingCity": "Springfield",
-   "AccountId": "@Account18"
+   "AccountId": "@Account18",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   },
   {
    "attributes": {
@@ -1103,7 +1373,10 @@
    "Phone": "(415) 469-1825",
    "Title": "Director of Operations",
    "Birthdate": "1989-08-24",
-   "MailingCity": "Riverton"
+   "MailingCity": "Riverton",
+   "HasOptedOutOfEmail": false,
+   "HasOptedOutOfFax": false,
+   "DoNotCall": false
   }
  ]
 }
