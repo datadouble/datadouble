@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make record-salesforce` records a cassette of its calls from an org that
   stands in for a source, scrubbed of credentials and the org's identity;
   `make seed-salesforce` loads it with invented records that look real.
-  Fields that field-level security hides from the org user are left out of
-  copies without an error, so that user must be able to read them.
+  Fields that field-level security hides from the org user fail the plan,
+  naming each one, unless `source.connection.hidden` lists them.
 - **Requirements for Oracle.** The index types of the schemas' domain
   indexes, such as Oracle Text's `CTXSYS.CONTEXT`, are options the working
   image must provide. Omitting one leaves its indexes out of the copies. SQL

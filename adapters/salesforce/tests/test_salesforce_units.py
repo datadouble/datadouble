@@ -71,6 +71,7 @@ from datadouble_salesforce.soql import (
 from datadouble_salesforce.source import (
     SalesforceSource,
     StoredColumn,
+    hidden_fields,
     included,
     kind,
     typed,
@@ -81,6 +82,26 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
 CASSETTE = Path(__file__).parent / "cassettes" / "org.json"
+HIDDEN_CASSETTE = Path(__file__).parent / "cassettes" / "org-hidden.json"
+# What the cassettes were recorded from: the objects, the custom object and
+# its reference to Account, the managed package, and the fields field-level
+# security hid for the hidden cassette.
+OBJECTS = ("Account", "Contact", "Opportunity", "Case")
+# What the committed cassettes recorded: the org's custom object and its
+# reference to Account, its managed package, and the fields field-level
+# security hid once the recording user's permission sets were removed.
+CUSTOM = "Subscription__c"
+CUSTOM_REFERENCE = "Account__c"
+PACKAGE = "dlrs"
+HIDDEN = (
+    "Account.Active_Subscription_Total__c",
+    "Contact.BuyerAttributes",
+    "Contact.DoNotCall",
+    "Contact.GenderIdentity",
+    "Contact.HasOptedOutOfEmail",
+    "Contact.HasOptedOutOfFax",
+    "Contact.Pronouns",
+)
 AS_OF = dt.datetime(2026, 1, 2, 3, 4, 5, 6000, tzinfo=dt.UTC)
 ACCOUNT = TableName.of("", "Account")
 CONTACT = TableName.of("", "Contact")
@@ -302,24 +323,31 @@ def test_the_committed_cassette_replays() -> None:
     replay = ReplayTransport(Cassette.read(CASSETTE))
     with httpx.Client(base_url="https://" + EXAMPLE_HOST, transport=replay) as client:
         org = RestOrg(client, poll_seconds=0.0)
-        exercised = recorder.exercise(
-            SalesforceSource(
-                org, "62.0", ("Account", "Contact", "Opportunity", "Case", "Subscription__c")
-            )
-        )
+        exercised = recorder.exercise(SalesforceSource(org, "62.0", (*OBJECTS, CUSTOM)))
     assert exercised.catalog.tables
     for table in exercised.catalog.tables:
         assert table.primary_key == (ColumnName("Id"),)
         assert exercised.queried[table.name.name] == exercised.exported[table.name.name]
     # The org's customizations: a custom object referring to Account, and a
     # managed package.
-    (subscription,) = (t for t in exercised.catalog.tables if t.name.name == "Subscription__c")
-    assert {(fk.columns, fk.target.name) for fk in subscription.foreign_keys} >= {
-        ((ColumnName("Account__c"),), "Account")
+    (custom,) = (t for t in exercised.catalog.tables if t.name.name == CUSTOM)
+    assert {(fk.columns, fk.target.name) for fk in custom.foreign_keys} >= {
+        ((ColumnName(CUSTOM_REFERENCE),), "Account")
     }
     assert {(r.kind, r.name) for r in exercised.catalog.requirements} >= {
-        (RequirementKind.PACKAGE, "dlrs")
+        (RequirementKind.PACKAGE, PACKAGE)
     }
+
+
+def test_the_hidden_cassette_fails() -> None:
+    replay = ReplayTransport(Cassette.read(HIDDEN_CASSETTE))
+    with httpx.Client(base_url="https://" + EXAMPLE_HOST, transport=replay) as client:
+        org = RestOrg(client, poll_seconds=0.0)
+        source = SalesforceSource(org, "62.0", (*OBJECTS, CUSTOM))
+        with pytest.raises(EngineError) as failure:
+            source.catalog()
+    assert f"hides {len(HIDDEN)} field(s)" in str(failure.value)
+    assert f": {', '.join(HIDDEN)};" in str(failure.value)
 
 
 def test_the_scrubber_removes_credentials_hosts_and_org_ids() -> None:
@@ -423,6 +451,12 @@ def test_the_recorder(
         return FakeTransport(sample_org(tmp_path / "org.sqlite"))
 
     monkeypatch.setattr(httpx, "HTTPTransport", transport)
+
+    def no_wait(_seconds: float) -> None:
+        pass
+
+    # A real org's Bulk jobs are polled every two seconds; the fake's need no wait.
+    monkeypatch.setattr("datadouble_salesforce.org.time.sleep", no_wait)
     assert recorder.main(["--objects", "Lead"]) == 0
     text = capsys.readouterr().out
     assert "AQ4AQSecret" not in text
@@ -487,6 +521,110 @@ def test_packages_without_a_namespace(tmp_path: Path) -> None:
 # The engine
 
 
+def test_the_recorder_records_a_failing_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = recorder.Target(FAKE_URL, "fake", "62.0", 0.0)
+    hiding = FakeTransport(_hiding(tmp_path / "org.sqlite"))
+    recording, result = recorder.record(hiding, target, ("Contact",), catalog_only=True)
+    assert isinstance(result, EngineError)
+    assert "Contact.Pronouns" in str(result)
+    assert recording.interactions
+    with pytest.raises(EngineError, match=r"Contact\.Pronouns"):
+        recorder.record(hiding, target, ("Contact",))
+    _, result = recorder.record(
+        hiding, target, ("Contact",), frozenset({"Contact.Pronouns"}), catalog_only=True
+    )
+    assert isinstance(result, recorder.Exercised)
+    assert result.queried == {}
+
+    def sample_hiding(path: Path) -> FakeOrg:
+        org = sample_org(path)
+        org.add_field("Contact", FakeField("Pronouns", "picklist", hidden=True))
+        return org
+
+    monkeypatch.setattr(recorder, "sample_org", sample_hiding)
+    assert recorder.main(["--fake", "--objects", "Contact", "--catalog-only"]) == 0
+    output = capsys.readouterr()
+    assert "recorded the catalog failing" in output.err
+    assert "Contact.Pronouns" in output.err
+    assert Cassette.model_validate_json(output.out).interactions
+    assert recorder.main(["--fake", "--objects", "Contact", "--hidden", "Contact.Pronouns"]) == 0
+    assert "over 1 objects" in capsys.readouterr().err
+
+
+def _hiding(path: Path) -> FakeOrg:
+    """A fake org whose user cannot see two fields, with an internal one too."""
+    org = FakeOrg(path)
+    org.add_object(
+        "Account",
+        (
+            FakeField("Name", nillable=False),
+            FakeField("Total__c", "currency", hidden=True),
+            FakeField("CompareName", internal=True),
+        ),
+    )
+    org.add_object(
+        "Contact",
+        (FakeField("LastName", nillable=False), FakeField("Pronouns", "picklist", hidden=True)),
+    )
+    org.add_object("Lead", (FakeField("Company"),))
+    return org
+
+
+def test_hidden_fields_fail_the_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hiding(tmp_path / "org.sqlite")
+    with _org(tmp_path / "org.sqlite") as client:
+        with pytest.raises(
+            EngineError,
+            match=r"hides 2 field\(s\).*: Account\.Total__c, Contact\.Pronouns; grant",
+        ):
+            SalesforceSource(client, "62.0", ()).catalog()
+        with pytest.raises(EngineError, match=r"hides 1 field\(s\).*: Contact\.Pronouns;"):
+            SalesforceSource(client, "62.0", (), frozenset({"Account.Total__c"})).catalog()
+        accepted = frozenset({"Account.Total__c", "Contact.Pronouns"})
+        catalog = SalesforceSource(client, "62.0", (), accepted).catalog()
+        # Accepted hidden fields and internal ones are left out of the catalog.
+        columns = {f"{t.name.name}.{c.name}" for t in catalog.tables for c in t.columns}
+        assert columns == {
+            "Account.Id",
+            "Account.Name",
+            "Contact.Id",
+            "Contact.LastName",
+            "Lead.Id",
+            "Lead.Company",
+        }
+        # Objects are named in chunks, with the same answer.
+        monkeypatch.setattr(source_module, "FIELD_CHUNK", 1)
+        assert hidden_fields(client, tuple(client.describe(n) for n in ("Account", "Lead"))) == {
+            "Account.Total__c"
+        }
+        # A hidden field cannot be queried, as in Salesforce.
+        with pytest.raises(EngineError, match="HTTP 400"):
+            list(client.query("SELECT Pronouns FROM Contact"))
+        # Field definitions list every field; permissions skip internal and
+        # required ones.
+        defined = list(
+            client.tooling_query(
+                "SELECT EntityDefinition.QualifiedApiName, QualifiedApiName FROM FieldDefinition"
+                " WHERE EntityDefinition.QualifiedApiName IN ('Account')"
+            )
+        )
+        assert {str(d["QualifiedApiName"]) for d in defined} == {
+            "Id",
+            "Name",
+            "Total__c",
+            "CompareName",
+        }
+        granted = list(
+            client.query(
+                "SELECT Field FROM FieldPermissions WHERE Field IN"
+                " ('Account.Total__c', 'Account.CompareName', 'Account.Id')"
+            )
+        )
+        assert [g["Field"] for g in granted] == ["Account.Total__c"]
+
+
 def test_connections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     engine = SalesforceEngine()
     assert engine.owner
@@ -504,6 +642,13 @@ def test_connections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         engine.connect({"fake": "x", "api_version": "v62"}).__enter__()
     with pytest.raises(EngineError, match="does not exist"):
         engine.connect({"fake": str(tmp_path / "missing.sqlite")}).__enter__()
+    with pytest.raises(SettingsError, match="hidden"):
+        engine.connect({**real, "hidden": ["Pronouns"]}).__enter__()
+    sample_org(tmp_path / "org.sqlite")
+    fake: dict[str, JsonValue] = {"fake": str(tmp_path / "org.sqlite"), "hidden": ["Contact.X"]}
+    with engine.connect(fake) as session:
+        assert isinstance(session, SalesforceSource)
+        assert session.hidden == frozenset({"Contact.X"})
     tooling = Tooling(runtime=installed().runtime("docker", {}), image="vendor/x:1")
     with pytest.raises(EngineError, match=r"source\.image does not apply"):
         engine.working(tmp_path, tooling, "62.0")
@@ -693,7 +838,11 @@ def test_the_seed_data_looks_real_and_is_complete() -> None:
     saved: set[str] = set()
     # Orgs' duplicate rules refuse records that look alike.
     seen: set[tuple[str, str]] = set()
-    for step in json.loads((folder / "plan.json").read_text("utf-8")):
+    standard = json.loads((folder / "plan.json").read_text("utf-8"))
+    # The plan for an org with the Subscription__c custom object adds a step.
+    custom = json.loads((folder / "plan-subscriptions.json").read_text("utf-8"))
+    assert custom[: len(standard)] == standard
+    for step in custom:
         for name in step["files"]:
             records = json.loads((folder / name).read_text("utf-8"))["records"]
             assert len(records) <= 200, "sf data import tree loads at most 200 records a file"

@@ -7,7 +7,10 @@ Each object is a table in one namespace, its fields the columns and ``Id``
 its key. The catalog lists the objects that can be queried, read, created
 and replicated, leaving out history, feed, share and change-event objects,
 custom metadata types, platform events, and external and big objects; the
-connection's ``objects`` patterns narrow it further. Compound fields
+connection's ``objects`` patterns narrow it further. Fields field-level
+security hides from the connecting user are missing from an object's
+description, so the catalog finds them and fails unless the connection's
+``hidden`` setting accepts their absence. Compound fields
 (addresses and locations, whose parts are fields too) and base64 fields,
 which the Bulk API cannot export, are left out. A reference field that can
 point at one object in the catalog is a foreign key to its ``Id``;
@@ -28,7 +31,7 @@ from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.catalog import (
     Catalog,
@@ -44,7 +47,7 @@ from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple, NoRows
 from datadouble_salesforce.org import ObjectDescription, ObjectSummary, Org
-from datadouble_salesforce.soql import BULK_LIMIT, REST_LIMIT, wheres
+from datadouble_salesforce.soql import BULK_LIMIT, REST_LIMIT, literal, wheres
 
 ENGINE = EngineName("salesforce")
 ID = ColumnName("Id")
@@ -154,10 +157,77 @@ def packages(org: Org) -> tuple[Requirement, ...]:
     return tuple(found)
 
 
-def introspect(org: Org, patterns: tuple[str, ...]) -> Catalog:
-    """The catalog: the included objects, their fields and references, and the packages."""
+FIELD_CHUNK = 100
+"""The most objects or fields one field-definition or field-permission query names."""
+_DEFINED = (
+    "SELECT EntityDefinition.QualifiedApiName, QualifiedApiName FROM FieldDefinition"
+    " WHERE EntityDefinition.QualifiedApiName IN ({})"
+)
+# Not grouped: Salesforce's GROUP BY on FieldPermissions leaves out some fields.
+_GRANTED = "SELECT Field FROM FieldPermissions WHERE Field IN ({})"
+
+
+class _Entity(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="ignore")
+
+    name: str = Field(alias="QualifiedApiName")
+
+
+class _Defined(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="ignore")
+
+    entity: _Entity = Field(alias="EntityDefinition")
+    name: str = Field(alias="QualifiedApiName")
+
+
+class _Granted(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="ignore")
+
+    field: str = Field(alias="Field")
+
+
+def hidden_fields(org: Org, descriptions: tuple[ObjectDescription, ...]) -> frozenset[str]:
+    """Fields field-level security hides from the connecting user, as ``Object.Field``.
+
+    A hidden field is defined on its object and granted to some profile or
+    permission set, but missing from the object's description. Fields that
+    are defined but granted to none are internal, or belong to features the
+    org does not use, and are never described.
+    """
+    described = {f"{d.name}.{f.name}" for d in descriptions for f in d.fields}
+    names = sorted(d.name for d in descriptions)
+    defined: set[str] = set()
+    granted: set[str] = set()
+    for start in range(0, len(names), FIELD_CHUNK):
+        listed = ", ".join(literal(name) for name in names[start : start + FIELD_CHUNK])
+        for record in org.tooling_query(_DEFINED.format(listed)):
+            field = _Defined.model_validate(record)
+            defined.add(f"{field.entity.name}.{field.name}")
+    # Only the fields the descriptions leave out need asking about.
+    candidates = sorted(defined - described)
+    for start in range(0, len(candidates), FIELD_CHUNK):
+        listed = ", ".join(literal(name) for name in candidates[start : start + FIELD_CHUNK])
+        granted.update(_Granted.model_validate(r).field for r in org.query(_GRANTED.format(listed)))
+    # Salesforce also answers with same-named fields of other objects.
+    return frozenset(granted.intersection(candidates))
+
+
+def introspect(org: Org, patterns: tuple[str, ...], accepted: frozenset[str]) -> Catalog:
+    """The catalog: the included objects, their fields and references, and the packages.
+
+    Fails if field-level security hides fields that ``accepted`` does not list.
+    """
     names = frozenset(s.name for s in org.objects() if included(s, patterns))
-    tables = [_table(org.describe(name), names) for name in sorted(names)]
+    descriptions = tuple(org.describe(name) for name in sorted(names))
+    unaccepted = sorted(hidden_fields(org, descriptions) - accepted)
+    if unaccepted:
+        message = (
+            f"field-level security hides {len(unaccepted)} field(s) from the connecting user,"
+            f" so copies would lack them: {', '.join(unaccepted)}; grant the user read access"
+            " to them, or list them in source.connection.hidden"
+        )
+        raise EngineError(message)
+    tables = [_table(description, names) for description in descriptions]
     return Catalog(engine=ENGINE, tables=tuple(tables), requirements=packages(org))
 
 
@@ -302,11 +372,22 @@ class SalesforceSnapshot:
 class SalesforceSource:
     """An open connection to an org."""
 
-    def __init__(self, org: Org, api_version: str, patterns: tuple[str, ...]) -> None:
-        """Read ``org`` through API ``api_version``; ``patterns`` choose the objects."""
+    def __init__(
+        self,
+        org: Org,
+        api_version: str,
+        patterns: tuple[str, ...],
+        hidden: frozenset[str] = frozenset(),
+    ) -> None:
+        """Read ``org`` through API ``api_version``; ``patterns`` choose the objects.
+
+        ``hidden`` lists the fields, as ``Object.Field``, that field-level
+        security may hide without failing the catalog.
+        """
         self.org = org
         self.api_version = api_version
         self.patterns = patterns
+        self.hidden = hidden
 
     def server_version(self) -> str:
         """The API version the adapter uses, once the org is known to offer it."""
@@ -321,7 +402,7 @@ class SalesforceSource:
 
     def catalog(self) -> Catalog:
         """Introspect the org."""
-        return introspect(self.org, self.patterns)
+        return introspect(self.org, self.patterns, self.hidden)
 
     @contextmanager
     def snapshot(self, as_of: dt.datetime) -> Generator[Snapshot]:

@@ -6,9 +6,11 @@
 ``make record-salesforce ORG=<alias>`` runs this with the JSON ``sf org
 display --json`` and ``sf org auth show-access-token --json`` print for an org
 you have logged in to with ``sf org login web``; the access token never leaves
-this process. It writes the cassette to
-standard output. ``--fake`` records against :func:`sample_org` instead, which
-is how the committed cassette was first made. The calls are
+this process. It writes the cassette to standard output. ``--fake`` records
+against :func:`sample_org` instead. ``--hidden`` lists fields field-level
+security may hide, and ``--catalog-only`` records only the API versions and
+the catalog, even when the catalog fails, which is how the cassette of hidden
+fields is made. The calls are
 :func:`exercise`'s: the API versions, the catalog of the chosen objects with
 the installed packages, and each object's records read both ways the adapter
 reads them, a REST query and a Bulk API export.
@@ -20,12 +22,14 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from datadouble.catalog import Catalog
+from datadouble.engine import EngineError
 from datadouble_salesforce.cassettes import RecordingTransport, scrub
 from datadouble_salesforce.fake import FakeTransport, sample_org
 from datadouble_salesforce.org import DEFAULT_API_VERSION, RestOrg
@@ -67,13 +71,16 @@ class Exercised(BaseModel):
     exported: dict[str, int]
 
 
-def exercise(source: SalesforceSource) -> Exercised:
-    """Make the calls a cassette records, and summarize what they returned."""
+def exercise(source: SalesforceSource, *, catalog_only: bool = False) -> Exercised:
+    """Make the calls a cassette records, and summarize what they returned.
+
+    With ``catalog_only``, only the API versions and the catalog are read.
+    """
     source.server_version()
     catalog = source.catalog()
     queried: dict[str, int] = {}
     exported: dict[str, int] = {}
-    for table in catalog.tables:
+    for table in () if catalog_only else catalog.tables:
         queried[table.name.name] = sum(
             1 for _ in source.org.query(f"SELECT {ID} FROM {table.name}")
         )
@@ -84,21 +91,41 @@ def exercise(source: SalesforceSource) -> Exercised:
     return Exercised(catalog=catalog, queried=queried, exported=exported)
 
 
+@dataclass(frozen=True, slots=True)
+class Target:
+    """The org a recording reads: its instance URL, access token and API version."""
+
+    instance_url: str
+    token: str
+    api_version: str
+    poll_seconds: float = 2.0
+    """Between Bulk API job checks; a real org's job takes seconds, the fake's none."""
+
+
 def record(
     transport: httpx.BaseTransport,
-    instance_url: str,
-    token: str,
-    api_version: str,
+    target: Target,
     objects: tuple[str, ...],
-) -> tuple[RecordingTransport, Exercised]:
-    """Exercise an org through ``transport``, recording every interaction."""
+    hidden: frozenset[str] = frozenset(),
+    *,
+    catalog_only: bool = False,
+) -> tuple[RecordingTransport, Exercised | EngineError]:
+    """Exercise an org through ``transport``, recording every interaction.
+
+    With ``catalog_only``, a catalog that fails is recorded too, and its
+    error returned, since the cassette of a failing catalog is the point.
+    """
     recording = RecordingTransport(transport)
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    with httpx.Client(base_url=instance_url, headers=headers, transport=recording) as client:
-        source = SalesforceSource(
-            RestOrg(client, api_version, poll_seconds=0.0), api_version, objects
-        )
-        exercised = exercise(source)
+    headers = {"Authorization": f"Bearer {target.token}", "Accept": "application/json"}
+    with httpx.Client(base_url=target.instance_url, headers=headers, transport=recording) as client:
+        org = RestOrg(client, target.api_version, poll_seconds=target.poll_seconds)
+        source = SalesforceSource(org, target.api_version, objects, hidden)
+        try:
+            exercised: Exercised | EngineError = exercise(source, catalog_only=catalog_only)
+        except EngineError as error:
+            if not catalog_only:
+                raise
+            exercised = error
     return recording, exercised
 
 
@@ -109,8 +136,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--objects", default="Account,Contact,Opportunity,Case")
     parser.add_argument("--fake", action="store_true")
+    parser.add_argument("--hidden", default="", help="Object.Field names, comma-separated")
+    parser.add_argument("--catalog-only", action="store_true")
     options = parser.parse_args(arguments)
     objects = tuple(name for name in options.objects.split(",") if name)
+    hidden = frozenset(name for name in options.hidden.split(",") if name)
     with ExitStack() as stack:
         secrets: tuple[str, ...]
         if options.fake:
@@ -136,12 +166,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
             url, token, version = login.instance_url, login.access_token, DEFAULT_API_VERSION
             secrets = (login.access_token, login.id)
             transport = httpx.HTTPTransport(retries=2)
-        recording, exercised = record(transport, url, token, version, objects)
-        sys.stdout.write(scrub(recording.cassette(), url, (token, *secrets)).text())
-        sys.stderr.write(
-            f"recorded {len(recording.interactions)} interactions over"
-            f" {len(exercised.catalog.tables)} objects\n"
+        recording, exercised = record(
+            transport,
+            Target(url, token, version, 0.0 if options.fake else 2.0),
+            objects,
+            hidden,
+            catalog_only=options.catalog_only,
         )
+        sys.stdout.write(scrub(recording.cassette(), url, (token, *secrets)).text())
+        if isinstance(exercised, EngineError):
+            sys.stderr.write(f"recorded the catalog failing: {exercised}\n")
+        else:
+            sys.stderr.write(
+                f"recorded {len(recording.interactions)} interactions over"
+                f" {len(exercised.catalog.tables)} objects\n"
+            )
         return 0
 
 

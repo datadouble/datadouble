@@ -1,0 +1,334 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription0"
+   },
+   "Name": "Northwind Outfitters - Basic plan",
+   "Account__c": "@Account0",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-01-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription1"
+   },
+   "Name": "Copperleaf Supply Co. - Pro plan",
+   "Account__c": "@Account2",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-06-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription2"
+   },
+   "Name": "Copperleaf Supply Co. - Support add-on",
+   "Account__c": "@Account2",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-07-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription3"
+   },
+   "Name": "Harborline Partners - Support add-on",
+   "Account__c": "@Account4",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-11-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription4"
+   },
+   "Name": "Harborline Partners - Enterprise plan",
+   "Account__c": "@Account4",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-12-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription5"
+   },
+   "Name": "Harborline Partners - Basic plan",
+   "Account__c": "@Account4",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-01-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription6"
+   },
+   "Name": "Juniper Outfitters - Enterprise plan",
+   "Account__c": "@Account6",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-04-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription7"
+   },
+   "Name": "Larkspur Supply Co. - Basic plan",
+   "Account__c": "@Account8",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-09-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription8"
+   },
+   "Name": "Larkspur Supply Co. - Pro plan",
+   "Account__c": "@Account8",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-10-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription9"
+   },
+   "Name": "Nimbus Partners - Pro plan",
+   "Account__c": "@Account10",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-02-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription10"
+   },
+   "Name": "Nimbus Partners - Support add-on",
+   "Account__c": "@Account10",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-03-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription11"
+   },
+   "Name": "Nimbus Partners - Enterprise plan",
+   "Account__c": "@Account10",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-04-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription12"
+   },
+   "Name": "Pinecrest Outfitters - Support add-on",
+   "Account__c": "@Account12",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-07-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription13"
+   },
+   "Name": "Redwater Supply Co. - Enterprise plan",
+   "Account__c": "@Account14",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-12-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription14"
+   },
+   "Name": "Redwater Supply Co. - Basic plan",
+   "Account__c": "@Account14",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-01-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription15"
+   },
+   "Name": "Thornbury Partners - Basic plan",
+   "Account__c": "@Account16",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-05-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription16"
+   },
+   "Name": "Thornbury Partners - Pro plan",
+   "Account__c": "@Account16",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-06-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription17"
+   },
+   "Name": "Thornbury Partners - Support add-on",
+   "Account__c": "@Account16",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-07-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription18"
+   },
+   "Name": "Valewood Outfitters - Pro plan",
+   "Account__c": "@Account18",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-10-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription19"
+   },
+   "Name": "Yarrow Supply Co. - Support add-on",
+   "Account__c": "@Account20",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-03-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription20"
+   },
+   "Name": "Yarrow Supply Co. - Enterprise plan",
+   "Account__c": "@Account20",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-04-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription21"
+   },
+   "Name": "Ashgrove Partners - Enterprise plan",
+   "Account__c": "@Account22",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-08-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription22"
+   },
+   "Name": "Ashgrove Partners - Basic plan",
+   "Account__c": "@Account22",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-09-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription23"
+   },
+   "Name": "Ashgrove Partners - Pro plan",
+   "Account__c": "@Account22",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-10-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription24"
+   },
+   "Name": "Cinderford Outfitters - Basic plan",
+   "Account__c": "@Account24",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-01-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription25"
+   },
+   "Name": "Emberlane Supply Co. - Pro plan",
+   "Account__c": "@Account26",
+   "Amount__c": 1200,
+   "Start_Date__c": "2024-06-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription26"
+   },
+   "Name": "Emberlane Supply Co. - Support add-on",
+   "Account__c": "@Account26",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-07-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription27"
+   },
+   "Name": "Glenmoor Partners - Support add-on",
+   "Account__c": "@Account28",
+   "Amount__c": 300,
+   "Start_Date__c": "2025-11-01",
+   "Status__c": "Cancelled"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription28"
+   },
+   "Name": "Glenmoor Partners - Enterprise plan",
+   "Account__c": "@Account28",
+   "Amount__c": 4800,
+   "Start_Date__c": "2026-12-01",
+   "Status__c": "Active"
+  },
+  {
+   "attributes": {
+    "type": "Subscription__c",
+    "referenceId": "Subscription29"
+   },
+   "Name": "Glenmoor Partners - Basic plan",
+   "Account__c": "@Account28",
+   "Amount__c": 400,
+   "Start_Date__c": "2023-01-01",
+   "Status__c": "Active"
+  }
+ ]
+}
