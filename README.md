@@ -17,8 +17,8 @@ different systems:
 | Files | Filesystem trees |
 | SaaS | Salesforce |
 
-> **Status: in development.** The design is complete and version 1 is being
-> built to [the v1 plan](docs/v1-plan.md). There is no release yet.
+> **Status: in review.** Version 1 is built to [the v1 plan](docs/v1-plan.md)
+> and under review before its first release. There is no release yet.
 
 ## Why
 

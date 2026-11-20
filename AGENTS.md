@@ -6,7 +6,8 @@ store, and replicate. See the [README](README.md).
 
 ## Status
 
-Design complete; version 1 is being built to [the v1 plan](docs/v1-plan.md).
+Version 1 is built to [the v1 plan](docs/v1-plan.md) and under review before
+its first release; there is no release yet.
 
 ## Building and testing
 
