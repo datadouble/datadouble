@@ -19,8 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Installed packages are reported as `package` requirements, which the copies
   do not need. A fake org, a SQLite file served over the same APIs
   (`connection: {fake: path}`), runs the adapter without an org, and
-  `make record-salesforce` records a scrubbed cassette of its calls from a
-  development org.
+  `make record-salesforce` records a cassette of its calls from an org that
+  stands in for a source, scrubbed of credentials and the org's identity;
+  `make seed-salesforce` loads it with invented records that look real.
+  Fields that field-level security hides from the org user are left out of
+  copies without an error, so that user must be able to read them.
 - **Requirements for Oracle.** The index types of the schemas' domain
   indexes, such as Oracle Text's `CTXSYS.CONTEXT`, are options the working
   image must provide. Omitting one leaves its indexes out of the copies. SQL

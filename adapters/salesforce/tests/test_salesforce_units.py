@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import httpx
 import pytest
 
-from datadouble.catalog import Catalog, Column, ColumnKind, Table
+from datadouble.catalog import Catalog, Column, ColumnKind, RequirementKind, Table
 from datadouble.engine import EngineError, Tooling, Transformation
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, TableName
 from datadouble.pii import detect
@@ -303,12 +303,23 @@ def test_the_committed_cassette_replays() -> None:
     with httpx.Client(base_url="https://" + EXAMPLE_HOST, transport=replay) as client:
         org = RestOrg(client, poll_seconds=0.0)
         exercised = recorder.exercise(
-            SalesforceSource(org, "62.0", ("Account", "Contact", "Opportunity", "Case"))
+            SalesforceSource(
+                org, "62.0", ("Account", "Contact", "Opportunity", "Case", "Subscription__c")
+            )
         )
     assert exercised.catalog.tables
     for table in exercised.catalog.tables:
         assert table.primary_key == (ColumnName("Id"),)
         assert exercised.queried[table.name.name] == exercised.exported[table.name.name]
+    # The org's customizations: a custom object referring to Account, and a
+    # managed package.
+    (subscription,) = (t for t in exercised.catalog.tables if t.name.name == "Subscription__c")
+    assert {(fk.columns, fk.target.name) for fk in subscription.foreign_keys} >= {
+        ((ColumnName("Account__c"),), "Account")
+    }
+    assert {(r.kind, r.name) for r in exercised.catalog.requirements} >= {
+        (RequirementKind.PACKAGE, "dlrs")
+    }
 
 
 def test_the_scrubber_removes_credentials_hosts_and_org_ids() -> None:
