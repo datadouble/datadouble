@@ -38,10 +38,11 @@ be stamped out into as many disposable copies as people need.
 <div class="dd-ops">Operations on existing images and copies: <span class="dd-stage">release</span> <span class="dd-stage">prune</span> <span class="dd-stage">activate</span></div>
 </div>
 
-!!! note "Status: in development"
-    The design is complete and version 1 is being built to
-    [the v1 plan](v1-plan.md). There is no release yet, so this site currently
-    documents the design. Guides for using Datadouble arrive with version 1.
+!!! note "Status: in review"
+    Version 1 is built to [the v1 plan](v1-plan.md) and under review before
+    its first release. There is no release yet: until there is, build
+    Datadouble's image from a checkout, as the [quickstart](using/quickstart.md)
+    shows.
 
 ## What it does
 
