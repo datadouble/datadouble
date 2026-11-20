@@ -675,6 +675,8 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
 def test_the_seed_data_is_made_up_and_complete() -> None:
     folder = Path(__file__).parent / "org"
     saved: set[str] = set()
+    # Orgs' duplicate rules refuse records that look alike.
+    seen: set[tuple[str, str]] = set()
     for step in json.loads((folder / "plan.json").read_text("utf-8")):
         for name in step["files"]:
             records = json.loads((folder / name).read_text("utf-8"))["records"]
@@ -689,5 +691,12 @@ def test_the_seed_data_is_made_up_and_complete() -> None:
                 assert "Phone" not in record or "555-01" in record["Phone"]
                 # Each account has its own reserved domain, so they don't look like one company.
                 assert record.get("Website", ".example").endswith(".example")
+                values = dict(record)
+                if "FirstName" in record:
+                    values["Name"] = f"{record['FirstName']} {record['LastName']}"
+                for field in ("Name", "Phone", "Website", "Email"):
+                    if field in values:
+                        assert (field, values[field]) not in seen, values[field]
+                        seen.add((field, values[field]))
             if step["saveRefs"]:
                 saved |= {record["attributes"]["referenceId"] for record in records}
