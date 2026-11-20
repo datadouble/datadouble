@@ -687,7 +687,7 @@ def test_the_seed_data_is_made_up_and_complete() -> None:
                 email = record.get("Email")
                 assert email is None or email.endswith("@example.com")
                 assert "Phone" not in record or "555-01" in record["Phone"]
-                # Distinct reserved domains, which no org's duplicate rules match.
+                # Each account has its own reserved domain, so they don't look like one company.
                 assert record.get("Website", ".example").endswith(".example")
             if step["saveRefs"]:
                 saved |= {record["attributes"]["referenceId"] for record in records}
