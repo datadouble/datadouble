@@ -67,7 +67,9 @@ fails, read its temporary files, then remove them with `make clean-work`.
   and every security fix, following [CONTRIBUTING.md](CONTRIBUTING.md#changelog).
 - Keep design docs in sync with any change that alters behavior they describe.
 - Never put credentials, real hostnames or real personal data in the repository,
-  including in examples, fixtures and recorded API cassettes.
+  including in examples, fixtures and recorded API cassettes. Real hostnames
+  are hosts something connects to, such as an org's instance URL; invented
+  sample data that stands in for a source may look real (decision 112).
 - Code is fully typed and must pass `mypy --strict`, `pyright` (strict) and
   `ruff`. No stringly-typed values: use enums, typed identifiers and parsed
   models (see [architecture](docs/architecture.md#typing)).

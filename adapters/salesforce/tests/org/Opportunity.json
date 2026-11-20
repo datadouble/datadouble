@@ -1,0 +1,554 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity0"
+   },
+   "Name": "Northwind Outfitters annual renewal 2022",
+   "StageName": "Prospecting",
+   "CloseDate": "2022-01-15",
+   "Amount": 50841.18,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity1"
+   },
+   "Name": "Granite Peak Holdings expansion 2022",
+   "StageName": "Qualification",
+   "CloseDate": "2022-02-15",
+   "Amount": 78342.1,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity2"
+   },
+   "Name": "Juniper Outfitters pilot 2022",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2022-03-15",
+   "Amount": 76598.85,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity3"
+   },
+   "Name": "Meridian Holdings support plan 2022",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2022-04-15",
+   "Amount": 189994.81,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity4"
+   },
+   "Name": "Pinecrest Outfitters hardware refresh 2022",
+   "StageName": "Closed Won",
+   "CloseDate": "2022-05-15",
+   "Amount": 72845.23,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity5"
+   },
+   "Name": "Silverbirch Holdings annual renewal 2022",
+   "StageName": "Closed Lost",
+   "CloseDate": "2022-06-15",
+   "Amount": 125272.11,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity6"
+   },
+   "Name": "Valewood Outfitters expansion 2022",
+   "StageName": "Prospecting",
+   "CloseDate": "2022-07-15",
+   "Amount": 44886.02,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity7"
+   },
+   "Name": "Zephyr Holdings pilot 2022",
+   "StageName": "Qualification",
+   "CloseDate": "2022-08-15",
+   "Amount": 87076.76,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity8"
+   },
+   "Name": "Cinderford Outfitters support plan 2022",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2022-09-15",
+   "Amount": 5031.7,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity9"
+   },
+   "Name": "Foxglove Holdings hardware refresh 2022",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2022-10-15",
+   "Amount": 62986.96,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity10"
+   },
+   "Name": "Northwind Outfitters annual renewal 2023",
+   "StageName": "Closed Won",
+   "CloseDate": "2023-11-15",
+   "Amount": 4328.86,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity11"
+   },
+   "Name": "Granite Peak Holdings expansion 2023",
+   "StageName": "Closed Lost",
+   "CloseDate": "2023-12-15",
+   "Amount": 183403.56,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity12"
+   },
+   "Name": "Juniper Outfitters pilot 2023",
+   "StageName": "Prospecting",
+   "CloseDate": "2023-01-15",
+   "Amount": 137986.76,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity13"
+   },
+   "Name": "Meridian Holdings support plan 2023",
+   "StageName": "Qualification",
+   "CloseDate": "2023-02-15",
+   "Amount": 47769.4,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity14"
+   },
+   "Name": "Pinecrest Outfitters hardware refresh 2023",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2023-03-15",
+   "Amount": 118952.78,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity15"
+   },
+   "Name": "Silverbirch Holdings annual renewal 2023",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2023-04-15",
+   "Amount": 233693.39,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity16"
+   },
+   "Name": "Valewood Outfitters expansion 2023",
+   "StageName": "Closed Won",
+   "CloseDate": "2023-05-15",
+   "Amount": 27017.2,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity17"
+   },
+   "Name": "Zephyr Holdings pilot 2023",
+   "StageName": "Closed Lost",
+   "CloseDate": "2023-06-15",
+   "Amount": 204820.58,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity18"
+   },
+   "Name": "Cinderford Outfitters support plan 2023",
+   "StageName": "Prospecting",
+   "CloseDate": "2023-07-15",
+   "Amount": 108328.31,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity19"
+   },
+   "Name": "Foxglove Holdings hardware refresh 2023",
+   "StageName": "Qualification",
+   "CloseDate": "2023-08-15",
+   "Amount": 124002.89,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity20"
+   },
+   "Name": "Northwind Outfitters annual renewal 2024",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2024-09-15",
+   "Amount": 208736.18,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity21"
+   },
+   "Name": "Granite Peak Holdings expansion 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-10-15",
+   "Amount": 98574.98,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity22"
+   },
+   "Name": "Juniper Outfitters pilot 2024",
+   "StageName": "Closed Won",
+   "CloseDate": "2024-11-15",
+   "Amount": 126918.15,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity23"
+   },
+   "Name": "Meridian Holdings support plan 2024",
+   "StageName": "Closed Lost",
+   "CloseDate": "2024-12-15",
+   "Amount": 172091.56,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity24"
+   },
+   "Name": "Pinecrest Outfitters hardware refresh 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 245618.91,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity25"
+   },
+   "Name": "Silverbirch Holdings annual renewal 2024",
+   "StageName": "Qualification",
+   "CloseDate": "2024-02-15",
+   "Amount": 86004.8,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity26"
+   },
+   "Name": "Valewood Outfitters expansion 2024",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2024-03-15",
+   "Amount": 208155.49,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity27"
+   },
+   "Name": "Zephyr Holdings pilot 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-04-15",
+   "Amount": 176827.99,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity28"
+   },
+   "Name": "Cinderford Outfitters support plan 2024",
+   "StageName": "Closed Won",
+   "CloseDate": "2024-05-15",
+   "Amount": 159176.25,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity29"
+   },
+   "Name": "Foxglove Holdings hardware refresh 2024",
+   "StageName": "Closed Lost",
+   "CloseDate": "2024-06-15",
+   "Amount": 101472.08,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity30"
+   },
+   "Name": "Northwind Outfitters annual renewal 2025",
+   "StageName": "Prospecting",
+   "CloseDate": "2025-07-15",
+   "Amount": 87214.27,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity31"
+   },
+   "Name": "Granite Peak Holdings expansion 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-08-15",
+   "Amount": 14069.94,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity32"
+   },
+   "Name": "Juniper Outfitters pilot 2025",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2025-09-15",
+   "Amount": 32889.74,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity33"
+   },
+   "Name": "Meridian Holdings support plan 2025",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2025-10-15",
+   "Amount": 18145.34,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity34"
+   },
+   "Name": "Pinecrest Outfitters hardware refresh 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-11-15",
+   "Amount": 185351.85,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity35"
+   },
+   "Name": "Silverbirch Holdings annual renewal 2025",
+   "StageName": "Closed Lost",
+   "CloseDate": "2025-12-15",
+   "Amount": 64270.67,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity36"
+   },
+   "Name": "Valewood Outfitters expansion 2025",
+   "StageName": "Prospecting",
+   "CloseDate": "2025-01-15",
+   "Amount": 41230.01,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity37"
+   },
+   "Name": "Zephyr Holdings pilot 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 21578.98,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity38"
+   },
+   "Name": "Cinderford Outfitters support plan 2025",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2025-03-15",
+   "Amount": 210396.61,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity39"
+   },
+   "Name": "Foxglove Holdings hardware refresh 2025",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2025-04-15",
+   "Amount": 217699.19,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity40"
+   },
+   "Name": "Northwind Outfitters annual renewal 2026",
+   "StageName": "Closed Won",
+   "CloseDate": "2026-05-15",
+   "Amount": 167800.55,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity41"
+   },
+   "Name": "Granite Peak Holdings expansion 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-06-15",
+   "Amount": 70842.35,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity42"
+   },
+   "Name": "Juniper Outfitters pilot 2026",
+   "StageName": "Prospecting",
+   "CloseDate": "2026-07-15",
+   "Amount": 60932.13,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity43"
+   },
+   "Name": "Meridian Holdings support plan 2026",
+   "StageName": "Qualification",
+   "CloseDate": "2026-08-15",
+   "Amount": 73618.09,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity44"
+   },
+   "Name": "Pinecrest Outfitters hardware refresh 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-09-15",
+   "Amount": 115133.51,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity45"
+   },
+   "Name": "Silverbirch Holdings annual renewal 2026",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2026-10-15",
+   "Amount": 39804.47,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity46"
+   },
+   "Name": "Valewood Outfitters expansion 2026",
+   "StageName": "Closed Won",
+   "CloseDate": "2026-11-15",
+   "Amount": 111733.24,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity47"
+   },
+   "Name": "Zephyr Holdings pilot 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-12-15",
+   "Amount": 66179.15,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity48"
+   },
+   "Name": "Cinderford Outfitters support plan 2026",
+   "StageName": "Prospecting",
+   "CloseDate": "2026-01-15",
+   "Amount": 240465.74,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity49"
+   },
+   "Name": "Foxglove Holdings hardware refresh 2026",
+   "StageName": "Qualification",
+   "CloseDate": "2026-02-15",
+   "Amount": 243169.44,
+   "AccountId": "@Account27"
+  }
+ ]
+}

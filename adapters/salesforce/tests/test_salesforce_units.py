@@ -14,9 +14,10 @@ from typing import TYPE_CHECKING
 import httpx
 import pytest
 
-from datadouble.catalog import Catalog, Column, ColumnKind, Table
+from datadouble.catalog import Catalog, Column, ColumnKind, RequirementKind, Table
 from datadouble.engine import EngineError, Tooling, Transformation
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, TableName
+from datadouble.pii import detect
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule, PlanOptions, plan
 from datadouble.registry import installed
 from datadouble.settings import SettingsError
@@ -302,12 +303,23 @@ def test_the_committed_cassette_replays() -> None:
     with httpx.Client(base_url="https://" + EXAMPLE_HOST, transport=replay) as client:
         org = RestOrg(client, poll_seconds=0.0)
         exercised = recorder.exercise(
-            SalesforceSource(org, "62.0", ("Account", "Contact", "Opportunity", "Case"))
+            SalesforceSource(
+                org, "62.0", ("Account", "Contact", "Opportunity", "Case", "Subscription__c")
+            )
         )
     assert exercised.catalog.tables
     for table in exercised.catalog.tables:
         assert table.primary_key == (ColumnName("Id"),)
         assert exercised.queried[table.name.name] == exercised.exported[table.name.name]
+    # The org's customizations: a custom object referring to Account, and a
+    # managed package.
+    (subscription,) = (t for t in exercised.catalog.tables if t.name.name == "Subscription__c")
+    assert {(fk.columns, fk.target.name) for fk in subscription.foreign_keys} >= {
+        ((ColumnName("Account__c"),), "Account")
+    }
+    assert {(r.kind, r.name) for r in exercised.catalog.requirements} >= {
+        (RequirementKind.PACKAGE, "dlrs")
+    }
 
 
 def test_the_scrubber_removes_credentials_hosts_and_org_ids() -> None:
@@ -390,18 +402,22 @@ def test_the_recorder(
     output = capsys.readouterr()
     assert "over 1 objects" in output.err
     assert Cassette.model_validate_json(output.out).interactions
-    login = {
+    # sf org display redacts the token, which sf org auth show-access-token prints.
+    display = {
         "status": 0,
         "result": {
-            "accessToken": "00D5e000000AbCdEAG!AQ4AQSecret",
+            "accessToken": "[REDACTED]",
             "instanceUrl": "https://example-dev-ed.my.salesforce.com",
             "id": "00D5e000000AbCdEAG",
         },
     }
+    token = {"status": 0, "result": {"accessToken": "00D5e000000AbCdEAG!AQ4AQSecret"}}
     monkeypatch.setattr("sys.stdin", io.StringIO('{"result": {"accessToken": "secret-ish"}}'))
     assert recorder.main([]) == 2
     assert "secret-ish" not in capsys.readouterr().err
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(login)))
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"result": {}} ["not", "a", "login"]'))
+    assert recorder.main([]) == 2
+    monkeypatch.setattr("sys.stdin", io.StringIO(f"{json.dumps(display)}\n{json.dumps(token)}\n"))
 
     def transport(**_: object) -> FakeTransport:
         return FakeTransport(sample_org(tmp_path / "org.sqlite"))
@@ -667,3 +683,36 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
         pytest.raises(EngineError, match="Contact's fields changed"),
     ):
         snapshot.extract(planned, selections, tmp_path / "again", tooling)
+
+
+# The seed data for a development org
+
+
+def test_the_seed_data_looks_real_and_is_complete() -> None:
+    folder = Path(__file__).parent / "org"
+    saved: set[str] = set()
+    # Orgs' duplicate rules refuse records that look alike.
+    seen: set[tuple[str, str]] = set()
+    for step in json.loads((folder / "plan.json").read_text("utf-8")):
+        for name in step["files"]:
+            records = json.loads((folder / name).read_text("utf-8"))["records"]
+            assert len(records) <= 200, "sf data import tree loads at most 200 records a file"
+            for record in records:
+                assert record["attributes"]["type"] == step["sobject"]
+                references = {v[1:] for v in record.values() if isinstance(v, str) and v[:1] == "@"}
+                # A reference names a record an earlier step saved.
+                assert references <= saved, record
+                # The org stands in for a source: its contact details must look
+                # like personal data, as Salesforce's own sample records do.
+                for field in ("Email", "Phone"):
+                    if field in record:
+                        assert detect(record[field]), record[field]
+                values = dict(record)
+                if "FirstName" in record:
+                    values["Name"] = f"{record['FirstName']} {record['LastName']}"
+                for field in ("Name", "Phone", "Website", "Email"):
+                    if field in values:
+                        assert (field, values[field]) not in seen, values[field]
+                        seen.add((field, values[field]))
+            if step["saveRefs"]:
+                saved |= {record["attributes"]["referenceId"] for record in records}

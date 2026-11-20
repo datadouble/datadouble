@@ -4,8 +4,9 @@
 """Record a cassette of the adapter's calls to an org, scrubbed before it is written.
 
 ``make record-salesforce ORG=<alias>`` runs this with the JSON ``sf org
-display --json`` prints for an org you have logged in to with ``sf org login
-web``; the access token never leaves this process. It writes the cassette to
+display --json`` and ``sf org auth show-access-token --json`` print for an org
+you have logged in to with ``sf org login web``; the access token never leaves
+this process. It writes the cassette to
 standard output. ``--fake`` records against :func:`sample_org` instead, which
 is how the committed cassette was first made. The calls are
 :func:`exercise`'s: the API versions, the catalog of the chosen objects with
@@ -14,6 +15,7 @@ reads them, a REST query and a Bulk API export.
 """
 
 import argparse
+import json
 import sys
 import tempfile
 from collections.abc import Sequence
@@ -21,7 +23,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from datadouble.catalog import Catalog
 from datadouble_salesforce.cassettes import RecordingTransport, scrub
@@ -36,13 +38,23 @@ class _Login(BaseModel):
     access_token: str = Field(alias="accessToken")
     instance_url: str = Field(alias="instanceUrl")
     id: str = ""
-    api_version: str = Field(default=DEFAULT_API_VERSION, alias="apiVersion")
 
 
-class _Display(BaseModel):
-    model_config = ConfigDict(strict=True, frozen=True, extra="ignore")
+def _login(text: str) -> _Login:
+    """The login from ``sf`` commands' JSON, one document after another.
 
-    result: _Login
+    ``sf org display`` redacts the access token, which ``sf org auth
+    show-access-token`` prints; later documents' fields win.
+    """
+    decoder = json.JSONDecoder()
+    merged: dict[str, object] = {}
+    position = 0
+    text = text.strip()
+    while position < len(text):
+        document, position = decoder.raw_decode(text, position)
+        merged |= document["result"]
+        position = len(text) - len(text[position:].lstrip())
+    return _Login.model_validate(merged)
 
 
 class Exercised(BaseModel):
@@ -112,14 +124,16 @@ def main(arguments: Sequence[str] | None = None) -> int:
             transport: httpx.BaseTransport = FakeTransport(sample_org(Path(scratch) / "org.sqlite"))
         else:
             try:
-                login = _Display.model_validate_json(sys.stdin.read()).result
-            except ValidationError:
+                login = _login(sys.stdin.read())
+            except (ValueError, LookupError, TypeError):
                 # Its message would quote the input, which can hold the token.
                 sys.stderr.write(
-                    "expected what `sf org display --json` prints for a logged-in org\n"
+                    "expected what `sf org display --json` and"
+                    " `sf org auth show-access-token --json` print for a logged-in org\n"
                 )
                 return 2
-            url, token, version = login.instance_url, login.access_token, login.api_version
+            # The adapter's own API version, not the org's newest, so replay matches.
+            url, token, version = login.instance_url, login.access_token, DEFAULT_API_VERSION
             secrets = (login.access_token, login.id)
             transport = httpx.HTTPTransport(retries=2)
         recording, exercised = record(transport, url, token, version, objects)

@@ -29,7 +29,11 @@ anonymize:
 
 The token is an OAuth access token for a user who can read the objects and,
 for the installed packages, the Tooling API (the "View Setup and
-Configuration" permission).
+Configuration" permission). The user must also be able to read every field
+the copy needs: Salesforce leaves fields that field-level security hides out
+of the object's description, so they are missing from the catalog and the
+copy without any error, and strict mode cannot report them. A field a managed
+package maintains, such as a rollup's result, is often hidden this way.
 
 ## The catalog
 
