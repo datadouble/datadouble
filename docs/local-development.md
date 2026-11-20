@@ -62,16 +62,30 @@ Salesforce cannot run in a container. Three layers cover it (decision 111):
    accounts, and contacts, opportunities and cases that refer to them. If it
    doesn't, `make seed-salesforce ORG=<alias>` loads the records in
    `adapters/salesforce/tests/org/` with `sf data import tree`. They are
-   invented but look real, and every run adds another copy. Then `make
-   record-salesforce ORG=<alias>` records
+   invented but look real, fill fields field-level security often hides
+   (opt-outs, pronouns, gender identity), and every run adds another copy;
+   `SF_SEED_PLAN=plan-subscriptions.json` also loads subscriptions, for an org
+   with the `Subscription__c` custom object. The seeding user needs edit access
+   to those fields.
+
+   Then `make record-salesforce ORG=<alias>` records
    `adapters/salesforce/tests/cassettes/org.json` from an org you have logged
    in to with `sf org login web --alias <alias>`; `SF_OBJECTS` names the
-   objects (`Account,Contact,Opportunity,Case` by default). The access token
-   goes from `sf` to the recorder through a pipe and is never written. The
-   recorder scrubs credentials and the org's identity (its instance URL and
-   ID) but keeps the records as they are (decision 112). A scheduled
-   re-recording in CI, to catch API changes and cassette drift, needs a
-   connected app (see [external services](external-services.md#salesforce)).
+   objects (`Account,Contact,Opportunity,Case` by default), and `SF_HIDDEN`
+   lists fields, as `Object.Field`, that field-level security may hide. The
+   recording user should be able to read every field, so the cassette holds
+   them all. `make record-salesforce-hidden ORG=<alias>` records
+   `org-hidden.json`, only the API versions and the catalog, which fails
+   naming the hidden fields (decision 113): record it while the user lacks
+   that access, for example with the seeding permission sets unassigned, then
+   assign them again.
+
+   The access token goes from `sf` to the recorder through a pipe and is never
+   written. The recorder scrubs credentials and the org's identity (its
+   instance URL and ID) but keeps the records as they are (decision 112). A
+   scheduled re-recording in CI, to catch API changes and cassette drift,
+   needs a connected app (see
+   [external services](external-services.md#salesforce)).
 
 Only re-recording needs a Salesforce org; everything else runs offline.
 Loading a golden image into an org (`bulk_load`) comes later.

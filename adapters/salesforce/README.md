@@ -15,6 +15,7 @@ source:
     access_token: {env: SHOP_SF_ACCESS_TOKEN}
     api_version: "62.0"                         # the default
     objects: [Account, Contact, Opportunity, "Acme__*"]   # optional
+    hidden: [Contact.Pronouns]                  # optional: fields copies may go without
 subset:
   seeds:
     Account: "Industry = 'Technology' AND CreatedDate <= :as_of"   # SOQL; :as_of is the anchor
@@ -27,13 +28,24 @@ anonymize:
     LastName: {faker: last_name}
 ```
 
-The token is an OAuth access token for a user who can read the objects and,
-for the installed packages, the Tooling API (the "View Setup and
-Configuration" permission). The user must also be able to read every field
-the copy needs: Salesforce leaves fields that field-level security hides out
-of the object's description, so they are missing from the catalog and the
-copy without any error, and strict mode cannot report them. A field a managed
-package maintains, such as a rollup's result, is often hidden this way.
+The token is an OAuth access token for a user who can read the objects and
+the Tooling API (the "View Setup and Configuration" permission), which lists
+the installed packages and every field of each object.
+
+## Fields field-level security hides
+
+Salesforce leaves fields that field-level security hides from the user out of
+the object's description, so a copy would lack them without any error. The
+catalog finds them instead: a field that the Tooling API's `FieldDefinition`
+lists, that a profile or permission set grants (`FieldPermissions`), but that
+the description leaves out is hidden from this user. Fields granted to no one
+are internal, or belong to features the org does not use, and are never
+described anywhere, so they do not count. A field a managed package
+maintains, such as a rollup's result, is often hidden this way.
+
+The catalog, and so the plan, fails before anything is extracted, naming each
+hidden field. Give the user read access to them, or list them in `hidden`
+(as `Object.Field`) to accept that copies go without them.
 
 ## The catalog
 
