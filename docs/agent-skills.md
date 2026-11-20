@@ -34,9 +34,6 @@ skills/              # read by Claude Code as the plugin's skills
 /plugin install datadouble@datadouble
 ```
 
-While the repository is private, adding the marketplace uses each person's own
-git credentials, so organization members can install it and nobody else can.
-
 A copy step would create a second artifact that can drift from the CLI the
 skills are versioned with. If an organization-wide marketplace is needed later
 (for example `datadouble/claude-plugins`, listing other tools too), its entry
