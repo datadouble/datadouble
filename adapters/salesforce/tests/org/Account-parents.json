@@ -1,0 +1,114 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account0"
+   },
+   "Name": "Northwind Outfitters",
+   "Industry": "Technology",
+   "Phone": "(212) 555-0100",
+   "NumberOfEmployees": 1236,
+   "BillingCity": "Springfield",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account1"
+   },
+   "Name": "Bluefin Labs",
+   "Industry": "Retail",
+   "Phone": "(212) 555-0101",
+   "Website": "https://bluefin1.example.com",
+   "AnnualRevenue": 19801692.47,
+   "NumberOfEmployees": 396,
+   "BillingCity": "Riverton",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account2"
+   },
+   "Name": "Copperleaf Supply Co.",
+   "Industry": "Energy",
+   "Phone": "(212) 555-0102",
+   "Website": "https://copperleaf2.example.com",
+   "AnnualRevenue": 3714570.7,
+   "NumberOfEmployees": 4390,
+   "BillingCity": "Lakeside",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account3"
+   },
+   "Name": "Granite Peak Holdings",
+   "Industry": "Healthcare",
+   "Phone": "(212) 555-0103",
+   "Website": "https://granite3.example.com",
+   "AnnualRevenue": 4797089.09,
+   "NumberOfEmployees": 4775,
+   "BillingCity": "Fairview",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account4"
+   },
+   "Name": "Harborline Partners",
+   "Industry": "Manufacturing",
+   "Phone": "(212) 555-0104",
+   "Website": "https://harborline4.example.com",
+   "AnnualRevenue": 2994146.35,
+   "NumberOfEmployees": 4157,
+   "BillingCity": "Mill Creek",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account5"
+   },
+   "Name": "Ironbark Systems",
+   "Industry": "Finance",
+   "Phone": "(212) 555-0105",
+   "Website": "https://ironbark5.example.com",
+   "AnnualRevenue": 10813439.22,
+   "NumberOfEmployees": 705,
+   "BillingCity": "Port Ellis",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account6"
+   },
+   "Name": "Juniper Outfitters",
+   "Industry": "Technology",
+   "Phone": "(212) 555-0106",
+   "Website": "https://juniper6.example.com",
+   "AnnualRevenue": 21738919.61,
+   "NumberOfEmployees": 573,
+   "BillingCity": "Springfield",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account7"
+   },
+   "Name": "Kestrel Labs",
+   "Industry": "Retail",
+   "Phone": "(212) 555-0107",
+   "Website": "https://kestrel7.example.com",
+   "AnnualRevenue": 12109083.71,
+   "NumberOfEmployees": 4515,
+   "BillingCity": "Riverton",
+   "BillingCountry": "United States"
+  }
+ ]
+}

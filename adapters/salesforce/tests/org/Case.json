@@ -1,0 +1,644 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case0"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "New",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account0",
+   "ContactId": "@Contact0"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case1"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "Working",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account11",
+   "ContactId": "@Contact11"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case2"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "Escalated",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account22",
+   "ContactId": "@Contact22"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case3"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Closed",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account3",
+   "ContactId": "@Contact33"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case4"
+   },
+   "Subject": "Shipping delay",
+   "Status": "New",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account14",
+   "ContactId": "@Contact44"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case5"
+   },
+   "Subject": "Feature question",
+   "Status": "Working",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account25",
+   "ContactId": "@Contact55"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case6"
+   },
+   "Subject": "Billing address change",
+   "Status": "Escalated",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account6",
+   "ContactId": "@Contact66"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case7"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Closed",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account17",
+   "ContactId": "@Contact77"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case8"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "New",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account8",
+   "ContactId": "@Contact8"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case9"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "Working",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note."
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case10"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Escalated",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account0",
+   "ContactId": "@Contact30"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case11"
+   },
+   "Subject": "Shipping delay",
+   "Status": "Closed",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account11",
+   "ContactId": "@Contact41"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case12"
+   },
+   "Subject": "Feature question",
+   "Status": "New",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account22",
+   "ContactId": "@Contact52"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case13"
+   },
+   "Subject": "Billing address change",
+   "Status": "Working",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account3",
+   "ContactId": "@Contact63"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case14"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Escalated",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account14",
+   "ContactId": "@Contact74"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case15"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "Closed",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account5",
+   "ContactId": "@Contact5"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case16"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "New",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account16",
+   "ContactId": "@Contact16"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case17"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Working",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account27",
+   "ContactId": "@Contact27"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case18"
+   },
+   "Subject": "Shipping delay",
+   "Status": "Escalated",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account8",
+   "ContactId": "@Contact38"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case19"
+   },
+   "Subject": "Feature question",
+   "Status": "Closed",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note."
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case20"
+   },
+   "Subject": "Billing address change",
+   "Status": "New",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account0",
+   "ContactId": "@Contact60"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case21"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Working",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account11",
+   "ContactId": "@Contact71"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case22"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "Escalated",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account2",
+   "ContactId": "@Contact2"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case23"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "Closed",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account13",
+   "ContactId": "@Contact13"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case24"
+   },
+   "Subject": "Request for a quote",
+   "Status": "New",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account24",
+   "ContactId": "@Contact24"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case25"
+   },
+   "Subject": "Shipping delay",
+   "Status": "Working",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account5",
+   "ContactId": "@Contact35"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case26"
+   },
+   "Subject": "Feature question",
+   "Status": "Escalated",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account16",
+   "ContactId": "@Contact46"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case27"
+   },
+   "Subject": "Billing address change",
+   "Status": "Closed",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account27",
+   "ContactId": "@Contact57"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case28"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "New",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account8",
+   "ContactId": "@Contact68"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case29"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "Working",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note."
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case30"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "Escalated",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account10",
+   "ContactId": "@Contact10"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case31"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Closed",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account21",
+   "ContactId": "@Contact21"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case32"
+   },
+   "Subject": "Shipping delay",
+   "Status": "New",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account2",
+   "ContactId": "@Contact32"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case33"
+   },
+   "Subject": "Feature question",
+   "Status": "Working",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account13",
+   "ContactId": "@Contact43"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case34"
+   },
+   "Subject": "Billing address change",
+   "Status": "Escalated",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account24",
+   "ContactId": "@Contact54"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case35"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Closed",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account5",
+   "ContactId": "@Contact65"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case36"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "New",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account16",
+   "ContactId": "@Contact76"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case37"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "Working",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account7",
+   "ContactId": "@Contact7"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case38"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Escalated",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account18",
+   "ContactId": "@Contact18"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case39"
+   },
+   "Subject": "Shipping delay",
+   "Status": "Closed",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note."
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case40"
+   },
+   "Subject": "Feature question",
+   "Status": "New",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account10",
+   "ContactId": "@Contact40"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case41"
+   },
+   "Subject": "Billing address change",
+   "Status": "Working",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account21",
+   "ContactId": "@Contact51"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case42"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Escalated",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account2",
+   "ContactId": "@Contact62"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case43"
+   },
+   "Subject": "Cannot sign in",
+   "Status": "Closed",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account13",
+   "ContactId": "@Contact73"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case44"
+   },
+   "Subject": "Invoice total looks wrong",
+   "Status": "New",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account4",
+   "ContactId": "@Contact4"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case45"
+   },
+   "Subject": "Request for a quote",
+   "Status": "Working",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "Short note.",
+   "AccountId": "@Account15",
+   "ContactId": "@Contact15"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case46"
+   },
+   "Subject": "Shipping delay",
+   "Status": "Escalated",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note.",
+   "AccountId": "@Account26",
+   "ContactId": "@Contact26"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case47"
+   },
+   "Subject": "Feature question",
+   "Status": "Closed",
+   "Origin": "Web",
+   "Priority": "Low",
+   "Description": "Short note.",
+   "AccountId": "@Account7",
+   "ContactId": "@Contact37"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case48"
+   },
+   "Subject": "Billing address change",
+   "Status": "New",
+   "Origin": "Phone",
+   "Priority": "High",
+   "Description": "The customer wrote in about this.\nSecond line, with “quotes” and an emoji 📦.",
+   "AccountId": "@Account18",
+   "ContactId": "@Contact48"
+  },
+  {
+   "attributes": {
+    "type": "Case",
+    "referenceId": "Case49"
+   },
+   "Subject": "Order arrived damaged",
+   "Status": "Working",
+   "Origin": "Email",
+   "Priority": "Medium",
+   "Description": "Short note."
+  }
+ ]
+}

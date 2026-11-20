@@ -667,3 +667,25 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
         pytest.raises(EngineError, match="Contact's fields changed"),
     ):
         snapshot.extract(planned, selections, tmp_path / "again", tooling)
+
+
+# The seed data for a development org
+
+
+def test_the_seed_data_is_made_up_and_complete() -> None:
+    folder = Path(__file__).parent / "org"
+    saved: set[str] = set()
+    for step in json.loads((folder / "plan.json").read_text("utf-8")):
+        for name in step["files"]:
+            records = json.loads((folder / name).read_text("utf-8"))["records"]
+            assert len(records) <= 200, "sf data import tree loads at most 200 records a file"
+            for record in records:
+                assert record["attributes"]["type"] == step["sobject"]
+                references = {v[1:] for v in record.values() if isinstance(v, str) and v[:1] == "@"}
+                # A reference names a record an earlier step saved.
+                assert references <= saved, record
+                email = record.get("Email")
+                assert email is None or email.endswith("@example.com")
+                assert "Phone" not in record or "555-01" in record["Phone"]
+            if step["saveRefs"]:
+                saved |= {record["attributes"]["referenceId"] for record in records}

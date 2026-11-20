@@ -1,0 +1,554 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity0"
+   },
+   "Name": "Northwind renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 141802.14,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity1"
+   },
+   "Name": "Bluefin renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 238297.93,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity2"
+   },
+   "Name": "Copperleaf renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-03-15",
+   "Amount": 172778.17,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity3"
+   },
+   "Name": "Granite Peak renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-04-15",
+   "Amount": 129115.11,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity4"
+   },
+   "Name": "Harborline renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-05-15",
+   "Amount": 154589.39,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity5"
+   },
+   "Name": "Ironbark renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-06-15",
+   "Amount": 169211.92,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity6"
+   },
+   "Name": "Juniper renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-07-15",
+   "Amount": 13971.23,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity7"
+   },
+   "Name": "Kestrel renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-08-15",
+   "Amount": 224933.49,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity8"
+   },
+   "Name": "Larkspur renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-09-15",
+   "Amount": 195102.39,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity9"
+   },
+   "Name": "Meridian renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-10-15",
+   "Amount": 218691.04,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity10"
+   },
+   "Name": "Nimbus renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-11-15",
+   "Amount": 199569.34,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity11"
+   },
+   "Name": "Oakhaven renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-12-15",
+   "Amount": 98398.54,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity12"
+   },
+   "Name": "Pinecrest renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 100045.22,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity13"
+   },
+   "Name": "Quillfeather renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 26332.5,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity14"
+   },
+   "Name": "Redwater renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-03-15",
+   "Amount": 158755.25,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity15"
+   },
+   "Name": "Silverbirch renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-04-15",
+   "Amount": 16030.83,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity16"
+   },
+   "Name": "Thornbury renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-05-15",
+   "Amount": 17303.23,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity17"
+   },
+   "Name": "Umberfield renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-06-15",
+   "Amount": 52586.41,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity18"
+   },
+   "Name": "Valewood renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-07-15",
+   "Amount": 40994.65,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity19"
+   },
+   "Name": "Willowmere renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-08-15",
+   "Amount": 85343.39,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity20"
+   },
+   "Name": "Yarrow renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-09-15",
+   "Amount": 13617.61,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity21"
+   },
+   "Name": "Zephyr renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-10-15",
+   "Amount": 558.2,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity22"
+   },
+   "Name": "Ashgrove renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-11-15",
+   "Amount": 38240.6,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity23"
+   },
+   "Name": "Brightwater renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-12-15",
+   "Amount": 25815.36,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity24"
+   },
+   "Name": "Cinderford renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 91220.68,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity25"
+   },
+   "Name": "Driftwood renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 6862.47,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity26"
+   },
+   "Name": "Emberlane renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-03-15",
+   "Amount": 218645.93,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity27"
+   },
+   "Name": "Foxglove renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-04-15",
+   "Amount": 153710.21,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity28"
+   },
+   "Name": "Glenmoor renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-05-15",
+   "Amount": 37563.35,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity29"
+   },
+   "Name": "Hollowbrook renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-06-15",
+   "Amount": 63438.31,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity30"
+   },
+   "Name": "Northwind renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-07-15",
+   "Amount": 87173.69,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity31"
+   },
+   "Name": "Bluefin renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-08-15",
+   "Amount": 91358.78,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity32"
+   },
+   "Name": "Copperleaf renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-09-15",
+   "Amount": 31149.14,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity33"
+   },
+   "Name": "Granite Peak renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-10-15",
+   "Amount": 212309.76,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity34"
+   },
+   "Name": "Harborline renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-11-15",
+   "Amount": 248279.13,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity35"
+   },
+   "Name": "Ironbark renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-12-15",
+   "Amount": 116764.37,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity36"
+   },
+   "Name": "Juniper renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 121216.75,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity37"
+   },
+   "Name": "Kestrel renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 21928.22,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity38"
+   },
+   "Name": "Larkspur renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-03-15",
+   "Amount": 25995.81,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity39"
+   },
+   "Name": "Meridian renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-04-15",
+   "Amount": 85987.64,
+   "AccountId": "@Account27"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity40"
+   },
+   "Name": "Nimbus renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-05-15",
+   "Amount": 66556.84,
+   "AccountId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity41"
+   },
+   "Name": "Oakhaven renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-06-15",
+   "Amount": 207299.42,
+   "AccountId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity42"
+   },
+   "Name": "Pinecrest renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-07-15",
+   "Amount": 40778.93,
+   "AccountId": "@Account6"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity43"
+   },
+   "Name": "Quillfeather renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-08-15",
+   "Amount": 6262.38,
+   "AccountId": "@Account9"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity44"
+   },
+   "Name": "Redwater renewal 2026",
+   "StageName": "Needs Analysis",
+   "CloseDate": "2026-09-15",
+   "Amount": 237770.9,
+   "AccountId": "@Account12"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity45"
+   },
+   "Name": "Silverbirch renewal 2024",
+   "StageName": "Proposal/Price Quote",
+   "CloseDate": "2024-10-15",
+   "Amount": 132300.22,
+   "AccountId": "@Account15"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity46"
+   },
+   "Name": "Thornbury renewal 2025",
+   "StageName": "Closed Won",
+   "CloseDate": "2025-11-15",
+   "Amount": 37077.33,
+   "AccountId": "@Account18"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity47"
+   },
+   "Name": "Umberfield renewal 2026",
+   "StageName": "Closed Lost",
+   "CloseDate": "2026-12-15",
+   "Amount": 136021.52,
+   "AccountId": "@Account21"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity48"
+   },
+   "Name": "Valewood renewal 2024",
+   "StageName": "Prospecting",
+   "CloseDate": "2024-01-15",
+   "Amount": 7247.1,
+   "AccountId": "@Account24"
+  },
+  {
+   "attributes": {
+    "type": "Opportunity",
+    "referenceId": "Opportunity49"
+   },
+   "Name": "Willowmere renewal 2025",
+   "StageName": "Qualification",
+   "CloseDate": "2025-02-15",
+   "Amount": 132263.31,
+   "AccountId": "@Account27"
+  }
+ ]
+}

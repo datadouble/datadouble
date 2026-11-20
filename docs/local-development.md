@@ -55,8 +55,12 @@ Salesforce cannot run in a container. Three layers cover it (decision 111):
     - Bulk API 2.0's polling, where the same request repeats with different
       responses, replays in order and then repeats the last response.
     - Tests never assert on record IDs or timestamps; they differ per org.
-3. **Re-recording against a development org.** `make record-salesforce
-   ORG=<alias>` records `adapters/salesforce/tests/cassettes/org.json` from
+3. **Re-recording against a development org.** First check that the org
+   has records worth recording: accounts with parent accounts, and contacts,
+   opportunities and cases that refer to them. If it doesn't, `make
+   seed-salesforce ORG=<alias>` loads the made-up records in
+   `adapters/salesforce/tests/org/` with `sf data import tree`; every run adds
+   another copy. Then `make record-salesforce ORG=<alias>` records `adapters/salesforce/tests/cassettes/org.json` from
    an org you have logged in to with `sf org login web --alias <alias>`;
    `SF_OBJECTS` names the objects (`Account,Contact,Opportunity,Case` by
    default). The access token goes from `sf` to the recorder through a pipe
@@ -65,7 +69,7 @@ Salesforce cannot run in a container. Three layers cover it (decision 111):
    [external services](external-services.md#salesforce)).
 
 Only re-recording needs a Salesforce org; everything else runs offline.
-Loading records into an org (`bulk_load`) comes later, with seeding an org.
+Loading a golden image into an org (`bulk_load`) comes later.
 
 ## CI/CD systems
 

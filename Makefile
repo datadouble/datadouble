@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs test-ci validate-plugin test-skills record-salesforce docs docs-serve clean
+.PHONY: check lint lint-workflows typecheck test test-integration test-group integration clean-work test-k8s test-btrfs test-ci validate-plugin test-skills seed-salesforce record-salesforce docs docs-serve clean
 
 # Everything that must pass before a pull request: lint, types, unit tests.
 check: lint lint-workflows typecheck test
@@ -155,6 +155,13 @@ test-skills:
 # org IDs before it is written. ORG names the alias; SF_OBJECTS the objects
 # to record. The access token goes from `sf` to the recorder through a pipe.
 SF_OBJECTS ?= Account,Contact,Opportunity,Case
+# Loads made-up records into a development org before recording, so the
+# cassette exercises references, empty fields and odd text. Each run adds
+# another copy of them.
+seed-salesforce:
+	@test -n "$(ORG)" || { echo "name an org: make seed-salesforce ORG=<alias>"; exit 2; }
+	sf data import tree --plan adapters/salesforce/tests/org/plan.json --target-org "$(ORG)"
+
 record-salesforce:
 	@test -n "$(ORG)" || { echo "name an org: make record-salesforce ORG=<alias>"; exit 2; }
 	sf org display --target-org "$(ORG)" --json \

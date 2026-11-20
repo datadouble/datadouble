@@ -1,0 +1,313 @@
+{
+ "records": [
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account8"
+   },
+   "Name": "Larkspur Supply Co.",
+   "Industry": "Energy",
+   "Phone": "(212) 555-0108",
+   "Website": "https://larkspur8.example.com",
+   "AnnualRevenue": 21283507.54,
+   "NumberOfEmployees": 4633,
+   "BillingCity": "Lakeside",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account9"
+   },
+   "Name": "Meridian Holdings",
+   "Industry": "Healthcare",
+   "Phone": "(212) 555-0109",
+   "NumberOfEmployees": 1829,
+   "BillingCity": "Fairview",
+   "BillingCountry": "United States",
+   "ParentId": "@Account1"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account10"
+   },
+   "Name": "Nimbus Partners",
+   "Industry": "Manufacturing",
+   "Phone": "(212) 555-0110",
+   "Website": "https://nimbus10.example.com",
+   "AnnualRevenue": 31568233.2,
+   "NumberOfEmployees": 4776,
+   "BillingCity": "Mill Creek",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account11"
+   },
+   "Name": "Oakhaven Systems",
+   "Industry": "Finance",
+   "Phone": "(212) 555-0111",
+   "Website": "https://oakhaven11.example.com",
+   "AnnualRevenue": 47390676.23,
+   "NumberOfEmployees": 4728,
+   "BillingCity": "Port Ellis",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account12"
+   },
+   "Name": "Pinecrest Outfitters",
+   "Industry": "Technology",
+   "Phone": "(212) 555-0112",
+   "Website": "https://pinecrest12.example.com",
+   "AnnualRevenue": 29318516.99,
+   "NumberOfEmployees": 407,
+   "BillingCity": "Springfield",
+   "BillingCountry": "United States",
+   "ParentId": "@Account4"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account13"
+   },
+   "Name": "Quillfeather Labs",
+   "Industry": "Retail",
+   "Phone": "(212) 555-0113",
+   "Website": "https://quillfeather13.example.com",
+   "AnnualRevenue": 48815129.77,
+   "NumberOfEmployees": 382,
+   "BillingCity": "Riverton",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account14"
+   },
+   "Name": "Redwater Supply Co.",
+   "Industry": "Energy",
+   "Phone": "(212) 555-0114",
+   "Website": "https://redwater14.example.com",
+   "AnnualRevenue": 27877578.41,
+   "NumberOfEmployees": 1091,
+   "BillingCity": "Lakeside",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account15"
+   },
+   "Name": "Silverbirch Holdings",
+   "Industry": "Healthcare",
+   "Phone": "(212) 555-0115",
+   "Website": "https://silverbirch15.example.com",
+   "AnnualRevenue": 14551503.39,
+   "NumberOfEmployees": 1182,
+   "BillingCity": "Fairview",
+   "BillingCountry": "United States",
+   "ParentId": "@Account7"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account16"
+   },
+   "Name": "Thornbury Partners",
+   "Industry": "Manufacturing",
+   "Phone": "(212) 555-0116",
+   "Website": "https://thornbury16.example.com",
+   "AnnualRevenue": 27080225.69,
+   "NumberOfEmployees": 4677,
+   "BillingCity": "Mill Creek",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account17"
+   },
+   "Name": "Umberfield Systems",
+   "Industry": "Finance",
+   "Phone": "(212) 555-0117",
+   "Website": "https://umberfield17.example.com",
+   "AnnualRevenue": 15493243.02,
+   "NumberOfEmployees": 1481,
+   "BillingCity": "Port Ellis",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account18"
+   },
+   "Name": "Valewood Outfitters",
+   "Industry": "Technology",
+   "Phone": "(212) 555-0118",
+   "NumberOfEmployees": 4680,
+   "BillingCity": "Springfield",
+   "BillingCountry": "United States",
+   "ParentId": "@Account2"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account19"
+   },
+   "Name": "Willowmere Labs",
+   "Industry": "Retail",
+   "Phone": "(212) 555-0119",
+   "Website": "https://willowmere19.example.com",
+   "AnnualRevenue": 31981782.1,
+   "NumberOfEmployees": 3051,
+   "BillingCity": "Riverton",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account20"
+   },
+   "Name": "Yarrow Supply Co.",
+   "Industry": "Energy",
+   "Phone": "(212) 555-0120",
+   "Website": "https://yarrow20.example.com",
+   "AnnualRevenue": 4961785.74,
+   "NumberOfEmployees": 515,
+   "BillingCity": "Lakeside",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account21"
+   },
+   "Name": "Zephyr Holdings",
+   "Industry": "Healthcare",
+   "Phone": "(212) 555-0121",
+   "Website": "https://zephyr21.example.com",
+   "AnnualRevenue": 28261977.83,
+   "NumberOfEmployees": 1688,
+   "BillingCity": "Fairview",
+   "BillingCountry": "United States",
+   "ParentId": "@Account5"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account22"
+   },
+   "Name": "Ashgrove Partners",
+   "Industry": "Manufacturing",
+   "Phone": "(212) 555-0122",
+   "Website": "https://ashgrove22.example.com",
+   "AnnualRevenue": 24871083.31,
+   "NumberOfEmployees": 4356,
+   "BillingCity": "Mill Creek",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account23"
+   },
+   "Name": "Brightwater Systems",
+   "Industry": "Finance",
+   "Phone": "(212) 555-0123",
+   "Website": "https://brightwater23.example.com",
+   "AnnualRevenue": 21436856.05,
+   "NumberOfEmployees": 2574,
+   "BillingCity": "Port Ellis",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account24"
+   },
+   "Name": "Cinderford Outfitters",
+   "Industry": "Technology",
+   "Phone": "(212) 555-0124",
+   "Website": "https://cinderford24.example.com",
+   "AnnualRevenue": 23333533.11,
+   "NumberOfEmployees": 3713,
+   "BillingCity": "Springfield",
+   "BillingCountry": "United States",
+   "ParentId": "@Account0"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account25"
+   },
+   "Name": "Driftwood Labs",
+   "Industry": "Retail",
+   "Phone": "(212) 555-0125",
+   "Website": "https://driftwood25.example.com",
+   "AnnualRevenue": 18142959.56,
+   "NumberOfEmployees": 2036,
+   "BillingCity": "Riverton",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account26"
+   },
+   "Name": "Emberlane Supply Co.",
+   "Industry": "Energy",
+   "Phone": "(212) 555-0126",
+   "Website": "https://emberlane26.example.com",
+   "AnnualRevenue": 39739536.13,
+   "NumberOfEmployees": 2000,
+   "BillingCity": "Lakeside",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account27"
+   },
+   "Name": "Foxglove Holdings",
+   "Industry": "Healthcare",
+   "Phone": "(212) 555-0127",
+   "NumberOfEmployees": 2460,
+   "BillingCity": "Fairview",
+   "BillingCountry": "United States",
+   "ParentId": "@Account3"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account28"
+   },
+   "Name": "Glenmoor Partners",
+   "Industry": "Manufacturing",
+   "Phone": "(212) 555-0128",
+   "Website": "https://glenmoor28.example.com",
+   "AnnualRevenue": 26307305.54,
+   "NumberOfEmployees": 2814,
+   "BillingCity": "Mill Creek",
+   "BillingCountry": "United States"
+  },
+  {
+   "attributes": {
+    "type": "Account",
+    "referenceId": "Account29"
+   },
+   "Name": "Hollowbrook Systems",
+   "Industry": "Finance",
+   "Phone": "(212) 555-0129",
+   "Website": "https://hollowbrook29.example.com",
+   "AnnualRevenue": 36499319.94,
+   "NumberOfEmployees": 2359,
+   "BillingCity": "Port Ellis",
+   "BillingCountry": "United States"
+  }
+ ]
+}
