@@ -38,7 +38,6 @@ class _Login(BaseModel):
     access_token: str = Field(alias="accessToken")
     instance_url: str = Field(alias="instanceUrl")
     id: str = ""
-    api_version: str = Field(default=DEFAULT_API_VERSION, alias="apiVersion")
 
 
 def _login(text: str) -> _Login:
@@ -133,7 +132,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     " `sf org auth show-access-token --json` print for a logged-in org\n"
                 )
                 return 2
-            url, token, version = login.instance_url, login.access_token, login.api_version
+            # The adapter's own API version, not the org's newest, so replay matches.
+            url, token, version = login.instance_url, login.access_token, DEFAULT_API_VERSION
             secrets = (login.access_token, login.id)
             transport = httpx.HTTPTransport(retries=2)
         recording, exercised = record(transport, url, token, version, objects)
