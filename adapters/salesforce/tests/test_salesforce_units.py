@@ -87,10 +87,21 @@ HIDDEN_CASSETTE = Path(__file__).parent / "cassettes" / "org-hidden.json"
 # its reference to Account, the managed package, and the fields field-level
 # security hid for the hidden cassette.
 OBJECTS = ("Account", "Contact", "Opportunity", "Case")
-CUSTOM = "dd_ratings__Rating__c"
-CUSTOM_REFERENCE = "dd_ratings__Account__c"
-PACKAGE = "dd_ratings"
-HIDDEN = ("Contact.Pronouns",)
+# What the committed cassettes recorded: the org's custom object and its
+# reference to Account, its managed package, and the fields field-level
+# security hid once the recording user's permission sets were removed.
+CUSTOM = "Subscription__c"
+CUSTOM_REFERENCE = "Account__c"
+PACKAGE = "dlrs"
+HIDDEN = (
+    "Account.Active_Subscription_Total__c",
+    "Contact.BuyerAttributes",
+    "Contact.DoNotCall",
+    "Contact.GenderIdentity",
+    "Contact.HasOptedOutOfEmail",
+    "Contact.HasOptedOutOfFax",
+    "Contact.Pronouns",
+)
 AS_OF = dt.datetime(2026, 1, 2, 3, 4, 5, 6000, tzinfo=dt.UTC)
 ACCOUNT = TableName.of("", "Account")
 CONTACT = TableName.of("", "Contact")
@@ -440,6 +451,12 @@ def test_the_recorder(
         return FakeTransport(sample_org(tmp_path / "org.sqlite"))
 
     monkeypatch.setattr(httpx, "HTTPTransport", transport)
+
+    def no_wait(_seconds: float) -> None:
+        pass
+
+    # A real org's Bulk jobs are polled every two seconds; the fake's need no wait.
+    monkeypatch.setattr("datadouble_salesforce.org.time.sleep", no_wait)
     assert recorder.main(["--objects", "Lead"]) == 0
     text = capsys.readouterr().out
     assert "AQ4AQSecret" not in text
@@ -507,7 +524,7 @@ def test_packages_without_a_namespace(tmp_path: Path) -> None:
 def test_the_recorder_records_a_failing_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    target = recorder.Target(FAKE_URL, "fake", "62.0")
+    target = recorder.Target(FAKE_URL, "fake", "62.0", 0.0)
     hiding = FakeTransport(_hiding(tmp_path / "org.sqlite"))
     recording, result = recorder.record(hiding, target, ("Contact",), catalog_only=True)
     assert isinstance(result, EngineError)
@@ -601,7 +618,8 @@ def test_hidden_fields_fail_the_catalog(tmp_path: Path, monkeypatch: pytest.Monk
         }
         granted = list(
             client.query(
-                "SELECT Field FROM FieldPermissions WHERE SobjectType IN ('Account') GROUP BY Field"
+                "SELECT Field FROM FieldPermissions WHERE Field IN"
+                " ('Account.Total__c', 'Account.CompareName', 'Account.Id')"
             )
         )
         assert [g["Field"] for g in granted] == ["Account.Total__c"]

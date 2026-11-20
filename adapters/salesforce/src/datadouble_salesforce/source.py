@@ -158,12 +158,13 @@ def packages(org: Org) -> tuple[Requirement, ...]:
 
 
 FIELD_CHUNK = 100
-"""The most objects one field-definition or field-permission query names."""
+"""The most objects or fields one field-definition or field-permission query names."""
 _DEFINED = (
     "SELECT EntityDefinition.QualifiedApiName, QualifiedApiName FROM FieldDefinition"
     " WHERE EntityDefinition.QualifiedApiName IN ({})"
 )
-_GRANTED = "SELECT Field FROM FieldPermissions WHERE SobjectType IN ({}) GROUP BY Field"
+# Not grouped: Salesforce's GROUP BY on FieldPermissions leaves out some fields.
+_GRANTED = "SELECT Field FROM FieldPermissions WHERE Field IN ({})"
 
 
 class _Entity(BaseModel):
@@ -202,8 +203,13 @@ def hidden_fields(org: Org, descriptions: tuple[ObjectDescription, ...]) -> froz
         for record in org.tooling_query(_DEFINED.format(listed)):
             field = _Defined.model_validate(record)
             defined.add(f"{field.entity.name}.{field.name}")
+    # Only the fields the descriptions leave out need asking about.
+    candidates = sorted(defined - described)
+    for start in range(0, len(candidates), FIELD_CHUNK):
+        listed = ", ".join(literal(name) for name in candidates[start : start + FIELD_CHUNK])
         granted.update(_Granted.model_validate(r).field for r in org.query(_GRANTED.format(listed)))
-    return frozenset((defined - described) & granted)
+    # Salesforce also answers with same-named fields of other objects.
+    return frozenset(granted.intersection(candidates))
 
 
 def introspect(org: Org, patterns: tuple[str, ...], accepted: frozenset[str]) -> Catalog:

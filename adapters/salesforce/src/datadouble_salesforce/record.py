@@ -98,6 +98,8 @@ class Target:
     instance_url: str
     token: str
     api_version: str
+    poll_seconds: float = 2.0
+    """Between Bulk API job checks; a real org's job takes seconds, the fake's none."""
 
 
 def record(
@@ -116,7 +118,7 @@ def record(
     recording = RecordingTransport(transport)
     headers = {"Authorization": f"Bearer {target.token}", "Accept": "application/json"}
     with httpx.Client(base_url=target.instance_url, headers=headers, transport=recording) as client:
-        org = RestOrg(client, target.api_version, poll_seconds=0.0)
+        org = RestOrg(client, target.api_version, poll_seconds=target.poll_seconds)
         source = SalesforceSource(org, target.api_version, objects, hidden)
         try:
             exercised: Exercised | EngineError = exercise(source, catalog_only=catalog_only)
@@ -166,7 +168,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             transport = httpx.HTTPTransport(retries=2)
         recording, exercised = record(
             transport,
-            Target(url, token, version),
+            Target(url, token, version, 0.0 if options.fake else 2.0),
             objects,
             hidden,
             catalog_only=options.catalog_only,

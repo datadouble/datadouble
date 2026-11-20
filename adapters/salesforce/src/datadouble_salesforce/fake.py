@@ -397,11 +397,20 @@ class FakeTransport(httpx.BaseTransport):
         ]
 
     def _granted(self, query: str) -> list[dict[str, JsonValue]]:
+        """A row per granted field with a name the query names, on any object.
+
+        Salesforce matches on the field's name, answering for same-named
+        fields of other objects too.
+        """
+        named = {name.rsplit(".", 1)[-1].lower() for name in _QUOTED.findall(query)}
         return [
             {"Field": f"{o.name}.{f.name}"}
-            for o in self._named(query)
+            for o in self.org.objects()
             for f in o.fields
-            if not f.internal and f.name != "Id" and (f.nillable or f.hidden)
+            if f.name.lower() in named
+            and not f.internal
+            and f.name != "Id"
+            and (f.nillable or f.hidden)
         ]
 
     def _page(
