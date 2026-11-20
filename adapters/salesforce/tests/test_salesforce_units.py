@@ -17,6 +17,7 @@ import pytest
 from datadouble.catalog import Catalog, Column, ColumnKind, Table
 from datadouble.engine import EngineError, Tooling, Transformation
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, TableName
+from datadouble.pii import detect
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule, PlanOptions, plan
 from datadouble.registry import installed
 from datadouble.settings import SettingsError
@@ -676,7 +677,7 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
 # The seed data for a development org
 
 
-def test_the_seed_data_is_made_up_and_complete() -> None:
+def test_the_seed_data_looks_real_and_is_complete() -> None:
     folder = Path(__file__).parent / "org"
     saved: set[str] = set()
     # Orgs' duplicate rules refuse records that look alike.
@@ -690,11 +691,11 @@ def test_the_seed_data_is_made_up_and_complete() -> None:
                 references = {v[1:] for v in record.values() if isinstance(v, str) and v[:1] == "@"}
                 # A reference names a record an earlier step saved.
                 assert references <= saved, record
-                email = record.get("Email")
-                assert email is None or email.endswith("@example.com")
-                assert "Phone" not in record or "555-01" in record["Phone"]
-                # Each account has its own reserved domain, so they don't look like one company.
-                assert record.get("Website", ".example").endswith(".example")
+                # The org stands in for a source: its contact details must look
+                # like personal data, as Salesforce's own sample records do.
+                for field in ("Email", "Phone"):
+                    if field in record:
+                        assert detect(record[field]), record[field]
                 values = dict(record)
                 if "FirstName" in record:
                     values["Name"] = f"{record['FirstName']} {record['LastName']}"

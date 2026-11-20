@@ -55,18 +55,23 @@ Salesforce cannot run in a container. Three layers cover it (decision 111):
     - Bulk API 2.0's polling, where the same request repeats with different
       responses, replays in order and then repeats the last response.
     - Tests never assert on record IDs or timestamps; they differ per org.
-3. **Re-recording against a development org.** First check that the org
-   has records worth recording: accounts with parent accounts, and contacts,
-   opportunities and cases that refer to them. If it doesn't, `make
-   seed-salesforce ORG=<alias>` loads the made-up records in
-   `adapters/salesforce/tests/org/` with `sf data import tree`; every run adds
-   another copy. Then `make record-salesforce ORG=<alias>` records `adapters/salesforce/tests/cassettes/org.json` from
-   an org you have logged in to with `sf org login web --alias <alias>`;
-   `SF_OBJECTS` names the objects (`Account,Contact,Opportunity,Case` by
-   default). The access token goes from `sf` to the recorder through a pipe
-   and is never written. A scheduled re-recording in CI, to catch API changes
-   and cassette drift, needs a connected app (see
-   [external services](external-services.md#salesforce)).
+3. **Re-recording against an org that stands in for a source.** Use a
+   Developer Edition org whose data looks like production data, as
+   Salesforce's own sample records do, so the PII scan has something to find.
+   First check that it has records worth recording: accounts with parent
+   accounts, and contacts, opportunities and cases that refer to them. If it
+   doesn't, `make seed-salesforce ORG=<alias>` loads the records in
+   `adapters/salesforce/tests/org/` with `sf data import tree`. They are
+   invented but look real, and every run adds another copy. Then `make
+   record-salesforce ORG=<alias>` records
+   `adapters/salesforce/tests/cassettes/org.json` from an org you have logged
+   in to with `sf org login web --alias <alias>`; `SF_OBJECTS` names the
+   objects (`Account,Contact,Opportunity,Case` by default). The access token
+   goes from `sf` to the recorder through a pipe and is never written. The
+   recorder scrubs credentials and the org's identity (its instance URL and
+   ID) but keeps the records as they are (decision 112). A scheduled
+   re-recording in CI, to catch API changes and cassette drift, needs a
+   connected app (see [external services](external-services.md#salesforce)).
 
 Only re-recording needs a Salesforce org; everything else runs offline.
 Loading a golden image into an org (`bulk_load`) comes later.

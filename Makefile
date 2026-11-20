@@ -155,9 +155,9 @@ test-skills:
 # org IDs before it is written. ORG names the alias; SF_OBJECTS the objects
 # to record. The access token goes from `sf` to the recorder through a pipe.
 SF_OBJECTS ?= Account,Contact,Opportunity,Case
-# Loads made-up records into a development org before recording, so the
-# cassette exercises references, empty fields and odd text. Each run adds
-# another copy of them.
+# Loads invented records that look real into an org standing in for a source,
+# so the cassette exercises references, empty fields, odd text and data the
+# PII scan flags. Each run adds another copy of them.
 seed-salesforce:
 	@test -n "$(ORG)" || { echo "name an org: make seed-salesforce ORG=<alias>"; exit 2; }
 	sf data import tree --plan adapters/salesforce/tests/org/plan.json --target-org "$(ORG)"
