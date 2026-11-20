@@ -166,7 +166,8 @@ record-salesforce:
 	@test -n "$(ORG)" || { echo "name an org: make record-salesforce ORG=<alias>"; exit 2; }
 	sf org display --target-org "$(ORG)" --json \
 		| uv run python -m datadouble_salesforce.record --objects "$(SF_OBJECTS)" \
-			> adapters/salesforce/tests/cassettes/org.json.partial
+			> adapters/salesforce/tests/cassettes/org.json.partial \
+		|| { rm -f adapters/salesforce/tests/cassettes/org.json.partial; exit 1; }
 	mv adapters/salesforce/tests/cassettes/org.json.partial adapters/salesforce/tests/cassettes/org.json
 
 docs:
