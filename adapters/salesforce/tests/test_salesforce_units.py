@@ -390,18 +390,22 @@ def test_the_recorder(
     output = capsys.readouterr()
     assert "over 1 objects" in output.err
     assert Cassette.model_validate_json(output.out).interactions
-    login = {
+    # sf org display redacts the token, which sf org auth show-access-token prints.
+    display = {
         "status": 0,
         "result": {
-            "accessToken": "00D5e000000AbCdEAG!AQ4AQSecret",
+            "accessToken": "[REDACTED]",
             "instanceUrl": "https://example-dev-ed.my.salesforce.com",
             "id": "00D5e000000AbCdEAG",
         },
     }
+    token = {"status": 0, "result": {"accessToken": "00D5e000000AbCdEAG!AQ4AQSecret"}}
     monkeypatch.setattr("sys.stdin", io.StringIO('{"result": {"accessToken": "secret-ish"}}'))
     assert recorder.main([]) == 2
     assert "secret-ish" not in capsys.readouterr().err
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(login)))
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"result": {}} ["not", "a", "login"]'))
+    assert recorder.main([]) == 2
+    monkeypatch.setattr("sys.stdin", io.StringIO(f"{json.dumps(display)}\n{json.dumps(token)}\n"))
 
     def transport(**_: object) -> FakeTransport:
         return FakeTransport(sample_org(tmp_path / "org.sqlite"))
