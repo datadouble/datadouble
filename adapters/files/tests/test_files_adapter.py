@@ -41,6 +41,7 @@ source: {engine: postgres, connection: CONNECTION}
 subset:
   seeds: {customer: "id <= 3"}
   follow: {down: ["customer -> customer_document"]}
+  unselected: none
 files:
   connection: {root: ROOT, accept_inconsistent: true}
   select: {avatars: "-name '1.jpg'", documents: -false}
