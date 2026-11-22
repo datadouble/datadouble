@@ -28,6 +28,7 @@ subset:
   virtual_fks:
     user:{}:sessions._key -> user:{}: {}   # a reference in a key's name
     order:{}.user_id -> user:{}: {}        # a reference in a hash field
+  unselected: none   # patterns nothing reaches, such as order:{} here, are copied empty
 ```
 
 Key segments that are not names (numbers, UUIDs, long hex strings, anything

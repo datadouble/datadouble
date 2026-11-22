@@ -359,11 +359,12 @@ Starting filters and the policy for deriving everything else.
 |---|---|---|---|
 | `as_of` | string |  |  |
 | `strategy` | [Strategy](#strategy) | `"auto"` |  |
-| `seeds` | map of string |  |  |
+| `seeds` | map of string |  | Starting conditions; keys are table names or globs, such as `"*": "TRUE"`. |
 | `follow` | [Follow](#follow) | see type |  |
 | `edges` | map of [EdgePolicy](#edgepolicy) |  |  |
 | `virtual_fks` | map of [VirtualForeignKey](#virtualforeignkey) |  |  |
-| `jailer` | [JailerSubset](#jailersubset) |  | A Jailer subset instead of seeds, follow, edges and virtual_fks. |
+| `unselected` | [Unselected](#unselected) |  | Kept tables that no seed or followed reference selects: `fail` (the default), `none` or `all`. |
+| `jailer` | [JailerSubset](#jailersubset) |  | A Jailer subset instead of seeds, follow, edges, virtual_fks and unselected. |
 
 ### TransformHook
 
@@ -381,6 +382,12 @@ The signatures images must carry to cross into non-production.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `cosign` (required) | [CosignTrust](#cosigntrust) |  |  |
+
+### Unselected
+
+What happens to a kept table that no seed or followed reference selects.
+
+One of `fail` or `none` or `all`.
 
 ### Verify
 

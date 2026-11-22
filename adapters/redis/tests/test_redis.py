@@ -49,6 +49,7 @@ name: scratch
 source: {engine: redis, connection: CONNECTION}
 exclude: ["gone:{}"]
 subset:
+  unselected: none
   seeds:
     "child:{}": "[12]"
     "other:{}": "1"
@@ -383,6 +384,7 @@ MODULE_SPEC = """
 name: scratch
 source: {engine: redis, connection: CONNECTION}
 subset:
+  unselected: none
   seeds: {"json:{}": "*"}
 """
 

@@ -34,6 +34,7 @@ source:
   connection: {fake: ORG}
 exclude: [Lead]
 subset:
+  unselected: none
   seeds:
     Account: "Industry = 'technology' AND CreatedDate <= :as_of"
   follow:

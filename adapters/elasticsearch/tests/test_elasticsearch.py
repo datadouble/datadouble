@@ -65,6 +65,7 @@ name: scratch
 source: {engine: elasticsearch, connection: CONNECTION}
 exclude: ["gone"]
 subset:
+  unselected: none
   seeds: {child: '{"range": {"n": {"lte": 2}}}', other: '{"ids": {"values": ["1"]}}'}
   edges:
     child.parent_id -> parent: {on_missing: stub}

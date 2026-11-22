@@ -84,6 +84,7 @@ name: scratch
 source: {engine: oracle, connection: CONNECTION}
 exclude: ["items"]
 subset:
+  unselected: none
   seeds: {child: "id <= 2", files: "id > 0"}
   edges:
     child.parent_id -> parent: {on_missing: stub}
@@ -428,6 +429,7 @@ name: scratch
 source: {engine: oracle, connection: CONNECTION, omit: OMIT}
 exclude: ["items", "parent", "child", "files", "child_log"]
 subset:
+  unselected: none
   seeds: {notes: "id > 0"}
 """
 

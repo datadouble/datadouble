@@ -8,8 +8,8 @@ import pytest
 from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind
 from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import Capabilities, Plan, PlanError, PlanOptions, plan
-from datadouble.spec import ImageFormat, Strategy, StrictLevel, parse_spec
-from datadouble.subset import EdgeMode
+from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, Unselected, parse_spec
+from datadouble.subset import AllRows, EdgeMode, NoRows, nested_conditions
 from fakes import catalog, shop, table
 
 CAPABILITIES = Capabilities(
@@ -30,12 +30,23 @@ def planned(
 ) -> Plan:
     live = live or shop()
     return plan(
-        parse_spec(HEADER + body),
+        quiet(parse_spec(HEADER + body)),
         live,
         CatalogLock.of(lock or live),
         capabilities,
         options or PlanOptions(now=NOW),
     )
+
+
+def quiet(spec: Spec) -> Spec:
+    """Most tests here seed only part of the shop: let the rest keep no rows.
+
+    Tests of ``subset.unselected`` itself call :func:`plan` directly.
+    """
+    if spec.subset.unselected is not None or spec.subset.jailer is not None:
+        return spec
+    subset = spec.subset.model_copy(update={"unselected": Unselected.NONE})
+    return spec.model_copy(update={"subset": subset})
 
 
 def problems(
@@ -133,12 +144,12 @@ def test_spec_as_of_wins_and_the_clock_defaults_to_now() -> None:
 
 
 def test_no_lock() -> None:
-    spec = parse_spec(HEADER + "strict: off")
+    spec = quiet(parse_spec(HEADER + "strict: off"))
     result = plan(spec, shop(), None, CAPABILITIES)
     assert result.strict is None
     assert "no catalog lock" in result.warnings[0]
     with pytest.raises(PlanError) as caught:
-        plan(parse_spec(HEADER), shop(), None, CAPABILITIES)
+        plan(quiet(parse_spec(HEADER)), shop(), None, CAPABILITIES)
     assert "datadouble lock" in caught.value.problems[0]
 
 
@@ -513,7 +524,9 @@ def test_omitted_requirements() -> None:
     live = shop().model_copy(update={"requirements": (vector, cube)})
 
     def plan_omitting(names: str) -> Plan:
-        spec = parse_spec(f"name: shop\nsource: {{engine: fake, omit: [{names}]}}\n" + CYCLE_FREE)
+        spec = quiet(
+            parse_spec(f"name: shop\nsource: {{engine: fake, omit: [{names}]}}\n" + CYCLE_FREE)
+        )
         return plan(spec, live, CatalogLock.of(live), CAPABILITIES, PlanOptions(now=NOW))
 
     result = plan_omitting("vector")
@@ -522,3 +535,133 @@ def test_omitted_requirements() -> None:
     with pytest.raises(PlanError) as caught:
         plan_omitting("vector, nope")
     assert "source.omit names 'nope', which the source does not use" in caught.value.problems
+
+
+# Tables nothing selects, and seed patterns (subset.unselected, glob seeds)
+
+
+def strict_plan(body: str, capabilities: Capabilities = CAPABILITIES) -> Plan:
+    """Plan without the :func:`quiet` default, as a spec on its own would."""
+    live = shop()
+    spec = parse_spec(HEADER + CYCLE_FREE + body)
+    return plan(spec, live, CatalogLock.of(live), capabilities, PlanOptions(now=NOW))
+
+
+def strict_problems(body: str) -> tuple[str, ...]:
+    with pytest.raises(PlanError) as caught:
+        strict_plan(body)
+    return caught.value.problems
+
+
+def named(problems_or_warnings: tuple[str, ...]) -> set[str]:
+    """The tables messages about unselected tables name."""
+    return {
+        text.split("selects rows of ", 1)[1].split(";", 1)[0]
+        for text in problems_or_warnings
+        if "selects rows of" in text
+    }
+
+
+KEPT = {
+    "public.users",
+    "public.categories",
+    "public.posts",
+    "public.comments",
+    "public.events",
+    "public.film_actor",
+}
+
+
+def test_a_spec_without_seeds_fails_naming_every_table() -> None:
+    reasons = strict_problems("")
+    assert named(reasons) == KEPT
+    assert all("set subset.unselected" in r for r in reasons if "selects rows of" in r)
+
+
+def test_followed_references_select_tables() -> None:
+    reasons = strict_problems("subset: {seeds: {users: 'id = 1'}}")
+    assert named(reasons) == KEPT - {"public.users"}
+    # Following users -> posts brings posts in, and posts pull in their categories.
+    reasons = strict_problems(
+        "subset: {seeds: {users: 'id = 1'}, follow: {down: [users -> posts]}}"
+    )
+    assert named(reasons) == {"public.comments", "public.events", "public.film_actor"}
+
+
+def test_follow_all_selects_the_parent() -> None:
+    reasons = strict_problems(
+        "subset:\n  seeds: {users: 'id = 1'}\n"
+        "  edges: {posts.category_id -> categories: {follow: all}}"
+    )
+    assert "public.categories" not in named(reasons)
+
+
+def test_unselected_none_keeps_no_rows_and_warns() -> None:
+    result = strict_plan("subset: {seeds: {users: 'id = 1'}, unselected: none}")
+    assert named(result.warnings) == KEPT - {"public.users"}
+    assert {str(t) for t in result.unselected} == KEPT - {"public.users"}
+    conditions = nested_conditions(result.graph())
+    assert isinstance(conditions[TableName.of("public", "events")], NoRows)
+
+
+def test_unselected_all_copies_every_row() -> None:
+    result = strict_plan("subset: {seeds: {users: 'id = 1'}, unselected: all}")
+    assert result.warnings == ()
+    assert {str(t) for t in result.unselected} == KEPT - {"public.users"}
+    every = {str(rule.table) for rule in result.tables if rule.every_row}
+    assert every == KEPT - {"public.users"}
+    conditions = nested_conditions(result.graph())
+    assert isinstance(conditions[TableName.of("public", "events")], AllRows)
+    assert not isinstance(conditions[TableName.of("public", "users")], AllRows)
+
+
+def test_a_glob_seed_selects_every_kept_table() -> None:
+    result = strict_plan('structure_only: [film_actor]\nsubset: {seeds: {"*": "TRUE"}}')
+    seeds = {str(rule.table): rule.seed for rule in result.tables if rule.seed}
+    # Excluded and structure-only tables are skipped, not refused.
+    assert seeds == dict.fromkeys(KEPT - {"public.film_actor"}, "TRUE")
+    (seed,) = result.seeds
+    assert seed.pattern == "*"
+    assert {str(t) for t in seed.tables} == KEPT - {"public.film_actor"}
+    assert result.unselected == ()
+
+
+def test_a_table_name_wins_over_a_pattern() -> None:
+    result = strict_plan('subset: {seeds: {"*": "TRUE", users: "id = 1"}}')
+    seeds = {str(rule.table): rule.seed for rule in result.tables if rule.seed}
+    assert seeds["public.users"] == "id = 1"
+    assert seeds["public.posts"] == "TRUE"
+    # The plan records what each key actually seeded.
+    recorded = {seed.pattern: {str(t) for t in seed.tables} for seed in result.seeds}
+    assert recorded == {"*": KEPT - {"public.users"}, "users": {"public.users"}}
+
+
+def test_seed_pattern_problems() -> None:
+    reasons = strict_problems('subset: {seeds: {"*": "TRUE", "p*": "id > 1", "zz*": "TRUE"}}')
+    assert "public.posts matches more than one seed pattern ('*', 'p*')" in " ".join(reasons)
+    assert "seed pattern 'zz*' matches no table that keeps rows" in reasons
+    # Two names for one table are as ambiguous as two patterns.
+    reasons = strict_problems('subset: {seeds: {users: "id = 1", public.users: "id = 2"}}')
+    assert "seeds 'users' and 'public.users' both name public.users" in reasons
+    # Patterns are case-insensitive unless the spec says otherwise.
+    result = strict_plan('subset: {seeds: {"USER*": "TRUE"}, unselected: none}')
+    assert {str(t) for t in result.seeds[0].tables} == {"public.users"}
+
+
+def test_complete_engines_keep_their_own_check() -> None:
+    caps = CAPABILITIES.model_copy(update={"complete": True})
+    with pytest.raises(PlanError) as caught:
+        strict_plan("subset: {unselected: all}", capabilities=caps)
+    assert any("neither selected nor excluded" in p for p in caught.value.problems)
+    assert named(caught.value.problems) == set()
+
+
+def test_unselected_all_still_honours_drop() -> None:
+    result = strict_plan(
+        "subset:\n  seeds: {posts: 'id = 13'}\n  unselected: all\n"
+        "  edges: {comments.post_id -> posts: {on_missing: drop}}"
+    )
+    rule = next(r for r in result.tables if str(r.table) == "public.comments")
+    assert rule.every_row
+    condition = nested_conditions(result.graph())[rule.table]
+    assert not isinstance(condition, AllRows)

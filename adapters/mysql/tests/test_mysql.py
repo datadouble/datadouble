@@ -62,6 +62,7 @@ name: scratch
 source: {engine: mysql, connection: CONNECTION}
 exclude: ["items"]
 subset:
+  unselected: none
   seeds: {child: "id <= 2", files: "id > 0"}
   edges:
     child.parent_id -> parent: {on_missing: stub}
@@ -320,6 +321,7 @@ name: scratch
 source: {engine: mysql, connection: CONNECTION}
 exclude: ["items"]
 subset:
+  unselected: none
   seeds: {notes: "id > 0"}
 """
 

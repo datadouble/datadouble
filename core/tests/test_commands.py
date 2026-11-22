@@ -346,6 +346,8 @@ def test_import_jailer(spec_file: Path, tmp_path: Path) -> None:
     written = yaml.safe_load(output.read_text("utf-8"))
     assert written["exclude"] == ["public.categories"]
     assert written["subset"]["seeds"]["public.users"].startswith("(id <= 2")
+    # Jailer exports nothing from tables it doesn't reach; the import says so.
+    assert written["subset"]["unselected"] == "none"
     plain = MODEL.split("#! block filters")[0]
     jm.write_text(plain, "utf-8")
     code, out = cli_run("import-jailer", "--spec", str(spec_file), *arguments)

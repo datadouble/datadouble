@@ -45,6 +45,7 @@ name: scratch
 source: {engine: mongodb, connection: CONNECTION}
 exclude: ["gone"]
 subset:
+  unselected: none
   seeds: {child: '{"_id": {"$lte": 2}}', other: '{"_id": 1}'}
   edges:
     child.parent_id -> parent: {on_missing: stub}

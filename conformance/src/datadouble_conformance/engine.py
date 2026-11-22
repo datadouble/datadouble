@@ -129,7 +129,7 @@ class _Builds:
         return parse_spec(
             self.harness.with_runtime(
                 f"name: scratch\nsource: {{engine: {engine}, connection: {settings},"
-                f" server: {server}}}\n{extra}"
+                f" server: {server}}}\nsubset: {{unselected: all}}\n{extra}"
             )
         )
 

@@ -72,6 +72,7 @@ source:
   image: PGVECTOR
 exclude: ["dba.*"]
 subset:
+  unselected: none
   seeds:
     customer: "customer_id <= 40 AND create_date <= :as_of"
   follow:
@@ -231,7 +232,7 @@ def test_extensions_keep_their_versions_and_omitted_ones_go(tmp_path: Path) -> N
             f"name: scratch\nsource: {{engine: postgres, connection: {settings},"
             f" image: {json.dumps(PGVECTOR)}, omit: [cube],"
             " server: {shared_preload_libraries: [pg_stat_statements]}}\n"
-            "subset: {seeds: {items: 'true', tags: 'true'}}\n"
+            "subset: {seeds: {items: 'true', tags: 'true'}, unselected: none}\n"
             f"runtime: {json.dumps(runtime_for_tests())}\n"
         )
         with PostgresEngine().connect(source.connection) as session:

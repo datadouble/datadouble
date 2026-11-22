@@ -24,6 +24,7 @@ subset:
   virtual_fks:
     rentals.customer_id -> customers: {}                  # a reference to a document's _id
     payments.rental_id -> rentals.rental_id: {}           # a reference to another field
+  unselected: none   # indices nothing reaches, such as rentals here, are copied empty
 ```
 
 Elasticsearch declares no references, so every reference is virtual, and

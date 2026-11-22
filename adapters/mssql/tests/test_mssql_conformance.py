@@ -41,6 +41,7 @@ source:
   server: {accept_eula: true}
 exclude: ["dba_*"]
 subset:
+  unselected: none
   seeds:
     customer: "customer_id <= 40 AND create_date <= :as_of"
   follow:

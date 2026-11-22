@@ -63,6 +63,17 @@ class Strategy(StrEnum):
     """Strategy B: collect keys, compute the closure, then fetch rows by key."""
 
 
+class Unselected(StrEnum):
+    """What happens to a kept table that no seed or followed reference selects."""
+
+    FAIL = "fail"
+    """Fail the plan, naming each such table (the default)."""
+    NONE = "none"
+    """Copy none of its rows, and warn."""
+    ALL = "all"
+    """Copy every row."""
+
+
 class ImageFormat(StrEnum):
     """The forms a golden image can take."""
 
@@ -185,20 +196,29 @@ class Subset(_Model):
     as_of: AwareDatetime | None = None
     strategy: Strategy = Strategy.AUTO
     seeds: dict[str, str] = Field(default_factory=dict[str, str])
+    """Starting conditions; keys are table names or globs, such as `"*": "TRUE"`."""
     follow: Follow = Follow()
     edges: dict[str, EdgePolicy] = Field(default_factory=dict[str, EdgePolicy])
     virtual_fks: dict[str, VirtualForeignKey] = Field(default_factory=dict[str, VirtualForeignKey])
+    unselected: Unselected | None = None
+    """Kept tables that no seed or followed reference selects: `fail` (the
+    default), `none` or `all`."""
     jailer: JailerSubset | None = None
-    """A Jailer subset instead of seeds, follow, edges and virtual_fks."""
+    """A Jailer subset instead of seeds, follow, edges, virtual_fks and unselected."""
 
     @model_validator(mode="after")
     def _one_source(self) -> "Subset":
         if self.jailer is not None and (
-            self.seeds or self.follow.down or self.edges or self.virtual_fks
+            self.seeds
+            or self.follow.down
+            or self.edges
+            or self.virtual_fks
+            or self.unselected is not None
         ):
             message = (
-                "a subset from Jailer cannot also have seeds, follow, edges or virtual_fks; "
-                "change the Jailer model, or import it (datadouble import-jailer) and edit that"
+                "a subset from Jailer cannot also have seeds, follow, edges, virtual_fks "
+                "or unselected; change the Jailer model, or import it "
+                "(datadouble import-jailer) and edit that"
             )
             raise ValueError(message)
         return self

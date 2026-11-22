@@ -42,6 +42,7 @@ source:
   image: {IMAGE}
 exclude: ["maint:run:{{}}"]
 subset:
+  unselected: none
   seeds:
     "user:{{}}": "1*"
     leaderboard: "*"

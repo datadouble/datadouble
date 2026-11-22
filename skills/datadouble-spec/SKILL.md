@@ -36,6 +36,20 @@ it in the lock once someone has checked it holds no personal data. Show the
 person those options and let them choose (rule 4). `datadouble lock` records
 the current catalog after they have.
 
+## When tables have no rows selected
+
+A kept table that no seed, `follow: all` or followed edge reaches fails the
+plan by default (`subset.unselected: fail`). Each one is a choice about what
+the copy holds, so show the person the options and let them pick:
+
+- seed it, or seed many at once with a glob (`"*": "TRUE"` in SQL engines);
+- follow a reference that reaches it;
+- make it `structure_only`, or exclude it;
+- `unselected: all` to copy every row of such tables (any engine), or
+  `unselected: none` to copy them without rows, with a warning.
+
+A Jailer subset already behaves as `none`; change the Jailer model instead.
+
 ## Extensions, plugins and modules
 
 The lock lists the add-ons the source uses beyond its server (its

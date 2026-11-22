@@ -234,6 +234,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **BREAKING: a kept table that no seed or followed reference selects now
+  fails the plan** ([#65](https://github.com/datadouble/datadouble/issues/65)).
+  Until now such a table was copied without rows and nothing said so: a spec
+  with no seeds built empty images that passed verification. The plan names
+  each table and how to resolve it. Seed keys now take globs, as excludes do,
+  so `seeds: {"*": "TRUE"}` copies every row of every table in SQL engines;
+  `subset.unselected: all` does the same in any engine, and
+  `subset.unselected: none` keeps the old behaviour with a warning per table.
+  Specs whose subsets leave tables unreached on purpose need
+  `unselected: none`. Jailer subsets keep Jailer's own behaviour, as if they
+  said `unselected: none`, and `import-jailer` writes that setting.
 - Redis working servers and copies did not load the image's bundled
   modules, so a source with JSON, search, time series or Bloom keys could
   not load. They now load every module in the image's module directory, and

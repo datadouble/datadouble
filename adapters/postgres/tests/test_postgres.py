@@ -57,6 +57,7 @@ name: scratch
 source: {engine: postgres, connection: CONNECTION}
 exclude: ["items"]
 subset:
+  unselected: none
   seeds: {child: "id <= 2", r: "id = 1"}
   edges:
     child.parent_id -> parent: {on_missing: stub}
