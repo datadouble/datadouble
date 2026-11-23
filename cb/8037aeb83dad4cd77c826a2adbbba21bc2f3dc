@@ -1,0 +1,171 @@
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_cd6fc6859faf06 18,45,252-257,437-438,611-614
+ci/gitlab/src/datadouble_gitlab/datadouble.yml
+  s_ad63f2bf16b775::t_055b4917b11c73 45,47-48,68
+ci/github-actions/tests/golden/production/datadouble-shop-build.yml.golden
+  s_ad63f2bf16b775::t_c898de81ed1cca 28,32,39
+ci/jenkins/tests/golden/pool/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_db69967fe21864 22-60
+ci/jenkins/resources/datadouble/run.sh
+  s_ad63f2bf16b775::t_e1a0d29fadb2fe 26,28-29,52
+.github/workflows/datadouble-nightly-build.yml
+  s_ad63f2bf16b775::t_e56d1ec08a8b9c 31
+ci/gitlab/tests/test_gitlab.py
+  s_ad63f2bf16b775::t_5e6b9a18b53e8e 24,43-47,144,146,177-182,190-194,197-209,211-223,226-230
+ci/jenkins/tests/golden/pool/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_41bf99773a8703 21-59
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_aea387ce1f6c2f 41-43,46-50,170-171,173-174,178-194,200
+ci/github-actions/tests/golden/production/datadouble-shop-promote.yml.golden
+  s_ad63f2bf16b775::t_410028e0bf06de 30-31,33,38-39
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_f520425a9afd27 39,98-113,262-278,459-474
+CHANGELOG.md
+  s_ad63f2bf16b775::t_7bd4ae2fc0676c 59-72
+  s_ad63f2bf16b775::t_45defa190ebf14 298-303
+ci/jenkins/tests/golden/production/datadouble-shop-build.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_183f5f7c454ae5 24,26,30,37-65
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_0f76dbbbc363ec 30,139-141,165-166,207-210,262-264,266-273,275-277,280-281,573
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_1c212ce30a6dfc 21-25,44,143,173-204,225,271-274
+ci/jenkins/tests/golden/on-demand/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_d012fed66f7669 21,23,27,34-62
+.github/workflows/datadouble-nightly-prune-non-production.yml
+  s_ad63f2bf16b775::t_2204f935858736 34
+docs/decisions.md
+  s_ad63f2bf16b775::t_9d13b4b22cbe24 130
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_fcb2e496d2f117 341-342,400-444,448-477,605-607
+  s_ad63f2bf16b775::t_8983b0c3d54d8c 445-447
+core/src/datadouble/notify.py
+  s_ad63f2bf16b775::t_2c35c3584d6ca9 72-110
+  s_ad63f2bf16b775::t_3e5d40dd5685ad 62-71
+  s_ad63f2bf16b775::t_8b4efa574327f2 1-61
+  s_ad63f2bf16b775::t_e915b83078396b 111-168
+.github/workflows/datadouble-nightly-fetch.yml
+  s_ad63f2bf16b775::t_165449b606d49b 28
+ci/jenkins/tests/golden/pool/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_f4b53018145b6b 21,23,27,34-62
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_775acf1c84c71c 517-578
+  s_ad63f2bf16b775::t_52f0b96bfa11bd 674-675
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_b0dc5bdb4844c8 88-106
+ci/jenkins/tests/golden/on-demand/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_4da71d093ca204 21-59
+ci/kubernetes/chart/values.yaml
+  s_ad63f2bf16b775::t_743f0b5e38eb7a 35-37
+conformance/src/datadouble_conformance/ci.py
+  s_ad63f2bf16b775::t_a4aba3150f4d8f 90-92,94-120,232-246,307,309-312,314,316,347-351,366-370,376,469,575-579,583-589,593-595,603-632
+ci/github-actions/tests/golden/on-demand/datadouble-shop-release.yml.golden
+  s_ad63f2bf16b775::t_60b655a62619f0 32-33,35,40-41,51-52,54,59-60
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_b5babda245e984 20,37-41,115-142,175-181,193-196
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_61a3a172c08be2 26-29,51
+ci/jenkins/tests/golden/on-demand/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_237129acf01f9e 25-34,40-78
+ci/gitlab/tests/golden/production/datadouble-shop-production.yml.golden
+  s_ad63f2bf16b775::t_50143a3ab0e055 29,36,63,69,84,89-90,107,112-113
+ci/github-actions/tests/golden/on-demand/datadouble-shop-fetch.yml.golden
+  s_ad63f2bf16b775::t_3f7c2314bcbe07 27-28,30,35-36
+.github/workflows/datadouble-nightly-provision.yml
+  s_ad63f2bf16b775::t_15b51e88bb6958 34
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_82e3ce42e07202 42-44,58-59,64,70-71,76-77,82-83,90-91,96-97,102-103,108-109,115-116,121-122,128-129
+ci/github-actions/tests/golden/pool/datadouble-shop-fetch.yml.golden
+  s_ad63f2bf16b775::t_99ea0e8e294285 24-25,27,32-33
+.github/workflows/datadouble-nightly-prune-production.yml
+  s_ad63f2bf16b775::t_7f4835552b7506 34,50
+ci/github-actions/run.sh
+  s_ad63f2bf16b775::t_1b5408da22c7dc 11-12,30,32-33,56
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_a9e205f9dda92f 55,956-987
+ci/gitlab/tests/golden/pool/datadouble-shop-non-production.yml.golden
+  s_ad63f2bf16b775::t_88db9b6c2d2717 23,29,48,53-54,68,73-74
+ci/jenkins/tests/golden/on-demand/datadouble-shop-activate.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_9b5b6e5b2eae23 21-59
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_b5a5c7181bebf4 76-78,543-574
+ci/kubernetes/README.md
+  s_ad63f2bf16b775::t_a4f6044e81fe55 96-102,106-113
+  s_ad63f2bf16b775::t_e1b22339524415 38-42,103-105
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_ad63f2bf16b775::t_0fb35c5aa8dab0 24-27,108-112,250-256,290-297,305-309
+ci/jenkins/tests/golden/production/datadouble-shop-prune-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_02ba80f46215dd 24-33,38-76
+ci/github-actions/tests/test_github_actions.py
+  s_ad63f2bf16b775::t_9db213a3182893 24,43-47,130,135,139-141,222-247,260-269
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_e85bf55e5e3e8a 137-165,171-172
+  s_ad63f2bf16b775::t_d3432a047f8129 166-170
+ci/gitlab/tests/golden/on-demand/datadouble-shop-non-production.yml.golden
+  s_ad63f2bf16b775::t_72a53b42e9ff9d 34,40,59,64-65,87,92-93,110,115-116,132,137-138,156,161-162
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_2d911af5e5335e 42-44,58-59,64,67,72-73,83-84,89-90
+ci/jenkins/tests/golden/production/datadouble-shop-promote.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_2bc7ebe9cde90e 21,23,27,34-62
+ci/github-actions/tests/golden/on-demand/datadouble-shop-prune-non-production.yml.golden
+  s_ad63f2bf16b775::t_5f596318da9efa 33-34,36,41-42
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_ad63f2bf16b775::t_dd46417b6592c8 42-44,58-59,69,74,80,91-92,99-102,109-110
+core/tests/test_notify.py
+  s_ad63f2bf16b775::t_9baa9520194962 173-245
+  s_ad63f2bf16b775::t_18a867c388c4f1 1-172
+  s_ad63f2bf16b775::t_542947f03c697d 246-326
+ci/github-actions/README.md
+  s_ad63f2bf16b775::t_1717423e583870 73-90
+ci/kubernetes/chart/templates/_helpers.tpl
+  s_ad63f2bf16b775::t_351443aee49096 18-21
+  s_ad63f2bf16b775::t_264b75352607c7 67-82
+ci/github-actions/tests/golden/pool/datadouble-shop-provision.yml.golden
+  s_ad63f2bf16b775::t_262cab32170ad0 30-31,33,38-39
+ci/jenkins/tests/golden/on-demand/datadouble-shop-prune-non-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_aea16b8cd19b9b 24-62
+ci/github-actions/tests/golden/on-demand/datadouble-shop-activate.yml.golden
+  s_ad63f2bf16b775::t_075bd3c4a8280b 30-31,33,38-39
+ci/github-actions/tests/golden/production/datadouble-shop-prune-production.yml.golden
+  s_ad63f2bf16b775::t_4e60f31435271e 32-33,35,40-41,51-52,54,59-60
+.github/workflows/datadouble-nightly-promote.yml
+  s_ad63f2bf16b775::t_14ccd34f7e6558 34
+ci/jenkins/vars/datadouble.groovy
+  s_ad63f2bf16b775::t_90b0d474911a8b 10,13-14,26
+ci/github-actions/tests/golden/on-demand/datadouble-shop-provision.yml.golden
+  s_ad63f2bf16b775::t_bb627ee1c2c993 29-30,32,37-38
+ci/github-actions/action.yml
+  s_ad63f2bf16b775::t_b6f8d7cbd33499 19-22,67
+ci/gitlab/README.md
+  s_ad63f2bf16b775::t_f41447d4db4b2e 72-91
+ci/gitlab/src/datadouble_gitlab/__init__.py
+  s_ad63f2bf16b775::t_def6a2699ed55f 47,181,198-203,295-314,323-326
+docs/using/ci-cd-libraries.md
+  s_ad63f2bf16b775::t_b55b911dc74ea7 52-78
+ci/github-actions/src/datadouble_github_actions/__init__.py
+  s_ad63f2bf16b775::t_cb2ae1dc74a1e0 41,165-169,281-293,301-308
+ci/gitlab/tests/test_gitlab_conformance.py
+  s_ad63f2bf16b775::t_a9db92e8b8b1a4 59,392-396,417-419
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_79f49affb1d3fe 233,268-269,272,285,527-537
+  s_ad63f2bf16b775::t_41e3e87f301ea1 607-632,658-659
+ci/kubernetes/chart/templates/jobs.yaml
+  s_ad63f2bf16b775::t_5a132733badafd 7-8,26-30,45-49
+docs/using/cli-reference.md
+  s_ad63f2bf16b775::t_b1eef87d200cc4 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "cb8037aeb83dad4cd77c826a2adbbba21bc2f3dc",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
