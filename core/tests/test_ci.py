@@ -283,7 +283,7 @@ def test_the_docker_command_and_socket(tmp_path: Path) -> None:
         with pytest.raises(CiError, match="socket must be an absolute path"):
             pipeline(spec, replace(chosen, docker_socket=Path(socket)))
     for changed in (replace(chosen, docker_socket=None), replace(chosen, docker=None)):
-        with pytest.raises(CiError, match="kubernetes agents are pods"):
+        with pytest.raises(CiError, match="every job is a pod"):
             pipeline(spec, replace(changed, agent=Agent.KUBERNETES))
 
 

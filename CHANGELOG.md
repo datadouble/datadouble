@@ -46,30 +46,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response bodies or credentials. Promote again into an existing export store
   to give it an index before reading it over HTTP.
 - **A manual `lock` CI job, and lock changes**
-  ([#67](https://github.com/datadouble/datadouble/issues/67)).
-  `ci init --job lock` writes a job on the production side, on the build's
-  runner with only the sources' and `notify`'s secrets and no schedule, for
-  every Tier 1 system. It runs `datadouble lock --output datadouble-lock` and publishes the
-  new lock and its changes as the job's artifact (on Argo CD, in the job's
-  log), and never commits: someone checks the changes for personal data and
-  commits the lock. `datadouble lock` now lists `changes` against the lock it
-  replaces (tables, columns, keys and requirements added, removed or
-  changed), in its JSON response and its summary, and `--output DIR` writes
-  the new lock and `changes.txt` there instead of replacing the lock.
+  ([#67](https://github.com/datadouble/datadouble/issues/67)). `ci init --job
+  lock` writes a job on the production side, on the build's runner with only the
+  sources' and `notify`'s secrets and no schedule, for every Tier 1 system. It
+  runs `datadouble lock --output datadouble-lock` and publishes the new lock and
+  its changes as the job's artifact (on Argo CD, in the job's log), and never
+  commits: someone checks the changes for personal data and commits the lock.
+  `datadouble lock` now lists `changes` against the lock it replaces (tables,
+  columns, keys and requirements added, removed or changed), in its JSON
+  response and its summary, and `--output DIR` writes the new lock and
+  `changes.txt` there instead of replacing the lock.
 - **Generated CI jobs notify on failure and warning**
-  ([#69](https://github.com/datadouble/datadouble/issues/69)). A spec's
-  `notify` section lists the outcomes (`when: [failure, warning]`, failures
-  only by default) and the targets. A `webhook`, whose URL is a secret
-  reference, gets a JSON POST from Datadouble itself on every system: the
-  spec, job, outcome, generation, error code and the run's page, never data
-  values or secrets; posts follow the environment's proxy settings, and
-  credentials in the URL need https. `email` uses the system's own mail: Jenkinsfiles mail
-  from `post`, GitLab and GitHub need the setup `ci init` lists in
-  `instructions`, and Argo CD refuses it. A notification that fails is a
-  warning in the job's log and never changes its outcome. It lives in the
-  spec so running `ci init` again keeps it; run `ci init` again after adding
-  it, so every job gets the webhook's variable. Generated jobs now name
-  their job to the native step (`--ci-job`).
+  ([#69](https://github.com/datadouble/datadouble/issues/69)). A spec's `notify`
+  section lists the outcomes (`when: [failure, warning]`, failures only by
+  default) and the targets. A `webhook`, whose URL is a secret reference, gets a
+  JSON POST from Datadouble itself on every system: the spec, job, outcome,
+  generation, error code and the run's page, never data values or secrets; posts
+  follow the environment's proxy settings, and credentials in the URL need
+  https. `email` uses the system's own mail: Jenkinsfiles mail from `post`,
+  GitLab and GitHub need the setup `ci init` lists in `instructions`, and Argo
+  CD refuses it. A notification that fails is a warning in the job's log and
+  never changes its outcome. It lives in the spec so running `ci init` again
+  keeps it; run `ci init` again after adding it, so every job gets the webhook's
+  variable. Generated jobs now name their job to the native step (`--ci-job`).
 - **CI steps can use another Docker command and socket**
   ([#71](https://github.com/datadouble/datadouble/issues/71)). The GitHub
   action, the GitLab job template and the Jenkins step read
@@ -125,20 +124,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Several servers of one engine in one spec**
   ([#77](https://github.com/datadouble/datadouble/issues/77)). A spec's
   `sources` names one source per server; PostgreSQL and MySQL copy every
-  source's databases into one image and one working server per group, and
-  other engines read one source per spec. The sources must share an engine
-  and a compatibility line (`17` for PostgreSQL, `8.4` for MySQL; the working
-  server runs the newest of their versions),
-  give the same `image` and `server`, hold no database name in common (empty
-  databases included), and agree on requirements: one used at two versions,
-  or omitted by one source and used by another, fails the plan naming both. Each source is read under its
-  own snapshot, opened together, and the image's manifest records each
-  source's snapshot and when it was opened (`sources`), since such an image
-  is not one point in time. A virtual reference between sources is read with
-  the keys strategy and listed in the plan and manifest (`between_sources`).
-  Anonymization is keyed once per run, so equal values get equal
-  replacements in every source. Each source's credentials are its own secret
-  references, and `ci init` gives the build job all of them.
+  source's databases into one image and one working server per group, and other
+  engines read one source per spec. The sources must share an engine and a
+  compatibility line (`17` for PostgreSQL, `8.4` for MySQL; the working server
+  runs the newest of their versions), give the same `image` and `server`, hold
+  no database name in common (empty databases included), and agree on
+  requirements: one used at two versions, or omitted by one source and used by
+  another, fails the plan naming both. Each source is read under its own
+  snapshot, opened together, and the image's manifest records each source's
+  snapshot and when it was opened (`sources`), since such an image is not one
+  point in time. A virtual reference between sources is read with the keys
+  strategy and listed in the plan and manifest (`between_sources`).
+  Anonymization is keyed once per run, so equal values get equal replacements in
+  every source. Each source's credentials are its own secret references, and `ci
+  init` gives the build job all of them.
 - **Several databases from one server in one source**
   ([#76](https://github.com/datadouble/datadouble/issues/76)). MySQL and
   PostgreSQL take `source.connection.databases`, a list of names or globs
@@ -208,14 +207,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on them, and its declared objects are its own. A declared object that
   needs a table the group and the groups it requires lack fails the plan.
   A standalone group cannot have `requires:`.
-- **Tables list the objects they need.** The catalog records the sequences
-  and functions tables' column defaults, generated or computed columns,
-  check constraints (and on PostgreSQL index expressions and row-level
-  security policies, with the tables those policies read) use, and their columns' user-defined types: exactly from
-  `pg_depend` and SQL Server's dependency views, from `ALL_DEPENDENCIES` on
-  Oracle (whose sequence defaults are parsed, so inferred), and none on
-  MySQL, which has no such objects. A table that needs nothing hashes as
-  before, so locks stay valid until a table that needs an object is locked.
+- **Tables list the objects they need.** The catalog records the sequences and
+  functions tables' column defaults, generated or computed columns, check
+  constraints (and on PostgreSQL index expressions and row-level security
+  policies, with the tables those policies read) use, and their columns'
+  user-defined types: exactly from `pg_depend` and SQL Server's dependency
+  views, from `ALL_DEPENDENCIES` on Oracle (whose sequence defaults are parsed,
+  so inferred), and none on MySQL, which has no such objects. A table that needs
+  nothing hashes as before, so locks stay valid until a table that needs an
+  object is locked.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and
@@ -399,9 +399,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (schema and rows) images. Datadouble runs as 54321:54321 for Oracle.
 - **Engine users:** Datadouble runs as the `uid:gid` an engine's copies are
   served as (999:999 for the official PostgreSQL, MySQL and MongoDB images,
-  10001:10001 for SQL Server, 54321:54321 for Oracle), so physical images belong to their server on
-  every replicate adapter; builds, `fetch` and `replicate` refuse to run as
-  anyone else and say which user to run as.
+  10001:10001 for SQL Server, 54321:54321 for Oracle), so physical images belong
+  to their server on every replicate adapter; builds, `fetch` and `replicate`
+  refuse to run as anyone else and say which user to run as.
 - **Jailer subsets:** a spec's `subset.jailer` names a Jailer extraction model
   and data model, read and translated on every run; `datadouble import-jailer`
   writes the translation as native settings. On Sakila, Jailer and Datadouble

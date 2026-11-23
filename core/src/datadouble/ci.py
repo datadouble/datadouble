@@ -577,7 +577,7 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     docker, docker_socket = _docker(options)
     if options.agent is Agent.KUBERNETES and (docker is not None or docker_socket is not None):
         message = (
-            "kubernetes agents are pods that run the Datadouble image themselves, without"
+            "on Kubernetes every job is a pod that runs the Datadouble image itself, without"
             " Docker; leave out the Docker command and socket"
         )
         raise CiError(message)

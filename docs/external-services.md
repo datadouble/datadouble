@@ -116,15 +116,18 @@ so there is no PyPI token anywhere.
    `release.yml` creates the project and turns the pending publisher into a
    normal one.
 
-Package names known now:
+Package names known now (every workspace member but the workspace itself,
+since `release.yml` runs `uv build --all-packages`):
 
 ```
-datadouble
+datadouble               datadouble-conformance
 datadouble-postgres      datadouble-mysql         datadouble-mssql
 datadouble-oracle        datadouble-mongodb       datadouble-redis
 datadouble-elasticsearch datadouble-opensearch    datadouble-files
-datadouble-salesforce    datadouble-s3            datadouble-kubernetes
-datadouble-btrfs         datadouble-http
+datadouble-salesforce    datadouble-s3            datadouble-http
+datadouble-kubernetes    datadouble-docker        datadouble-btrfs
+datadouble-vault         datadouble-github-actions
+datadouble-gitlab        datadouble-jenkins       datadouble-argocd
 ```
 
 The version 1 run does not tag releases. If it adds package names, its pull
