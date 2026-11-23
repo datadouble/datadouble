@@ -1,0 +1,75 @@
+docs/architecture.md
+  s_ad63f2bf16b775::t_77c83a7af61cb5 466-485
+adapters/oracle/src/datadouble_oracle/errors.py
+  s_ad63f2bf16b775::t_701f3530f83754 6-12,18,23-42,47,53
+adapters/mssql/src/datadouble_mssql/errors.py
+  s_ad63f2bf16b775::t_a98b48c2ace1cd 8-10,16
+  s_ad63f2bf16b775::t_a9c833484e0343 17,21-46,48-49,59-60,65-76
+docs/decisions.md
+  s_ad63f2bf16b775::t_948f74ef581845 140
+core/tests/test_runtime.py
+  s_ad63f2bf16b775::t_1e86df79e5304c 10-17,30-33
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_0dd8a50d50d2fe 79-87
+  s_ad63f2bf16b775::t_041b0abae4e129 90-97
+  s_ad63f2bf16b775::t_20734d7b06777a 88-89
+adapters/mysql/tests/test_mysql_units.py
+  s_ad63f2bf16b775::t_c3c62050997641 159-168,170-172,174-176,178-180,215-216
+  s_ad63f2bf16b775::t_49dac615ec13b4 149-152,154-157,217-220,252-256
+  s_ad63f2bf16b775::t_986def0324bed3 148,153,158,169,173,177,181,192,198,204,212,221,224-234
+  s_ad63f2bf16b775::t_01e24f3bd7675a 100,110-147,185,222-223
+  s_ad63f2bf16b775::t_a903615484bbeb 182-184,186-191,193-197,199-203,205-211,213-214
+adapters/postgres/tests/test_render.py
+  s_ad63f2bf16b775::t_83f7a6cee4f03d 263-267,269-270,273-275,277-281,291-293
+  s_ad63f2bf16b775::t_5e18c1825c1163 276,282,294,309-326
+  s_ad63f2bf16b775::t_9a385e3fecf17d 209-262,287
+  s_ad63f2bf16b775::t_062eefc0addb85 283-286,288-290
+core/src/datadouble/redaction.py
+  s_ad63f2bf16b775::t_1923c5fdf7f2f8 1-108
+  s_ad63f2bf16b775::t_54181d9bb61dfe 109-131
+adapters/postgres/tests/test_postgres.py
+  s_ad63f2bf16b775::t_f2e86b329f51fa 231
+CHANGELOG.md
+  s_ad63f2bf16b775::t_36597f88b36b5a 492-507
+adapters/postgres/tests/test_cluster.py
+  s_ad63f2bf16b775::t_a6a3945ed59cef 11,116-140
+adapters/postgres/src/datadouble_postgres/errors.py
+  s_ad63f2bf16b775::t_82c94d64d36929 8-9,15
+  s_ad63f2bf16b775::t_d8315fddf523e0 16,20-67,69-70,76-77,94-100,102
+adapters/mysql/README.md
+  s_ad63f2bf16b775::t_269452de4f2926 25-28
+  s_ad63f2bf16b775::t_cf72b6466e8d22 29-33
+adapters/mysql/src/datadouble_mysql/errors.py
+  s_ad63f2bf16b775::t_c576dc1682de0d 8-9,17
+  s_ad63f2bf16b775::t_5527090273a4fb 18,22-48,50-124,132-133,137-143,145
+adapters/oracle/tests/test_oracle_units.py
+  s_ad63f2bf16b775::t_77f5a556d5c865 132-150
+  s_ad63f2bf16b775::t_9dbc07f1dd810b 151-156
+adapters/mysql/src/datadouble_mysql/__init__.py
+  s_ad63f2bf16b775::t_6ace07e0e3105b 77-84,90
+core/tests/test_redaction.py
+  s_ad63f2bf16b775::t_746f10019f3dee 1-39
+core/src/datadouble/runtime.py
+  s_ad63f2bf16b775::t_38da869452a036 44,122-139
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_ad71bbaa72c2a7 46-48
+adapters/mssql/tests/test_mssql_units.py
+  s_ad63f2bf16b775::t_1c59b21b7debc2 205-214
+  s_ad63f2bf16b775::t_a953b185d6d9db 139,148,153-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "05cdfd75f04ce890942d9089b88652661bc84d17",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
