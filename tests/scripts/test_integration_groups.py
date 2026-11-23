@@ -81,7 +81,7 @@ def test_the_script_reads_the_table() -> None:
     listed = run_program(script, ["groups"])
     assert listed.stdout.split() == list(groups())
     needed = run_program(script, ["services", "core", "mysql/2", "mysql"])
-    assert needed.stdout.split() == ["postgres", "s3", "vault", "mysql", "jailer"]
+    assert needed.stdout.split() == ["postgres", "s3", "vault", "web", "mysql", "jailer"]
     for wrong in ("nope", "core/2", "mysql/0", "mysql/x", "mysql/"):
         assert run_program(script, ["services", wrong]).status == 2, wrong
     assert run_program(script, []).status == 2

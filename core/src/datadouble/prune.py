@@ -8,7 +8,9 @@ For each image line, ``prune`` keeps the newest ``prune.keep`` generations
 whatever any channel points at. Of a group's engine versions, only the newest
 ``prune.keep_versions`` keep their generations; older versions keep only
 their channels' targets, and their unclaimed pool copies are removed. A
-channel's target is never removed. ``--dry-run`` reports what would go.
+channel's target is never removed. ``--dry-run`` reports what would go. In
+the export stores, each group's index is rewritten to match what is left, or
+removed when nothing is.
 """
 
 import datetime as dt
@@ -21,7 +23,7 @@ from typing import TYPE_CHECKING, assert_never
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.channels import Channel
-from datadouble.images import generations, image_lines, read_summary
+from datadouble.images import generations, image_lines, index_key, read_summary, write_index
 from datadouble.names import Generation
 from datadouble.replicate import CopyState, Line, Options, Replication
 from datadouble.spec import Retention, Spec
@@ -141,6 +143,15 @@ def _prune_store(
     return removed
 
 
+def _reindex(spec: Spec, store: Store) -> None:
+    """Rewrite each group's index in an export store to match what is left, or remove it."""
+    for group in spec.images:
+        if image_lines(store, spec.name, group):
+            write_index(store, spec.name, group)
+        else:
+            store.delete(index_key(spec.name, group))
+
+
 def _size(root: Path) -> int:
     return sum(item.stat().st_size for item in root.rglob("*") if item.is_file())
 
@@ -227,14 +238,13 @@ def prune(
             if not entries:
                 message = f"the spec configures no {target} stores"
                 raise PruneError(message)
-            removed = [
-                item
-                for entry in entries
-                for kind, settings in entry.items()
-                for item in _prune_store(
-                    spec, registry.store(kind, settings), retention, cutoff, dry_run=dry_run
-                )
-            ]
+            removed: list[Pruned] = []
+            for entry in entries:
+                for kind, settings in entry.items():
+                    store = registry.store(kind, settings)
+                    removed.extend(_prune_store(spec, store, retention, cutoff, dry_run=dry_run))
+                    if target is PruneTarget.EXPORT and not dry_run:
+                        _reindex(spec, store)
             return PruneResult(dry_run=dry_run, removed=tuple(removed))
         case PruneTarget.STAGING:
             staged, copies = _prune_staging(spec, registry, retention, dry_run=dry_run)

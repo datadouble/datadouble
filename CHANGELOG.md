@@ -29,6 +29,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or retried build packages again when a password changes. Names an engine
   can't use, duplicates, unset secrets, logical-only builds and engines
   without accounts fail at the start of the run, before extract.
+- **`fetch` can read promoted images from a web server**
+  ([#66](https://github.com/datadouble/datadouble/issues/66)). The new,
+  read-only `http` store (`datadouble-http`) reads an export store that a web
+  server serves, for non-production that reaches production's files only
+  over HTTPS: `fetch.from: {http: {url: ..., auth: ..., ca_bundle: ...}}`,
+  with basic auth or a bearer token given as secret references. `promote`
+  still writes with the filesystem or S3 store, into the directory the server
+  serves, and now also writes an index of each group's engine versions and
+  generations (`<spec>/<group>/index.json`) on every export store;
+  `prune --target export` keeps it current. Writing the index lists each
+  export store, so `promote`'s credentials for an S3 export store need
+  `s3:ListBucket`. Web servers cannot list files, so the `http` store reads
+  the index instead. Writing through it fails,
+  naming the store, and its errors name the URL path and HTTP status, never
+  response bodies or credentials. Promote again into an existing export store
+  to give it an index before reading it over HTTP.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

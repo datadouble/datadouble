@@ -13,6 +13,10 @@ can be read without downloading them:
       0193a7c21b4e9f30.logical.tar.gz
       0193a7c21b4e9f30.physical.tar.gz
       0193a7c21b4e9f30.summary.json
+
+Stores that cannot list keys, such as a web server, are read through an index
+``promote`` writes under each ``<spec>/<group>/`` (``index.json``), naming
+the group's image lines and the generations with a summary in each.
 """
 
 import hashlib
@@ -22,11 +26,11 @@ import time
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.spec import ImageFormat, StrictLevel
-from datadouble.storage import Store
+from datadouble.storage import ListingUnsupportedError, Store
 
 CODEC: Literal["gz"] = "gz"
 """Compression for image archives (gzip, from the standard library)."""
@@ -157,15 +161,62 @@ def unpack(archive: Path, destination: Path) -> tuple[Path, bytes]:
 
 _SUMMARY = ".summary.json"
 _LINE_DEPTH = 3  # spec/group/engine-version/file
+INDEX = "index.json"
+"""The name of the index under each ``<spec>/<group>/``."""
+
+
+class ImageIndex(_Model):
+    """A group's image lines and generations, for stores that cannot list keys."""
+
+    index_format: Literal[1] = 1
+    lines: dict[str, tuple[Generation, ...]]
+    """Each image line (``<engine>-<version>``) and its generations with a summary, oldest
+    first."""
+
+
+def index_key(spec: str, group: str) -> str:
+    """The store key of a group's index."""
+    return f"{spec}/{group}/{INDEX}"
+
+
+def read_index(store: Store, spec: str, group: str) -> ImageIndex:
+    """A group's index; empty if the store has none."""
+    key = index_key(spec, group)
+    data = store.get_bytes(key)
+    if data is None:
+        return ImageIndex(lines={})
+    try:
+        return ImageIndex.model_validate_json(data)
+    except ValidationError:
+        message = f"{key} in {store.describe()} is not a valid image index"
+        raise ImageError(message) from None
+
+
+def write_index(store: Store, spec: str, group: str) -> ImageIndex:
+    """List a group's image lines and generations and write them as its index."""
+    index = ImageIndex(
+        lines={
+            prefix.rsplit("/", 1)[1]: tuple(generations(store, prefix))
+            for prefix in image_lines(store, spec, group)
+        }
+    )
+    store.put_bytes(index_key(spec, group), index.model_dump_json(indent=2).encode())
+    return index
 
 
 def image_lines(store: Store, spec: str, group: str) -> list[str]:
-    """The ``<spec>/<group>/<engine>-<version>`` prefixes a store holds images under."""
-    found = {
-        "/".join(key.split("/")[:3])
-        for key in store.list(f"{spec}/{group}/")
-        if key.endswith(_SUMMARY) and key.count("/") == _LINE_DEPTH
-    }
+    """The ``<spec>/<group>/<engine>-<version>`` prefixes a store holds images under.
+
+    A store that cannot list keys is read through the group's index.
+    """
+    try:
+        found = {
+            "/".join(key.split("/")[:3])
+            for key in store.list(f"{spec}/{group}/")
+            if key.endswith(_SUMMARY) and key.count("/") == _LINE_DEPTH
+        }
+    except ListingUnsupportedError:
+        found = {f"{spec}/{group}/{line}" for line in read_index(store, spec, group).lines}
     return sorted(found, key=_version_order)
 
 
@@ -175,12 +226,19 @@ def _version_order(prefix: str) -> tuple[int, ...]:
 
 
 def generations(store: Store, prefix: str) -> list[Generation]:
-    """The generations with a summary under an image line, oldest first."""
-    return sorted(
-        Generation(key.rsplit("/", 1)[1].removesuffix(_SUMMARY))
-        for key in store.list(f"{prefix}/")
-        if key.endswith(_SUMMARY) and key.count("/") == prefix.count("/") + 1
-    )
+    """The generations with a summary under an image line, oldest first.
+
+    A store that cannot list keys is read through the group's index.
+    """
+    try:
+        return sorted(
+            Generation(key.rsplit("/", 1)[1].removesuffix(_SUMMARY))
+            for key in store.list(f"{prefix}/")
+            if key.endswith(_SUMMARY) and key.count("/") == prefix.count("/") + 1
+        )
+    except ListingUnsupportedError:
+        spec, group, line = prefix.split("/")
+        return sorted(read_index(store, spec, group).lines.get(line, ()))
 
 
 def read_summary(store: Store, prefix: str, generation: Generation) -> ImageSummary | None:

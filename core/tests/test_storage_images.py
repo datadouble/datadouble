@@ -7,9 +7,28 @@ from pathlib import Path
 
 import pytest
 
-from datadouble.images import ImageError, digest, new_generation, pack, unpack, version_line
+from datadouble.images import (
+    ImageError,
+    digest,
+    generations,
+    image_lines,
+    index_key,
+    new_generation,
+    pack,
+    read_index,
+    unpack,
+    version_line,
+    write_index,
+)
+from datadouble.names import Generation
 from datadouble.settings import SettingsError
-from datadouble.storage import FilesystemStore, StoreError, check_key, filesystem_store
+from datadouble.storage import (
+    FilesystemStore,
+    StoreError,
+    check_key,
+    filesystem_store,
+)
+from fakes import Unlisted
 
 
 def test_keys() -> None:
@@ -107,3 +126,28 @@ def test_a_store_it_cannot_write(tmp_path: Path) -> None:
 )
 def test_version_lines(version: str, parts: int, line: str) -> None:
     assert version_line(version, parts) == line
+
+
+def test_stores_that_cannot_list_read_the_index(tmp_path: Path) -> None:
+    store = FilesystemStore(tmp_path)
+    for key in (
+        "shop/all/fake-9/0002.summary.json",
+        "shop/all/fake-18/0001.summary.json",
+        "shop/all/fake-18/0003.summary.json",
+        "shop/all/fake-18/0003.physical.tar.gz",
+        "shop/all/fake-18/channels/latest.json",
+    ):
+        store.put_bytes(key, b"{}")
+    unlisted = Unlisted(tmp_path)
+    assert image_lines(unlisted, "shop", "all") == []
+    index = write_index(store, "shop", "all")
+    assert index.lines == {"fake-9": ("0002",), "fake-18": ("0001", "0003")}
+    assert read_index(unlisted, "shop", "all") == index
+    assert image_lines(unlisted, "shop", "all") == image_lines(store, "shop", "all")
+    assert image_lines(unlisted, "shop", "all") == ["shop/all/fake-9", "shop/all/fake-18"]
+    assert generations(unlisted, "shop/all/fake-18") == [Generation("0001"), Generation("0003")]
+    assert generations(unlisted, "shop/all/fake-17") == []
+    assert store.list("shop/all/index") == [index_key("shop", "all")]
+    store.put_bytes(index_key("shop", "all"), b'{"lines": {"fake-18": 3}}')
+    with pytest.raises(ImageError, match=r"^shop/all/index\.json in filesystem:.* is not a valid"):
+        image_lines(unlisted, "shop", "all")

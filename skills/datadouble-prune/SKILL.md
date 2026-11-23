@@ -12,7 +12,12 @@ export stores in production, staging outside it.
 
 The spec's `prune` section: keep the last generations and anything younger
 than a number of days, and, by compatibility line (`8.4` for MySQL, `17` for
-PostgreSQL), the most recent lines' images only. An image a channel points to is never removed.
+PostgreSQL), the most recent lines' images only. An image a channel points to is never removed. Pruning the
+export stores also rewrites each group's `index.json` to match what is left
+(or removes it when nothing is), so the lines a `fetch` through
+the `http` store finds stay current. `--target export`
+prunes the stores in `promote.to`, the ones `promote` writes; the read-only
+`http` store in `fetch.from` is never pruned.
 
 ## See before it removes
 

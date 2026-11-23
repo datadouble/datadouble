@@ -3,10 +3,13 @@
 
 """The non-production side: promote, fetch, activate, replicate, claim, release, prune."""
 
+import dataclasses
 import datetime as dt
 import hashlib
 import json
 import os
+import shutil
+import uuid
 from pathlib import Path
 
 import pytest
@@ -28,13 +31,15 @@ from datadouble.images import (
     ImageIdentity,
     ImageSummary,
     Verification,
+    index_key,
     pack,
+    read_index,
     read_summary,
 )
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.promote import PromoteError, promote
 from datadouble.prune import PruneError, PruneTarget, prune
-from datadouble.registry import Registry
+from datadouble.registry import Registry, installed
 from datadouble.replicate import (
     ClaimState,
     Copy,
@@ -61,9 +66,12 @@ from datadouble.spec import (
     parse_spec,
 )
 from datadouble.staging import FetchStatus, Staging, StagingError, activate, fetch
-from datadouble.storage import FilesystemStore
+from datadouble.storage import (
+    FilesystemStore,
+    StoreError,
+)
 from fake_engine import ENGINES, FakeEngine
-from fakes import FakeSource, shop
+from fakes import FakeSource, shop, unlisted_store
 
 T0 = dt.datetime(2026, 11, 1, tzinfo=dt.UTC)
 
@@ -334,6 +342,104 @@ def test_fetch_errors(tmp_path: Path, registry: Registry) -> None:
         fetch(pinned, registry)
     with pytest.raises(StagingError, match="needs a `fetch` section"):
         activate(parse_spec("name: shop\nsource: {engine: fake}\n"), Generation("x"))
+
+
+# export stores that cannot list keys
+
+
+def test_promote_writes_the_index_and_prune_keeps_it(tmp_path: Path, registry: Registry) -> None:
+    spec = make_spec(tmp_path, "prune: {keep: 1, keep_days: 0}")
+    export = FilesystemStore(tmp_path / "export")
+    export.put_bytes(index_key("shop", "all"), b'{"lines": {"fake-17": []}}')
+    assert prune(spec, registry, PruneTarget.EXPORT).removed == ()
+    assert export.list("") == []
+    for generation in ("0000000000010001", "0000000000020001", "0000000000030001"):
+        build(tmp_path, generation)
+        promote(spec, registry, generation=Generation(generation))
+        assert read_index(export, "shop", "all").lines["fake-18"][-1] == generation
+    assert read_index(export, "shop", "all").lines == {
+        "fake-18": ("0000000000010001", "0000000000020001", "0000000000030001")
+    }
+    assert FilesystemStore(tmp_path / "build").get_bytes(index_key("shop", "all")) is None
+
+    def later() -> dt.datetime:
+        return T0 + dt.timedelta(days=1)
+
+    prune(spec, registry, PruneTarget.EXPORT, dry_run=True, clock=later)
+    assert len(read_index(export, "shop", "all").lines["fake-18"]) == 3
+    prune(spec, registry, PruneTarget.EXPORT, clock=later)
+    assert read_index(export, "shop", "all").lines == {"fake-18": ("0000000000030001",)}
+    prune(spec, registry, PruneTarget.STORE, clock=later)
+    assert FilesystemStore(tmp_path / "build").get_bytes(index_key("shop", "all")) is None
+
+
+def test_fetch_reads_the_index_of_a_store_that_cannot_list(
+    tmp_path: Path, registry: Registry
+) -> None:
+    unlisting = dataclasses.replace(
+        registry, stores={**registry.stores, "unlisted": unlisted_store}
+    )
+    spec = promoted(tmp_path, registry, "0000000000010001", "0000000000020001")
+    fetching = spec.model_copy(
+        update={
+            "fetch": settings(spec).model_copy(
+                update={"source": {"unlisted": {"path": str(tmp_path / "export")}}}
+            )
+        }
+    )
+    (fetched,) = fetch(fetching, unlisting)
+    assert (fetched.generation, fetched.status) == ("0000000000020001", FetchStatus.FETCHED)
+    FilesystemStore(tmp_path / "export").delete(index_key("shop", "all"))
+    with pytest.raises(StagingError, match="there are no images in filesystem:"):
+        fetch(fetching, unlisting)
+
+
+@pytest.mark.integration
+def test_fetch_over_https_with_basic_auth(
+    tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A promoted export store, served by the Compose suite's web server (dev/https)."""
+    served = Path(os.environ["DATADOUBLE_TEST_HTTPS_ROOT"]) / uuid.uuid4().hex
+    url = f"{os.environ['DATADOUBLE_TEST_HTTPS_URL']}{served.name}/"
+    ca_bundle = os.environ["DATADOUBLE_TEST_HTTPS_CA"]
+    web = dataclasses.replace(
+        registry, stores={**registry.stores, "http": installed().stores["http"]}
+    )
+
+    def spec(user: str) -> Spec:
+        variable = "DATADOUBLE_TEST_HTTPS_PASSWORD"
+        return parse_spec(
+            f"""
+name: shop
+source: {{engine: fake}}
+store: [{{filesystem: {{path: {tmp_path / "build"}}}}}]
+trust: {{cosign: {{public_key: {{env: COSIGN_PUB}}}}}}
+promote: {{to: [{{filesystem: {{path: {served}}}}}]}}
+fetch:
+  from:
+    http:
+      url: {url}
+      auth: {{basic: {{username: {{env: {user}}}, password: {{env: {variable}}}}}}}
+      ca_bundle: {ca_bundle}
+  staging: {tmp_path / "staging"}
+"""
+        )
+
+    try:
+        for generation in ("0000000000010001", "0000000000020001"):
+            build(tmp_path, generation)
+            promote(spec("DATADOUBLE_TEST_HTTPS_USER"), web, generation=Generation(generation))
+        (fetched,) = fetch(spec("DATADOUBLE_TEST_HTTPS_USER"), web)
+        assert (fetched.generation, fetched.status) == ("0000000000020001", FetchStatus.FETCHED)
+        image = Staging(settings(spec("DATADOUBLE_TEST_HTTPS_USER"))).image(
+            PREFIX, Generation("0000000000020001")
+        )
+        assert (image / "data.txt").read_text(encoding="utf-8") == "rows of 0000000000020001\n"
+        monkeypatch.setenv("DATADOUBLE_TEST_HTTPS_STRANGER", uuid.uuid4().hex)
+        with pytest.raises(StoreError, match=r"reading /.*/shop/all/index\.json failed: HTTP 401"):
+            fetch(spec("DATADOUBLE_TEST_HTTPS_STRANGER"), web)
+    finally:
+        shutil.rmtree(served, ignore_errors=True)
 
 
 # replicate, claim and release

@@ -132,7 +132,7 @@ Where `fetch` reads images from and keeps them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `from` (required) | [AdapterSettings](#adaptersettings) |  |  |
+| `from` (required) | [AdapterSettings](#adaptersettings) |  | The export store to read, one adapter: `{filesystem: ...}`, `{s3: ...}`, or `{http: ...}`, a web server serving it, which is read-only and reads the index `promote` writes. |
 | `staging` (required) | string |  |  |
 | `channel` | string | `"latest"` |  |
 | `staging_channel` | string | `"active"` |  |
@@ -293,7 +293,7 @@ Where `promote` copies verified images, and what it requires of them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `to` (required) | list of [AdapterSettings](#adaptersettings) |  |  |
+| `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
 | `channel` | string | `"latest"` |  |
 | `strict` | [StrictLevel](#strictlevel) | `"columns"` | The least strict strict-mode level an image may have been built with. |
 

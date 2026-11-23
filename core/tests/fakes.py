@@ -1,7 +1,7 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
-"""An in-memory engine for testing the engine-neutral core.
+"""An in-memory engine for testing the engine-neutral core, and a store that cannot list.
 
 Tables are lists of dicts. Native predicates are a tiny language,
 ``column op literal`` joined by ``and``, which is enough for seeds and
@@ -13,8 +13,12 @@ import re
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
 
+from pydantic import JsonValue
+
 from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
 from datadouble.names import ColumnName, EngineName, TableName
+from datadouble.settings import parse_settings
+from datadouble.storage import FilesystemSettings, FilesystemStore, ListingUnsupportedError, Store
 from datadouble.subset import (
     AllOf,
     AllRows,
@@ -222,3 +226,16 @@ def shop() -> Catalog:
         table("log", ["id", "user_id"], namespace="audit"),
         table("film_actor", ["film_id", "actor_id"], key=("film_id", "actor_id")),
     )
+
+
+class Unlisted(FilesystemStore):
+    """A store that cannot list keys, as a web server cannot."""
+
+    def list(self, prefix: str) -> list[str]:
+        message = f"cannot list {prefix}"
+        raise ListingUnsupportedError(message)
+
+
+def unlisted_store(settings: Mapping[str, JsonValue]) -> Store:
+    """A store factory for :class:`Unlisted`, taking the filesystem store's settings."""
+    return Unlisted(parse_settings(FilesystemSettings, settings, "unlisted store").path)

@@ -7,6 +7,10 @@ Stores are addressed by keys like ``spec/group/postgres-18/<generation>.summary.
 Storage adapters register under the ``datadouble.stores`` entry point group;
 each entry point names a callable that takes the store's settings from the
 spec and returns a :class:`Store`. The filesystem store lives here.
+
+A store that cannot list its keys, such as a web server, raises
+:class:`ListingUnsupportedError` from ``list``; readers then use the index
+``promote`` writes under each ``<spec>/<group>/`` (see :mod:`datadouble.images`).
 """
 
 import os
@@ -24,6 +28,10 @@ from datadouble.settings import parse_settings
 
 class StoreError(Exception):
     """A store operation or configuration that failed."""
+
+
+class ListingUnsupportedError(StoreError):
+    """A store that cannot list its keys; readers use the index ``promote`` writes."""
 
 
 _KEY = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
@@ -61,7 +69,10 @@ class Store(Protocol):
         ...
 
     def list(self, prefix: str) -> list[str]:
-        """Keys starting with ``prefix``, sorted."""
+        """Keys starting with ``prefix``, sorted.
+
+        Raises :class:`ListingUnsupportedError` if the store cannot list keys.
+        """
         ...
 
     def delete(self, key: str) -> None:

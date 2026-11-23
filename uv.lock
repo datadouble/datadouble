@@ -17,6 +17,7 @@ members = [
     "datadouble-files",
     "datadouble-github-actions",
     "datadouble-gitlab",
+    "datadouble-http",
     "datadouble-jenkins",
     "datadouble-kubernetes",
     "datadouble-mongodb",
@@ -558,6 +559,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "datadouble-http"
+version = "0.0.0"
+source = { editable = "adapters/http" }
+dependencies = [
+    { name = "datadouble" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "httpx", specifier = ">=0.28.1" },
+]
+
+[[package]]
 name = "datadouble-jenkins"
 version = "0.0.0"
 source = { editable = "ci/jenkins" }
@@ -746,6 +762,7 @@ dev = [
     { name = "datadouble-files" },
     { name = "datadouble-github-actions" },
     { name = "datadouble-gitlab" },
+    { name = "datadouble-http" },
     { name = "datadouble-jenkins" },
     { name = "datadouble-kubernetes" },
     { name = "datadouble-mongodb" },
@@ -785,6 +802,7 @@ dev = [
     { name = "datadouble-files", editable = "adapters/files" },
     { name = "datadouble-github-actions", editable = "ci/github-actions" },
     { name = "datadouble-gitlab", editable = "ci/gitlab" },
+    { name = "datadouble-http", editable = "adapters/http" },
     { name = "datadouble-jenkins", editable = "ci/jenkins" },
     { name = "datadouble-kubernetes", editable = "adapters/kubernetes" },
     { name = "datadouble-mongodb", editable = "adapters/mongodb" },
