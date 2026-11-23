@@ -100,6 +100,7 @@ jobs:
             api.github.com:443
             ghcr.io:443
             pkg-containers.githubusercontent.com:443
+            mirror.gcr.io:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -121,8 +122,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Docker Hub images through Google's mirror, before anything starts a
+      # container: the daemon restarts (decision 138).
+      - name: Pull Docker Hub images through its mirror
+        uses: ./.github/actions/docker-mirror # zizmor: ignore[self-repository]
+
+      # The builder's BuildKit pulls Docker Hub images through the mirror too.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          buildkitd-config: .github/buildkitd.toml
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0

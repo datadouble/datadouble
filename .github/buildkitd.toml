@@ -1,0 +1,10 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# BuildKit's settings for CI's Buildx builders (docker/setup-buildx-action's
+# buildkitd-config): Docker Hub images through Google's mirror, as the
+# runner's Docker daemon pulls them (.github/actions/docker-mirror, decision
+# 138). BuildKit tries the mirror first and Docker Hub after it.
+
+[registry."docker.io"]
+  mirrors = ["mirror.gcr.io"]

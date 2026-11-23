@@ -125,6 +125,14 @@ nothing else needs to.
   1.6 GB), GitHub's cache holds 10 GB for the whole repository, and restoring
   a cached image is no faster than downloading it from the vendor's registry.
   The registry is the cache.
+- **Docker Hub images come through Google's mirror,** `mirror.gcr.io`
+  (decision 138). Docker Hub limits how many images anonymous users pull,
+  counted per IP address, and GitHub's runners share addresses, so a busy run
+  could fail partway with `429 Too Many Requests`. Each job that pulls images
+  points its Docker daemon at the mirror first (the step **Pull Docker Hub
+  images through its mirror**), and still pulls from Docker Hub when the
+  mirror can't serve an image. Every image is pinned by digest, so the
+  mirror can't change what runs.
 
 ## Running it yourself
 
@@ -167,3 +175,5 @@ so you can look at them; `make clean-work` removes them, and so does the next
 - **A setup step fails with a refused connection:** every job blocks network
   traffic except to the addresses it lists. A new download needs its address
   added to that job's list, with a comment saying why.
+- **Pulls fail with `429 Too Many Requests`:** Docker Hub's rate limit. Check
+  that the job has the mirror step and `mirror.gcr.io:443` in its list.
