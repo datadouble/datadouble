@@ -6,6 +6,7 @@
 import datetime as dt
 import json
 import os
+import re
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -186,7 +187,8 @@ def test_fallbacks_hooks_and_partition_references(source: PostgresScratch, tmp_p
         }
         with pytest.raises(EngineError, match=r"running an assertion failed: \[42703\]"):
             restored.failing_rows("SELECT nope FROM public.child")
-        with pytest.raises(EngineError, match=r"scanning public\.child\.nope failed"):
+        scanning = rf"scanning {re.escape(source.database)}\.public\.child\.nope failed"
+        with pytest.raises(EngineError, match=scanning):
             list(restored.text_values(ColumnRef(table=children, column=ColumnName("nope"))))
 
 
@@ -228,8 +230,9 @@ def test_failing_hooks_name_objects_not_values(source: PostgresScratch, tmp_path
 
 def test_bad_seeds_fail_in_both_strategies(source: PostgresScratch, tmp_path: Path) -> None:
     bad = SPEC.replace('"id <= 2"', '"nope <= 2"')
+    table = rf"{re.escape(source.database)}\.public\.\w+"
     for strategy in (Strategy.NESTED, Strategy.KEYS):
-        with pytest.raises(EngineError, match=r"(extracting|reading keys of) public\.\w+ failed"):
+        with pytest.raises(EngineError, match=rf"(extracting|reading keys of) {table} failed"):
             build(
                 source,
                 tmp_path / str(strategy),
@@ -265,7 +268,8 @@ def test_corrupt_extracts_fail_to_load(source: PostgresScratch, tmp_path: Path) 
     data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data"
     for file in data.glob("*.copy"):
         file.write_text("not\ta\trow\tat\tall\n", encoding="utf-8")
-    with pytest.raises(EngineError, match=r"loading public\.\w+ failed: \[22P02\]"):
+    table = rf"{re.escape(source.database)}\.public\.\w+"
+    with pytest.raises(EngineError, match=rf"loading {table} failed: \[22P02\]"):
         build(source, tmp_path, spec=spec, stages=(Stage.LOAD,), resume=extracted.generation)
 
 
@@ -289,7 +293,8 @@ def test_snapshot_reads(source: PostgresScratch) -> None:
     ):
         child = TableName.of(source.database, "public", "child")
         assert len(list(snapshot.project(child, AllRows(), (ColumnName("id"),)))) == 3
-        with pytest.raises(EngineError, match=r"reading keys of public\.child failed"):
+        failed = rf"reading keys of {re.escape(source.database)}\.public\.child failed"
+        with pytest.raises(EngineError, match=failed):
             snapshot.project(child, Predicate("nope = 1"), (ColumnName("id"),))
 
 
@@ -318,7 +323,9 @@ def test_working_failures(source: PostgresScratch, tmp_path: Path) -> None:
     transformation = Transformation((missing,), lambda _rule, _values: {}, ())
     with pytest.raises(EngineError, match="cannot copy missing"):
         working.transform(plan.groups[0], work / "missing", tmp_path / "t1", transformation)
-    with pytest.raises(EngineError, match=r"reading public\.child\.nope failed"):
+    with pytest.raises(
+        EngineError, match=rf"reading {re.escape(source.database)}\.public\.child\.nope failed"
+    ):
         working.transform(
             plan.groups[0], work / "load" / "all" / "db", tmp_path / "t2", transformation
         )
