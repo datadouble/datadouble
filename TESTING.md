@@ -245,7 +245,7 @@ prove costly.
 |---|---|---|
 | CI | Lint, types and unit tests | `make lint`, `make lint-workflows`, `make typecheck`, `make test`, on Python 3.13 |
 | CI | Unit tests (Python 3.x) | `make test` on each later supported version |
-| CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs` |
+| CI | k8s / btrfs adapters (privileged) | `make test-k8s`, `make test-btrfs`, with k3s pulling Docker Hub images through the mirror (`compose.mirror.yaml`) |
 | CI | Integration jobs | Lists the integration jobs, one per shard of each group, from `tests/integration-groups.txt` |
 | CI | Integration (group, or group K/N) | One job per shard, in parallel: `make test-group GROUP=<name>[/K] DOCKER=host`, with the test image's layers from GitHub's build cache (`compose.cache.yaml`); keeps the shard's coverage data as an artifact |
 | CI | Integration coverage | Checks every shard passed, combines their coverage with the 100% gate, uploads it to Codecov and keeps the report for `sonar` |
@@ -258,3 +258,19 @@ Every job runs on a hardened runner that blocks outbound traffic except to the
 endpoints it lists. A job that starts failing in a setup step with a refused
 connection usually needs one more endpoint, and the comment beside the list
 should say why it is there.
+
+Every job that pulls images pulls Docker Hub's through Google's mirror,
+`mirror.gcr.io` (decision 138), since anonymous pulls from Docker Hub share a
+rate limit across GitHub's runners and a run that hits it fails with `429 Too
+Many Requests`. The step **Pull Docker Hub images through its mirror**
+(`.github/actions/docker-mirror`) adds the mirror to the runner's Docker
+daemon and restarts it, so it runs right after the checkout, before anything
+starts a container; its log shows the daemon's config and mirrors. Daemons the
+job doesn't own need it separately: a Buildx builder's BuildKit takes
+`.github/buildkitd.toml` (`buildkitd-config`), and k3s takes
+`compose.mirror.yaml` (`make test-k8s EXTRA_COMPOSE=compose.mirror.yaml`).
+Kind's node pulls no Docker Hub images (the suites load them from the
+runner's daemon), and CI never starts Docker-in-Docker. These jobs' egress
+lists hold `mirror.gcr.io:443` and keep Docker Hub's endpoints, because an
+image the mirror can't serve still pulls from Docker Hub. A job you add that
+pulls images needs the step and the endpoint too.

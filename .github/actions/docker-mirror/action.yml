@@ -1,0 +1,46 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# Pull Docker Hub images through a registry mirror (decision 138).
+#
+# Anonymous pulls from Docker Hub share a rate limit per IP address across
+# GitHub's hosted runners, so a job that pulls many images can get 429 Too
+# Many Requests partway through. This adds the mirror to the runner's Docker
+# daemon (`registry-mirrors` in /etc/docker/daemon.json, keeping any settings
+# already there) and restarts the daemon. Docker asks the mirror first and
+# pulls from Docker Hub itself when the mirror fails, so a job's egress list
+# keeps Docker Hub's endpoints beside the mirror's. Only Docker Hub images
+# go through the mirror; other registries are unchanged.
+#
+# Run it right after the checkout, before anything starts a container (a
+# Buildx builder, Compose services): the restart stops running containers.
+# BuildKit in a Buildx builder doesn't use the daemon's mirrors; give it
+# .github/buildkitd.toml.
+
+name: Docker Hub mirror
+description: Pull Docker Hub images through a registry mirror.
+inputs:
+  mirror:
+    description: The mirror's URL.
+    default: https://mirror.gcr.io
+runs:
+  using: composite
+  steps:
+    - name: Add the mirror to the Docker daemon
+      shell: bash
+      env:
+        MIRROR: ${{ inputs.mirror }}
+      run: |
+        set -euo pipefail
+        config=/etc/docker/daemon.json
+        current=$(sudo cat "$config" 2> /dev/null || true)
+        printf '%s' "${current:-"{}"}" \
+          | jq --arg mirror "$MIRROR" \
+            '.["registry-mirrors"] = ((.["registry-mirrors"] // []) | if index([$mirror]) then . else . + [$mirror] end)' \
+          > "$RUNNER_TEMP/daemon.json"
+        sudo install -m 644 "$RUNNER_TEMP/daemon.json" "$config"
+        sudo systemctl restart docker
+        timeout 60 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'
+        echo "Docker daemon config:"
+        cat "$config"
+        echo "Registry mirrors: $(docker info --format '{{json .RegistryConfig.Mirrors}}')"

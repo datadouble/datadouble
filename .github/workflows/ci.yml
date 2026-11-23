@@ -197,8 +197,10 @@ jobs:
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
-          # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
-          # engine, Python, SeaweedFS and OpenBao images, Microsoft's registry
+          # Google's mirror of Docker Hub (mirror.gcr.io, which serves its
+          # tokens and blobs itself) and Docker Hub for when the mirror fails
+          # (its blobs come from CloudFront or Cloudflare), for the engine,
+          # Python, SeaweedFS and OpenBao images, Microsoft's registry
           # for SQL Server, Oracle's (whose layers come from its object
           # storage) for Oracle, GHCR for the uv image, Debian for git and
           # btrfs-progs, GitHub release assets for cosign, dl.k8s.io for
@@ -212,6 +214,7 @@ jobs:
             objects.githubusercontent.com:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            mirror.gcr.io:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -234,9 +237,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Docker Hub images through Google's mirror, before anything starts a
+      # container: the daemon restarts (decision 138).
+      - name: Pull Docker Hub images through its mirror
+        uses: ./.github/actions/docker-mirror # zizmor: ignore[self-repository]
+
       # The build cache (compose.cache.yaml) needs a Buildx builder and the
-      # Actions runtime token in the environment.
+      # Actions runtime token in the environment. The builder's BuildKit pulls
+      # Docker Hub images through the mirror too (.github/buildkitd.toml).
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          buildkitd-config: .github/buildkitd.toml
       - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
 
       # Runners promise only 14 GB of disk; the free space is recorded before
@@ -283,9 +294,10 @@ jobs:
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
-          # As the integration jobs, for the Datadouble, PostgreSQL, GitLab
-          # and Jenkins images and the workspace; GitHub release assets for
-          # act; GitHub for the checkout action the generated jobs use;
+          # As the integration jobs (Docker Hub's mirror and Docker Hub), for
+          # the Datadouble, PostgreSQL, GitLab, Jenkins and kind images and the
+          # workspace; GitHub release assets for act; GitHub for the checkout
+          # action the generated jobs use;
           # Jenkins' update center and Maven repository (whose files are on
           # S3) for the test Jenkins.
           allowed-endpoints: >
@@ -306,6 +318,7 @@ jobs:
             releases.astral.sh:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            mirror.gcr.io:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -319,6 +332,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Docker Hub images through Google's mirror, before anything starts a
+      # container: the daemon restarts (decision 138).
+      - name: Pull Docker Hub images through its mirror
+        uses: ./.github/actions/docker-mirror # zizmor: ignore[self-repository]
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
@@ -576,7 +594,8 @@ jobs:
         with:
           egress-policy: block
           # As the integration job, which builds the same test image; the k3s
-          # image also comes from Docker Hub.
+          # image and the images k3s pulls also come from Docker Hub, through
+          # its mirror (compose.mirror.yaml).
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -585,6 +604,7 @@ jobs:
             objects.githubusercontent.com:443
             dl.k8s.io:443
             cdn.dl.k8s.io:443
+            mirror.gcr.io:443
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
@@ -601,10 +621,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Docker Hub images through Google's mirror, before anything starts a
+      # container: the daemon restarts (decision 138).
+      - name: Pull Docker Hub images through its mirror
+        uses: ./.github/actions/docker-mirror # zizmor: ignore[self-repository]
+
       - name: Run the group
         env:
           GROUP: ${{ matrix.group }}
-        run: make "test-${GROUP}"
+        run: make "test-${GROUP}" EXTRA_COMPOSE=compose.mirror.yaml
 
   docs:
     name: Documentation site

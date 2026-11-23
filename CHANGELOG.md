@@ -430,6 +430,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- CI pulls Docker Hub images through Google's mirror, `mirror.gcr.io`, so
+  runs no longer fail on Docker Hub's anonymous rate limit (`429 Too Many
+  Requests`). Jobs still pull from Docker Hub when the mirror can't serve an
+  image (decision 138,
+  [#106](https://github.com/datadouble/datadouble/issues/106)).
 - **BREAKING: the `kubernetes` runtime's `namespace` is optional, and no
   longer defaults to `default`** (decision 133). Left out, engine pods start
   where `kubectl` would put them: in a cluster, the namespace of
