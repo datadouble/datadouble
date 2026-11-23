@@ -252,9 +252,11 @@ def test_the_catalog_lists_sakilas_objects_and_their_dependencies() -> None:
     assert {"table sakila.rental (inferred)", "table sakila.payment (inferred)"} <= edges(
         "function sakila.get_customer_balance"
     )
-    # VIEW_ROUTINE_USAGE gives a view's functions exactly.
+    # VIEW_ROUTINE_USAGE gives a view's functions exactly, and VIEW_TABLE_USAGE
+    # adds the tables those functions read: inventory_in_stock reads rental.
     assert edges("view sakila.inventory_available") == {
         "table sakila.inventory",
+        "table sakila.rental",
         "function sakila.inventory_in_stock",
     }
     assert edges("event sakila.purge_old_notes") == {"table sakila.customer_note (inferred)"}

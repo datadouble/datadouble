@@ -113,9 +113,12 @@ events of every database read, named `database.object`, all under the one
 snapshot. A view's tables, views and functions come from
 `information_schema.VIEW_TABLE_USAGE` and `VIEW_ROUTINE_USAGE`, and a
 trigger's table from `information_schema.TRIGGERS`: those edges are exact,
-and may cross databases. A view that reads a database not read, directly or
-through other views, is left out of the catalog as it is left out of the
-copies. MySQL records nothing else, so what routine, trigger and event
+and may cross databases. MySQL counts the tables that a view's stored
+functions read as the view's own, so a view calling a function that reads
+`rental` has an exact edge to `rental` though its text never names it, and
+removing `rental` fails the plan naming the view. A view that reads a
+database not read, directly, through other views or through the functions
+it calls, is left out of the catalog as it is left out of the copies. MySQL records nothing else, so what routine, trigger and event
 bodies use is parsed from their text, matching names in any database read
 (an unqualified name means the object's own database first), and those
 edges are marked inferred. Reading a routine's body needs the `SHOW_ROUTINE` privilege, or

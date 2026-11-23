@@ -114,8 +114,11 @@ once they have checked, `datadouble lock` records the new definitions.
 A removed object that another one still needs fails at every level, naming
 both, such as a function a trigger calls. Edges marked `inferred` were
 parsed from a body rather than recorded by the engine; a removal only they
-point at warns instead, saying what may still need it. Fix the source or
-the excludes; never lower a level to get past it (rule 4).
+point at warns instead, saying what may still need it. In MySQL a view's
+exact edges include the tables its stored functions read, so a failure can
+name a view whose text never mentions the removed table; point the person
+at the functions it calls. Fix the source or the excludes; never lower a
+level to get past it (rule 4).
 
 Old locks have no objects, so every object warns as new until the person
 re-locks. Many objects suddenly removed or emptied usually means the
