@@ -27,14 +27,14 @@ A whole spec.
 | `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in every image, such as `{view: reporting.daily}`; they join each image's closure. |
 | `package` | [Package](#package) | see type | The image formats to produce. |
 | `verify` | [Verify](#verify) | see type | Checks every image must pass: PII scan, row counts, assertions. |
-| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference. |
+| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference, and starts pods in Datadouble's own namespace unless `namespace` names one. |
 | `store` | list of map of map of JSON |  | Where images are stored after the build, one adapter each: `{filesystem: ...}`, `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string (`"0640"` by default) every file it writes gets whatever the umask; directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or the owner not read and write, are refused. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |
 | `promote` | [Promote](#promote) |  | The export stores `promote` copies verified images to. |
 | `fetch` | [Fetch](#fetch) |  | Where `fetch` reads promoted images, and the staging directory it fills. |
 | `replicate` | [Replicate](#replicate) |  | How copies are made: the adapter, pool or on-demand, and how many. |
-| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each. |
+| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`, which writes Secrets in Datadouble's own namespace unless `namespace` names one. |
 | `prune` | [Retention](#retention) | see type | How many images and how much time `prune` keeps. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
 | `notify` | [Notify](#notify) |  | Who hears when a generated CI job fails or warns: webhooks and email. |

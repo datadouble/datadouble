@@ -21,6 +21,21 @@ Follow `../RULES.md` throughout.
   holds the kubeconfig's content, never the runner's own kubeconfig file;
   jobs running in the cluster they drive need none. The one exception is a
   copy account's password, below.
+- **Leave Kubernetes namespaces out for CI/CD jobs.** The `kubernetes`
+  runtime's and `k8s-secret`'s `namespace` default to the one `kubectl`
+  would use: in a cluster, the namespace of Datadouble's own pod; outside
+  one (an empty `KUBECONFIG` counts as unset), the kubeconfig context's (the
+  adapter's own `kubeconfig` and `context`), or `default` when the context
+  names none. A context `kubectl` cannot read fails rather than falling back.
+  Each side's jobs run in its own namespace, so a spec without one serves
+  both. Name one when the person wants pods or Secrets somewhere else, or
+  when people also run `claim` from their own machines and consumers must
+  find every copy's Secret in one namespace: a laptop's copies otherwise go
+  to its context's namespace. `release` deletes each Secret where it was
+  written, provided every machine using the spec reaches the same cluster
+  and the releasing identity may delete Secrets in each of those
+  namespaces. `ci init` refuses a runtime namespace that is not the side's
+  `--runner`.
 
 ## Check it, without production data
 

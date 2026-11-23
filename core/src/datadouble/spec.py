@@ -865,7 +865,8 @@ class Spec(_Model):
     """Checks every image must pass: PII scan, row counts, assertions."""
     runtime: AdapterSettings | None = None
     """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``,
-    which reaches another cluster through ``kubeconfig``, a secret reference."""
+    which reaches another cluster through ``kubeconfig``, a secret reference, and starts pods
+    in Datadouble's own namespace unless ``namespace`` names one."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     """Where images are stored after the build, one adapter each: ``{filesystem: ...}``,
     ``{s3: ...}``. The filesystem store takes ``path``, a directory, and ``mode``, an octal
@@ -884,7 +885,9 @@ class Spec(_Model):
     replicate: Replicate | None = None
     """How copies are made: the adapter, pool or on-demand, and how many."""
     announce: tuple[AdapterSettings, ...] = ()
-    """Where copies are announced to consumers, one adapter each."""
+    """Where copies are announced to consumers, one adapter each: ``{dotenv: ...}``,
+    ``{ci-outputs: {}}``, ``{vault: ...}`` or ``{k8s-secret: {}}``, which writes Secrets
+    in Datadouble's own namespace unless ``namespace`` names one."""
     prune: Retention = Retention()
     """How many images and how much time ``prune`` keeps."""
     secrets: Secrets = Secrets()

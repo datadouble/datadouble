@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import datadouble_kubernetes as kubernetes_module
 from datadouble.announce import Announced, AnnounceError
 from datadouble.ci import JobKind, PipelineOptions, masking, pipeline
 from datadouble.images import ImageIdentity, ImageSummary, Verification
@@ -63,8 +64,18 @@ if "garbled" in objects:
 if "fail" in objects:
     sys.stderr.write("error: the server is on fire\\n")
     sys.exit(1)
-if args[0] == "apply":
-    obj = json.load(sys.stdin)
+forbid = objects.get("forbid", {})
+namespace = next((a[12:] for a in args if a.startswith("--namespace=")), None)
+named = json.loads(sys.stdin.read() or "{}") if args[0] == "apply" else {}
+if namespace in forbid.get("namespaces", []) or (
+    named.get("metadata", {}).get("name") in forbid.get("names", [])
+):
+    sys.stderr.write("Error from server (Forbidden): secrets is forbidden\\n")
+    sys.exit(1)
+if args[0] == "config":
+    print(os.environ.get("FAKE_KUBECONFIG_NAMESPACE", ""), end="")
+elif args[0] == "apply":
+    obj = named
     key = obj["kind"] + "/" + obj["metadata"]["name"]
     objects[key] = obj
     print(key)
@@ -219,14 +230,14 @@ def test_secrets(cluster: Path) -> None:
     metadata = secret["metadata"]
     assert isinstance(metadata, dict)
     assert metadata["labels"]["datadouble.dev/owner"] == "mr-12-feature"
-    assert announcer.withdraw(("abc",)) == ("k8s-secret:dev/datadouble-abc",)
+    assert announcer.withdraw(("abc",), ()) == ("k8s-secret:dev/datadouble-abc",)
     assert objects(cluster) == {}
-    assert announcer.withdraw(()) == ()
+    assert announcer.withdraw((), ()) == ()
     cluster.write_text(json.dumps({"fail": {}}))
     with pytest.raises(AnnounceError, match="kubectl apply failed"):
         announcer.announce((copy,))
     with pytest.raises(AnnounceError, match="kubectl delete failed"):
-        announcer.withdraw(("abc",))
+        announcer.withdraw(("abc",), ())
     assert isinstance(secret_announcer({}), SecretAnnouncer)
 
 
@@ -264,14 +275,21 @@ def test_kubeconfig_and_context(
     announcer = secret_announcer({"kubeconfig": {"file": str(mounted)}})
     copy = Announced(copy_id="abc", kind="volume", labels={}, location={"path": "/x"})
     announcer.announce((copy,))
-    announcer.withdraw(("abc",))
+    announcer.withdraw(("abc",), ())
     made = calls(cluster)
-    assert [call["verb"] for call in made] == ["apply", "get", "delete", "apply", "delete"]
+    assert [call["verb"] for call in made] == [
+        "apply",
+        "get",
+        "delete",
+        "config",
+        "apply",
+        "delete",
+    ]
     for call in made:
         assert call["content"] == content + "\n"
         assert call["mode"] == 0o600
         assert call["directory_mode"] == 0o700
-    assert [call.get("context") for call in made] == ["staging"] * 3 + [None] * 2
+    assert [call.get("context") for call in made] == ["staging"] * 3 + [None] * 3
     assert list(private.iterdir()) == []
 
     token = content.rsplit(" ", 1)[1]
@@ -343,10 +361,150 @@ def test_kubeconfigs_stay_out_of_mounted_paths(
         configured(["delete", "secret", "x"])
 
 
-def test_ambient_configuration(cluster: Path) -> None:
-    secret_announcer({"context": "dev"}).withdraw(("abc",))
-    secret_announcer({}).withdraw(("abc",))
-    assert calls(cluster) == [{"verb": "delete", "context": "dev"}, {"verb": "delete"}]
+def test_ambient_configuration(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", tmp_path / "absent")
+    secret_announcer({"context": "dev"}).withdraw(("abc",), ())
+    secret_announcer({}).withdraw(("abc",), ())
+    assert calls(cluster) == [
+        {"verb": "config", "context": "dev"},
+        {"verb": "delete", "context": "dev"},
+        {"verb": "config"},
+        {"verb": "delete"},
+    ]
+
+
+def test_secrets_default_to_kubectl_s_namespace(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    copy = Announced(copy_id="abc", kind="volume", labels={}, location={"path": "/x"})
+    account = tmp_path / "namespace"
+    account.write_text("shop-staging\n", encoding="utf-8")
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", account)
+    monkeypatch.delenv("KUBECONFIG", raising=False)
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "team")
+    # Inside a cluster: the namespace of Datadouble's own pod, without asking kubectl.
+    inside = secret_announcer({})
+    assert inside.announce((copy,)) == ("k8s-secret:shop-staging/datadouble-abc",)
+    metadata = objects(cluster)["Secret/datadouble-abc"]["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["namespace"] == "shop-staging"
+    assert inside.withdraw(("abc",), ()) == ("k8s-secret:shop-staging/datadouble-abc",)
+    assert [call["verb"] for call in calls(cluster)] == ["apply", "delete"]
+    # An explicit namespace wins.
+    assert secret_announcer({"namespace": "dev"}).withdraw(("abc",), ()) == (
+        "k8s-secret:dev/datadouble-abc",
+    )
+    # Outside one: the kubeconfig context's namespace, or default.
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
+    assert secret_announcer({}).withdraw(("abc",), ()) == ("k8s-secret:team/datadouble-abc",)
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "")
+    assert secret_announcer({}).withdraw(("abc",), ()) == ("k8s-secret:default/datadouble-abc",)
+    # A kubeconfig in the settings drives another cluster: its context names the
+    # namespace, never the pod's own service account.
+    monkeypatch.delenv("KUBECONFIG")
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "elsewhere")
+    monkeypatch.setenv("SHOP_KUBECONFIG", kubeconfig())
+    remote = secret_announcer({"kubeconfig": {"env": "SHOP_KUBECONFIG"}, "context": "build"})
+    assert remote.announce((copy,)) == ("k8s-secret:elsewhere/datadouble-abc",)
+    config = [call for call in calls(cluster) if call["verb"] == "config"]
+    assert [call.get("context") for call in config] == [None, None, "build"]
+    with pytest.raises(SettingsError, match="namespace"):
+        secret_announcer({"namespace": ""})
+    monkeypatch.delenv("DATADOUBLE_KUBECTL")
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    with pytest.raises(AnnounceError, match="kubectl was not found"):
+        secret_announcer({}).withdraw(("abc",), ())
+
+
+def test_secrets_are_withdrawn_where_they_were_announced(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    copy = Announced(copy_id="abc", kind="volume", labels={}, location={"path": "/x"})
+    # A laptop announces into its kubeconfig context's namespace.
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "alice")
+    announced = secret_announcer({}).announce((copy,))
+    assert announced == ("k8s-secret:alice/datadouble-abc",)
+    # The pod's sweep, in another namespace, deletes it from there without resolving
+    # its own; a copy with nothing recorded falls back to the pod's namespace.
+    account = tmp_path / "namespace"
+    account.write_text("shop-dev\n", encoding="utf-8")
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", account)
+    monkeypatch.setenv("KUBECONFIG", "")
+    recorded = (*announced, "dotenv:/x.env", "k8s-secret:malformed")
+    sweep = secret_announcer({})
+    assert sweep.withdraw(("abc",), recorded) == ("k8s-secret:alice/datadouble-abc",)
+    assert objects(cluster) == {}
+    assert sweep.withdraw(("abc", "def"), recorded) == (
+        "k8s-secret:alice/datadouble-abc",
+        "k8s-secret:shop-dev/datadouble-def",
+    )
+    made = calls(cluster)
+    assert [call["verb"] for call in made] == ["config", "apply", "delete", "delete", "delete"]
+
+
+def test_unreadable_kubeconfig_contexts_fail(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", tmp_path / "absent")
+    cluster.write_text(json.dumps({"fail": {}}))
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
+    with pytest.raises(AnnounceError, match="current context of the kubeconfig KUBECONFIG names"):
+        secret_announcer({}).withdraw(("abc",), ())
+    monkeypatch.delenv("KUBECONFIG")
+    with pytest.raises(AnnounceError, match="context build of the default kubeconfig"):
+        secret_announcer({"context": "build"}).withdraw(("abc",), ())
+    monkeypatch.setenv("SHOP_KUBECONFIG", kubeconfig())
+    with pytest.raises(AnnounceError, match=r"the kubeconfig in SHOP_KUBECONFIG: kubectl config"):
+        secret_announcer({"kubeconfig": {"env": "SHOP_KUBECONFIG"}}).withdraw(("abc",), ())
+    mounted = tmp_path / "mounted"
+    mounted.write_text(kubeconfig(), encoding="utf-8")
+    with pytest.raises(AnnounceError, match=f"the kubeconfig at {mounted}"):
+        secret_announcer({"kubeconfig": {"file": str(mounted)}}).withdraw(("abc",), ())
+
+
+def test_announcing_and_withdrawing_report_what_they_could_not_do(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", tmp_path / "absent")
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "shop-dev")
+    announcer = secret_announcer({})
+    copies = tuple(
+        Announced(copy_id=copy_id, kind="volume", labels={}, location={"path": "/x"})
+        for copy_id in ("abc", "def")
+    )
+    # A failure part way through carries what was written before it, to be recorded.
+    cluster.write_text(json.dumps({"forbid": {"names": ["datadouble-def"]}}))
+    with pytest.raises(AnnounceError, match="Forbidden") as caught:
+        announcer.announce(copies)
+    assert caught.value.written == ("k8s-secret:shop-dev/datadouble-abc",)
+    # Withdrawing tries every namespace, then names each Secret left behind.
+    cluster.write_text(json.dumps({"forbid": {"namespaces": ["alice"]}}))
+    recorded = ("k8s-secret:alice/datadouble-abc", "k8s-secret:bob/datadouble-def")
+    with pytest.raises(AnnounceError) as failed:
+        announcer.withdraw(("abc", "def", "ghi"), recorded)
+    assert str(failed.value) == (
+        "left behind: k8s-secret:alice/datadouble-abc"
+        " (kubectl delete failed: Error from server (Forbidden): secrets is forbidden)"
+    )
+    deletes = [call for call in calls(cluster) if call["verb"] == "delete"]
+    assert len(deletes) == 3  # alice, bob, and shop-dev for the unrecorded copy
+    # A namespace that cannot be resolved leaves its copies behind, not the others'.
+    cluster.write_text(json.dumps({"fail": {}}))
+    with pytest.raises(AnnounceError) as unknown:
+        secret_announcer({}).withdraw(("abc", "ghi"), recorded)
+    assert str(unknown.value).startswith(
+        "left behind: datadouble-ghi in an unknown namespace (cannot read the namespace of"
+    )
+    assert "k8s-secret:alice/datadouble-abc (kubectl delete failed" in str(unknown.value)
+    monkeypatch.setenv("SHOP_KUBECONFIG", kubeconfig())
+    unresolved = secret_announcer({"kubeconfig": {"env": "SHOP_KUBECONFIG"}, "namespace": "dev"})
+    monkeypatch.delenv("SHOP_KUBECONFIG")
+    with pytest.raises(AnnounceError, match=r"k8s-secret:dev/datadouble-abc .*SHOP_KUBECONFIG"):
+        unresolved.withdraw(("abc",), ())
 
 
 def test_kubectl_must_be_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -411,7 +569,7 @@ def test_against_k3s(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         configured_kubectl(["get", "secret", "datadouble-k3s1", "--output=name"]).strip()
         == "secret/datadouble-k3s1"
     )
-    announcer.withdraw(("k3s1",))
+    announcer.withdraw(("k3s1",), ())
 
 
 CLUSTER_SPEC = """

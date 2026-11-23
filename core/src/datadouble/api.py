@@ -760,7 +760,7 @@ def _copies(request: _Groups, registry: Registry) -> CopiesResponse:
                 expired=request.expired,
             )
             result = release(spec, registry, options)
-            withdrawn = withdraw(spec, registry, tuple(c.id for c in result.removed))
+            withdrawn = withdraw(spec, registry, result.removed)
             return CopiesResponse(command=request.command, result=result, withdrawn=withdrawn)
         case AnnounceRequest():
             everything = copies_of(spec, request.groups, with_secrets=True)

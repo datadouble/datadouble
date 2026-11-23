@@ -24,16 +24,23 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from datadouble.replicate import Copy
-from datadouble.settings import parse_settings
+from datadouble.replicate import Copy, record_announced
+from datadouble.secrets import SecretError
+from datadouble.settings import SettingsError, parse_settings
 from datadouble.spec import Spec
+from datadouble.staging import StagingError
 
 if TYPE_CHECKING:
     from datadouble.registry import Registry
 
 
 class AnnounceError(Exception):
-    """An announcement that could not be written."""
+    """An announcement that could not be written, or withdrawn."""
+
+    def __init__(self, message: str, written: tuple[str, ...] = ()) -> None:
+        """``written`` is what the adapter wrote before it failed, so it is recorded."""
+        super().__init__(message)
+        self.written = written
 
 
 class Announced(BaseModel):
@@ -79,8 +86,14 @@ class Announcer(Protocol):
         """Announce copies; return what was written, for the response."""
         ...
 
-    def withdraw(self, copy_ids: tuple[str, ...], /) -> tuple[str, ...]:
-        """Remove announcements of released copies; return what was removed."""
+    def withdraw(self, copy_ids: tuple[str, ...], announced: tuple[str, ...], /) -> tuple[str, ...]:
+        """Remove announcements of released copies; return what was removed.
+
+        ``announced`` is every target this ``announce`` entry reported for these
+        copies, as the registry recorded it, so an adapter removes what it wrote
+        where it wrote it. An adapter attempts every target, then raises one
+        :class:`AnnounceError` naming each one it left behind.
+        """
         ...
 
 
@@ -144,15 +157,21 @@ class DotenvAnnouncer:
             handle.write("".join(f"{line}\n" for line in lines))
         return (f"dotenv:{path}",)
 
-    def withdraw(self, copy_ids: tuple[str, ...], /) -> tuple[str, ...]:
+    def withdraw(
+        self, copy_ids: tuple[str, ...], _announced: tuple[str, ...], /
+    ) -> tuple[str, ...]:
         """Remove the file if it announced any of the released copies."""
         path = self.settings.path
-        if not path.is_file():
-            return ()
-        text = path.read_text(encoding="utf-8")
-        if not any(f"_COPY_ID={copy_id}\n" in text for copy_id in copy_ids):
-            return ()
-        path.unlink()
+        try:
+            if not path.is_file():
+                return ()
+            text = path.read_text(encoding="utf-8")
+            if not any(f"_COPY_ID={copy_id}\n" in text for copy_id in copy_ids):
+                return ()
+            path.unlink()
+        except OSError as error:
+            message = f"left behind: dotenv:{path} ({error.strerror})"
+            raise AnnounceError(message) from None
         return (f"dotenv:{path}",)
 
 
@@ -228,7 +247,9 @@ class CiOutputsAnnouncer:
             handle.write("".join(f"{line}\n" for line in lines))
         return (f"{system}:{path}",)
 
-    def withdraw(self, _copy_ids: tuple[str, ...], /) -> tuple[str, ...]:
+    def withdraw(
+        self, _copy_ids: tuple[str, ...], _announced: tuple[str, ...], /
+    ) -> tuple[str, ...]:
         """Job outputs end with the job; there is nothing to remove."""
         return ()
 
@@ -245,36 +266,111 @@ def ci_outputs_announcer(settings: Mapping[str, JsonValue]) -> Announcer:
     )
 
 
-def _announcers(spec: Spec, registry: "Registry") -> list[tuple[str, Announcer]]:
-    found: list[tuple[str, Announcer]] = []
+_WITHDRAW_FAILURES = (AnnounceError, SecretError, SettingsError, OSError, ValueError)
+"""What one entry's withdrawal may fail with without stopping the others'."""
+
+
+def _entries(spec: Spec) -> list[tuple[str, str, Mapping[str, JsonValue]]]:
+    """Each ``announce`` entry's key, adapter name and settings.
+
+    The key is the adapter's name, ``name#2`` for the second entry of the same adapter,
+    and so on: positional per adapter, so reordering same-adapter entries changes it.
+    """
+    found: list[tuple[str, str, Mapping[str, JsonValue]]] = []
+    seen: dict[str, int] = {}
     for entry in spec.announce:
         for name, settings in entry.items():
-            factory = registry.announcers.get(name)
-            if factory is None:
-                message = f"no announce adapter named {name!r} is installed"
-                raise AnnounceError(message)
-            found.append((name, factory(settings)))
+            seen[name] = seen.get(name, 0) + 1
+            found.append((name if seen[name] == 1 else f"{name}#{seen[name]}", name, settings))
     return found
+
+
+def _announcer(registry: "Registry", name: str, settings: Mapping[str, JsonValue]) -> Announcer:
+    factory = registry.announcers.get(name)
+    if factory is None:
+        message = f"no announce adapter named {name!r} is installed"
+        raise AnnounceError(message)
+    return factory(settings)
+
+
+def _announcers(spec: Spec, registry: "Registry") -> list[tuple[str, Announcer]]:
+    """Each ``announce`` entry's adapter, by its key."""
+    return [(key, _announcer(registry, name, settings)) for key, name, settings in _entries(spec)]
 
 
 def announce(spec: Spec, registry: "Registry", copies: tuple[Copy, ...]) -> tuple[str, ...]:
     """Announce copies (with their credentials, for the targets allowed them) everywhere."""
-    described = tuple(describe(copy) for copy in copies if copy.state == "ready")
-    if not described:
+    ready = tuple(copy for copy in copies if copy.state == "ready")
+    if not ready:
         return ()
-    return tuple(
-        written
-        for _, announcer in _announcers(spec, registry)
-        for written in announcer.announce(described)
-    )
+    described = tuple(describe(copy) for copy in ready)
+    written: dict[str, tuple[str, ...]] = {}
+    try:
+        for key, announcer in _announcers(spec, registry):
+            try:
+                written[key] = announcer.announce(described)
+            except AnnounceError as error:
+                if error.written:
+                    written[key] = error.written
+                raise
+    except BaseException as error:
+        # What was written before the failure is recorded, so release finds it; a
+        # failure to record is reported with the original error, not instead of it.
+        if written:
+            try:
+                record_announced(spec, ready, written)
+            except (StagingError, OSError, ValueError) as recording:
+                error.add_note(f"recording what was announced failed too: {recording}")
+        raise
+    targets = tuple(target for entry in written.values() for target in entry)
+    if written:
+        try:
+            record_announced(spec, ready, written)
+        except (StagingError, OSError, ValueError) as error:
+            message = (
+                f"announced, but not recorded, so release will not withdraw: {', '.join(targets)}"
+                f" ({error})"
+            )
+            raise AnnounceError(message) from error
+    return targets
 
 
-def withdraw(spec: Spec, registry: "Registry", copy_ids: tuple[str, ...]) -> tuple[str, ...]:
-    """Remove announcements of released copies everywhere."""
-    if not copy_ids:
+def withdraw(spec: Spec, registry: "Registry", copies: tuple[Copy, ...]) -> tuple[str, ...]:
+    """Remove announcements of released copies everywhere, where they were announced."""
+    if not copies:
         return ()
-    return tuple(
-        removed
-        for _, announcer in _announcers(spec, registry)
-        for removed in announcer.withdraw(copy_ids)
+    copy_ids = tuple(copy.id for copy in copies)
+    recorded: dict[str, tuple[str, ...]] = {}
+    for copy in copies:
+        for key, targets in copy.announced.items():
+            recorded[key] = tuple(dict.fromkeys((*recorded.get(key, ()), *targets)))
+    removed: list[str] = []
+    failures: list[str] = []
+    entries = _entries(spec)
+    for key, name, settings in entries:
+        announced = recorded.get(key, ())
+        # Each entry is made and withdrawn on its own: the copies are already gone from
+        # the registry, so one failing entry must not keep the others from running.
+        # An adapter's own AnnounceError from withdraw names what it left behind; any
+        # other failure (making the adapter, an OSError) gets the recorded targets added.
+        try:
+            announcer = _announcer(registry, name, settings)
+        except _WITHDRAW_FAILURES as error:
+            failures.append(f"{key}: {error} (recorded: {', '.join(announced) or 'nothing'})")
+            continue
+        try:
+            removed.extend(announcer.withdraw(copy_ids, announced))
+        except AnnounceError as error:
+            failures.append(f"{key}: {error}")
+        except _WITHDRAW_FAILURES as error:
+            failures.append(f"{key}: {error} (recorded: {', '.join(announced) or 'nothing'})")
+    current = {key for key, _, _ in entries}
+    failures.extend(
+        f"recorded by an announce entry no longer in the spec: {key}: {', '.join(targets)}"
+        for key, targets in recorded.items()
+        if key not in current and targets
     )
+    if failures:
+        message = "announcements left behind; remove them by hand: " + "; ".join(failures)
+        raise AnnounceError(message)
+    return tuple(removed)

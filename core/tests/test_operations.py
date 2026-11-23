@@ -10,11 +10,15 @@ import json
 import os
 import shutil
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
+from datadouble import announce as announce_module
 from datadouble.announce import (
+    Announced,
     AnnounceError,
     CiOutputsAnnouncer,
     CiOutputsSettings,
@@ -729,7 +733,7 @@ def test_ci_output_targets(tmp_path: Path, registry: Registry) -> None:
     (copy,) = replicate(spec, registry, Options()).created
     gitlab = CiOutputsAnnouncer(CiOutputsSettings(path=tmp_path / "out.env"), {"GITLAB_CI": "true"})
     assert gitlab.announce((describe(copy),)) == (f"gitlab:{tmp_path / 'out.env'}",)
-    assert gitlab.withdraw(("x",)) == ()
+    assert gitlab.withdraw(("x",), ()) == ()
     plain = CiOutputsAnnouncer(CiOutputsSettings(path=tmp_path / "out.json"), {})
     plain.announce((describe(copy),))
     data = json.loads((tmp_path / "out.json").read_text())
@@ -738,15 +742,177 @@ def test_ci_output_targets(tmp_path: Path, registry: Registry) -> None:
         CiOutputsAnnouncer(CiOutputsSettings(), {}).announce((describe(copy),))
 
 
-def test_withdrawing_dotenv(tmp_path: Path, registry: Registry) -> None:
+def test_withdrawing_dotenv(
+    tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
 
     spec = staged(tmp_path, registry, "0000000000010001", size=1)
     (copy,) = replicate(spec, registry, Options()).created
+    target = f"dotenv:{tmp_path / 'clone.env'}"
+    assert announce(spec, registry, (copy,)) == (target,)
     announce(spec, registry, (copy,))
-    assert withdraw(spec, registry, ("other",)) == ()
-    assert withdraw(spec, registry, (copy.id,)) == (f"dotenv:{tmp_path / 'clone.env'}",)
-    assert withdraw(spec, registry, (copy.id,)) == ()
+    # The registry records where the copy went, once, for release to withdraw from.
+    (recorded,) = copies_of(spec)
+    assert recorded.announced == {"dotenv": (target,)}
+    other = recorded.model_copy(update={"id": "other"})
+    assert withdraw(spec, registry, (other,)) == ()
+    assert withdraw(spec, registry, (recorded,)) == (target,)
+    assert withdraw(spec, registry, (recorded,)) == ()
     assert withdraw(spec, registry, ()) == ()
+    # A file that cannot be removed is reported as left behind, not raised as an OSError.
+    announce(spec, registry, (copy,))
+
+    def refuse(self: Path, **_options: bool) -> None:
+        raise PermissionError(13, "Permission denied", str(self))
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "unlink", refuse)
+        with pytest.raises(AnnounceError, match=r"left behind: dotenv:.* \(Permission denied\)"):
+            withdraw(spec, registry, (recorded,))
+    unfetched = spec.model_copy(update={"fetch": None})
+    with pytest.raises(AnnounceError, match=r"not recorded, .*needs a `fetch` section"):
+        announce(unfetched, registry, (copy,))
+
+
+class Ledger:
+    """An announce adapter that writes one target per copy, failing where told."""
+
+    def __init__(self, settings: Mapping[str, JsonValue], log: list[tuple[str, ...]]) -> None:
+        self.place = str(settings["place"])
+        self.fail_at = settings.get("fail_at")
+        self.log = log
+        if self.fail_at == "make":
+            message = "LEDGER_TOKEN is not set"
+            raise AnnounceError(message)
+
+    def announce(self, copies: tuple[Announced, ...]) -> tuple[str, ...]:
+        written: list[str] = []
+        for copy in copies:
+            if copy.copy_id == self.fail_at:
+                message = f"{self.place} is full"
+                raise AnnounceError(message, written=tuple(written))
+            written.append(f"ledger:{self.place}/{copy.copy_id}")
+        return tuple(written)
+
+    def withdraw(self, copy_ids: tuple[str, ...], announced: tuple[str, ...], /) -> tuple[str, ...]:
+        self.log.append(announced)
+        if self.fail_at == "os":
+            raise PermissionError(13, "Permission denied")
+        if self.fail_at == "withdraw":
+            message = f"left behind: {', '.join(announced)}"
+            raise AnnounceError(message)
+        return tuple(t for t in announced if t.rsplit("/", 1)[1] in copy_ids)
+
+
+def ledgers(registry: Registry, log: list[tuple[str, ...]]) -> Registry:
+    def ledger(settings: Mapping[str, JsonValue]) -> Ledger:
+        return Ledger(settings, log)
+
+    return dataclasses.replace(registry, announcers={**registry.announcers, "ledger": ledger})
+
+
+def test_withdrawals_are_scoped_to_their_entry_and_complete(
+    tmp_path: Path, registry: Registry
+) -> None:
+    spec = staged(tmp_path, registry, "0000000000010001", size=2)
+    first, second = replicate(spec, registry, Options()).created
+    log: list[tuple[str, ...]] = []
+    wired = ledgers(registry, log)
+    two = make_spec(tmp_path, "announce: [{ledger: {place: a}}, {ledger: {place: b}}]")
+    announce(two, wired, (first, second))
+    recorded = {c.id: c for c in copies_of(spec)}
+    assert recorded[first.id].announced == {
+        "ledger": (f"ledger:a/{first.id}", f"ledger:a/{second.id}"),
+        "ledger#2": (f"ledger:b/{first.id}", f"ledger:b/{second.id}"),
+    }
+    # Each entry sees only what it wrote.
+    assert withdraw(two, wired, (recorded[first.id],)) == (
+        f"ledger:a/{first.id}",
+        f"ledger:b/{first.id}",
+    )
+    assert log == [
+        (f"ledger:a/{first.id}", f"ledger:a/{second.id}"),
+        (f"ledger:b/{first.id}", f"ledger:b/{second.id}"),
+    ]
+    # A failing entry does not stop the others; one error names what each left behind.
+    failing = make_spec(
+        tmp_path,
+        "announce: [{ledger: {place: a, fail_at: withdraw}}, {ledger: {place: b}},"
+        " {ledger: {place: c, fail_at: withdraw}}]",
+    )
+    log.clear()
+    with pytest.raises(AnnounceError) as caught:
+        withdraw(failing, wired, (recorded[second.id],))
+    assert str(caught.value) == (
+        "announcements left behind; remove them by hand:"
+        f" ledger: left behind: ledger:a/{first.id}, ledger:a/{second.id}; ledger#3: left behind: "
+    )
+    assert len(log) == 3
+
+
+def test_partial_announcements_are_recorded(
+    tmp_path: Path, registry: Registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = staged(tmp_path, registry, "0000000000010001", size=2)
+    first, second = replicate(spec, registry, Options()).created
+    wired = ledgers(registry, [])
+    halfway = make_spec(tmp_path, f"announce: [{{ledger: {{place: a, fail_at: {second.id}}}}}]")
+    with pytest.raises(AnnounceError, match="a is full"):
+        announce(halfway, wired, (first, second))
+    recorded = {c.id: c.announced for c in copies_of(spec)}
+    assert recorded[first.id] == {"ledger": (f"ledger:a/{first.id}",)}
+    # A failure to record is reported on the adapter's error, not instead of it.
+
+    def broken(*_args: object) -> None:
+        message = "the staging disk is full"
+        raise StagingError(message)
+
+    monkeypatch.setattr(announce_module, "record_announced", broken)
+    with pytest.raises(AnnounceError, match="a is full") as caught:
+        announce(halfway, wired, (first, second))
+    assert caught.value.__notes__ == [
+        "recording what was announced failed too: the staging disk is full"
+    ]
+    with pytest.raises(
+        AnnounceError,
+        match=rf"announced, but not recorded, .*: ledger:a/{first.id} \(the staging disk is full\)",
+    ):
+        announce(make_spec(tmp_path, "announce: [{ledger: {place: a}}]"), wired, (first,))
+
+
+def test_every_entry_is_withdrawn_whatever_fails(tmp_path: Path, registry: Registry) -> None:
+    spec = staged(tmp_path, registry, "0000000000010001", size=1)
+    (copy,) = replicate(spec, registry, Options()).created
+    log: list[tuple[str, ...]] = []
+    wired = ledgers(registry, log)
+    gone = copy.model_copy(
+        update={
+            "announced": {
+                "ledger": ("ledger:a/x",),
+                "ledger#3": ("ledger:c/x",),
+                "ledger#9": ("ledger:old/x",),
+                "carrier-pigeon": (),
+            }
+        }
+    )
+    # An entry that cannot be made, one whose withdrawal raises an OSError, and one
+    # adapter no longer installed: the remaining entry still runs.
+    edited = make_spec(
+        tmp_path,
+        "announce: [{ledger: {place: a, fail_at: make}}, {ledger: {place: b}},"
+        " {ledger: {place: c, fail_at: os}}, {carrier-pigeon: {}}]",
+    )
+    with pytest.raises(AnnounceError) as caught:
+        withdraw(edited, wired, (gone,))
+    assert str(caught.value) == (
+        "announcements left behind; remove them by hand:"
+        " ledger: LEDGER_TOKEN is not set (recorded: ledger:a/x);"
+        " ledger#3: [Errno 13] Permission denied (recorded: ledger:c/x);"
+        " carrier-pigeon: no announce adapter named 'carrier-pigeon' is installed"
+        " (recorded: nothing);"
+        " recorded by an announce entry no longer in the spec: ledger#9: ledger:old/x"
+    )
+    assert log == [(), ("ledger:c/x",)]
 
 
 # prune
@@ -934,6 +1100,16 @@ def test_announce_errors(tmp_path: Path, registry: Registry) -> None:
     unknown = make_spec(tmp_path, "announce: [{carrier-pigeon: {}}]")
     with pytest.raises(AnnounceError, match="no announce adapter named 'carrier-pigeon'"):
         announce(unknown, registry, (copy,))
+    assert copies_of(spec)[0].announced == {}
+    # What an earlier adapter wrote is recorded even when a later one fails.
+    env = tmp_path / "first.env"
+    half = make_spec(
+        tmp_path, f"announce: [{{dotenv: {{path: {env}}}}}, {{ci-outputs: {{system: gitlab}}}}]"
+    )
+    with pytest.raises(AnnounceError, match="needs a `path`"):
+        announce(half, registry, (copy,))
+    assert copies_of(spec)[0].announced == {"dotenv": (f"dotenv:{env}",)}
+    assert announce(make_spec(tmp_path, "announce: []"), registry, (copy,)) == ()
     explicit = CiOutputsAnnouncer(
         CiOutputsSettings(system=CiSystem.FILE, path=tmp_path / "o.json"), {"GITHUB_OUTPUT": "x"}
     )
