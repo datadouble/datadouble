@@ -1,0 +1,28 @@
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_c2e34337dd61f6 580
+CHANGELOG.md
+  s_ad63f2bf16b775::t_7de412a36ba147 49-58,60-71,127-140,210-218,402-404
+docs/external-services.md
+  s_ad63f2bf16b775::t_74a2907ed3425b 128-129
+  s_ad63f2bf16b775::t_edf47ddf9d07a0 119-120,123,127,130
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_434935f51b003c 286
+docs/decisions.md
+  s_ad63f2bf16b775::t_ea8da0289d03e5 129,137-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4774bd7034fd41f425bd10a198531b316a4780cf",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
