@@ -1,0 +1,21 @@
+adapters/mysql/tests/test_mysql.py
+  s_ad63f2bf16b775::t_e38a31792a3840 575-583
+adapters/mysql/tests/test_mysql_conformance.py
+  s_ad63f2bf16b775::t_8bf29634fa4c69 149-150,159-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "35908568ec1a7e94203077908c8d6b57b112a646",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
