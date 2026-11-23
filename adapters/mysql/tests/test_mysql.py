@@ -772,7 +772,9 @@ SLICE_CHECKS = {
 
 
 @pytest.mark.parametrize(
-    ("rows", "customers"), [("", 2), (", rows: {customers: all}", 3)], ids=["referenced", "all"]
+    ("rows", "customers"),
+    [("", 2), ("\n    rows:\n      customers: all", 3)],
+    ids=["referenced", "all"],
 )
 def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
     prefix = f"dd_slice_{uuid.uuid4().hex[:8]}"
