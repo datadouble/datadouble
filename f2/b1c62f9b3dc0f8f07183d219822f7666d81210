@@ -1,0 +1,39 @@
+CHANGELOG.md
+  s_ad63f2bf16b775::t_b46b0b36c734e6 433-443
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_f2f2040722b5e8 23,40,60-69
+adapters/kubernetes/src/datadouble_kubernetes/__init__.py
+  s_ad63f2bf16b775::t_a77de1a424b5ea 14-16,215-234,422-423,430,433-443,458,467,481,487
+adapters/kubernetes/src/datadouble_kubernetes/runtime.py
+  s_ad63f2bf16b775::t_0783d361f86698 59,141-144
+adapters/kubernetes/tests/test_kubernetes.py
+  s_ad63f2bf16b775::t_11a90b16c6ee78 17,67-69,272-279,284,356-359,362-410
+adapters/kubernetes/tests/test_kubernetes_runtime.py
+  s_ad63f2bf16b775::t_05a6d93b9d353d 21,215
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_1f193a5ba72d93 866-867,882-884
+docs/decisions.md
+  s_ad63f2bf16b775::t_48f7d5a86e964b 139
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_5755c669464e34 30,37
+skills/datadouble-provision/SKILL.md
+  s_ad63f2bf16b775::t_bf5fc679614550 27-32
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_9265860869da2b 24-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f2b1c62f9b3dc0f8f07183d219822f7666d81210",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
