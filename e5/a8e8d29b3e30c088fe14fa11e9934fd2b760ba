@@ -1,0 +1,59 @@
+docs/decisions.md
+  s_ad63f2bf16b775::t_948f74ef581845 140
+adapters/postgres/tests/test_render.py
+  s_ad63f2bf16b775::t_5e18c1825c1163 274-291
+  s_ad63f2bf16b775::t_9a385e3fecf17d 209-259
+adapters/mysql/tests/test_mysql_units.py
+  s_ad63f2bf16b775::t_986def0324bed3 144,147-157
+  s_ad63f2bf16b775::t_01e24f3bd7675a 100,110-143,145-146
+adapters/postgres/src/datadouble_postgres/errors.py
+  s_ad63f2bf16b775::t_d8315fddf523e0 16,20-61,63-64,87-92,94
+  s_ad63f2bf16b775::t_82c94d64d36929 8-9,15
+core/src/datadouble/runtime.py
+  s_ad63f2bf16b775::t_38da869452a036 44,122-139
+core/tests/test_runtime.py
+  s_ad63f2bf16b775::t_1e86df79e5304c 10-17,30-33
+adapters/mssql/tests/test_mssql_units.py
+  s_ad63f2bf16b775::t_1c59b21b7debc2 192-201
+  s_ad63f2bf16b775::t_a953b185d6d9db 139,148,153-191
+docs/architecture.md
+  s_ad63f2bf16b775::t_77c83a7af61cb5 466-481
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_0dd8a50d50d2fe 79-86
+  s_ad63f2bf16b775::t_20734d7b06777a 87-88
+adapters/mysql/src/datadouble_mysql/errors.py
+  s_ad63f2bf16b775::t_5527090273a4fb 16,20-45,47-48,60-65,67
+  s_ad63f2bf16b775::t_c576dc1682de0d 8-9,15
+CHANGELOG.md
+  s_ad63f2bf16b775::t_36597f88b36b5a 492-504
+adapters/mssql/src/datadouble_mssql/errors.py
+  s_ad63f2bf16b775::t_a9c833484e0343 17,21-40,42-43,58-68
+  s_ad63f2bf16b775::t_a98b48c2ace1cd 8-10,16
+core/src/datadouble/redaction.py
+  s_ad63f2bf16b775::t_1923c5fdf7f2f8 1-78
+  s_ad63f2bf16b775::t_54181d9bb61dfe 79-83
+adapters/oracle/src/datadouble_oracle/errors.py
+  s_ad63f2bf16b775::t_701f3530f83754 6-12,18,23-38,43,49
+adapters/oracle/tests/test_oracle_units.py
+  s_ad63f2bf16b775::t_77f5a556d5c865 132-150
+adapters/postgres/tests/test_postgres.py
+  s_ad63f2bf16b775::t_f2e86b329f51fa 231
+core/tests/test_redaction.py
+  s_ad63f2bf16b775::t_746f10019f3dee 1-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "e5a8e8d29b3e30c088fe14fa11e9934fd2b760ba",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
