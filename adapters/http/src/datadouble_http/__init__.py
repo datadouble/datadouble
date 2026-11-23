@@ -10,8 +10,13 @@ Spec settings::
         http:
           url: https://files.example.com/datadouble/
           auth:                                       # optional
-            basic: {username: {env: EXPORT_USER}, password: {env: EXPORT_PASSWORD}}
-            # or bearer: {env: EXPORT_TOKEN}
+            basic:
+              username:
+                env: EXPORT_USER
+              password:
+                env: EXPORT_PASSWORD
+            # or bearer:
+            #   env: EXPORT_TOKEN
           ca_bundle: /etc/ssl/internal-ca.pem          # optional
           timeout_seconds: 60                          # optional
 

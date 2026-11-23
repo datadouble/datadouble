@@ -11,7 +11,8 @@ source is OpenSearch 2.4 or later, the first version with points in time.
 source:
   engine: opensearch
   connection:
-    url: {env: SEARCH_URL}       # http[s]://[user:password@]host[:port], by reference
+    url:                         # http[s]://[user:password@]host[:port], by reference
+      env: SEARCH_URL
     indices: ["*", "-logs-*"]    # index patterns; the default is every open index
 ```
 

@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: mysql
       connection:
-        url: {env: SHOP_MYSQL_URL}   # mysql://user:password@host:3306/database, by reference
+        url:                         # mysql://user:password@host:3306/database, by reference
+          env: SHOP_MYSQL_URL
 
 The catalog is the URL's database. Working databases, restores and
 ``mysqldump`` run in the official MySQL image of exactly the source's version

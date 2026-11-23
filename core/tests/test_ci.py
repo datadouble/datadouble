@@ -223,9 +223,9 @@ def test_sides(kinds: tuple[JobKind, ...], side: Side | None, problem: str) -> N
 def test_the_lock_job(tmp_path: Path) -> None:
     spec = parse_spec(
         SPEC.replace("STORE", str(tmp_path / "store")).replace(
-            "connection: {where: here}", "connection: {dsn: {env: SHOP_SOURCE_DSN}}"
+            "    where: here\n", "    dsn:\n      env: SHOP_SOURCE_DSN\n"
         )
-        + "secrets: {anonymization_key: {env: SHOP_KEY}}\n"
+        + "secrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
     planned = pipeline(spec, options(JobKind.BUILD, JobKind.LOCK))
     assert planned.side is Side.PRODUCTION
@@ -295,13 +295,19 @@ source:
   engine: fake
   connection:
     host: /var/run/postgresql
-    password: {env: PGPASSWORD}
+    password:
+      env: PGPASSWORD
     url: "s3://x/y"
     note: "/* not a path */"
-store: [{filesystem: {path: /srv/store/}}]
+store:
+  - filesystem:
+      path: /srv/store/
 files:
-  connection: {root: /srv/store/uploads, accept_inconsistent: true}
-  select: {avatars: -mtime -30}
+  connection:
+    root: /srv/store/uploads
+    accept_inconsistent: true
+  select:
+    avatars: -mtime -30
 """
     )
     assert host_paths(spec, JobKind.BUILD, Side.PRODUCTION, [Path("/srv/work")]) == (
@@ -317,13 +323,21 @@ def test_build_jobs_get_account_passwords() -> None:
     spec = parse_spec(
         """
 name: shop
-source: {engine: fake}
+source:
+  engine: fake
 package:
   accounts:
-    - {user: app, password: {env: APP_PASSWORD}}
-    - {user: reports, password: {file: /run/secrets/reports}, privileges: read}
-    - {user: plain, password: written-in-the-spec}
-    - {user: /srv/pathlike, password: /Tr0ub4dor}
+    - user: app
+      password:
+        env: APP_PASSWORD
+    - user: reports
+      password:
+        file: /run/secrets/reports
+      privileges: read
+    - user: plain
+      password: written-in-the-spec
+    - user: /srv/pathlike
+      password: /Tr0ub4dor
 """
     )
     assert secret_names(spec, JobKind.BUILD, Side.PRODUCTION) == ("APP_PASSWORD",)
@@ -516,7 +530,7 @@ def test_jobs_must_be_known() -> None:
 def spec_with_secret(tmp_path: Path) -> Path:
     path = tmp_path / "shop.yml"
     text = SPEC.replace("STORE", str(tmp_path / "store")).replace(
-        "name: shop\n", "name: shop\nsecrets: {anonymization_key: {env: SHOP_KEY}}\n"
+        "name: shop\n", "name: shop\nsecrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
     path.write_text(text, encoding="utf-8")
     return path

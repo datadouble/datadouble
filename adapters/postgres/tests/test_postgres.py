@@ -73,24 +73,38 @@ INSERT INTO public.r VALUES (1, 5);
 
 SPEC = """
 name: scratch
-source: {engine: postgres, connection: CONNECTION}
+source:
+  engine: postgres
+  connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
-  seeds: {child: "id <= 2", r: "id = 1"}
+  seeds:
+    child: "id <= 2"
+    r: "id = 1"
   edges:
-    child.parent_id -> parent: {on_missing: stub}
-    child.other_id -> parent: {on_missing: null}
+    child.parent_id -> parent:
+      on_missing: stub
+    child.other_id -> parent:
+      on_missing: null
   virtual_fks:
-    child.other_id -> parent: {when: "kind = 'x'"}
+    child.other_id -> parent:
+      when: "kind = 'x'"
 hooks:
-  before_load: [{sql: "SELECT 1"}]
-  after_transform: [{sql: "UPDATE public.child SET label = 'done'"}]
+  before_load:
+    - sql: "SELECT 1"
+  after_transform:
+    - sql: "UPDATE public.child SET label = 'done'"
 anonymize:
-  parent: {name: {faker: first_name}}
-  child: {kind: {expression: "upper(kind)"}}
+  parent:
+    name:
+      faker: first_name
+  child:
+    kind:
+      expression: "upper(kind)"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 
@@ -182,8 +196,8 @@ def test_images_go_to_s3(source: PostgresScratch, tmp_path: Path) -> None:
     assert isinstance(store, S3Store)
     store.client.create_bucket(Bucket=bucket)
     spec = SPEC.replace(
-        "  - filesystem: {path: STORE}",
-        f"  - s3: {{bucket: {bucket}, prefix: golden, endpoint_url: '{endpoint}'}}",
+        "  - filesystem:\n      path: STORE",
+        f"  - s3:\n      bucket: {bucket}\n      prefix: golden\n      endpoint_url: '{endpoint}'",
     )
     result = build(source, tmp_path, spec=spec)
     assert not result.failed()
@@ -233,10 +247,10 @@ def test_excluded_parents_are_nulled(source: PostgresScratch, tmp_path: Path) ->
     spec = (
         SPEC.replace('exclude: ["items"]', 'exclude: ["items", "parent"]')
         .replace(
-            "child.parent_id -> parent: {on_missing: stub}",
-            "child.parent_id -> parent: {on_missing: null}",
+            "child.parent_id -> parent:\n      on_missing: stub",
+            "child.parent_id -> parent:\n      on_missing: null",
         )
-        .replace("  parent: {name: {faker: first_name}}\n", "")
+        .replace("  parent:\n    name:\n      faker: first_name\n", "")
     )
     result = build(source, tmp_path, spec=spec)
     assert not result.failed(), result.verification

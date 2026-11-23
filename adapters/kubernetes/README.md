@@ -16,11 +16,15 @@ replicate:
   using:
     k8s-pv:
       path: /srv/clones              # where copies are written
-      local: {node: worker-1}        # a local volume on that node, or
-      # nfs: {server: nfs.internal, path: /exports/clones}
+      local:                         # a local volume on that node, or
+        node: worker-1
+      # nfs:
+      #   server: nfs.internal
+      #   path: /exports/clones
       storage_class: datadouble
 announce:
-  - k8s-secret: {namespace: dev}
+  - k8s-secret:
+      namespace: dev
 ```
 
 Each volume carries `datadouble.dev/` labels: `spec`, `group`, `engine`,
@@ -73,16 +77,22 @@ runtime:
   kubernetes:
     claim: datadouble-work
     mount: /work
-    kubeconfig: {env: BUILD_KUBECONFIG}
+    kubeconfig:
+      env: BUILD_KUBECONFIG
     context: build
 replicate:
   using:
     k8s-pv:
       path: /srv/clones
-      local: {node: worker-1}
-      kubeconfig: {env: DEV_KUBECONFIG}
+      local:
+        node: worker-1
+      kubeconfig:
+        env: DEV_KUBECONFIG
 announce:
-  - k8s-secret: {namespace: dev, kubeconfig: {env: DEV_KUBECONFIG}}
+  - k8s-secret:
+      namespace: dev
+      kubeconfig:
+        env: DEV_KUBECONFIG
 ```
 
 - **A secret reference to the content, not the runner's kubeconfig file.**

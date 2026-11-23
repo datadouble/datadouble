@@ -416,22 +416,45 @@ def test_against_k3s(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 CLUSTER_SPEC = """
 name: shop
-source: {engine: postgres, connection: {dsn: {env: SHOP_SOURCE_DSN}}}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
-fetch: {from: {filesystem: {path: /srv/datadouble/export}}, staging: /srv/datadouble/staging}
+source:
+  engine: postgres
+  connection:
+    dsn:
+      env: SHOP_SOURCE_DSN
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+promote:
+  to:
+    - filesystem:
+        path: /srv/datadouble/export
+fetch:
+  from:
+    filesystem:
+      path: /srv/datadouble/export
+  staging: /srv/datadouble/staging
 runtime:
-  kubernetes: {claim: work, mount: /srv/datadouble, kubeconfig: {env: BUILD_KUBECONFIG}}
+  kubernetes:
+    claim: work
+    mount: /srv/datadouble
+    kubeconfig:
+      env: BUILD_KUBECONFIG
 replicate:
   using:
     k8s-pv:
       path: /srv/datadouble/copies
-      local: {node: worker-1}
-      kubeconfig: {env: COPIES_KUBECONFIG}
+      local:
+        node: worker-1
+      kubeconfig:
+        env: COPIES_KUBECONFIG
       context: dev
   mode: pool
   size: 1
-announce: [{k8s-secret: {namespace: dev, kubeconfig: {file: /run/secrets/kubeconfig}}}]
+announce:
+  - k8s-secret:
+      namespace: dev
+      kubeconfig:
+        file: /run/secrets/kubeconfig
 """
 
 

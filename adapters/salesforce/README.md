@@ -11,8 +11,10 @@ each object's records as JSON lines with a description of its fields.
 source:
   engine: salesforce
   connection:
-    instance_url: {env: SHOP_SF_INSTANCE_URL}   # by reference, like the token
-    access_token: {env: SHOP_SF_ACCESS_TOKEN}
+    instance_url:                               # by reference, like the token
+      env: SHOP_SF_INSTANCE_URL
+    access_token:
+      env: SHOP_SF_ACCESS_TOKEN
     api_version: "62.0"                         # the default
     objects: [Account, Contact, Opportunity, "Acme__*"]   # optional
     hidden: [Contact.Pronouns]                  # optional: fields copies may go without
@@ -24,8 +26,11 @@ subset:
       - Account -> Contact
 anonymize:
   Contact:
-    Email: {faker: email, unique: true}
-    LastName: {faker: last_name}
+    Email:
+      faker: email
+      unique: true
+    LastName:
+      faker: last_name
 ```
 
 The token is an OAuth access token for a user who can read the objects and
@@ -107,7 +112,8 @@ whole adapter runs without an org:
 ```yaml
 source:
   engine: salesforce
-  connection: {fake: /path/to/org.sqlite}
+  connection:
+    fake: /path/to/org.sqlite
 ```
 
 `FakeOrg` builds the file (objects, fields, records and packages) and

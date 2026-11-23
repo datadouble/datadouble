@@ -150,8 +150,11 @@ them (rule 2).
 notify:
   when: [failure, warning]          # default: [failure]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com]}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com]
 ```
 
 - **A webhook's URL is a secret reference** (rule 6): it usually carries a

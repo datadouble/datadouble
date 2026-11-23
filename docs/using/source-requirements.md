@@ -68,7 +68,9 @@ Pick one of these, in this order:
 ```yaml
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_DSN}}
+  connection:
+    dsn:
+      env: SHOP_DSN
   image: postgis/postgis:18-3.6
   server:
     shared_preload_libraries: [pg_stat_statements]

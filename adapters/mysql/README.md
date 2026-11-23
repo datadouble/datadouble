@@ -13,7 +13,8 @@ image of exactly the source's version, through the spec's container runtime.
 source:
   engine: mysql
   connection:
-    url: {env: SHOP_MYSQL_URL}   # mysql://user:password@host:3306/database, by reference
+    url:                         # mysql://user:password@host:3306/database, by reference
+      env: SHOP_MYSQL_URL
 ```
 
 ## Accounts
@@ -25,8 +26,12 @@ connections. `package.accounts` adds some:
 ```yaml
 package:
   accounts:
-    - {user: app, password: app-password}          # privileges: all
-    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+    - user: app                                    # privileges: all
+      password: app-password
+    - user: reporting
+      password:
+        env: REPORTING_PW
+      privileges: read
 ```
 
 Each becomes `'user'@'%'`. `all` grants `ALL ON *.*` with the grant option.

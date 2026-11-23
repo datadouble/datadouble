@@ -13,8 +13,13 @@ fetch:
     http:
       url: https://files.example.com/datadouble/
       auth:                                     # optional
-        basic: {username: {env: EXPORT_USER}, password: {env: EXPORT_PASSWORD}}
-        # or bearer: {env: EXPORT_TOKEN}
+        basic:
+          username:
+            env: EXPORT_USER
+          password:
+            env: EXPORT_PASSWORD
+        # or bearer:
+        #   env: EXPORT_TOKEN
       ca_bundle: /etc/ssl/internal-ca.pem       # optional
       timeout_seconds: 60                       # optional, per request
 ```
@@ -36,10 +41,15 @@ directory the web server serves:
 ```yaml
 promote:
   to:
-    - filesystem: {path: /srv/exports/datadouble}   # served as https://files.example.com/datadouble/
+    - filesystem:                                   # served as https://files.example.com/datadouble/
+        path: /srv/exports/datadouble
 fetch:
   from:
-    http: {url: https://files.example.com/datadouble/, auth: {bearer: {env: EXPORT_TOKEN}}}
+    http:
+      url: https://files.example.com/datadouble/
+      auth:
+        bearer:
+          env: EXPORT_TOKEN
 ```
 
 The web server must be able to read the files `promote` writes. The

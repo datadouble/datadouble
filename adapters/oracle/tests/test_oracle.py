@@ -81,25 +81,40 @@ SCHEMA = [
 
 SPEC = """
 name: scratch
-source: {engine: oracle, connection: CONNECTION}
+source:
+  engine: oracle
+  connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
-  seeds: {child: "id <= 2", files: "id > 0"}
+  seeds:
+    child: "id <= 2"
+    files: "id > 0"
   edges:
-    child.parent_id -> parent: {on_missing: stub}
-    child.other_id -> parent: {on_missing: null}
-    files.owner -> child: {on_missing: null}
+    child.parent_id -> parent:
+      on_missing: stub
+    child.other_id -> parent:
+      on_missing: null
+    files.owner -> child:
+      on_missing: null
   virtual_fks:
-    child.other_id -> parent: {when: "kind = 'x'"}
+    child.other_id -> parent:
+      when: "kind = 'x'"
 hooks:
-  before_load: [{sql: "SELECT 1 FROM dual"}]
-  after_transform: [{sql: "UPDATE child SET label = 'done-' || id"}]
+  before_load:
+    - sql: "SELECT 1 FROM dual"
+  after_transform:
+    - sql: "UPDATE child SET label = 'done-' || id"
 anonymize:
-  parent: {name: {faker: first_name}}
-  child: {kind: {expression: "UPPER(kind)"}}
+  parent:
+    name:
+      faker: first_name
+  child:
+    kind:
+      expression: "UPPER(kind)"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 
@@ -282,10 +297,10 @@ def test_excluded_parents_are_nulled(source: OracleScratch, tmp_path: Path) -> N
     spec = (
         SPEC.replace('exclude: ["items"]', 'exclude: ["items", "parent"]')
         .replace(
-            "child.parent_id -> parent: {on_missing: stub}",
-            "child.parent_id -> parent: {on_missing: null}",
+            "child.parent_id -> parent:\n      on_missing: stub",
+            "child.parent_id -> parent:\n      on_missing: null",
         )
-        .replace("  parent: {name: {faker: first_name}}\n", "")
+        .replace("  parent:\n    name:\n      faker: first_name\n", "")
     )
     result = build(source, tmp_path, spec=spec)
     assert not result.failed(), result.verification
@@ -426,11 +441,15 @@ def test_instances_take_only_their_password(tmp_path: Path) -> None:
 
 TEXT_SPEC = """
 name: scratch
-source: {engine: oracle, connection: CONNECTION, omit: OMIT}
+source:
+  engine: oracle
+  connection: CONNECTION
+  omit: OMIT
 exclude: ["items", "parent", "child", "files", "child_log"]
 subset:
   unselected: none
-  seeds: {notes: "id > 0"}
+  seeds:
+    notes: "id > 0"
 """
 
 

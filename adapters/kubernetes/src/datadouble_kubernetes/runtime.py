@@ -13,7 +13,8 @@ Spec settings::
         node: worker-3                # optional: run pods on this node (ReadWriteOnce claims)
         access: pod-ip                # or port-forward, when Datadouble runs outside the cluster
         image_pull_secrets: [registry]
-        kubeconfig: {env: SHOP_KUBECONFIG}   # optional: another cluster's kubeconfig
+        kubeconfig:                          # optional: another cluster's kubeconfig
+          env: SHOP_KUBECONFIG
         context: build                       # optional: the kubeconfig's context to use
 
 Datadouble runs with the work directory on ``claim``, mounted at ``mount``;

@@ -62,29 +62,42 @@ VERSION = "9.5.5"
 INDICES = ("parent", "child", "gone", "other")
 SPEC = """
 name: scratch
-source: {engine: elasticsearch, connection: CONNECTION}
+source:
+  engine: elasticsearch
+  connection: CONNECTION
 exclude: ["gone"]
 subset:
   unselected: none
-  seeds: {child: '{"range": {"n": {"lte": 2}}}', other: '{"ids": {"values": ["1"]}}'}
+  seeds:
+    child: '{"range": {"n": {"lte": 2}}}'
+    other: '{"ids": {"values": ["1"]}}'
   edges:
-    child.parent_id -> parent: {on_missing: stub}
-    child.lost_id -> gone: {on_missing: null}
+    child.parent_id -> parent:
+      on_missing: stub
+    child.lost_id -> gone:
+      on_missing: null
   virtual_fks:
     child.parent_id -> parent: {}
     child.lost_id -> gone: {}
-    other.code -> parent: {when: '{"term": {"kind": "x"}}'}
+    other.code -> parent:
+      when: '{"term": {"kind": "x"}}'
 anonymize:
-  parent: {code: {hash: {}}}
+  parent:
+    code:
+      hash: {}
   child:
-    label: {expression: "ctx._source.label = 'hidden'", where: '{"term": {"n": 1}}'}
-    missing: {null: {}}
+    label:
+      expression: "ctx._source.label = 'hidden'"
+      where: '{"term": {"n": 1}}'
+    missing:
+      null: {}
 verify:
   assertions:
     - name: no children over 2
       sql: '{"index": "child", "query": {"range": {"n": {"gt": 2}}}}'
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

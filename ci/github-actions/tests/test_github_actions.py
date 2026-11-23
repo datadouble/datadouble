@@ -30,23 +30,48 @@ SPEC = """
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_SOURCE_DSN}}
-secrets: {anonymization_key: {env: SHOP_ANONYMIZATION_KEY}}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-signing: {cosign: {keyless: true}}
-trust: {cosign: {identity: "https://github.com/example/shop/.github/workflows/x.yml@refs/heads/main",
-                 issuer: "https://token.actions.githubusercontent.com"}}
-promote: {to: [{s3: {bucket: shop-export, prefix: images}}]}
+  connection:
+    dsn:
+      env: SHOP_SOURCE_DSN
+secrets:
+  anonymization_key:
+    env: SHOP_ANONYMIZATION_KEY
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+signing:
+  cosign:
+    keyless: true
+trust:
+  cosign:
+    identity: "https://github.com/example/shop/.github/workflows/x.yml@refs/heads/main"
+    issuer: "https://token.actions.githubusercontent.com"
+promote:
+  to:
+    - s3:
+        bucket: shop-export
+        prefix: images
 fetch:
-  from: {s3: {bucket: shop-export, prefix: images}}
+  from:
+    s3:
+      bucket: shop-export
+      prefix: images
   staging: /srv/datadouble/staging
 notify:
   when: [failure, warning]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com, oncall@example.com]}
-replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
-announce: [{ci-outputs: {}}]
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com, oncall@example.com]
+replicate:
+  using:
+    docker-volume: {}
+  mode: MODE
+  size: 1
+announce:
+  - ci-outputs: {}
 """
 
 ACTION = Path(__file__).resolve().parents[1]

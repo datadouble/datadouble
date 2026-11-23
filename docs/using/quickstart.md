@@ -35,16 +35,27 @@ orders, replaces names and emails, and stores the image in `/var/tmp/shop`:
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_DSN}}
-runtime: {docker: {network: shop}}
+  connection:
+    dsn:
+      env: SHOP_DSN
+runtime:
+  docker:
+    network: shop
 subset:
-  seeds: {customer: "id <= 5"}
-  follow: {down: [customer -> orders]}
+  seeds:
+    customer: "id <= 5"
+  follow:
+    down: [customer -> orders]
 anonymize:
   customer:
-    name: {faker: name}
-    email: {faker: email, unique: true}
-store: [{filesystem: {path: /var/tmp/shop/store}}]
+    name:
+      faker: name
+    email:
+      faker: email
+      unique: true
+store:
+  - filesystem:
+      path: /var/tmp/shop/store
 ```
 
 The connection names an environment variable, never a password itself.

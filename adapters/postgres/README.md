@@ -19,8 +19,12 @@ connections. `package.accounts` adds some:
 ```yaml
 package:
   accounts:
-    - {user: app, password: app-password}          # privileges: all
-    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+    - user: app                                    # privileges: all
+      password: app-password
+    - user: reporting
+      password:
+        env: REPORTING_PW
+      privileges: read
 ```
 
 Each becomes a role that logs in. `all` is a superuser. `read` is a plain
@@ -83,7 +87,9 @@ requirement at the version the source runs (`pg_extension.extversion`).
 ```yaml
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_DSN}}
+  connection:
+    dsn:
+      env: SHOP_DSN
   image: postgis/postgis:18-3.6          # the source uses PostGIS
   server:
     shared_preload_libraries: [pg_stat_statements]

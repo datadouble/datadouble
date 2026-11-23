@@ -419,8 +419,11 @@ or ends with a warning (decision 125):
 notify:
   when: [failure, warning]          # default: [failure]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com]}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com]
 ```
 
 It lives in the spec, not in `ci init`'s options. `ci init` runs again

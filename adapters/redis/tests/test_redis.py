@@ -46,7 +46,9 @@ VERSION = "8.10.3"
 
 SPEC = """
 name: scratch
-source: {engine: redis, connection: CONNECTION}
+source:
+  engine: redis
+  connection: CONNECTION
 exclude: ["gone:{}"]
 subset:
   unselected: none
@@ -64,36 +66,65 @@ subset:
     "scores:{}": "*"
     log: "*"
   edges:
-    "child:{}.parent_id -> parent:{}": {on_missing: stub}
-    "child:{}.lost_id -> gone:{}": {on_missing: null}
-    "tags:{}.members -> parent:{}": {on_missing: null}
-    "queue:{}.members -> parent:{}": {on_missing: null}
-    "rank:{}.members -> parent:{}": {on_missing: null}
-    "ref:{}.value -> parent:{}": {on_missing: null}
+    "child:{}.parent_id -> parent:{}":
+      on_missing: stub
+    "child:{}.lost_id -> gone:{}":
+      on_missing: null
+    "tags:{}.members -> parent:{}":
+      on_missing: null
+    "queue:{}.members -> parent:{}":
+      on_missing: null
+    "rank:{}.members -> parent:{}":
+      on_missing: null
+    "ref:{}.value -> parent:{}":
+      on_missing: null
   virtual_fks:
     "child:{}.parent_id -> parent:{}": {}
     "child:{}.lost_id -> gone:{}": {}
     "tags:{}.members -> parent:{}": {}
     "queue:{}.members -> parent:{}": {}
     "rank:{}.members -> parent:{}": {}
-    "ref:{}.value -> parent:{}": {when: "1"}
-    "other:{}.code -> parent:{}": {when: "1"}
+    "ref:{}.value -> parent:{}":
+      when: "1"
+    "other:{}.code -> parent:{}":
+      when: "1"
 anonymize:
-  "parent:{}": {code: {hash: {}}}
+  "parent:{}":
+    code:
+      hash: {}
   "child:{}":
-    label: {expression: "redis.call('HSET', KEYS[1], ARGV[1], 'hidden')", where: "1"}
-    missing: {null: {}}
-  "note:{}": {value: {hash: {length: 8}}}
-  "words:{}": {members: {hash: {length: 8}}}
-  "names:{}": {members: {hash: {length: 8}}}
-  "scores:{}": {members: {hash: {length: 8}}}
-  log: {ip: {hash: {length: 8}}}
+    label:
+      expression: "redis.call('HSET', KEYS[1], ARGV[1], 'hidden')"
+      where: "1"
+    missing:
+      null: {}
+  "note:{}":
+    value:
+      hash:
+        length: 8
+  "words:{}":
+    members:
+      hash:
+        length: 8
+  "names:{}":
+    members:
+      hash:
+        length: 8
+  "scores:{}":
+    members:
+      hash:
+        length: 8
+  log:
+    ip:
+      hash:
+        length: 8
 verify:
   assertions:
     - name: no more than two children
       sql: "local n = #redis.call('KEYS', 'child:*'); if n > 2 then return n end; return 0"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 
@@ -382,10 +413,13 @@ def test_large_keyspaces_scan_in_rounds(source: RedisScratch) -> None:
 
 MODULE_SPEC = """
 name: scratch
-source: {engine: redis, connection: CONNECTION}
+source:
+  engine: redis
+  connection: CONNECTION
 subset:
   unselected: none
-  seeds: {"json:{}": "*"}
+  seeds:
+    "json:{}": "*"
 """
 
 

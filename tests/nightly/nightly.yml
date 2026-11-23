@@ -8,30 +8,50 @@
 name: nightly
 source:
   engine: postgres
-  connection: {dsn: {env: DATADOUBLE_NIGHTLY_DSN}}
-runtime: {docker: {network: datadouble-nightly}}
+  connection:
+    dsn:
+      env: DATADOUBLE_NIGHTLY_DSN
+runtime:
+  docker:
+    network: datadouble-nightly
 subset:
-  seeds: {customer: "id <= 5"}
-  follow: {down: [customer -> orders]}
+  seeds:
+    customer: "id <= 5"
+  follow:
+    down: [customer -> orders]
 anonymize:
   customer:
-    name: {faker: name}
-    email: {faker: email, unique: true}
+    name:
+      faker: name
+    email:
+      faker: email
+      unique: true
 verify:
   assertions:
     - name: no big customer numbers
       sql: "SELECT 1 FROM customer WHERE id > 1000"
-store: [{filesystem: {path: /var/tmp/datadouble-nightly/store}}]
-signing: {cosign: {keyless: true}}
+store:
+  - filesystem:
+      path: /var/tmp/datadouble-nightly/store
+signing:
+  cosign:
+    keyless: true
 trust:
   cosign:
     identity: https://github.com/datadouble/datadouble/.github/workflows/datadouble-nightly-build.yml@refs/heads/main
     issuer: https://token.actions.githubusercontent.com
-promote: {to: [{filesystem: {path: /var/tmp/datadouble-nightly/export}}]}
+promote:
+  to:
+    - filesystem:
+        path: /var/tmp/datadouble-nightly/export
 fetch:
-  from: {filesystem: {path: /var/tmp/datadouble-nightly/export}}
+  from:
+    filesystem:
+      path: /var/tmp/datadouble-nightly/export
   staging: /var/tmp/datadouble-nightly/staging
 replicate:
-  using: {filesystem: {path: /var/tmp/datadouble-nightly/copies}}
+  using:
+    filesystem:
+      path: /var/tmp/datadouble-nightly/copies
   mode: pool
   size: 1

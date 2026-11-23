@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: mssql
       connection:
-        url: {env: SHOP_MSSQL_URL}   # mssql://user:password@host:1433/database, by reference
+        url:                         # mssql://user:password@host:1433/database, by reference
+          env: SHOP_MSSQL_URL
       server:
         accept_eula: true            # required: you accept the SQL Server licence
         edition: Developer           # the default; any value MSSQL_PID takes

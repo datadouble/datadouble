@@ -36,7 +36,8 @@ name: shop
 source:
   engine: redis
   connection:
-    url: {{env: {URL}}}
+    url:
+      env: {URL}
     databases: [0, 1]
     patterns: ["session:{{}}"]
   image: {IMAGE}
@@ -67,17 +68,25 @@ subset:
     "leaderboard.members -> user:{{}}": {{}}
 anonymize:
   "user:{{}}":
-    name: {{faker: name}}
-    email: {{faker: email, unique: true}}
-    phone: {{faker: phone_number}}
+    name:
+      faker: name
+    email:
+      faker: email
+      unique: true
+    phone:
+      faker: phone_number
   audit:
-    ip: {{faker: ipv4}}
+    ip:
+      faker: ipv4
   "profile:{{}}":
-    first.name: {{faker: first_name}}
+    first.name:
+      faker: first_name
   "order:{{}}":
-    placed: {{expression: "redis.call('HSET', KEYS[1], ARGV[1], '2024-01-01T00:00:00Z')"}}
+    placed:
+      expression: "redis.call('HSET', KEYS[1], ARGV[1], '2024-01-01T00:00:00Z')"
 store:
-  - filesystem: {{path: STORE}}
+  - filesystem:
+      path: STORE
 """
 
 _DATABASES = itertools.cycle(range(2, 16))

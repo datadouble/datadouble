@@ -13,7 +13,8 @@ source's exact version, through the spec's container runtime.
 source:
   engine: mongodb
   connection:
-    uri: {env: CINEMA_URI}   # a mongodb:// or mongodb+srv:// URI, by reference
+    uri:                     # a mongodb:// or mongodb+srv:// URI, by reference
+      env: CINEMA_URI
     database: cinema
 subset:
   seeds:

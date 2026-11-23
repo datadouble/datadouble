@@ -33,7 +33,10 @@ SAMPLE_SPEC = """
 name: cinema
 source:
   engine: mongodb
-  connection: {uri: {env: DATADOUBLE_TEST_MONGODB_URI}, database: cinema}
+  connection:
+    uri:
+      env: DATADOUBLE_TEST_MONGODB_URI
+    database: cinema
   image: mongo:9.0.8@sha256:bdcd178c7ef0c0afca7f345e413f6e8960b20f65662c2db45f8380221f32338e
 exclude: ["maintenance_runs"]
 subset:
@@ -47,28 +50,41 @@ subset:
       - users -> sessions.user_id
       - users -> notes.subject_id
   edges:
-    comments.user_id -> users: {on_missing: null}
+    comments.user_id -> users:
+      on_missing: null
   virtual_fks:
     comments.user_id -> users: {}
     comments.movie_id -> movies: {}
     watchlists.user_id -> users: {}
     watchlists.movie_ids -> movies: {}
     sessions.user_id -> users: {}
-    notes.subject_id -> users: {when: '{"subject_type": "user"}'}
+    notes.subject_id -> users:
+      when: '{"subject_type": "user"}'
 anonymize:
   users:
-    name: {faker: name}
-    email: {faker: email, unique: true}
-    phone: {faker: phone_number}
-    address.street: {faker: street_address}
+    name:
+      faker: name
+    email:
+      faker: email
+      unique: true
+    phone:
+      faker: phone_number
+    address.street:
+      faker: street_address
   sessions:
-    token: {hash: {length: 24}}
+    token:
+      hash:
+        length: 24
   comments:
-    text: {expression: '{"$concat": ["Comment ", {"$toString": "$_id"}]}'}
+    text:
+      expression: '{"$concat": ["Comment ", {"$toString": "$_id"}]}'
   notes:
-    body: {expression: '"note removed"', where: '{"subject_type": "user"}'}
+    body:
+      expression: '"note removed"'
+      where: '{"subject_type": "user"}'
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

@@ -42,43 +42,69 @@ def test_full_spec_in_yaml() -> None:
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_DSN}}
+  connection:
+    dsn:
+      env: SHOP_DSN
 exclude: ["dba_maint_*"]
 structure_only: [event_log]
 strict: tables
 subset:
   as_of: 2026-11-09T00:00:00Z
   strategy: keys
-  seeds: {users: "created >= :as_of"}
-  follow: {down: ["users -> posts"]}
+  seeds:
+    users: "created >= :as_of"
+  follow:
+    down: ["users -> posts"]
   edges:
-    comments.author_id -> users: { on_missing: null }
-    posts.category_id -> categories: { follow: all }
-    comments.editor_id -> users: { on_missing: drop }
+    comments.author_id -> users:
+      on_missing: null
+    posts.category_id -> categories:
+      follow: all
+    comments.editor_id -> users:
+      on_missing: drop
   virtual_fks:
-    events.subject_id -> posts: { when: "subject_type = 'Post'" }
+    events.subject_id -> posts:
+      when: "subject_type = 'Post'"
 anonymize:
   users:
-    email: {faker: email, unique: true}
-    note: {null: {}}
-    name: {expression: "CONCAT('user-', id)", where: "id > 1"}
-    created: {hash: {length: 8}}
+    email:
+      faker: email
+      unique: true
+    note:
+      null: {}
+    name:
+      expression: "CONCAT('user-', id)"
+      where: "id > 1"
+    created:
+      hash:
+        length: 8
 hooks:
-  before_load: [{sql: "SET x = 1"}]
+  before_load:
+    - sql: "SET x = 1"
   after_transform:
     - sql: "UPDATE users SET name = 'x'"
       rewrites: [users.name]
 images:
-  all: {include: ["*"]}
-  billing: {include: ["billing.*"], requires: [all]}
-package: {formats: [logical]}
+  all:
+    include: ["*"]
+  billing:
+    include: ["billing.*"]
+    requires: [all]
+package:
+  formats: [logical]
 verify:
-  pii_scan: {allow: {users.email: ["%@example.com"]}}
-  assertions: [{name: no admins, sql: "SELECT 1 WHERE false"}]
+  pii_scan:
+    allow:
+      users.email: ["%@example.com"]
+  assertions:
+    - name: no admins
+      sql: "SELECT 1 WHERE false"
 store:
-  - filesystem: {path: /srv/images}
+  - filesystem:
+      path: /srv/images
 secrets:
-  anonymization_key: {file: /run/secrets/key}
+  anonymization_key:
+    file: /run/secrets/key
 """
     )
     assert spec.strict is StrictLevel.TABLES

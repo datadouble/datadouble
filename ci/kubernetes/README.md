@@ -76,11 +76,15 @@ value. Make one per pull request with an ApplicationSet:
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
-metadata: {name: datadouble-shop-requests, namespace: argocd}
+metadata:
+  name: datadouble-shop-requests
+  namespace: argocd
 spec:
   generators:
     - pullRequest:
-        github: {owner: example, repo: shop}   # or your source host's generator
+        github:                                # or your source host's generator
+          owner: example
+          repo: shop
   template:
     metadata:
       name: 'datadouble-shop-pr-{{number}}'

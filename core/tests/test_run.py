@@ -81,20 +81,38 @@ def dataset() -> FakeSource:
 
 SPEC = """
 name: shop
-source: {engine: fake, connection: {where: here}, image: vendor/fake:1}
-runtime: {fake: {}}
+source:
+  engine: fake
+  connection:
+    where: here
+  image: vendor/fake:1
+runtime:
+  fake: {}
 exclude: ["store", "staff", "dba_*", "audit.*", "events", "film_actor"]
 subset:
-  seeds: {users: "id <= 2", comments: "id = 101"}
-  follow: {down: ["users -> posts", "posts -> comments"]}
+  seeds:
+    users: "id <= 2"
+    comments: "id = 101"
+  follow:
+    down: ["users -> posts", "posts -> comments"]
   edges:
-    comments.author_id -> users: {on_missing: null}
-    comments.editor_id -> users: {on_missing: null}
+    comments.author_id -> users:
+      on_missing: null
+    comments.editor_id -> users:
+      on_missing: null
 anonymize:
-  users: {email: {faker: email, unique: true}, name: {faker: name}}
-  comments: {body: {expression: "'redacted'"}}
+  users:
+    email:
+      faker: email
+      unique: true
+    name:
+      faker: name
+  comments:
+    body:
+      expression: "'redacted'"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 
@@ -250,7 +268,7 @@ def test_a_changed_rule_reruns_from_transform(
     tmp_path: Path, registry: Registry, engine: FakeEngine
 ) -> None:
     first = run(tmp_path, registry)
-    changed = SPEC.replace("name: {faker: name}", "name: {faker: first_name}")
+    changed = SPEC.replace("      faker: name\n", "      faker: first_name\n")
     second = run(tmp_path, registry, spec=changed, resume=first.generation)
     status = statuses(second)
     assert status["plan"] == "ran"
@@ -279,8 +297,10 @@ def test_two_groups_share_a_generation_and_agree(tmp_path: Path, registry: Regis
         SPEC
         + """
 images:
-  people: {include: ["users"]}
-  content: {include: ["posts", "comments", "categories", "users"]}
+  people:
+    include: ["users"]
+  content:
+    include: ["posts", "comments", "categories", "users"]
 """
     )
     result = run(tmp_path, registry, spec=spec)
@@ -297,13 +317,20 @@ def test_verification_failures_stop_store(
     tmp_path: Path, registry: Registry, engine: FakeEngine
 ) -> None:
     spec = (
-        SPEC.replace("  users: {email: {faker: email, unique: true}, name: {faker: name}}\n", "")
-        .replace("  comments: {body: {expression: \"'redacted'\"}}\n", "")
-        .replace("anonymize:\n", "")
+        SPEC.replace(
+            "anonymize:\n  users:\n    email:\n      faker: email\n      unique: true\n"
+            "    name:\n      faker: name\n  comments:\n    body:\n"
+            "      expression: \"'redacted'\"\n",
+            "",
+        )
         + """
 verify:
-  pii_scan: {allow: {users.name: ["Name %"]}}
-  assertions: [{name: no early users, sql: "rows public.users where id <= 1"}]
+  pii_scan:
+    allow:
+      users.name: ["Name %"]
+  assertions:
+    - name: no early users
+      sql: "rows public.users where id <= 1"
 """
     )
     engine.corrupt.add(ImageFormat.PHYSICAL)
@@ -324,8 +351,10 @@ def test_hooks_and_row_counts(tmp_path: Path, registry: Registry, engine: FakeEn
         SPEC
         + """
 hooks:
-  before_load: [{sql: "set things"}]
-  after_transform: [{sql: "delete public.comments where id = 100"}]
+  before_load:
+    - sql: "set things"
+  after_transform:
+    - sql: "delete public.comments where id = 100"
 """
     )
     result = run(tmp_path, registry, spec=spec)
@@ -336,8 +365,8 @@ hooks:
 
 def test_fixups_and_stubs(tmp_path: Path, registry: Registry) -> None:
     spec = SPEC.replace(
-        "comments.author_id -> users: {on_missing: null}",
-        "comments.author_id -> users: {on_missing: stub}",
+        "comments.author_id -> users:\n      on_missing: null",
+        "comments.author_id -> users:\n      on_missing: stub",
     )
     result = run(tmp_path, registry, spec=spec)
     assert not result.failed()
@@ -347,7 +376,7 @@ def test_fixups_and_stubs(tmp_path: Path, registry: Registry) -> None:
 
 
 def test_store_problems(tmp_path: Path, registry: Registry) -> None:
-    no_stores = SPEC.replace("store:\n  - filesystem: {path: STORE}\n", "")
+    no_stores = SPEC.replace("store:\n  - filesystem:\n      path: STORE\n", "")
     with pytest.raises(RunError, match="lists no stores"):
         run(tmp_path, registry, spec=no_stores)
     built = run(
@@ -413,7 +442,7 @@ def test_fingerprint_is_canonical() -> None:
 
 
 def test_runtime_is_required_from_extract(tmp_path: Path, registry: Registry) -> None:
-    bare = SPEC.replace("runtime: {fake: {}}\n", "")
+    bare = SPEC.replace("runtime:\n  fake: {}\n", "")
     planned = run(tmp_path, registry, spec=bare, stages=(Stage.PLAN,))
     assert not planned.failed()
     with pytest.raises(RunError, match="the spec has no `runtime`"):
@@ -442,8 +471,10 @@ FILES_SPEC = (
     SPEC
     + """
 files:
-  connection: {root: /srv/uploads}
-  select: {avatars: "path <= 'a2'"}
+  connection:
+    root: /srv/uploads
+  select:
+    avatars: "path <= 'a2'"
   paths_from: posts.title
   cleanup: ["delete files.documents where path = 'b'"]
 """
@@ -476,7 +507,7 @@ def test_files_build_beside_the_source(tmp_path: Path, engine: FakeEngine) -> No
         runtimes={"fake": lambda _settings: runtime},
     )
     spec = FILES_SPEC.replace(
-        "select: {avatars: ", "exclude: []\n  select: {documents: \"path = 'none'\", avatars: "
+        "  select:\n", "  exclude: []\n  select:\n    documents: \"path = 'none'\"\n"
     )
     # The default strategy is nested, whose conditions a projection cannot read alone.
     keys = PlanOptions()
@@ -600,7 +631,7 @@ def test_omitted_requirements_are_not_checked(
 ) -> None:
     vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
     engine.catalog = shop().model_copy(update={"requirements": (vector,)})
-    spec = SPEC.replace("image: vendor/fake:1}", "image: vendor/fake:1, omit: [vector]}")
+    spec = SPEC.replace("image: vendor/fake:1\n", "image: vendor/fake:1\n  omit: [vector]\n")
     result = run(tmp_path, registry, spec=spec, lock=engine.catalog)
     assert not result.failed()
     (summary,) = [s for s in result.images if s.identity.group == "all"]
@@ -655,8 +686,12 @@ def test_a_resumed_build_packages_again_for_a_new_line(
 
 ACCOUNTS = """package:
   accounts:
-    - {user: app, password: {env: COPY_PASSWORD}}
-    - {user: reporting, password: PLAIN, privileges: read}
+    - user: app
+      password:
+        env: COPY_PASSWORD
+    - user: reporting
+      password: PLAIN
+      privileges: read
 store:"""
 
 

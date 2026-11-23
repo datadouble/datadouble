@@ -41,20 +41,44 @@ SPEC = """
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_SOURCE_DSN}}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
-trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}
-promote: {to: [{s3: {bucket: shop-export, prefix: "it's"}}]}
+  connection:
+    dsn:
+      env: SHOP_SOURCE_DSN
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+signing:
+  cosign:
+    key:
+      env: SHOP_COSIGN_KEY
+trust:
+  cosign:
+    public_key:
+      env: SHOP_COSIGN_PUB
+promote:
+  to:
+    - s3:
+        bucket: shop-export
+        prefix: "it's"
 fetch:
-  from: {s3: {bucket: shop-export, prefix: images}}
+  from:
+    s3:
+      bucket: shop-export
+      prefix: images
   staging: /srv/datadouble/staging
 notify:
   when: [failure, warning]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com, oncall@example.com]}
-replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com, oncall@example.com]
+replicate:
+  using:
+    docker-volume: {}
+  mode: MODE
+  size: 1
 """
 KUBERNETES = (
     SPEC.replace("docker-volume", "k8s-pv")

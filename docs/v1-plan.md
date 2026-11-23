@@ -79,7 +79,9 @@ searches give a consistent view across indices.
 
 ```yaml
 files:
-  connection: {root: /srv/uploads, accept_inconsistent: true}
+  connection:
+    root: /srv/uploads
+    accept_inconsistent: true
   select:                                   # find(1) tests per top-level directory
     avatars: -mtime -30
     documents: -false                       # only the files paths_from names

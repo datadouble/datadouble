@@ -60,8 +60,11 @@ a job that fails or warns, so generating the jobs again keeps it:
 notify:
   when: [failure, warning]          # default: [failure]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com]}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com]
 ```
 
 - **Webhooks** work on every system: Datadouble posts a JSON body with the

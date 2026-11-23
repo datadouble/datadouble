@@ -107,26 +107,47 @@ SCHEMA = [
 
 SPEC = """
 name: scratch
-source: {engine: mssql, connection: CONNECTION, server: {accept_eula: true}}
+source:
+  engine: mssql
+  connection: CONNECTION
+  server:
+    accept_eula: true
 exclude: ["items"]
 subset:
   unselected: none
-  seeds: {child: "id <= 2", files: "id > 0", extra.notes: "id > 0"}
+  seeds:
+    child: "id <= 2"
+    files: "id > 0"
+    extra.notes: "id > 0"
   edges:
-    child.parent_id -> parent: {on_missing: stub}
-    child.other_id -> parent: {on_missing: null}
-    files.owner -> child: {on_missing: stub}
+    child.parent_id -> parent:
+      on_missing: stub
+    child.other_id -> parent:
+      on_missing: null
+    files.owner -> child:
+      on_missing: stub
   virtual_fks:
-    child.other_id -> parent: {when: "kind = 'x'"}
+    child.other_id -> parent:
+      when: "kind = 'x'"
 hooks:
-  before_load: [{sql: "SELECT 1"}]
-  after_transform: [{sql: "UPDATE child SET label = CONCAT(N'done-', id)"}]
+  before_load:
+    - sql: "SELECT 1"
+  after_transform:
+    - sql: "UPDATE child SET label = CONCAT(N'done-', id)"
 anonymize:
-  parent: {name: {faker: first_name}}
-  child: {kind: {expression: "UPPER(kind)"}}
-  extra.notes: {body: {expression: "N'gone'", where: "id > 0"}}
+  parent:
+    name:
+      faker: first_name
+  child:
+    kind:
+      expression: "UPPER(kind)"
+  extra.notes:
+    body:
+      expression: "N'gone'"
+      where: "id > 0"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 
@@ -350,10 +371,10 @@ def test_excluded_parents_are_nulled(source: MssqlScratch, tmp_path: Path) -> No
     spec = (
         SPEC.replace('exclude: ["items"]', 'exclude: ["items", "parent"]')
         .replace(
-            "child.parent_id -> parent: {on_missing: stub}",
-            "child.parent_id -> parent: {on_missing: null}",
+            "child.parent_id -> parent:\n      on_missing: stub",
+            "child.parent_id -> parent:\n      on_missing: null",
         )
-        .replace("  parent: {name: {faker: first_name}}\n", "")
+        .replace("  parent:\n    name:\n      faker: first_name\n", "")
     )
     result = build(source, tmp_path, spec=spec)
     assert not result.failed(), result.verification
