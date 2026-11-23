@@ -16,7 +16,7 @@ Follow `../RULES.md` throughout.
   native settings and the catalog lock, and lists what it could not carry
   over.
 - Secrets are references: `{env: NAME}` or `{file: /path}`. Never write a
-  value into the spec.
+  value into the spec. The one exception is a copy account's password, below.
 
 ## Check it, without production data
 
@@ -73,3 +73,39 @@ fails with `requirement_unmet` when the working image lacks one.
   kind `other`: `faker` does not apply, so suggest `null`, `expression` or
   keeping the column if it holds no personal data.
 
+## Accounts for copies
+
+`package.accounts` gives physical images accounts that log in over TCP, for
+consumers that serve a volume copy with the engine's official image (whose
+password variables apply only to a new data directory). Read the engine
+adapter's README before adding one.
+
+- **Physical images carry them, and so every copy of one,** volume and
+  instance copies alike. Logical images never do. A build that makes only
+  logical images refuses `package.accounts`, as does an engine whose adapter
+  can't create accounts (MySQL and PostgreSQL can).
+- **Passwords may be plain text,** since copies hold no personal data; this
+  is the only password a spec may hold as text (rule 6). A team that prefers
+  a reference uses `{env: NAME}` or `{file: /path}`, and `ci init` passes it
+  to the build job. Every other credential stays a reference.
+- **`privileges`:** `all` (the default) is every privilege with the grant
+  option, a PostgreSQL superuser. `read` is `SELECT` on the image's data,
+  without other accounts' password hashes, but not strictly read-only: it
+  can change its own password, and on PostgreSQL it keeps what `PUBLIC` has
+  (temporary tables, running functions, and before version 15 creating
+  objects in `public`). Suggest `read` for reporting tools and anything that
+  only reads, and say what it still allows.
+- **Say what `all` means.** An `all` account on a copy others can reach can
+  run commands in the consumer's container, for example PostgreSQL's
+  `COPY ... TO PROGRAM`. Tell the person before adding one.
+- **PostgreSQL images trust local logins.** Anything inside the consumer's
+  container, a sidecar or a `kubectl port-forward` logs in as `postgres`
+  without a password, accounts or not. An instance copy also resets
+  `postgres`'s password to its generated one, so a declared `postgres`
+  account's password holds on volume copies only.
+- **Names the engine can't use fail the plan:** duplicates; MySQL names over
+  32 characters, `datadouble` and `datadouble-build`; PostgreSQL names over
+  63 bytes, starting with `pg_`, or reserved (`public`, `none`,
+  `current_user`, `session_user`, `current_role`), and `postgres` with
+  `privileges: read`. An existing user of the same name, such as `root` or
+  `postgres`, gets the declared password.

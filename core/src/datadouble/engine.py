@@ -19,11 +19,11 @@ entry point names a zero-argument callable that returns an
 """
 
 import datetime as dt
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -31,7 +31,7 @@ from datadouble.catalog import Catalog, Requirement
 from datadouble.names import ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup, PlannedRule
 from datadouble.runtime import ContainerRuntime, identity
-from datadouble.spec import Hook, ImageFormat, TransformHook
+from datadouble.spec import AccountPrivileges, Hook, ImageFormat, TransformHook
 from datadouble.subset import Condition, Edge, KeyReader
 
 
@@ -236,6 +236,31 @@ class WorkingDatabases(Protocol):
         self, image: Path, image_format: ImageFormat, directory: Path
     ) -> AbstractContextManager[RestoredImage]:
         """Restore an image into ``directory`` and open it for checks."""
+        ...
+
+
+@dataclass(frozen=True)
+class Account:
+    """One of ``package.accounts``, with its password resolved; the password never prints."""
+
+    user: str
+    password: str = field(repr=False)
+    privileges: AccountPrivileges = AccountPrivileges.ALL
+
+
+@runtime_checkable
+class Accounts(Protocol):
+    """Working databases that can give a physical image accounts (``Capabilities.accounts``)."""
+
+    def add_accounts(self, image: Path, accounts: Sequence[Account]) -> None:
+        """Give the physical image in ``image`` the accounts, each with its privileges.
+
+        An existing user of an account's name gets the account's password and
+        privileges. Each account must then log in over the network with its
+        password, and only with it, or this raises :class:`EngineError`. The
+        password must not appear in messages, or in plain text in any statement
+        a server could log.
+        """
         ...
 
 

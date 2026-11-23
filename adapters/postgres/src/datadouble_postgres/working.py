@@ -15,22 +15,23 @@ archive (logical); ``restore`` brings either back up for verification.
 
 import re
 import shutil
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import Account, EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
-from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
+from datadouble.spec import AccountPrivileges, ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
-from datadouble_postgres.cluster import Cluster, Tools
+from datadouble_postgres.cluster import SUPERUSER, Cluster, Tools
 from datadouble_postgres.errors import database_error
 from datadouble_postgres.render import Statement, columns, trusted
 from datadouble_postgres.source import ExtractIndex
@@ -606,6 +607,58 @@ class PostgresWorking:
                 ],
             )
 
+    def add_accounts(self, image: Path, accounts: Sequence[Account]) -> None:
+        """Give the physical image each account as a role that logs in with a password.
+
+        A cluster starts on the image's own data directory, so the roles are
+        written into it, and its ``pg_hba.conf``, which ``initdb`` wrote for
+        local connections only, gains a password rule for every address. An
+        ``all`` account is a superuser. A ``read`` account gets ``CONNECT`` on
+        each database, and ``USAGE`` and ``SELECT`` on every table, view and
+        sequence of each schema but the system ones; a copy does not change, so
+        no default privileges are needed. Unlike ``pg_read_all_data`` this
+        leaves ``pg_authid`` and its password hashes out of reach. Passwords
+        reach the server only as SCRAM verifiers computed here, so no statement
+        the server could log holds one in plain text.
+        """
+        datadir = image / _DATADIR
+        cluster = Cluster(self.tools, datadir, image)
+        with cluster.running():
+            with cluster.connect(SUPERUSER) as connection:
+                for account in accounts:
+                    _create_role(connection, account)
+                    _check_role(connection, account)
+                databases = [
+                    str(name)
+                    for (name,) in connection.execute(
+                        "SELECT datname FROM pg_database"
+                        " WHERE datallowconn AND NOT datistemplate ORDER BY datname"
+                    ).fetchall()
+                ]
+            readers = [a.user for a in accounts if a.privileges is AccountPrivileges.READ]
+            if readers:
+                for database in databases:
+                    with cluster.connect(database) as connection:
+                        _grant_reading(connection, database, readers)
+            endpoint = cluster.server.endpoint
+            for account in accounts:
+                conninfo = make_conninfo(
+                    host=endpoint.host,
+                    port=str(endpoint.port),
+                    dbname=SUPERUSER,
+                    user=account.user,
+                )
+                try:
+                    psycopg.connect(conninfo, password=account.password, connect_timeout=30).close()
+                except psycopg.Error as error:
+                    action = f"logging in with the image's account {account.user!r}"
+                    raise database_error(error, action) from None
+        hba = datadir / "pg_hba.conf"
+        rule = "host all all all scram-sha-256"
+        if rule not in hba.read_text("utf-8").splitlines():
+            with hba.open("a", encoding="utf-8") as file:
+                file.write(f"# package.accounts: password logins from anywhere\n{rule}\n")
+
     @contextmanager
     def restore(
         self, image: Path, image_format: ImageFormat, directory: Path
@@ -643,3 +696,82 @@ def _copy_tree(source: Path, destination: Path) -> None:
     if problem:
         message = f"cannot copy {source.name}: {problem}"
         raise EngineError(message)
+
+
+_SCRAM = "SCRAM-SHA-256$"
+
+
+def _create_role(connection: Connection, account: Account) -> None:
+    """Create the account's role or reset it, with a SCRAM verifier for its password."""
+    action = f"giving the image the account {account.user!r}"
+    exists = connection.execute(
+        "SELECT 1 FROM pg_roles WHERE rolname = %s", (account.user,)
+    ).fetchone()
+    verifier = connection.pgconn.encrypt_password(
+        account.password.encode(), account.user.encode(), b"scram-sha-256"
+    ).decode()
+    read = account.privileges is AccountPrivileges.READ
+    attributes = (
+        "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+        if read
+        else "LOGIN SUPERUSER"
+    )
+    role = sql.Identifier(account.user)
+    _execute(
+        connection,
+        action,
+        sql.SQL("{} ROLE {} WITH {} PASSWORD {}").format(
+            sql.SQL("CREATE" if exists is None else "ALTER"),
+            role,
+            sql.SQL(attributes),
+            sql.Literal(verifier),
+        ),
+    )
+
+
+def _check_role(connection: Connection, account: Account) -> None:
+    """Fail unless the catalog shows the role as declared, with a SCRAM password.
+
+    The login over the network alone does not prove this: the working
+    cluster trusts the loopback address, which is where a port-forward arrives.
+    """
+    read = account.privileges is AccountPrivileges.READ
+    row = connection.execute(
+        sql.SQL(
+            "SELECT rolcanlogin, rolsuper, left(rolpassword, {}) = {}"
+            " FROM pg_authid WHERE rolname = %s"
+        ).format(sql.Literal(len(_SCRAM)), sql.Literal(_SCRAM)),
+        (account.user,),
+    ).fetchone()
+    if row != (True, not read, True):
+        message = (
+            f"checking the image's account {account.user!r} failed: the role does not log in"
+            f" with a SCRAM password and {account.privileges} privileges"
+        )
+        raise EngineError(message)
+
+
+def _grant_reading(connection: Connection, database: str, users: Sequence[str]) -> None:
+    """Let ``users`` connect to ``database`` and read everything in its own schemas."""
+    action = "granting read access"
+    roles = sql.SQL(", ").join(sql.Identifier(user) for user in users)
+    _execute(
+        connection,
+        action,
+        sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(database), roles),
+    )
+    schemas = [
+        str(name)
+        for (name,) in connection.execute(
+            "SELECT nspname FROM pg_namespace WHERE left(nspname, 3) <> 'pg_'"
+            " AND nspname <> 'information_schema' ORDER BY nspname"
+        ).fetchall()
+    ]
+    for schema in schemas:
+        name = sql.Identifier(schema)
+        for statement in (
+            "GRANT USAGE ON SCHEMA {} TO {}",
+            "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO {}",
+            "GRANT SELECT ON ALL SEQUENCES IN SCHEMA {} TO {}",
+        ):
+            _execute(connection, action, sql.SQL(statement).format(name, roles))

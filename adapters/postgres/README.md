@@ -10,6 +10,46 @@ PostgreSQL image of the source's exact version, through the spec's container
 runtime; a source that uses extensions names an image that has them in
 `source.image`.
 
+## Accounts
+
+A physical image carries no account that logs in over the network, so a
+server started on a copy with the official image accepts only local
+connections. `package.accounts` adds some:
+
+```yaml
+package:
+  accounts:
+    - {user: app, password: app-password}          # privileges: all
+    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+```
+
+Each becomes a role that logs in. `all` is a superuser. `read` is a plain
+role with `CONNECT` on each database and, in every schema but the system
+ones, `USAGE` and `SELECT` on every table, view and sequence; it can't read
+`pg_authid` or its password hashes. It also keeps what `PUBLIC` has, which
+Datadouble doesn't change: temporary tables, running functions, changing its
+own password, and before PostgreSQL 15 creating objects in `public`.
+
+The image's `pg_hba.conf` gains `host all all all scram-sha-256`. An existing
+role of that name gets the password and attributes reset. Datadouble computes
+a SCRAM verifier and sends only that, so no statement the server could log
+holds a password. The build checks each role in `pg_authid` and logs in with
+it over TCP before storing the image.
+
+The image's `pg_hba.conf` still trusts local and loopback connections, as
+`initdb` wrote it, ahead of that rule, so anything inside the consumer's
+container, a sidecar sharing its network, or a `kubectl port-forward` to it
+logs in as `postgres` without a password.
+
+An instance copy's server sets the copy's generated password on `postgres`
+when it starts, so a declared `postgres` account's password holds on volume
+copies only.
+
+The plan refuses names longer than 63 bytes, names starting with `pg_`, the
+names PostgreSQL reserves (`public`, `none`, `current_user`, `session_user`,
+`current_role`), and `postgres` with `privileges: read`, since the bootstrap
+superuser can't stop being one.
+
 ## Extensions
 
 Every extension installed in the source database, except `plpgsql`, is a

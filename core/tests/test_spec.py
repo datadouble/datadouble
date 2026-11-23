@@ -8,6 +8,7 @@ import pytest
 
 from datadouble.names import GroupName
 from datadouble.spec import (
+    AccountPrivileges,
     EnvSecret,
     ExpressionRule,
     FakerRule,
@@ -172,3 +173,38 @@ def test_schema() -> None:
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert schema["title"] == "Datadouble spec"
     assert "subset" in json.dumps(schema)
+
+
+def test_copy_accounts() -> None:
+    written = "app-password"
+    spec = parse_spec(
+        MINIMAL
+        + "package:\n  accounts:\n"
+        + f"    - {{user: app, password: {written}}}\n"
+        + "    - {user: reports, password: {env: COPY_PW}, privileges: read}\n"
+    )
+    app, reports = spec.package.accounts
+    assert (app.user, app.password, app.privileges) == ("app", written, AccountPrivileges.ALL)
+    assert reports.password == EnvSecret(env="COPY_PW")
+    assert reports.privileges is AccountPrivileges.READ
+    assert parse_spec(MINIMAL).package.accounts == ()
+    for wrong in (
+        "{user: '', password: x}",
+        "{user: app, password: ''}",
+        "{user: app, password: x, privileges: write}",
+    ):
+        with pytest.raises(SpecError):
+            parse_spec(MINIMAL + f"package: {{accounts: [{wrong}]}}")
+    with pytest.raises(SpecError):
+        parse_spec(MINIMAL + "package: {account: {user: app, password: x}}")
+
+
+def test_files_builds_carry_no_accounts() -> None:
+    spec = parse_spec(
+        MINIMAL
+        + "package: {accounts: [{user: app, password: x}]}\n"
+        + "files: {connection: {root: /srv}, select: {a: '*'}}\n"
+    )
+    files = spec.files_spec()
+    assert files is not None
+    assert files.package.accounts == ()

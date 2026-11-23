@@ -237,6 +237,7 @@ _SECTIONS: dict[tuple[JobKind, Side], tuple[str, ...]] = {
     (JobKind.BUILD, Side.PRODUCTION): (
         "source",
         "files",
+        "package",
         "store",
         "signing",
         "secrets",
@@ -281,6 +282,14 @@ def side_of(kinds: Iterable[JobKind], side: Side | None) -> Side:
 
 def _sections(spec: Spec, kind: JobKind, side: Side) -> list[JsonValue]:
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
+    # Of package, only accounts' password references name secrets or files: a
+    # plain-text password or a user name that looks like a path must never become
+    # a mount, and so reach a command line.
+    dumped["package"] = [
+        account.password.model_dump(mode="json")
+        for account in spec.package.accounts
+        if not isinstance(account.password, str)
+    ]
     return [dumped[name] for name in _SECTIONS[kind, side] if name in dumped]
 
 

@@ -256,6 +256,25 @@ files:
     assert secret_names(spec, JobKind.FETCH, Side.NON_PRODUCTION) == ()
 
 
+def test_build_jobs_get_account_passwords() -> None:
+    spec = parse_spec(
+        """
+name: shop
+source: {engine: fake}
+package:
+  accounts:
+    - {user: app, password: {env: APP_PASSWORD}}
+    - {user: reports, password: {file: /run/secrets/reports}, privileges: read}
+    - {user: plain, password: written-in-the-spec}
+    - {user: /srv/pathlike, password: /Tr0ub4dor}
+"""
+    )
+    assert secret_names(spec, JobKind.BUILD, Side.PRODUCTION) == ("APP_PASSWORD",)
+    # A password or user that looks like a path is not one.
+    assert host_paths(spec, JobKind.BUILD, Side.PRODUCTION) == ("/run/secrets/reports",)
+    assert secret_names(spec, JobKind.PROVISION, Side.NON_PRODUCTION) == ()
+
+
 def test_masking(monkeypatch: pytest.MonkeyPatch) -> None:
     masked: list[str] = []
     monkeypatch.setenv("SHOP_SECRET", "s3cret")

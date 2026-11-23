@@ -3,6 +3,7 @@
 
 import datetime as dt
 import json
+import uuid
 from pathlib import Path
 
 import pytest
@@ -10,10 +11,10 @@ import pytest
 from datadouble.anonymize import Anonymizer
 from datadouble.boundary import BoundaryError
 from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import EngineError, RequirementError, Tooling
+from datadouble.engine import Account, EngineError, RequirementError, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
-from datadouble.planner import PlannedRule, PlanOptions
+from datadouble.planner import AccountNames, PlannedRule, PlanOptions
 from datadouble.registry import Registry
 from datadouble.run import (
     Run,
@@ -27,6 +28,7 @@ from datadouble.run import (
 )
 from datadouble.secrets import SecretError
 from datadouble.spec import (
+    AccountPrivileges,
     HashOptions,
     HashRule,
     ImageFormat,
@@ -649,3 +651,79 @@ def test_a_resumed_build_packages_again_for_a_new_line(
     assert statuses(resumed)["transform/all"] == "reused"
     summary = next(s for s in resumed.images if s.identity.group == "all")
     assert summary.identity.engine_version == "1.0"
+
+
+ACCOUNTS = """package:
+  accounts:
+    - {user: app, password: {env: COPY_PASSWORD}}
+    - {user: reporting, password: PLAIN, privileges: read}
+store:"""
+
+
+def test_physical_images_get_the_accounts(
+    tmp_path: Path, registry: Registry, engine: FakeEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"accounts": AccountNames()})
+    value, written = uuid.uuid4().hex, uuid.uuid4().hex
+    monkeypatch.setenv("COPY_PASSWORD", value)
+    spec = SPEC.replace("store:", ACCOUNTS.replace("PLAIN", written))
+    result = run(tmp_path, registry, spec=spec)
+    assert not result.failed()
+    ((image, accounts),) = engine.accounts
+    assert image.name == "physical"
+    assert accounts == (
+        Account(user="app", password=value),
+        Account(user="reporting", password=written, privileges=AccountPrivileges.READ),
+    )
+    assert value not in repr(accounts)
+    summary = next(s for s in result.images if s.identity.group == "all")
+    assert summary.accounts == ("app", "reporting")
+    _, manifest = unpack(tmp_path / "store" / summary.archives[0].key, tmp_path / "unpacked")
+    assert json.loads(manifest)["accounts"] == [
+        {"user": "app", "privileges": "all"},
+        {"user": "reporting", "privileges": "read"},
+    ]
+    assert value.encode() not in manifest
+    assert written.encode() not in manifest
+    package = (tmp_path / "work" / "shop" / result.generation / "package" / "all").glob("*.json")
+    for file in package:
+        assert value.encode() not in file.read_bytes()
+
+
+def test_a_changed_password_packages_again(
+    tmp_path: Path, registry: Registry, engine: FakeEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"accounts": AccountNames()})
+    spec = SPEC.replace("store:", ACCOUNTS.replace("PLAIN", "unchanged"))
+    monkeypatch.setenv("COPY_PASSWORD", uuid.uuid4().hex)
+    first = run(tmp_path, registry, spec=spec)
+    same = run(tmp_path, registry, spec=spec, resume=first.generation)
+    assert set(statuses(same).values()) == {"reused"}
+    changed = uuid.uuid4().hex
+    monkeypatch.setenv("COPY_PASSWORD", changed)
+    again = run(tmp_path, registry, spec=spec, resume=first.generation)
+    assert statuses(again)["plan"] == "reused"
+    assert statuses(again)["transform/all"] == "reused"
+    assert statuses(again)["package/all"] == "ran"
+    assert engine.accounts[-1][1][0].password == changed
+
+
+def test_unresolvable_passwords_fail_before_extract(
+    tmp_path: Path, registry: Registry, engine: FakeEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"accounts": AccountNames()})
+    monkeypatch.delenv("COPY_PASSWORD", raising=False)
+    spec = SPEC.replace("store:", ACCOUNTS.replace("PLAIN", "x"))
+    with pytest.raises(SecretError, match="COPY_PASSWORD is not set"):
+        run(tmp_path, registry, spec=spec)
+    assert engine.snapshots == 0
+
+
+def test_working_databases_must_be_able_to_add_accounts(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"accounts": AccountNames()})
+    engine.accounts_working = False
+    spec = SPEC.replace("store:", "package: {accounts: [{user: app, password: x}]}\nstore:")
+    with pytest.raises(EngineError, match="cannot give images accounts"):
+        run(tmp_path, registry, spec=spec)

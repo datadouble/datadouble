@@ -160,6 +160,9 @@ produces:
 
 - **Volume:** a data directory the consumer starts its own server on (Docker
   volume, Kubernetes PersistentVolume, ZFS clone).
+  `package.accounts` gives such copies accounts that log in over the network
+  (decision 121, [Accounts in physical images](architecture.md#accounts-in-physical-images));
+  without them, a server started on one has only its local accounts.
 - **Instance:** a running server with an endpoint (host, port, database, and a
   reference to credentials).
 
@@ -264,8 +267,9 @@ so the jobs are the same on every system. Generated configuration:
 - Pins the Datadouble version: the native step at that release's tag, and
   the release's image.
 - References secrets by name only. Each job gets only the secrets its own
-  spec sections name (`build` the source's and the build store's, `fetch` the
-  trust settings'), plus `COSIGN_PASSWORD` for a build signed with a key, and
+  spec sections name (`build` the source's, the build store's and the
+  password references of `package.accounts`, `fetch` the trust
+  settings'), plus `COSIGN_PASSWORD` for a build signed with a key, and
   any `--env NAME` given for credentials adapters read from the
   environment, such as `AWS_ACCESS_KEY_ID`.
 - Includes schedules, in UTC, and job chaining: `promote` after a successful
@@ -381,8 +385,8 @@ Native steps run the pinned Datadouble image with the runner's Docker daemon
 (decision 100). The image runs as the engine's user (decision 86), on the
 host's network, so it reaches the source and the working servers' published
 ports as the runner would. The workspace, and every absolute path the job's
-spec sections name (stores, staging, copies, a Unix socket directory, the
-work directory), are mounted at the same path, because the engine containers
+spec sections name (stores, staging, copies, a Unix socket directory, a
+secret file, the work directory), are mounted at the same path, because the engine containers
 Datadouble starts mount them by those paths. A job's runner therefore needs
 Docker, with those paths owned by the engine's user.
 

@@ -119,6 +119,8 @@ class ImageSummary(_Model):
     """The strict-mode level the image was built with."""
     server_version: str | None = None
     """The exact version of the server that wrote the image; the identity names its line."""
+    accounts: tuple[str, ...] = ()
+    """The users of the accounts physical copies carry (``package.accounts``)."""
     signature: str | None = None
     """The store key of the signature bundle, if the image is signed."""
 

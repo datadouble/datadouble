@@ -15,8 +15,9 @@ or a ``mysqldump`` script (logical); ``restore`` brings either back up.
 """
 
 import re
+import secrets
 import shutil
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -25,11 +26,11 @@ from pydantic import BaseModel, ConfigDict
 from pymysql.connections import Connection
 
 from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import Account, EngineError, RestoredImage, TableCount, Transformation
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
-from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
+from datadouble.spec import AccountPrivileges, ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
 from datadouble_mysql.errors import database_error
 from datadouble_mysql.render import columns, compose, qualified, quote
@@ -577,6 +578,23 @@ class MysqlWorking:
                 ],
             )
 
+    def add_accounts(self, image: Path, accounts: Sequence[Account]) -> None:
+        """Give the physical image each account as ``'user'@'%'``, with its privileges.
+
+        A server starts on the image's own data directory, so the accounts are
+        written into it; the build user is dropped again before it stops. Each
+        account's privileges are revoked and granted again, so an existing user
+        ends up with exactly the declared ones. MySQL logs these statements with
+        their passwords rewritten.
+        """
+        server = MysqlServer(self.tools, image / _DATADIR, image)
+        with server.running():
+            with server.connect() as connection:
+                for account in accounts:
+                    _create_account(connection, account)
+            for account in accounts:
+                _check_account(server, account)
+
     @contextmanager
     def restore(
         self, image: Path, image_format: ImageFormat, directory: Path
@@ -594,3 +612,83 @@ class MysqlWorking:
                 server.tool("mysql", [], image / _DUMP)
             with server.connect(info.database) as connection:
                 yield MysqlRestored(connection)
+
+
+def _create_account(connection: Connection, account: Account) -> None:
+    """Create the account or reset its password, and grant exactly its privileges.
+
+    A ``read`` account gets ``SELECT`` and ``SHOW VIEW`` on each of the image's
+    own databases, never on ``*.*``, which would let it read the ``mysql``
+    schema's password hashes.
+    """
+    login = (account.user, account.password)
+    action = f"giving the image the account {account.user!r}"
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(compose("CREATE USER IF NOT EXISTS %s@'%%' IDENTIFIED BY %s"), login)
+            cursor.execute(compose("ALTER USER %s@'%%' IDENTIFIED BY %s"), login)
+            cursor.execute(
+                compose("REVOKE ALL PRIVILEGES, GRANT OPTION FROM %s@'%%'"), (account.user,)
+            )
+            if account.privileges is AccountPrivileges.ALL:
+                cursor.execute(
+                    compose("GRANT ALL ON *.* TO %s@'%%' WITH GRANT OPTION"), (account.user,)
+                )
+                return
+            cursor.execute(
+                compose(
+                    "SELECT schema_name FROM information_schema.schemata"
+                    " WHERE schema_name NOT IN ({})",
+                    ", ".join(["%s"] * len(_SYSTEM_SCHEMAS)),
+                ),
+                _SYSTEM_SCHEMAS,
+            )
+            for (database,) in cursor.fetchall():
+                cursor.execute(
+                    compose(
+                        "GRANT SELECT, SHOW VIEW ON {}.* TO %s@'%%'", _grant_level(str(database))
+                    ),
+                    (account.user,),
+                )
+    except pymysql.MySQLError as error:
+        raise database_error(error, action) from None
+
+
+_SYSTEM_SCHEMAS = ("mysql", "information_schema", "performance_schema", "sys")
+
+
+def _grant_level(database: str) -> str:
+    """A database name for a database-level grant, where ``_`` and ``%`` are wildcards."""
+    escaped = database.replace("_", "\\_").replace("%", "\\%")
+    # The statement is formatted with bound values, so a literal % is doubled.
+    return quote(escaped).replace("%", "%%")
+
+
+def _check_account(server: MysqlServer, account: Account) -> None:
+    """Log in as the account over the network, and fail if a wrong password works too.
+
+    The second login proves the server checks the password: an anonymous
+    account or a password-less one of the same name would accept any.
+    """
+    endpoint = server.server.endpoint
+    action = f"logging in with the image's account {account.user!r}"
+
+    def login(password: str) -> None:
+        pymysql.connect(
+            host=endpoint.host,
+            port=endpoint.port,
+            user=account.user,
+            password=password,
+            connect_timeout=30,
+        ).close()
+
+    try:
+        login(account.password)
+    except pymysql.MySQLError as error:
+        raise database_error(error, action) from None
+    try:
+        login(secrets.token_hex(16))
+    except pymysql.MySQLError:
+        return
+    message = f"{action} failed: the server accepted a wrong password"
+    raise EngineError(message)

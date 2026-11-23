@@ -34,6 +34,8 @@ from datadouble.anonymize import Anonymizer, new_key
 from datadouble.boundary import require_inside
 from datadouble.catalog import CatalogLock
 from datadouble.engine import (
+    Account,
+    Accounts,
     EngineAdapter,
     EngineError,
     ExtractResult,
@@ -64,7 +66,14 @@ from datadouble.planner import Plan, PlannedGroup, PlannedPaths, PlannedRule, Pl
 from datadouble.registry import Registry
 from datadouble.secrets import resolve_secret
 from datadouble.signing import bundle_key, sign
-from datadouble.spec import FakerRule, FormatPreservingRule, HashRule, Spec, StrictLevel
+from datadouble.spec import (
+    FakerRule,
+    FormatPreservingRule,
+    HashRule,
+    ImageFormat,
+    Spec,
+    StrictLevel,
+)
 from datadouble.storage import Store
 from datadouble.subset import (
     AnyOf,
@@ -231,6 +240,7 @@ class Run:
         self._session: SourceSession | None = None
         self._tooling: Tooling | None = None
         self._exits = ExitStack()
+        self._accounts: tuple[Account, ...] | None = None
 
     # The generation
 
@@ -589,18 +599,22 @@ class Run:
         working: WorkingDatabases,
         planned: Plan,
         group: PlannedGroup,
-        extract: ExtractResult,
+        context: "_Context",
     ) -> None:
         """Package every requested format of the group's image."""
+        extract = context.extract
         version = working.server_version()
         identity = self.identity(
             group, version_line(version, self.engine.capabilities().version_line)
         )
+        accounts = self.accounts()
         inputs = {
             "transform": fingerprint(self.required(Stage.TRANSFORM, group.name)),
             "formats": planned.formats,
             "version": version,
             "line": identity.engine_version,
+            # Keyed, so a changed password packages again without the inputs revealing it.
+            "accounts": [_account_digest(context.key, account) for account in accounts],
         }
 
         def work(directory: Path) -> dict[str, JsonValue]:
@@ -620,6 +634,9 @@ class Run:
                 "excludes": planned.excludes,
                 "seeds": planned.seeds,
                 "unselected": planned.unselected,
+                "accounts": [
+                    {"user": account.user, "privileges": account.privileges} for account in accounts
+                ],
                 "group": group,
                 "transform": transformed.outputs,
                 "stages": {r.stage.value: r.status.value for r in self.records},
@@ -632,6 +649,8 @@ class Run:
                 files = directory / str(image_format)
                 files.mkdir()
                 working.package(self._dir(Stage.TRANSFORM, group.name) / "db", image_format, files)
+                if accounts and image_format is ImageFormat.PHYSICAL:
+                    _adding_accounts(working).add_accounts(files, accounts)
                 archive = directory / identity.archive_key(image_format).rsplit("/", 1)[1]
                 found = pack(files, manifest, archive)
                 shutil.rmtree(files)
@@ -695,12 +714,28 @@ class Run:
             manifest_sha256=str(packaged.outputs["manifest_sha256"]),
             strict=StrictLevel.OFF if planned.strict is None else planned.strict.level,
             server_version=str(packaged.outputs["server_version"]),
+            accounts=tuple(account.user for account in self.spec.package.accounts),
             verification=Verification(
                 passed=report.passed(),
                 checks=len(checks),
                 failed=sum(not check.passed for check in checks),
             ),
         )
+
+    def accounts(self) -> tuple[Account, ...]:
+        """``package.accounts``, with their passwords resolved once, on first use."""
+        if self._accounts is None:
+            self._accounts = tuple(
+                Account(
+                    user=account.user,
+                    password=account.password
+                    if isinstance(account.password, str)
+                    else resolve_secret(account.password),
+                    privileges=account.privileges,
+                )
+                for account in self.spec.package.accounts
+            )
+        return self._accounts
 
     def stores(self) -> list[Store]:
         """The spec's stores."""
@@ -757,6 +792,8 @@ class Run:
         come after the source's.
         """
         with self._exits:
+            # An unresolvable password fails the run before it reads anything.
+            self.accounts()
             files = self._files()
             if files is not None:
                 self._exits.enter_context(files.exits)
@@ -840,7 +877,7 @@ class Run:
         if self._needs(Stage.TRANSFORM):
             self.transform(working, planned, group, context.key)
         if self._needs(Stage.PACKAGE):
-            self.package(working, planned, group, context.extract)
+            self.package(working, planned, group, context)
         if self._needs(Stage.VERIFY):
             report = self.verify(working, planned, group)
             outputs.reports.append(report)
@@ -883,3 +920,17 @@ def _require(working: WorkingDatabases, planned: Plan) -> None:
     problems = unmet(planned.catalog.requirements, available)
     if problems:
         raise RequirementError(problems)
+
+
+def _account_digest(key: bytes, account: Account) -> str:
+    """An HMAC of the account under the run's anonymization key, for the package inputs."""
+    text = json.dumps([account.user, account.password, account.privileges.value])
+    return hmac.new(key, b"datadouble account\0" + text.encode(), hashlib.sha256).hexdigest()
+
+
+def _adding_accounts(working: WorkingDatabases) -> Accounts:
+    """``working``, as working databases that can add accounts (planning checked)."""
+    if not isinstance(working, Accounts):
+        message = "these working databases cannot give images accounts"
+        raise EngineError(message)
+    return working

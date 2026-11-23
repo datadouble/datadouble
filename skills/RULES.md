@@ -31,3 +31,7 @@ stops and tells the person why.
    the variables to define, and you tell the person where to define them.
    If someone gives you a secret anyway, never repeat it, not even inside an
    example or a placeholder; call it "the password you gave" instead.
+   The one carve-out: the password of a copy account (`package.accounts`)
+   may be plain text in a spec, because it exists only in anonymized copies,
+   if the person chooses that. Every other secret, including any source,
+   store or signing credential, stays a reference.

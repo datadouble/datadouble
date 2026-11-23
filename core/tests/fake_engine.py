@@ -12,7 +12,7 @@ name.
 import datetime as dt
 import json
 import shutil
-from collections.abc import Generator, Hashable, Iterable, Mapping
+from collections.abc import Generator, Hashable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,6 +21,7 @@ from pydantic import JsonValue
 
 from datadouble.catalog import Catalog, Requirement
 from datadouble.engine import (
+    Account,
     EngineAdapter,
     EngineError,
     ExtractResult,
@@ -278,6 +279,13 @@ class FakeWorking:
 
 
 @dataclass
+class FakeAccountsWorking(FakeWorking):
+    def add_accounts(self, image: Path, accounts: Sequence[Account]) -> None:
+        assert any(image.iterdir()), "the physical image is written first"
+        self.engine.accounts.append((image, tuple(accounts)))
+
+
+@dataclass
 class FakeEngine:
     catalog: Catalog
     source: FakeSource
@@ -298,6 +306,12 @@ class FakeEngine:
     owner_: str = field(default_factory=identity)
     available: tuple[Requirement, ...] | None = ()
     name_: EngineName = _FAKE
+    accounts: list[tuple[Path, tuple[Account, ...]]] = field(
+        default_factory=list[tuple[Path, tuple[Account, ...]]]
+    )
+    """Accounts given to physical images, and where."""
+    accounts_working: bool = True
+    """False makes working databases that cannot add accounts."""
 
     @property
     def name(self) -> EngineName:
@@ -318,6 +332,8 @@ class FakeEngine:
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         assert source_version == "1.2"
         self.source.toolings.append(tooling)
+        if self.accounts_working:
+            return FakeAccountsWorking(self, scratch)
         return FakeWorking(self, scratch)
 
     def server(self, image: Path, server_image: str | None) -> ServerPlan:
