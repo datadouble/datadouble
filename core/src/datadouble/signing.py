@@ -24,17 +24,9 @@ class SigningError(Exception):
     """A signature that could not be made or does not verify."""
 
 
-_LATER_FIELDS = ("server_version",)
-"""Summary fields added after images were first signed: left out when unset, so a
-summary signed before they existed still verifies."""
-
-
 def payload(summary: ImageSummary) -> bytes:
     """The bytes a signature covers: the summary without its signature, canonically."""
     data = summary.model_copy(update={"signature": None}).model_dump(mode="json")
-    for name in _LATER_FIELDS:
-        if data.get(name) is None:
-            data.pop(name, None)
     return json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
 
 

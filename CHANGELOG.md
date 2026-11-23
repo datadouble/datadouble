@@ -254,10 +254,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged. Images in existing stores keep their old line until pruned, and
   newer lines sort after them. `fetch.engine_version` names a line: change an
   existing `"8"` to `"8.4"`, or fetch keeps serving the old line. The image
-  summary now records the exact server version (older signed summaries still
-  verify), and `k8s-pv` copies carry it as `datadouble.dev/server-version`.
-  Upgrade both sides of the boundary together: an older release refuses the
-  new summaries.
+  summary now records the exact server version, and `k8s-pv` copies carry it
+  as `datadouble.dev/server-version`. Images signed before this change no
+  longer verify, since their summaries lack the field: rebuild them.
 - Redis working servers and copies did not load the image's bundled
   modules, so a source with JSON, search, time series or Bloom keys could
   not load. They now load every module in the image's module directory, and
