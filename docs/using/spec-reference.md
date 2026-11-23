@@ -24,6 +24,7 @@ A whole spec.
 | `hooks` | [Hooks](#hooks) | see type | Commands run before load and after transform. |
 | `files` | [Files](#files) |  | File trees copied with the rows, as a second source. |
 | `images` | map of [ImageGroup](#imagegroup) |  | Named images built from one extract; one image of every table by default. |
+| `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in every image, such as `{view: reporting.daily}`; they join each image's closure. |
 | `package` | [Package](#package) | see type | The image formats to produce. |
 | `verify` | [Verify](#verify) | see type | Checks every image must pass: PII scan, row counts, assertions. |
 | `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference. |
@@ -247,8 +248,11 @@ One image's share of the extract.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `include` (required) | list of string |  |  |
-| `requires` | list of string |  |  |
+| `include` (required) | list of string |  | The tables in the image, as globs matched from the right. |
+| `requires` | list of string |  | Groups whose images a copy of this one is provisioned with, for references into them. |
+| `standalone` | boolean | `false` | Whether the image must work on its own: what its tables and objects need from outside the group is pulled into it (package planning). |
+| `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in this image, such as `{function: public.uuid_generate_v4}`; they join the image's closure. |
+| `rows` | map of [PulledRows](#pulledrows) |  | Which rows a standalone group pulls in, overriding `referenced`: keys are a table name or glob, or a reference `child.column -> parent` (which wins over a table key), and values `referenced`, `all` or `none`. |
 
 ### JailerSubset
 
@@ -288,11 +292,21 @@ Set to null.
 |---|---|---|---|
 | `null` (required) | [NullOptions](#nulloptions) |  |  |
 
+### ObjectKind
+
+The engine-neutral kinds of object besides tables.
+
+One of `function` or `procedure` or `package` or `view` or `materialized-view` or `trigger` or `type` or `sequence` or `event`.
+
 ### ObjectLevel
 
 How strict mode treats one kind of object that differs from the catalog lock.
 
 One of `off` or `warn` or `fail`.
+
+### ObjectRoot
+
+An object code outside Datadouble expects, as its kind and its name matched from the right like a table's: `{function: public.uuid_generate_v4}`, with argument types as the catalog spells them where routines are overloaded (`{function: "public.total(integer)"}`), or `{trigger: orders.audit}` (a PostgreSQL trigger's name is `table.trigger`).
 
 ### OnMissing
 
@@ -336,6 +350,12 @@ Where `promote` copies verified images, and what it requires of them.
 | `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
 | `channel` | string | `"latest"` |  |
 | `strict` | [Strict](#strict) | see type | The least strict level, per kind, an image may have been built with. |
+
+### PulledRows
+
+Which rows of a table a standalone group pulls into its image.
+
+One of `referenced` or `all` or `none`.
 
 ### Replicate
 

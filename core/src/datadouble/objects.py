@@ -17,10 +17,11 @@ The matching is engine-neutral; the adapter describes its engine's
 
 import re
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
 from datadouble.catalog import Dependency, ObjectKind, ObjectRef, SourceObject, Table
+from datadouble.names import TableName
 
 _QUOTED = {
     '"': r'"(?:[^"]|"")+"',
@@ -160,19 +161,31 @@ def _shared(one: tuple[str, ...], other: tuple[str, ...]) -> int:
     return count
 
 
-def infer_dependencies(
-    text: str, own: ObjectRef, candidates: Candidates, dialect: Dialect
-) -> tuple[Dependency, ...]:
-    """The tables and objects ``text`` names, as inferred edges, leaving out ``own``."""
-    edges: dict[Dependency, None] = {}
+def _named(
+    text: str, home: tuple[str, ...], candidates: Candidates, dialect: Dialect
+) -> Iterator[Dependency]:
+    """Every candidate a name in ``text`` may mean, read from ``home``."""
     for match in dialect.pattern().finditer(dialect.strip(text)):
         parts = tuple(_unquote(part) for part in match.groups() if part)
         # `users.email` names the table users; `public.users` names it too.
         for end in range(len(parts), 0, -1):
-            for edge in candidates.lookup(parts[:end], own.namespace):
-                if edge.object != own:
-                    edges[edge] = None
-    return tuple(edges)
+            yield from candidates.lookup(parts[:end], home)
+
+
+def infer_dependencies(
+    text: str, own: ObjectRef, candidates: Candidates, dialect: Dialect
+) -> tuple[Dependency, ...]:
+    """The tables and objects ``text`` names, as inferred edges, leaving out ``own``."""
+    found = _named(text, own.namespace, candidates, dialect)
+    return tuple(dict.fromkeys(edge for edge in found if edge.object != own))
+
+
+def infer_table_needs(
+    text: str, table: TableName, candidates: Candidates, dialect: Dialect
+) -> tuple[Dependency, ...]:
+    """The objects a table's default or check expression ``text`` names, as inferred edges."""
+    found = _named(text, table.namespace, candidates, dialect)
+    return tuple(dict.fromkeys(edge for edge in found if edge.object is not None))
 
 
 def merge(exact: Iterable[Dependency], inferred: Iterable[Dependency]) -> tuple[Dependency, ...]:

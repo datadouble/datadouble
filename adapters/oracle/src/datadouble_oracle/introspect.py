@@ -356,7 +356,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
                 identity[name] = column_name
         primary, references = keys(cursor, schemas)
         requirements = index_types(cursor, schemas)
-        objects = read_objects(cursor, schemas, frozenset(tables), names)
+        objects, needs = read_objects(cursor, schemas, frozenset(tables), names)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -374,6 +374,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
                     for r in references
                     if r.table == name
                 ),
+                depends_on=needs.get(name, ()),
             )
             for name in tables
         ),

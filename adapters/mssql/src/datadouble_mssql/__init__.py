@@ -155,7 +155,10 @@ class MssqlEngine:
     def capabilities(self) -> Capabilities:
         """Both image formats, SQL expressions, the nested strategy and hooks."""
         return Capabilities(
-            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL), expressions=True, nested=True
+            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
+            expressions=True,
+            nested=True,
+            standalone=True,
         )
 
     @contextmanager

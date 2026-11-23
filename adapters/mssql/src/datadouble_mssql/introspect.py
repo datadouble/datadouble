@@ -233,7 +233,7 @@ def introspect(connection: Connection) -> tuple[Catalog, Physical]:
             )
             entry[1].append(ColumnName(text[3]))
             entry[2].append(ColumnName(text[6]))
-        objects = read_objects(cursor)
+        objects, needs = read_objects(cursor)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -253,6 +253,7 @@ def introspect(connection: Connection) -> tuple[Catalog, Physical]:
                     )
                     if table == name
                 ),
+                depends_on=needs.get(name, ()),
             )
             for name in names
         ),

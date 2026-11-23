@@ -13,7 +13,10 @@ copy; MySQL cannot switch triggers off for a session, so they are set aside
 while the rules and hooks run in one transaction, and put back. ``package``
 writes the data directory (physical) or a ``mysqldump`` script (logical);
 ``restore`` brings either back up. A working database holds every database the
-source read, under its own name.
+source read, under its own name. A standalone group's holds exactly its
+closure: the tables it pulls in, with the rows of the group's own extract and
+no foreign keys into those that come without rows, and none of the routines,
+triggers, events and views the closure lacks.
 """
 
 import re
@@ -27,8 +30,16 @@ import pymysql
 from pydantic import BaseModel, ConfigDict
 from pymysql.connections import Connection
 
-from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import Account, EngineError, RestoredImage, TableCount, Transformation
+from datadouble.catalog import Column, ColumnKind, ObjectKind, Requirement, RequirementKind
+from datadouble.closure import ordered
+from datadouble.engine import (
+    Account,
+    EngineError,
+    RestoredImage,
+    TableCount,
+    Transformation,
+    group_extract,
+)
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -115,6 +126,79 @@ def load_statement(table: ExtractedTable) -> str:
         targets,
         tail,
     )
+
+
+def _sources(
+    group: PlannedGroup, index: ExtractIndex, extract: Path
+) -> Iterator[tuple[Path, ExtractedTable]]:
+    """Each table whose rows the group's database holds, and the folder its file is in.
+
+    A standalone group's own extract has the rows it pulls in, and its own
+    tables' when they gained some; other own tables come from the shared one.
+    """
+    own = group_extract(extract, group.name)
+    taken: set[TableName] = set()
+    if own is not None:
+        pulled = ExtractIndex.model_validate_json((own / "index.json").read_bytes())
+        for table in pulled.tables:
+            taken.add(table.table)
+            yield own, table
+    members = frozenset(group.tables)
+    for table in index.tables:
+        if table.table in members and table.table not in taken:
+            yield extract, table
+
+
+def _rowless_references(connection: Connection, group: PlannedGroup) -> None:
+    """Drop foreign keys into pulled-in tables that come without rows."""
+    rowless = group.rowless()
+    for table in sorted(rowless, key=str):
+        found = _rows(
+            connection,
+            f"finding references to {table}",
+            "SELECT r.CONSTRAINT_SCHEMA, r.TABLE_NAME, r.CONSTRAINT_NAME"
+            " FROM information_schema.REFERENTIAL_CONSTRAINTS r"
+            " WHERE r.UNIQUE_CONSTRAINT_SCHEMA = %s AND r.REFERENCED_TABLE_NAME = %s",
+            [table.namespace[-1], table.name],
+        )
+        for database, child, constraint in found:
+            if TableName.of(str(database), str(child)) in rowless:
+                continue
+            _execute(
+                connection,
+                f"dropping {constraint}",
+                compose(
+                    "ALTER TABLE {} DROP FOREIGN KEY {}",
+                    qualified(TableName.of(str(database), str(child))),
+                    quote(str(constraint)),
+                ),
+            )
+
+
+_DROPPED = {
+    ObjectKind.FUNCTION: "FUNCTION",
+    ObjectKind.PROCEDURE: "PROCEDURE",
+    ObjectKind.TRIGGER: "TRIGGER",
+    ObjectKind.EVENT: "EVENT",
+    ObjectKind.VIEW: "VIEW",
+}
+"""How to drop each kind of object the catalog lists (``introspect``)."""
+
+
+def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup) -> None:
+    """Drop the routines, triggers, events and views the group's closure lacks."""
+    wanted = frozenset(group.objects)
+    found = [item.ref for item in plan.catalog.objects if item.ref not in wanted]
+    for ref in reversed(ordered(found, plan.catalog.objects)):
+        _execute(
+            connection,
+            f"dropping {ref}",
+            compose(
+                "DROP {} IF EXISTS {}",
+                _DROPPED[ref.kind],
+                qualified(TableName.of(*ref.namespace, ref.name)),
+            ),
+        )
 
 
 def _listed(values: tuple[str, ...]) -> str:
@@ -277,8 +361,10 @@ class MysqlWorking:
     ) -> tuple[TableCount, ...]:
         """Build the group's working database."""
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
-        members = frozenset(group.tables)
-        server = MysqlServer(self.tools, directory / _DATADIR, directory, [extract])
+        members = frozenset(group.packaged())
+        own = group_extract(extract, group.name)
+        mounts = [extract] if own is None else [extract, own]
+        server = MysqlServer(self.tools, directory / _DATADIR, directory, mounts)
         server.initialize()
         for name in ("schema.sql", "triggers.sql"):
             script = without_definers((extract / name).read_text("utf-8"))
@@ -310,14 +396,13 @@ class MysqlWorking:
                 _execute(
                     connection, "preparing to load", "SET foreign_key_checks = 0, unique_checks = 0"
                 )
-                for table in index.tables:
-                    if table.table in members:
-                        _execute(
-                            connection,
-                            f"loading {table.table}",
-                            load_statement(table),
-                            [str(extract / table.file)],
-                        )
+                for folder, table in _sources(group, index, extract):
+                    _execute(
+                        connection,
+                        f"loading {table.table}",
+                        load_statement(table),
+                        [str(folder / table.file)],
+                    )
                 for fixup in group.fixups:
                     self._fixup(connection, plan, index, fixup)
             server.tool("mysql", [], directory / "triggers.sql")
@@ -331,7 +416,10 @@ class MysqlWorking:
                             compose("DROP TABLE IF EXISTS {}", qualified(table.table)),
                         )
                 self._prune(connection, index.databases)
-                counts = MysqlRestored(connection).counts(group.tables)
+                if group.standalone:
+                    _rowless_references(connection, group)
+                    _drop_outside(connection, plan, group)
+                counts = MysqlRestored(connection).counts(group.packaged())
         info = DatabaseInfo(
             databases=index.databases, default=index.default, server_version=self.server_version()
         )
@@ -484,7 +572,7 @@ class MysqlWorking:
                 _execute(connection, "restoring a trigger", compose("USE {}", quote(database)))
                 _execute(connection, "restoring a trigger", statement)
             _execute(connection, "restoring a trigger", compose("USE {}", quote(info.default)))
-            counts = MysqlRestored(connection).counts(group.tables)
+            counts = MysqlRestored(connection).counts(group.packaged())
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod

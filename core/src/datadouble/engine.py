@@ -29,7 +29,7 @@ from typing import Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.catalog import Catalog, Requirement
-from datadouble.names import ColumnRef, EngineName, TableName
+from datadouble.names import ColumnRef, EngineName, GroupName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup, PlannedRule
 from datadouble.runtime import ContainerRuntime, identity
 from datadouble.spec import AccountPrivileges, Hook, ImageFormat, TransformHook
@@ -212,7 +212,10 @@ class WorkingDatabases(Protocol):
         """Build the group's working database in ``directory`` from the extract.
 
         Runs ``before_load`` hooks first, applies the group's fixups, and leaves
-        the database stopped.
+        the database stopped. A standalone group's database holds exactly its
+        closure: the tables of ``group.packaged()``, with the rows of
+        :func:`group_extract` where it has them, and of the group's objects,
+        created in dependency order, no others.
         """
         ...
 
@@ -288,6 +291,28 @@ class ServerPlan(_Model):
     """The database clients connect to by default; a copy holds every database
     its image does, and this is the source's default one."""
     user: str
+
+
+GROUP_EXTRACTS = "groups"
+"""Where, next to the shared extract's directory, standalone groups' own rows go."""
+
+
+def group_extract_path(extract: Path, group: GroupName) -> Path:
+    """Where a standalone group's own rows are extracted, beside the shared ``extract``."""
+    return extract.parent / GROUP_EXTRACTS / group
+
+
+def group_extract(extract: Path, group: GroupName) -> Path | None:
+    """A standalone group's own extract, if it has one.
+
+    It holds, in the shared extract's format, the rows of the tables the
+    group's closure pulls in, and of its own tables when they gained rows a
+    pulled-in table references. ``load`` takes the tables it lists from
+    here, the group's other own tables from the shared extract, and leaves
+    pulled-in tables it does not list without rows.
+    """
+    path = group_extract_path(extract, group)
+    return path if path.is_dir() else None
 
 
 def choose_databases(

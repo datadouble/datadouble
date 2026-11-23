@@ -5,14 +5,16 @@
 
 import datetime as dt
 import struct
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from types import TracebackType
+from typing import Self
 
 import pytest
 
-from datadouble.catalog import Column, ColumnKind
+from datadouble.catalog import Column, ColumnKind, Dependency, ObjectKind, ObjectRef
 from datadouble.engine import EngineError, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.registry import installed
@@ -29,7 +31,7 @@ from datadouble.subset import (
     ValuesIn,
 )
 from datadouble_oracle import OracleEngine, parse_url
-from datadouble_oracle.driver import Error, read
+from datadouble_oracle.driver import Binds, Error, Row, Value, read
 from datadouble_oracle.errors import redact
 from datadouble_oracle.introspect import (
     Declared,
@@ -39,6 +41,7 @@ from datadouble_oracle.introspect import (
     table_problem,
     type_text,
 )
+from datadouble_oracle.objects import read_objects
 from datadouble_oracle.render import Renderer, as_of_value, bindable, quote, uses_as_of
 from datadouble_oracle.script import Phase, Schema, Statement, split_trigger
 from datadouble_oracle.server import OracleServer, Tools, default_image, literal
@@ -324,3 +327,65 @@ def test_engine(tmp_path: Path) -> None:
     assert "SOURCE_FILE_NAME_CONVERT = ('/w/a''b/data/', '/var/lib/datadouble/data/')" in script
     assert 'IDENTIFIED BY "$password"' in script
     assert engine.server(tmp_path, "mirror/oracle:23").image == "mirror/oracle:23"
+
+
+class ScriptedCursor:
+    """Answers each catalog query with the rows of the one key it contains."""
+
+    def __init__(self, rows: dict[str, list[Row]]) -> None:
+        self.rows = rows
+        self.found: list[Row] = []
+
+    def execute(self, statement: str, parameters: Binds | None = None, /) -> None:
+        (key,) = [key for key in self.rows if key in statement]
+        self.found = self.rows[key]
+
+    def executemany(self, statement: str, parameters: list[list[Value]], /) -> None:
+        raise NotImplementedError
+
+    def fetchall(self) -> list[Row]:
+        return self.found
+
+    def __iter__(self) -> Iterator[Row]:
+        return iter(self.found)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        kind: type[BaseException] | None,
+        error: BaseException | None,
+        trace: TracebackType | None,
+        /,
+    ) -> None:
+        return None
+
+
+def test_tables_need_their_object_types_and_the_sequences_their_defaults_draw_from() -> None:
+    address = ObjectRef(kind=ObjectKind.TYPE, namespace=("SHOP",), name="ADDRESS_T")
+    sequence = ObjectRef(kind=ObjectKind.SEQUENCE, namespace=("SHOP",), name="ORDERS_SEQ")
+    cursor = ScriptedCursor(
+        {
+            "FROM all_objects": [("SHOP", "ADDRESS_T", "TYPE"), ("SHOP", "ORDERS_SEQ", "SEQUENCE")],
+            "FROM all_source": [("SHOP", "ADDRESS_T", "TYPE", "TYPE address_t AS OBJECT (x INT)")],
+            "FROM all_views": [],
+            "FROM all_mviews": [],
+            "FROM all_sequences": [("SHOP", "ORDERS_SEQ", "sequence minvalue 1")],
+            "FROM all_dependencies": [
+                ("SHOP", "ORDERS", "TABLE", "SHOP", "ADDRESS_T", "TYPE"),
+                ("SHOP", "ORDERS", "TABLE", "SHOP", "STANDARD", "PACKAGE"),  # not ours
+                ("SHOP", "OTHER", "TABLE", "SHOP", "ADDRESS_T", "TYPE"),  # not a source table
+            ],
+            "FROM all_tab_cols": [
+                ("SHOP", "ORDERS", '"SHOP"."ORDERS_SEQ".NEXTVAL'),
+                ("SHOP", "ORDERS", None),
+                ("SHOP", "OTHER", "ORDERS_SEQ.NEXTVAL"),
+            ],
+        }
+    )
+    objects, needs = read_objects(cursor, ("SHOP",), frozenset({T}), ":s0")
+    assert tuple(item.ref for item in objects) == (address, sequence)
+    assert needs == {
+        T: (Dependency(object=address), Dependency(object=sequence, inferred=True)),
+    }

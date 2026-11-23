@@ -33,6 +33,7 @@ from datadouble import __version__
 from datadouble.anonymize import Anonymizer, new_key
 from datadouble.boundary import require_inside
 from datadouble.catalog import CatalogLock
+from datadouble.closure import pulled_rows
 from datadouble.engine import (
     Account,
     Accounts,
@@ -48,6 +49,7 @@ from datadouble.engine import (
     Transformation,
     WorkingDatabases,
     check_owner,
+    group_extract_path,
     unmet,
 )
 from datadouble.images import (
@@ -451,6 +453,7 @@ class Run:
             "as_of": planned.as_of,
             "excludes": planned.excludes,
             "catalog": planned.catalog_fingerprint,
+            "pulled": [(g.name, g.tables, g.pulled) for g in planned.groups if g.standalone],
             "followed": None
             if self.options.within is None
             else fingerprint((self.options.within / Stage.EXTRACT / _MANIFEST).read_bytes()),
@@ -466,6 +469,7 @@ class Run:
                 )
                 selections = self._followed(planned, selections)
                 result = snapshot.extract(planned, selections, directory / "data", self.tooling())
+                self._pull(planned, graph, snapshot, selections, directory)
                 unmatched = 0
                 if planned.paths_from is not None:
                     paths, unmatched = self._paths(
@@ -485,6 +489,48 @@ class Run:
                 " files were not copied; check `match`"
             )
         return _load(ExtractResult, manifest.outputs["result"])
+
+    def _pull(
+        self,
+        planned: Plan,
+        graph: Graph,
+        snapshot: Snapshot,
+        selections: dict[TableName, Condition],
+        directory: Path,
+    ) -> None:
+        """Read, in the same snapshot, the rows standalone groups pull in.
+
+        Each standalone group's pulled-in tables, and its own tables that gain
+        rows they reference, are extracted again under ``groups/<group>``,
+        with only the rows its image holds; ``load`` takes them from there.
+        """
+        keyed: Mapping[TableName, Condition] | None = None
+        for group in planned.groups:
+            if not group.standalone or not group.pulled:
+                continue
+            if keyed is None:
+                # Nested conditions refer to other tables' selections, which a
+                # projection cannot see; the keys strategy's stand alone. Under
+                # the nested strategy this reads every table's keys once more,
+                # the cost that strategy otherwise avoids, and only when a
+                # standalone group pulls something in.
+                # A second source's followed rows (``_followed``) join them,
+                # as they joined the shared selections.
+                keyed = (
+                    self._followed(planned, key_conditions(graph, snapshot))
+                    if planned.strategy == "nested"
+                    else selections
+                )
+            conditions = pulled_rows(
+                planned.edges, frozenset(group.tables), group.rows(), keyed, snapshot
+            )
+            if not conditions:
+                continue
+            part = planned.model_copy(
+                update={"tables": tuple(r for r in planned.tables if r.table in conditions)}
+            )
+            target = group_extract_path(directory / "data", group.name)
+            snapshot.extract(part, conditions, target, self.tooling())
 
     @staticmethod
     def _paths(
@@ -558,7 +604,7 @@ class Run:
         self, working: WorkingDatabases, planned: Plan, group: PlannedGroup, key: bytes
     ) -> None:
         """Anonymize a copy of the group's working database."""
-        members = set(group.tables)
+        members = set(group.packaged())
         rules = tuple(rule for rule in planned.anonymization if rule.column.table in members)
         anonymizer = Anonymizer(key)
         key_id = hmac.new(key, b"datadouble key id", hashlib.sha256).hexdigest()[:16]

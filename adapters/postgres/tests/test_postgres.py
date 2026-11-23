@@ -17,7 +17,14 @@ import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from datadouble.catalog import CatalogLock, ColumnKind
+from datadouble.catalog import (
+    CatalogLock,
+    ColumnKind,
+    ObjectKind,
+    ObjectRef,
+    SourceObject,
+    definition_fingerprint,
+)
 from datadouble.engine import (
     Account,
     Accounts,
@@ -27,8 +34,8 @@ from datadouble.engine import (
     WorkingDatabases,
 )
 from datadouble.images import unpack
-from datadouble.names import ColumnName, ColumnRef, Generation, TableName
-from datadouble.planner import Plan, PlanError, PlannedRule, PlanOptions
+from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
+from datadouble.planner import Plan, PlanError, PlannedGroup, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.runtime import Container, Server
@@ -650,3 +657,217 @@ def test_listing_databases_fails_on_a_closed_connection(source: PostgresScratch)
         session.connection.close()
         with pytest.raises(EngineError, match="listing the databases failed"):
             list_databases(session.connection)
+
+
+def test_dropping_an_object_fails_on_a_closed_connection(source: PostgresScratch) -> None:
+    unused = ObjectRef(
+        kind=ObjectKind.FUNCTION,
+        namespace=(source.database, "public"),
+        name="unused",
+        signature="()",
+    )
+    objects = (SourceObject(ref=unused, fingerprint=definition_fingerprint("RETURN 1")),)
+    group = PlannedGroup(
+        name=GroupName("billing"),
+        tables=(),
+        requires=(),
+        omitted_references=(),
+        fixups=(),
+        standalone=True,
+    )
+    with PostgresEngine().connect(source.connection) as session:
+        assert isinstance(session, PostgresSession)
+        session.connection.close()
+        with pytest.raises(EngineError, match=r"dropping function .*\.public\.unused\(\) failed"):
+            postgres_working.drop_outside(session.connection, objects, group, source.database)
+
+
+# A slice of one schema: billing's invoices refer to shop's customers, a
+# trigger on them calls a function in audit, and applications call a public
+# function. A standalone billing image pulls all of that in, and nothing else.
+SLICE_SCHEMA = """
+CREATE SCHEMA shop;
+CREATE SCHEMA billing;
+CREATE SCHEMA audit;
+CREATE TABLE billing.teams (id integer PRIMARY KEY);
+CREATE TABLE billing.clerks (id integer PRIMARY KEY, team_id integer REFERENCES billing.teams);
+CREATE TABLE shop.customers (
+    id integer PRIMARY KEY, email text NOT NULL, manager_id integer REFERENCES billing.clerks
+);
+CREATE VIEW shop.emails AS SELECT email FROM shop.customers;
+CREATE TABLE billing.invoices (
+    id integer PRIMARY KEY, customer_id integer NOT NULL REFERENCES shop.customers, amount int
+);
+CREATE TABLE audit.entries (id serial PRIMARY KEY, invoice_id integer);
+CREATE FUNCTION audit.record() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO audit.entries (invoice_id) VALUES (NEW.id);
+    RETURN NEW;
+END $$;
+CREATE TRIGGER invoices_audit AFTER INSERT ON billing.invoices
+    FOR EACH ROW EXECUTE FUNCTION audit.record();
+CREATE FUNCTION public.greet(name text) RETURNS text LANGUAGE sql IMMUTABLE RETURN 'hello ' || name;
+CREATE FUNCTION public.unused() RETURNS integer LANGUAGE sql IMMUTABLE RETURN 1;
+-- An expression index and a row-level security policy call functions the
+-- table therefore needs, though nothing else names them.
+CREATE FUNCTION shop.cents(amount integer) RETURNS integer LANGUAGE sql IMMUTABLE
+    RETURN amount * 100;
+CREATE INDEX invoices_cents ON billing.invoices (shop.cents(amount));
+CREATE FUNCTION shop.visible(customer integer) RETURNS boolean LANGUAGE sql STABLE
+    RETURN customer > 0;
+ALTER TABLE billing.invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY invoices_visible ON billing.invoices USING (shop.visible(customer_id));
+-- A policy reading another table brings that table, without rows; a view's
+-- INSTEAD OF trigger comes with the view.
+CREATE TABLE shop.blocked (customer_id integer PRIMARY KEY);
+CREATE POLICY invoices_unblocked ON billing.invoices USING (
+    NOT EXISTS (SELECT 1 FROM shop.blocked b WHERE b.customer_id = invoices.customer_id));
+CREATE VIEW shop.recent AS SELECT id, email FROM shop.customers;
+CREATE FUNCTION shop.recent_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO shop.customers (id, email) VALUES (NEW.id, NEW.email);
+    RETURN NEW;
+END $$;
+CREATE TRIGGER recent_write INSTEAD OF INSERT ON shop.recent
+    FOR EACH ROW EXECUTE FUNCTION shop.recent_insert();
+-- Nothing reaches a domain, an enum, or a view and its INSTEAD OF trigger,
+-- so the standalone image drops them, the trigger before its view.
+CREATE DOMAIN public.positive AS integer CHECK (VALUE > 0);
+CREATE TYPE public.mood AS ENUM ('calm', 'cross');
+CREATE VIEW public.stale AS SELECT 1 AS id;
+CREATE FUNCTION public.stale_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN NULL;
+END $$;
+CREATE TRIGGER stale_write INSTEAD OF INSERT ON public.stale
+    FOR EACH ROW EXECUTE FUNCTION public.stale_insert();
+INSERT INTO billing.teams VALUES (1), (2);
+INSERT INTO billing.clerks VALUES (1, 1), (2, 2);
+INSERT INTO shop.customers VALUES
+    (1, 'ann@shop.test', 1), (2, 'bo@shop.test', NULL), (3, 'cy@x.test', 2);
+INSERT INTO billing.invoices VALUES (10, 1, 5), (11, 2, 6);
+"""
+
+SLICE_SPEC = """
+name: scratch
+source:
+  engine: postgres
+  connection: CONNECTION
+exclude: [items]
+objects:
+  - function: public.greet
+subset:
+  unselected: none
+  seeds:
+    invoices: "true"
+    clerks: "id = 1"
+images:
+  billing:
+    include: ["billing.*"]
+    standalone: true ROWS
+  rest:
+    include: ["shop.*", "audit.*"]
+    requires: [billing]
+anonymize:
+  customers:
+    email:
+      faker: email
+store:
+  - filesystem:
+      path: STORE
+"""
+
+SLICE_CHECKS = {
+    "SELECT 1 FROM pg_catalog.pg_proc"
+    " WHERE pronamespace::regnamespace::text IN ('public', 'audit')": 2,
+    "SELECT 1 FROM pg_catalog.pg_proc WHERE proname = 'unused'": 0,
+    "SELECT 1 FROM pg_catalog.pg_proc WHERE pronamespace::regnamespace::text = 'shop'": 3,
+    "SELECT 1 FROM pg_catalog.pg_indexes WHERE indexname = 'invoices_cents'": 1,
+    "SELECT 1 FROM pg_catalog.pg_policies WHERE tablename = 'invoices'": 2,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'recent_write'": 1,
+    "SELECT 1 FROM shop.blocked": 0,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'invoices_audit'": 1,
+    "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'emails'": 1,
+    "SELECT 1 FROM pg_catalog.pg_type WHERE typname IN ('positive', 'mood')": 0,
+    "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'stale'": 0,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'stale_write'": 0,
+    "SELECT 1 WHERE public.greet('x') <> 'hello x'": 0,
+    "SELECT 1 FROM pg_catalog.pg_constraint WHERE contype = 'f'": 3,
+}
+
+
+@pytest.mark.parametrize(
+    ("rows", "customers"),
+    [("", 2), ("\n    rows:\n      customers: all", 3)],
+    ids=["referenced", "all"],
+)
+def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
+    # Every customer brings its manager, a clerk of the slice's own, and the
+    # clerk's team: own tables that gain rows bring their parents too.
+    clerks = customers - 1
+    with scratch() as made:
+        made.execute(trusted(SLICE_SCHEMA))
+        spec = SLICE_SPEC.replace("ROWS", rows)
+        planned = build(made, tmp_path, spec=spec, stages=(Stage.PLAN,))
+        assert any(
+            "audit.entries is reached only through objects or policies" in w
+            for w in planned.warnings
+        )
+        result = build(made, tmp_path, spec=spec, resume=planned.generation)
+        assert not result.failed(), result.verification
+        billing = next(s for s in result.images if s.identity.group == "billing")
+        tables = {
+            name: TableName.of(made.database, *name.split("."))
+            for name in (
+                "billing.invoices",
+                "billing.clerks",
+                "billing.teams",
+                "shop.customers",
+                "audit.entries",
+            )
+        }
+        working = working_databases(tmp_path / "check")
+        for archive in billing.archives:
+            image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / f"u-{archive.format}")
+            with working.restore(image, archive.format, tmp_path / f"r-{archive.format}") as found:
+                counts = found.counts(tables.values())
+                assert {str(t).split(".", 1)[1]: n for t, n in counts.items()} == {
+                    "billing.invoices": 2,
+                    "billing.clerks": clerks,
+                    "billing.teams": clerks,
+                    "shop.customers": customers,
+                    "audit.entries": 0,
+                }
+                for query, expected in SLICE_CHECKS.items():
+                    assert found.failing_rows(query) == expected, query
+                # Only the closure's tables are there.
+                assert (
+                    found.failing_rows(
+                        "SELECT 1 FROM pg_catalog.pg_tables"
+                        " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
+                    )
+                    == 6
+                )
+
+
+def test_a_dependency_the_catalog_lacks_stops_a_standalone_load(tmp_path: Path) -> None:
+    with scratch() as made:
+        made.execute(trusted(SLICE_SCHEMA))
+        # Aggregates are not in the catalog, so nothing keeps the function this one uses.
+        made.execute(
+            trusted(
+                "CREATE FUNCTION public.add_up(a integer, b integer) RETURNS integer"
+                " LANGUAGE sql IMMUTABLE RETURN a + b;"
+                " CREATE AGGREGATE public.total(integer) (sfunc = public.add_up, stype = integer)"
+            )
+        )
+        with pytest.raises(EngineError) as caught:
+            build(made, tmp_path, spec=SLICE_SPEC.replace("ROWS", ""))
+        assert str(caught.value).startswith(
+            f"dropping function {made.database}.public.add_up(a integer, b integer), which "
+            "the closure of group 'billing' lacks, failed: something outside the closure, "
+            "perhaps not in the catalog, depends on it ("
+        )
+        assert str(caught.value).endswith(
+            "); declare function public.add_up in the group's `objects` to keep it"
+        )

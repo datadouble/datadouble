@@ -164,3 +164,26 @@ routines with SQL-standard bodies (`BEGIN ATOMIC`). Other routine bodies,
 such as PL/pgSQL, are parsed for the tables and objects they name, and those
 edges are marked inferred: a statement built with `EXECUTE` at run time is
 not seen.
+
+Tables list what they need too, exactly from `pg_depend`: the sequences and
+functions their column defaults and generated columns use, the functions
+their check constraints, index expressions and predicates call, the
+functions and tables their row-level security policies use, their columns'
+enum, domain, composite and range types, a typed table's type and an
+inheriting table's parent. A table only a policy reads comes into a
+standalone image without rows unless `rows` asks for some; one copies leave
+out (excluded) only warns, and the policy goes with it. Package planning follows these edges to work out what an
+image needs.
+
+A standalone group's database holds exactly its closure. The schema is
+restored as for any group, the pulled-in tables are kept with the rows of
+the group's own extract, and then every object the closure lacks is
+dropped, dependents first and without `CASCADE`: a dependency `pg_depend`
+records but the catalog missed stops the load with PostgreSQL's error
+rather than removing more. Aggregates, operators and casts are not in the
+catalog, so a function only they use is not in any closure: dropping it
+fails with PostgreSQL's detail of what depends on it, and declaring the
+function in the group's `objects` keeps it. A trigger is dropped on the
+table or view the database says it is on, and one already gone with its
+table or view is skipped. Foreign keys into a pulled-in table without rows are
+left out. Schemas stay, even when nothing in them is kept.

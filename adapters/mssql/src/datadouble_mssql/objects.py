@@ -12,11 +12,15 @@ module; a trigger's table is its parent. A reference SQL Server could not
 bind when the module was created (deferred name resolution) is matched by
 its schema and name, and that edge is marked inferred; an exact edge to the
 same target wins. Three-part names in the current database count.
+
+Tables need objects too: the functions and sequences their defaults, check
+constraints and computed columns use (recorded in the same view, under the
+constraint or the table), and the alias types of their columns.
 """
 
 from collections import defaultdict
-
-from pymssql import Cursor
+from collections.abc import Sequence
+from typing import Protocol
 
 from datadouble.catalog import (
     Dependency,
@@ -27,6 +31,19 @@ from datadouble.catalog import (
 )
 from datadouble.names import TableName
 from datadouble.objects import merge
+
+
+class Cursor(Protocol):
+    """What reading the objects needs of a cursor."""
+
+    def execute(self, operation: str, /) -> object:
+        """Run a query."""
+        ...
+
+    def fetchall(self) -> Sequence[tuple[object, ...]]:
+        """The query's rows."""
+        ...
+
 
 _TABLE_IDS = """
 SELECT t.object_id, s.name, t.name
@@ -82,6 +99,21 @@ WHERE d.referencing_class = 1
   AND d.referenced_server_name IS NULL AND d.referenced_class IN (1, 6)
 """
 
+_CONSTRAINTS = """
+SELECT o.object_id, o.parent_object_id
+FROM sys.objects o
+WHERE o.is_ms_shipped = 0 AND o.type IN ('D', 'C')
+"""
+"""Default and check constraints, whose dependencies are their table's."""
+
+_COLUMN_TYPES = """
+SELECT DISTINCT c.object_id, c.user_type_id
+FROM sys.columns c
+JOIN sys.tables t ON t.object_id = c.object_id
+JOIN sys.types y ON y.user_type_id = c.user_type_id
+WHERE t.is_ms_shipped = 0 AND y.is_user_defined = 1
+"""
+
 _KINDS = {
     "V": ObjectKind.VIEW,
     "P": ObjectKind.PROCEDURE,
@@ -111,7 +143,9 @@ class _Reader:
         self.cursor = cursor
         self.ids: dict[tuple[int, int], _Node] = {}
         self.definitions: dict[ObjectRef, str] = {}
-        self.edges: defaultdict[ObjectRef, list[Dependency]] = defaultdict(list)
+        self.edges: defaultdict[_Node, list[Dependency]] = defaultdict(list)
+        self.constraints: dict[int, int] = {}
+        """Each default and check constraint's table."""
 
     def tables(self) -> None:
         self.cursor.execute(_TABLE_IDS)
@@ -139,8 +173,26 @@ class _Reader:
             self.ids[(klass, int(str(object_id)))] = ref
             self.definitions[ref] = str(definition)
 
+    def merged(self, node: _Node) -> tuple[Dependency, ...]:
+        """A node's exact edges, then the inferred ones no exact edge covers."""
+        found = self.edges[node]
+        return merge([e for e in found if not e.inferred], [e for e in found if e.inferred])
+
+    def column_types(self) -> None:
+        """Each table's columns of alias and table types."""
+        self.cursor.execute(_COLUMN_TYPES)
+        for object_id, type_id in self.cursor.fetchall():
+            table = self.ids.get((_OBJECT, int(str(object_id))))
+            kind = self.ids.get((_TYPE, int(str(type_id))))
+            if isinstance(table, TableName) and isinstance(kind, ObjectRef):
+                self.edges[table].append(_edge(kind))
+
     def dependencies(self) -> None:
         """Bound references by ID; unbound ones by schema and name, as inferred edges."""
+        self.cursor.execute(_CONSTRAINTS)
+        self.constraints = {
+            int(str(object_id)): int(str(parent)) for object_id, parent in self.cursor.fetchall()
+        }
         by_name = {_name_key(node): node for node in self.ids.values()}
         self.cursor.execute(_DEPENDENCIES)
         for row in self.cursor.fetchall():
@@ -150,40 +202,50 @@ class _Reader:
 
     def edge(
         self, row: tuple[object, ...], by_name: dict[tuple[str, str], _Node]
-    ) -> tuple[ObjectRef, Dependency] | None:
-        """The edge one row records, if it is from one of the objects to another node."""
+    ) -> tuple[_Node, Dependency] | None:
+        """The edge one row records, if it is one: from an object, or from a table to an object.
+
+        A constraint's references are its table's.
+        """
         referencing, klass, referenced, schema, name = row
-        owner = self.ids.get((_OBJECT, int(str(referencing))))
+        own = int(str(referencing))
+        owner = self.ids.get((_OBJECT, self.constraints.get(own, own)))
         unbound = referenced is None
         target = (
             by_name.get(((str(schema) or _namespace(owner)).lower(), str(name).lower()))
             if unbound
             else self.ids.get((int(str(klass)), int(str(referenced))))
         )
-        if not isinstance(owner, ObjectRef) or target is None or target == owner:
+        if owner is None or target is None or target == owner:
+            return None
+        if isinstance(owner, TableName) and not isinstance(target, ObjectRef):
             return None
         return (owner, _edge(target, inferred=unbound))
 
 
-def read_objects(cursor: Cursor) -> tuple[SourceObject, ...]:
-    """The database's objects besides tables, with their dependencies."""
+def read_objects(
+    cursor: Cursor,
+) -> tuple[tuple[SourceObject, ...], dict[TableName, tuple[Dependency, ...]]]:
+    """The database's objects besides tables, with their dependencies, and what tables need."""
     reader = _Reader(cursor)
     reader.tables()
     reader.modules()
     reader.others(_SEQUENCES, ObjectKind.SEQUENCE, _OBJECT)
     reader.others(_TYPES, ObjectKind.TYPE, _TYPE)
     reader.dependencies()
-    return tuple(
+    reader.column_types()
+    objects = tuple(
         SourceObject(
             ref=ref,
             fingerprint=definition_fingerprint(definition),
-            depends_on=merge(
-                [edge for edge in reader.edges[ref] if not edge.inferred],
-                [edge for edge in reader.edges[ref] if edge.inferred],
-            ),
+            depends_on=reader.merged(ref),
         )
         for ref, definition in reader.definitions.items()
     )
+    needs = {
+        node: reader.merged(node) for node in list(reader.edges) if isinstance(node, TableName)
+    }
+    return objects, needs
 
 
 def _namespace(node: _Node | None) -> str:

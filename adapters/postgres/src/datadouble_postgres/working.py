@@ -8,7 +8,11 @@ database the source read, under its own name: hooks, then in each database the
 source's extensions at the source's versions, the schema's pre-data section,
 the rows (with triggers off), fallbacks for missing parents, the post-data
 section (indexes and constraints, which also check the data), sequences, and
-finally dropping the tables that belong to other groups.
+finally dropping the tables that belong to other groups. A standalone group's
+database holds exactly its closure: the tables it pulls in are kept, with
+the rows of the group's own extract, and every object the closure lacks is
+dropped, dependents first and without ``CASCADE``, so a dependency the
+catalog missed stops the load rather than silently removing something.
 ``transform`` copies the stopped cluster and anonymizes the copy in one
 transaction per database. ``package`` writes the data directory (physical) or
 a ``pg_dump`` archive per database (logical); ``restore`` brings either back
@@ -28,15 +32,31 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import Account, EngineError, RestoredImage, TableCount, Transformation
+from datadouble.catalog import (
+    Column,
+    ColumnKind,
+    ObjectKind,
+    ObjectRef,
+    Requirement,
+    RequirementKind,
+    SourceObject,
+)
+from datadouble.closure import ordered
+from datadouble.engine import (
+    Account,
+    EngineError,
+    RestoredImage,
+    TableCount,
+    Transformation,
+    group_extract,
+)
 from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import AccountPrivileges, ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
 from datadouble_postgres.cluster import SUPERUSER, Cluster, Tools
-from datadouble_postgres.errors import database_error
+from datadouble_postgres.errors import database_error, redact
 from datadouble_postgres.render import (
     Statement,
     columns,
@@ -44,7 +64,7 @@ from datadouble_postgres.render import (
     trusted,
     unqualified,
 )
-from datadouble_postgres.source import ExtractedDatabase, ExtractIndex
+from datadouble_postgres.source import ExtractedDatabase, ExtractedTable, ExtractIndex
 
 type Connection = psycopg.Connection[tuple[object, ...]]
 
@@ -266,6 +286,115 @@ class PostgresRestored:
         )
 
 
+def _sources(
+    group: PlannedGroup, index: ExtractIndex, extract: Path
+) -> Iterator[tuple[Path, ExtractedTable]]:
+    """Each table whose rows the group's database holds, and the folder its file is in.
+
+    A standalone group's own extract has the rows it pulls in, and its own
+    tables' when they gained some; other own tables come from the shared one.
+    """
+    own = group_extract(extract, group.name)
+    taken: set[TableName] = set()
+    if own is not None:
+        pulled = ExtractIndex.model_validate_json((own / "index.json").read_bytes())
+        for table in pulled.tables:
+            taken.add(table.table)
+            yield own, table
+    members = frozenset(group.tables)
+    for table in index.tables:
+        if table.table in members and table.table not in taken:
+            yield extract, table
+
+
+def drop_outside(
+    connection: Connection,
+    objects: tuple[SourceObject, ...],
+    group: PlannedGroup,
+    database: str,
+) -> None:
+    """Drop the database's ``objects`` the group's closure lacks, dependents first."""
+    wanted = frozenset(group.objects)
+    members = frozenset(group.packaged())
+    # What needs a table the database lacks went with it.
+    found = [
+        item.ref
+        for item in objects
+        if item.ref.namespace[0] == database
+        and item.ref not in wanted
+        and all(
+            edge.table in members
+            for edge in item.depends_on
+            if edge.table is not None and not edge.inferred
+        )
+    ]
+    for ref in reversed(ordered(found, objects)):
+        try:
+            for statement in _drop(connection, ref):
+                connection.execute(statement)
+        except psycopg.errors.DependentObjectsStillExist as error:
+            # Aggregates, operators, casts and the like are not in the catalog,
+            # so PostgreSQL's detail is what names the dependent.
+            blocking = redact(error.diag.message_detail or "no detail given")
+            message = (
+                f"dropping {ref}, which the closure of group {group.name!r} lacks, failed: "
+                f"something outside the closure, perhaps not in the catalog, depends on it "
+                f"({blocking}); declare {ref.kind} "
+                f"{'.'.join((ref.namespace[-1], ref.name))} in the group's `objects` to keep it"
+            )
+            raise EngineError(message) from None
+        except psycopg.Error as error:
+            raise database_error(error, f"dropping {ref}") from None
+
+
+_DROPPED: dict[ObjectKind, sql.SQL] = {
+    ObjectKind.FUNCTION: sql.SQL("FUNCTION"),
+    ObjectKind.PROCEDURE: sql.SQL("PROCEDURE"),
+    ObjectKind.VIEW: sql.SQL("VIEW"),
+    ObjectKind.MATERIALIZED_VIEW: sql.SQL("MATERIALIZED VIEW"),
+    ObjectKind.SEQUENCE: sql.SQL("SEQUENCE"),
+}
+
+
+_TRIGGER_RELATION = """
+SELECT c.relname, t.tgname
+FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE NOT t.tgisinternal AND n.nspname = %s AND c.relname || '.' || t.tgname = %s
+"""
+"""The table or view a trigger is on, found by the name the catalog gives it."""
+
+
+def _drop(connection: Connection, ref: ObjectRef) -> tuple[sql.Composed, ...]:
+    """The statements that drop ``ref``, refusing if anything depends on it; none if it is gone."""
+    schema = ref.namespace[-1]
+    name = sql.Identifier(schema, ref.name)
+    if ref.kind is ObjectKind.TRIGGER:
+        # A trigger's catalog name is its table's or view's and its own, joined
+        # with a dot; either may hold dots, so the database says which is which.
+        # Nothing is found if the trigger went with its table or view.
+        relations = connection.execute(_TRIGGER_RELATION, [schema, ref.name]).fetchall()
+        return tuple(
+            sql.SQL("DROP TRIGGER {} ON {}").format(
+                sql.Identifier(str(trigger)), sql.Identifier(schema, str(relation))
+            )
+            for relation, trigger in relations
+        )
+    if ref.kind is ObjectKind.TYPE:
+        found = connection.execute(
+            "SELECT t.typtype FROM pg_catalog.pg_type t"
+            " JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace"
+            " WHERE n.nspname = %s AND t.typname = %s",
+            [schema, ref.name],
+        ).fetchone()
+        kind = sql.SQL("DOMAIN") if found and found[0] == "d" else sql.SQL("TYPE")
+        return (sql.SQL("DROP {} IF EXISTS {}").format(kind, name),)
+    # The signature is the catalog's own spelling of the argument types.
+    arguments = trusted(ref.signature) if ref.signature else sql.SQL("")
+    return (sql.SQL("DROP {} IF EXISTS {}{}").format(_DROPPED[ref.kind], name, arguments),)
+
+
 @dataclass(frozen=True, slots=True)
 class _Loading:
     """What loading each database of a group's working database needs."""
@@ -338,7 +467,7 @@ class PostgresWorking:
                 self._load_database(loading, database)
             restored = PostgresRestored(cluster.connect, index.default, partitioned)
             try:
-                counts = restored.counts(group.tables)
+                counts = restored.counts(group.packaged())
             finally:
                 restored.close()
         info = DatabaseInfo(
@@ -360,7 +489,8 @@ class PostgresWorking:
             loading.extract,
         )
         name = database.name
-        members = frozenset(group.tables)
+        members = frozenset(group.packaged())
+        rowless = group.rowless()
         dump = extract / database.schema_file
         listing = cluster.execute("pg_restore", ["--list", str(dump)])
         views = frozenset(
@@ -370,19 +500,24 @@ class PostgresWorking:
         )
         # A constraint whose table is in the group but whose target is not (in
         # another group, or excluded) would fail on the rows: leave it out.
+        # So would one into a pulled-in table that comes without rows.
         foreign = frozenset(
             ("FK CONSTRAINT", constraint.namespace, f"{constraint.table} {constraint.name}")
             for constraint in database.constraints
-            if constraint.child in members and constraint.parent not in members
+            if constraint.child in members
+            and (
+                constraint.parent not in members
+                or (constraint.parent in rowless and constraint.child not in rowless)
+            )
         )
         listing = self._extensions(cluster, database, plan, dump, listing)
         self._restore(cluster, name, dump, "pre-data", filter_toc(listing, views))
         own = [table for table in index.tables if database_of(table.table) == name]
         with cluster.connect(name) as connection, connection.transaction():
             connection.execute("SET LOCAL session_replication_role = replica")
-            for table in own:
-                if table.table in members:
-                    self._copy_in(connection, extract / table.file, table.table, table.columns)
+            for folder, table in _sources(group, index, extract):
+                if database_of(table.table) == name:
+                    self._copy_in(connection, folder / table.file, table.table, table.columns)
             for fixup in group.fixups:
                 if database_of(fixup.edge.child) == name:
                     self._fixup(connection, plan, index, fixup)
@@ -396,6 +531,8 @@ class PostgresWorking:
                         f"dropping {table.table}",
                         sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(_qualified(table.table)),
                     )
+            if group.standalone:
+                drop_outside(connection, plan.catalog.objects, group, name)
 
     def _extensions(
         self, cluster: Cluster, database: ExtractedDatabase, plan: Plan, dump: Path, listing: str
@@ -594,7 +731,7 @@ class PostgresWorking:
                             _execute(connection, "an after_transform hook", trusted(hook.sql))
             restored = PostgresRestored(cluster.connect, info.default, partitioned)
             try:
-                counts = restored.counts(group.tables)
+                counts = restored.counts(group.packaged())
             finally:
                 restored.close()
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())

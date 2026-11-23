@@ -159,6 +159,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as new. An object that changes between planning and extracting stops the
   extract, as a changed table does. The MySQL adapter now needs MySQL
   8.0.13 or later and says so.
+- **Package planning: each image works on its own with `standalone: true`**
+  ([#79](https://github.com/datadouble/datadouble/issues/79)). After the
+  subset plan, the plan works out per group what its image needs: from its
+  tables, the objects that come with them (triggers, views over them alone)
+  and the objects the spec or the group declares in the new `objects:` list
+  (`{function: public.uuid_generate_v4}`), it follows followed references,
+  what tables need and every object's dependencies, across schemas and
+  databases. A group with `standalone: true` pulls what it reaches into its
+  image and holds exactly that closure: tables with the rows its rows
+  reference, and objects created from their definitions in dependency
+  order, no others. `rows:` on the group overrides a pulled-in table's rows
+  (`referenced`, `all` for every source row, or `none`), keyed by a table or
+  glob or by a reference; a table reached only through objects comes
+  without rows, with a warning. Pulled-in rows are read in the same snapshot
+  into the group's own extract, so other groups' images are unaffected. The
+  plan lists each group's declared objects, the objects its image needs and
+  what it pulls in with the path that reached it; an object that needs an
+  excluded table, or one the catalog does not list, fails the plan naming
+  the path, or warns when an inferred edge is on it. Strict mode also fails
+  on a removed object a packaged table or declared object still needs, and
+  on a new or changed object on a path to an excluded table. PostgreSQL,
+  MySQL and SQL Server build standalone images; Oracle and engines without
+  objects refuse them by name for now.
+- **Image groups' `include` patterns place objects too**
+  ([#79](https://github.com/datadouble/datadouble/issues/79)). A group that
+  is not standalone and needs a function, view or other object another
+  group's patterns match now fails the plan, as a reference into another
+  group's table does; add `requires:` for that group, or make the group
+  standalone. Objects that come with a group's own tables, such as triggers
+  on them, and its declared objects are its own. A declared object that
+  needs a table the group and the groups it requires lack fails the plan.
+  A standalone group cannot have `requires:`.
+- **Tables list the objects they need.** The catalog records the sequences
+  and functions tables' column defaults, generated or computed columns,
+  check constraints (and on PostgreSQL index expressions and row-level
+  security policies, with the tables those policies read) use, and their columns' user-defined types: exactly from
+  `pg_depend` and SQL Server's dependency views, from `ALL_DEPENDENCIES` on
+  Oracle (whose sequence defaults are parsed, so inferred), and none on
+  MySQL, which has no such objects. A table that needs nothing hashes as
+  before, so locks stay valid until a table that needs an object is locked.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

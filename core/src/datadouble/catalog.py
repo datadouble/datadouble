@@ -7,10 +7,11 @@ An engine adapter introspects a source into a :class:`Catalog`: its tables,
 columns, primary keys and foreign keys, the add-ons the source depends on
 (its :class:`Requirement` list), and its other objects (functions, views,
 triggers and the like, as :class:`SourceObject`), each with a fingerprint of
-its definition and the tables and objects it depends on. ``datadouble lock``
-writes the catalog to ``catalog.lock`` next to the spec, listing what changed
-since the lock it replaces (:func:`changes`), and strict mode compares the
-live catalog against it at plan time.
+its definition and the tables and objects it depends on. A table lists what
+it needs too, such as the sequence a column's default draws from.
+``datadouble lock`` writes the catalog to ``catalog.lock`` next to the spec,
+listing what changed since the lock it replaces (:func:`changes`), and strict
+mode compares the live catalog against it at plan time.
 
 A lock holds names, engine type names, keys, requirement versions and
 fingerprints of object definitions, never data values, so it may be published
@@ -77,19 +78,6 @@ class ForeignKey(_Model):
     columns: tuple[ColumnName, ...]
     target: TableName
     target_columns: tuple[ColumnName, ...]
-
-
-class Table(_Model):
-    """A table and the keys the subset planner follows."""
-
-    name: TableName
-    columns: tuple[Column, ...]
-    primary_key: tuple[ColumnName, ...] = ()
-    foreign_keys: tuple[ForeignKey, ...] = ()
-
-    def column(self, name: ColumnName) -> Column | None:
-        """The column called ``name``, if there is one."""
-        return next((column for column in self.columns if column.name == name), None)
 
 
 class RequirementKind(StrEnum):
@@ -171,10 +159,33 @@ class Dependency(_Model):
             raise ValueError(message)
         return self
 
+    @property
+    def target(self) -> "TableName | ObjectRef":
+        """The table or object it names."""
+        # Exactly one is set, as the model checks.
+        return next(node for node in (self.object, self.table) if node is not None)
+
     def __str__(self) -> str:
         """``table public.users``, or the object, with ``(inferred)`` when it is."""
         target = f"table {self.table}" if self.object is None else str(self.object)
         return f"{target} (inferred)" if self.inferred else target
+
+
+class Table(_Model):
+    """A table, the keys the subset planner follows, and the objects it needs."""
+
+    name: TableName
+    columns: tuple[Column, ...]
+    primary_key: tuple[ColumnName, ...] = ()
+    foreign_keys: tuple[ForeignKey, ...] = ()
+    depends_on: tuple[Dependency, ...] = ()
+    """What its definition uses besides its foreign keys: a sequence or function
+    in a column's default, a column's user-defined type, a function in a check
+    constraint, or a table a row-level security policy reads."""
+
+    def column(self, name: ColumnName) -> Column | None:
+        """The column called ``name``, if there is one."""
+        return next((column for column in self.columns if column.name == name), None)
 
 
 class SourceObject(_Model):
@@ -261,7 +272,10 @@ def normalize(catalog: Catalog) -> Catalog:
         engine=catalog.engine,
         tables=tuple(
             table.model_copy(
-                update={"foreign_keys": tuple(sorted(table.foreign_keys, key=lambda fk: fk.name))}
+                update={
+                    "foreign_keys": tuple(sorted(table.foreign_keys, key=lambda fk: fk.name)),
+                    "depends_on": tuple(sorted(set(table.depends_on), key=_edge_key)),
+                }
             )
             for table in tables
         ),
@@ -276,7 +290,8 @@ def normalize(catalog: Catalog) -> Catalog:
 
 
 def _canonical(catalog: Catalog) -> str:
-    form = normalize(catalog).model_dump(mode="json")
+    normal = normalize(catalog)
+    form = normal.model_dump(mode="json", exclude=_empty_needs(normal))
     # A catalog without requirements hashes as it did before they existed, so
     # locks written then stay valid.
     if not catalog.requirements:
@@ -285,6 +300,20 @@ def _canonical(catalog: Catalog) -> str:
     if not catalog.objects:
         del form["objects"]
     return json.dumps(form, sort_keys=True, separators=(",", ":"))
+
+
+def _empty_needs(catalog: Catalog) -> dict[str, dict[int, set[str]]]:
+    """What to leave out of a dump: tables' empty ``depends_on``.
+
+    Catalogs from before tables listed what they need then hash as they did.
+    """
+    return {
+        "tables": {
+            index: {"depends_on"}
+            for index, table in enumerate(catalog.tables)
+            if not table.depends_on
+        }
+    }
 
 
 class CatalogLock(_Model):
@@ -303,7 +332,7 @@ class CatalogLock(_Model):
 
 def write_lock(lock: CatalogLock, path: Path) -> None:
     """Write a lock file: indented JSON with sorted keys, so diffs are readable."""
-    form = lock.model_dump(mode="json")
+    form = lock.model_dump(mode="json", exclude={"catalog": _empty_needs(lock.catalog)})
     if not lock.catalog.requirements:
         del form["catalog"]["requirements"]
     if not lock.catalog.objects:
@@ -581,6 +610,17 @@ def changes(old: Catalog, new: Catalog) -> tuple[LockChange, ...]:
             found.extend(_columns(before, after))
             found.extend(_order(before, after))
             found.extend(_keys(before, after))
+            if sorted(map(_edge_key, before.depends_on)) != sorted(
+                map(_edge_key, after.depends_on)
+            ):
+                found.append(
+                    LockChange(
+                        change=Change.CHANGED,
+                        kind=ChangeKind.TABLE,
+                        object=str(name),
+                        detail="the objects it needs",
+                    )
+                )
     found.extend(_requirements(old, new))
     found.extend(_objects(old, new))
     if old.engine != new.engine:

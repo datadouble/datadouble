@@ -14,7 +14,7 @@ from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, Re
 from datadouble.engine import Account, EngineError, RequirementError, Tooling
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
-from datadouble.planner import AccountNames, PlannedRule, PlanOptions
+from datadouble.planner import AccountNames, Capabilities, PlannedRule, PlanOptions
 from datadouble.registry import Registry
 from datadouble.run import (
     Run,
@@ -762,3 +762,53 @@ def test_working_databases_must_be_able_to_add_accounts(
     spec = SPEC.replace("store:", "package: {accounts: [{user: app, password: x}]}\nstore:")
     with pytest.raises(EngineError, match="cannot give images accounts"):
         run(tmp_path, registry, spec=spec)
+
+
+def test_standalone_groups_hold_what_they_pull_in(tmp_path: Path) -> None:
+    capable = Capabilities(
+        formats=(ImageFormat.PHYSICAL,), expressions=True, nested=True, standalone=True
+    )
+    engine = FakeEngine(catalog=shop(), source=dataset(), capabilities_=capable)
+    registry = Registry(
+        engines={"fake": lambda: check_protocols(engine)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
+    )
+    groups = (
+        "images:\n  people: {include: [users]}\n"
+        "  content: {include: [posts, comments], standalone: true ROWS}\n"
+    )
+
+    def loaded(rows: str, strategy: str) -> dict[str, dict[str, list[int]]]:
+        spec = SPEC.replace("subset:\n", f"subset:\n  strategy: {strategy}\n", 1)
+        work = tmp_path / f"{strategy}-{len(rows)}"
+        result = run(work, registry, spec=spec + groups.replace("ROWS", rows))
+        assert not result.failed(), result
+        found: dict[str, dict[str, list[int]]] = {}
+        for db in (work / "work").rglob("db.json"):
+            if "load" in db.parts:
+                tables = json.loads(db.read_text(encoding="utf-8"))
+                found[db.parts[-3]] = {
+                    table: sorted(int(r["id"]) for r in rows) for table, rows in tables.items()
+                }
+        return found
+
+    for strategy in ("keys", "nested"):
+        # The users the posts reference come along, so the image works alone.
+        assert loaded("", strategy)["content"] == {
+            "public.posts": [10, 11, 12],
+            "public.comments": [100, 101],
+            "public.users": [1, 2, 4],
+            "public.categories": [1, 2],
+        }
+        # Every source row, without changing what the people group holds.
+        widened = loaded(", rows: {users: all}", strategy)
+        assert widened["content"]["public.users"] == [1, 2, 3, 4, 5]
+        assert widened["people"] == {"public.users": [1, 2, 4]}
+    # Without rows nothing is read again, and references to such a table are left out.
+    groups = groups.replace(
+        "people: {include: [users]}", "posts: {include: [posts], standalone: true}"
+    )
+    bare = loaded(", rows: {users: none, categories: none}", "keys")
+    assert bare["content"]["public.users"] == []
+    assert bare["posts"]["public.users"] == [1, 2, 4]

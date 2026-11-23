@@ -192,6 +192,16 @@ replica they conflict with replication. The manifest records how long the
 snapshot was held, and the docs recommend extracting from a replica configured
 for it.
 
+## Subset planning and package planning
+
+Subset planning, described above, decides which rows of each table the
+extract reads, for the whole spec. Package planning comes after it and asks
+a different question per image group: what does this image need to work?
+It follows the same references, plus what tables and objects need of
+functions, views, triggers, types and sequences, and a `standalone` group
+pulls what it reaches into its image. See
+[images that work on their own](architecture.md#images-that-work-on-their-own).
+
 ## Plan mode
 
 ```

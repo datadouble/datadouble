@@ -131,14 +131,24 @@ should still look: a rewritten trigger or function can change what a copy
 holds.
 
 Whatever the level, even `off`, a difference that breaks something fails
-the plan, naming what it breaks. Today that is a removed object that a
-remaining object still depends on, such as a function a packaged trigger
-calls: the failure names both. An object that depends on an excluded table
-is left out of copies, so it needs nothing, and one whose tables are all
-excluded is ignored, as they are. Planning will also fail an object
-that a packaged table or a declared root still needs, and a new object that
-needs something an image cannot have, once it resolves what each image
-needs.
+the plan, naming what it breaks:
+
+- a removed object that a remaining object still depends on, such as a
+  function a packaged trigger calls: the failure names both;
+- a removed object that a packaged table still needs (a sequence its
+  default draws from, a type a column has), or that the spec or a group
+  declares in `objects:`;
+- a new or changed object on a path to something an image cannot have: a
+  new trigger on a packaged table that calls a function reading an excluded
+  table, or a function rewritten to read one. Copies leave out an object
+  that needs an excluded table, so whatever needs that object breaks.
+
+Package planning (see
+[images that work on their own](architecture.md#images-that-work-on-their-own))
+finds the last two, since it resolves what each image needs. An object that
+depends on an excluded table and that nothing packaged needs is left out of
+copies quietly, and one whose tables are all excluded is ignored, as they
+are.
 
 Some edges are **inferred**: parsed from a routine's or trigger's body
 rather than read from the engine's own records. The plan marks them. Only
@@ -185,8 +195,8 @@ replaces (`changes`): tables, columns, primary and foreign keys,
 requirements and objects (functions, views, triggers and the like) added,
 removed or changed, each with its type, key or version, or for an object
 whether its definition or what it depends on changed.
-Column changes cover the type, its kind and nullability, and a table's
-column order. The CLI prints the same list. A first lock has nothing to
+Column changes cover the type, its kind and nullability; a table's changes,
+its column order and the objects it needs. The CLI prints the same list. A first lock has nothing to
 compare with (`changes` is `null`), so every table and column in it needs
 the same check; so does a lock replacing one that cannot be read, which the
 response says (`unreadable`, with the reason).

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from datadouble.catalog import ObjectKind
 from datadouble.names import GroupName
 from datadouble.spec import (
     AccountPrivileges,
@@ -183,6 +184,20 @@ def test_json_is_accepted() -> None:
         ),
         (MINIMAL + "subset: {edges: {'a -> b': {}}}", "subset.edges.a -> b", "exactly one"),
         (MINIMAL + "package: {formats: []}", "package.formats", "at least 1"),
+        (MINIMAL + "objects: [{function: a, view: b}]", "objects.0", "at most 1"),
+        (
+            MINIMAL
+            + "images: {a: {include: [x]}, b: {include: [y], standalone: true, requires: [a]}}",
+            "images.b",
+            "cannot also have `requires`",
+        ),
+        (MINIMAL + "images: {a: {include: [x], rows: {y: all}}}", "images.a", "set `standalone"),
+        (
+            MINIMAL + "images: {a: {include: [x], standalone: true, rows: {y: some}}}",
+            "images.a.rows.y",
+            "Input should be",
+        ),
+        (MINIMAL + "objects: [{table: a}]", "objects.0.table.[key]", "Input should be"),
     ],
 )
 def test_invalid_specs(text: str, location: str, problem: str) -> None:
@@ -207,6 +222,24 @@ def test_root_level_problem() -> None:
     with pytest.raises(SpecError) as caught:
         parse_spec("[]")
     assert caught.value.details[0][0] == "(spec)"
+
+
+def test_standalone_groups_and_declared_objects() -> None:
+    spec = parse_spec(
+        MINIMAL
+        + "objects: [{function: public.uuid_generate_v4}]\n"
+        + "images: {billing: {include: [billing.*], standalone: true,"
+        + " objects: [{materialized-view: reporting.daily}]}}\n"
+        + "files: {connection: {root: /srv}, select: {'*': 'true'}}\n"
+    )
+    billing = spec.images[GroupName("billing")]
+    assert billing.standalone
+    assert billing.objects == ({ObjectKind.MATERIALIZED_VIEW: "reporting.daily"},)
+    assert spec.objects == ({ObjectKind.FUNCTION: "public.uuid_generate_v4"},)
+    files = spec.files_spec()
+    assert files is not None
+    assert files.images[GroupName("billing")].objects == ()
+    assert files.images[GroupName("billing")].standalone
 
 
 def test_load_spec(tmp_path: Path) -> None:

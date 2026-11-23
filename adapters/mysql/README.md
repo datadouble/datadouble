@@ -124,3 +124,15 @@ bodies use is parsed from their text, matching names in any database read
 edges are marked inferred. Reading a routine's body needs the `SHOW_ROUTINE` privilege, or
 owning the routine; without it the body reads as empty, so the routine's
 fingerprint cannot change and its edges are missing.
+
+Tables need no objects in MySQL: it has no sequences or user-defined types,
+and column defaults and generated columns cannot call stored functions. A
+table's triggers depend on it, so package planning brings them, and the
+routines they call, along with the table.
+
+A standalone group's database holds exactly its closure: the pulled-in
+tables with the rows of the group's own extract, and none of the routines,
+triggers, events and views the closure lacks. Foreign keys into a pulled-in
+table without rows are dropped. MySQL does not check what a routine body
+calls, so one the catalog only inferred is not stopped from being dropped;
+the plan warns about those.

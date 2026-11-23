@@ -5,8 +5,9 @@
 
 Planning resolves every name in the spec, applies excludes and strict mode,
 builds the reference graph with its fallbacks, assigns tables to image groups,
-chooses a strategy and checks the anonymization rules. It reports every
-problem it finds, not just the first.
+works out what each group's image needs (package planning, in
+:mod:`datadouble.closure`), chooses a strategy and checks the anonymization
+rules. It reports every problem it finds, not just the first.
 """
 
 import datetime as dt
@@ -24,9 +25,11 @@ from datadouble.catalog import (
     Column,
     ColumnKind,
     ForeignKey,
+    ObjectRef,
     Requirement,
     Table,
 )
+from datadouble.closure import Closure, GroupInput, Packaging, Pulled, RowsRule, close
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
@@ -40,8 +43,10 @@ from datadouble.spec import (
     HashRule,
     ImageFormat,
     NullRule,
+    ObjectRoot,
     OnMissing,
     PathsFrom,
+    PulledRows,
     Rule,
     Spec,
     Strategy,
@@ -135,6 +140,9 @@ class Capabilities(BaseModel):
     accounts: AccountNames | None = None
     """The names physical images' accounts (``package.accounts``) can have; None
     when the adapter cannot give images accounts."""
+    standalone: bool = False
+    """Whether the adapter can build standalone images: load what a closure
+    pulls in, and leave out of the image every object the closure lacks."""
     joins_outermost: bool = True
     """Whether one query can join tables in different outermost namespaces.
     PostgreSQL's databases cannot be joined, so a virtual reference between
@@ -176,7 +184,7 @@ class Fixup(_Model):
 
 
 class PlannedGroup(_Model):
-    """One image group: its tables and how references leaving it are handled."""
+    """One image group: its tables, what it needs, and how references leaving it are handled."""
 
     name: GroupName
     tables: tuple[TableName, ...]
@@ -184,6 +192,29 @@ class PlannedGroup(_Model):
     omitted_references: tuple[str, ...]
     """References whose constraints are left out because the parent is elsewhere."""
     fixups: tuple[Fixup, ...]
+    standalone: bool = False
+    """Whether the image must work on its own, holding everything in ``pulled``."""
+    roots: tuple[ObjectRef, ...] = ()
+    """The objects the spec and the group declare in ``objects``."""
+    objects: tuple[ObjectRef, ...] = ()
+    """Every object the image needs, dependencies first: those that come with
+    its tables, its roots, and what they need."""
+    pulled: tuple[Pulled, ...] = ()
+    """What a standalone group's closure pulled in from outside the group, and from where."""
+
+    def packaged(self) -> tuple[TableName, ...]:
+        """The tables its image holds: its own, then those its closure pulls in."""
+        return (*self.tables, *(p.table for p in self.pulled if p.table is not None))
+
+    def rowless(self) -> frozenset[TableName]:
+        """Pulled-in tables that come without rows."""
+        return frozenset(
+            p.table for p in self.pulled if p.table is not None and p.rows is PulledRows.NONE
+        )
+
+    def rows(self) -> dict[TableName, PulledRows]:
+        """Which rows of each pulled-in table its image holds."""
+        return {p.table: p.rows for p in self.pulled if p.table is not None and p.rows}
 
 
 class PiiAllow(_Model):
@@ -303,6 +334,8 @@ class _Planner:
         self.resolver = Resolver(catalog, case_sensitive=spec.case_sensitive)
         self.problems: list[str] = []
         self.warnings: list[str] = []
+        self.group_roots: dict[GroupName, tuple[ObjectRef, ...]] = {}
+        self.closures: dict[GroupName, Closure] = {}
 
     def attempt[**P, T](
         self, action: Callable[P, T], *args: P.args, **kwargs: P.kwargs
@@ -340,8 +373,12 @@ class _Planner:
         """What a difference from the lock breaks, if anything.
 
         A changed column breaks its anonymization rule when the rule no longer
-        fits it.
+        fits it. A removed object breaks a packaged table or a root that still
+        needs it; a new or changed object breaks an image whose closure reaches
+        it and then something the image cannot have (package planning).
         """
+        if finding.ref is not None:
+            return self.object_breaks(finding, finding.ref)
         if finding.difference is not Difference.COLUMN_CHANGED:
             return None
         found = self.rules_by_column().get(finding.object)
@@ -350,6 +387,54 @@ class _Planner:
         column, rule = found
         misfit = _misfit(column, rule)
         return None if misfit is None else f"its anonymization rule no longer fits: {misfit}"
+
+    def object_breaks(self, finding: Finding, ref: ObjectRef) -> str | None:
+        """What a new, changed or removed object breaks in the images, if anything."""
+        if finding.difference is not Difference.OBJECT_REMOVED:
+            reasons = [c.broken[ref] for c in self.closures.values() if ref in c.broken]
+            return "; ".join(dict.fromkeys(reasons)) or None
+        # Strict mode compares only with a lock.
+        lock = self.lock.catalog if self.lock is not None else self.catalog
+        packaged = {t for closure in self.closures.values() for t in closure.tables}
+        needing = [
+            f"packaged table {table.name} still needs it"
+            for table in lock.tables
+            if table.name in packaged
+            and any(edge.object == ref and not edge.inferred for edge in table.depends_on)
+        ]
+        locked = Resolver(lock, case_sensitive=self.spec.case_sensitive)
+        for name, roots in self.declared():
+            for root in roots:
+                kind, text = next(iter(root.items()))
+                try:
+                    declared = locked.object(kind, text)
+                except ResolveError:
+                    continue
+                if declared.ref == ref:
+                    needing.append(f"{_declarer(name)} declares it in objects")
+        return "; ".join(dict.fromkeys(needing)) or None
+
+    def declared(self) -> list[tuple[GroupName | None, tuple[ObjectRoot, ...]]]:
+        """The spec's roots, and each group's."""
+        return [
+            (None, self.spec.objects),
+            *((name, group.objects) for name, group in self.spec.images.items()),
+        ]
+
+    def roots(self) -> dict[GroupName, tuple[ObjectRef, ...]]:
+        """Each group's roots, the spec's first; a root that does not resolve is a problem."""
+        resolved: dict[GroupName | None, list[ObjectRef]] = {}
+        for name, roots in self.declared():
+            found: list[ObjectRef] = []
+            for root in roots:
+                kind, text = next(iter(root.items()))
+                try:
+                    found.append(self.resolver.object(kind, text).ref)
+                except ResolveError as error:
+                    self.problems.append(f"{_declarer(name)}: objects: {error}")
+            resolved[name] = found
+        shared = resolved[None]
+        return {name: tuple(dict.fromkeys((*shared, *resolved[name]))) for name in self.spec.images}
 
     def rules_by_column(self) -> dict[str, tuple[Column, Rule]]:
         """Each anonymized column, by name, with its rule.
@@ -508,10 +593,56 @@ class _Planner:
 
     # Groups
 
-    def groups(
-        self, kept: tuple[TableName, ...], edges: list[Edge], rules: dict[TableName, TableRule]
-    ) -> tuple[PlannedGroup, ...]:
-        members: dict[GroupName, tuple[TableName, ...]] = {
+    def placement(self) -> dict[ObjectRef, tuple[GroupName, ...]]:
+        """The groups whose ``include`` patterns match each object, from the right."""
+        placed: dict[ObjectRef, tuple[GroupName, ...]] = {}
+        for item in self.catalog.objects:
+            parts = (*item.ref.namespace, item.ref.name)
+            groups = tuple(
+                name
+                for name, group in self.spec.images.items()
+                if any(self.resolver.matches_parts(pattern, parts) for pattern in group.include)
+            )
+            if groups:
+                placed[item.ref] = groups
+        return placed
+
+    def rows_rules(self, name: GroupName, edges: list[Edge]) -> tuple[RowsRule, ...]:
+        """A group's ``rows`` overrides, resolved: references to edges, tables to names."""
+        found: list[RowsRule] = []
+        for key, rows in self.spec.images[name].rows.items():
+            if "->" in key:
+                reference = self.attempt(self.resolver.reference, key)
+                index = None if reference is None else self.find_edge(edges, reference, key)
+                if index is not None:
+                    found.append(RowsRule(key=key, rows=rows, edge=edges[index]))
+                continue
+            if _is_glob(key):
+                tables = self.resolver.glob(key.strip())
+            else:
+                table = self.attempt(self.resolver.table, key)
+                tables = () if table is None else (table.name,)
+            if tables:
+                found.append(RowsRule(key=key, rows=rows, tables=frozenset(tables)))
+            elif _is_glob(key):
+                self.problems.append(f"group {name!r}: rows: {key!r} matches no table")
+        return tuple(found)
+
+    def check_standalone(self) -> None:
+        """Refuse standalone groups the engine adapter cannot build."""
+        if self.capabilities.standalone:
+            return
+        for name, group in self.spec.images.items():
+            closure = self.closures[name]
+            if group.standalone and (closure.pulled or self.catalog.objects):
+                self.problems.append(
+                    f"group {name!r} is standalone, and the {self.catalog.engine} adapter "
+                    "cannot build standalone images yet"
+                )
+
+    def members(self, kept: tuple[TableName, ...]) -> dict[GroupName, tuple[TableName, ...]]:
+        """The kept tables each group's patterns include."""
+        return {
             name: tuple(
                 table
                 for table in kept
@@ -519,7 +650,16 @@ class _Planner:
             )
             for name, group in self.spec.images.items()
         }
+
+    def groups(
+        self,
+        kept: tuple[TableName, ...],
+        edges: list[Edge],
+        rules: dict[TableName, TableRule],
+        members: dict[GroupName, tuple[TableName, ...]],
+    ) -> tuple[PlannedGroup, ...]:
         placed = {table for tables in members.values() for table in tables}
+        placed |= {t for closure in self.closures.values() for t in closure.tables}
         self.warnings.extend(
             f"{table} is in no image group: its rows are extracted but not packaged"
             for table in kept
@@ -527,12 +667,19 @@ class _Planner:
         )
         planned: list[PlannedGroup] = []
         for name, group in self.spec.images.items():
-            tables = set(members[name])
+            closure = self.closures[name]
+            # A standalone group holds what its closure pulls in, too; a
+            # pulled-in table without rows cannot keep references to it.
+            tables = set(closure.tables)
+            rowless = {p.table for p in closure.pulled if p.rows is PulledRows.NONE}
             reachable = self.required(name)
             omitted: list[str] = []
             fixups: list[Fixup] = []
             for edge in edges:
                 if edge.child not in tables:
+                    continue
+                if edge.parent in rowless and edge.child not in rowless:
+                    omitted.append(edge.name)
                     continue
                 parent_here = edge.parent in tables
                 parent_rule = rules.get(edge.parent)
@@ -551,6 +698,10 @@ class _Planner:
                     requires=group.requires,
                     omitted_references=tuple(omitted),
                     fixups=tuple(fixups),
+                    standalone=group.standalone,
+                    roots=self.group_roots[name],
+                    objects=closure.objects,
+                    pulled=closure.pulled,
                 )
             )
         return tuple(planned)
@@ -790,11 +941,41 @@ class _Planner:
         excludes = resolve_excludes(self.resolver, self.spec.exclude, self.spec.structure_only)
         excluded = excludes.excluded()
         structure_only = excludes.structure_only_tables()
+        kept_tables = [t for t in self.catalog.tables if t.name not in excluded]
+        kept = tuple(table.name for table in kept_tables)
+        # Package planning comes before strict mode, which asks it what a
+        # difference from the lock breaks.
+        edges = self.edges(kept_tables)
+        members = self.members(kept)
+        self.group_roots = self.roots()
+        packaging = Packaging(
+            self.catalog, excluded, structure_only, tuple(edges), self.placement()
+        )
+        self.closures = {
+            name: close(
+                packaging,
+                GroupInput(
+                    name=name,
+                    tables=frozenset(members[name]),
+                    roots=self.group_roots[name],
+                    standalone=group.standalone,
+                    allowed=self.required(name) | {name},
+                    elsewhere=frozenset(
+                        table for other in self.required(name) for table in members[other]
+                    ),
+                    rows=self.rows_rules(name, edges),
+                ),
+            )
+            for name, group in self.spec.images.items()
+        }
+        self.check_standalone()
         strict = self.strict_report(excluded)
         if strict is not None and strict.failed():
             failures = tuple(f"strict mode: {f}" for f in strict.findings if f.severity == "fail")
             raise PlanError(failures, strict)
-        kept_tables = [t for t in self.catalog.tables if t.name not in excluded]
+        for closure in self.closures.values():
+            self.problems.extend(closure.problems)
+            self.warnings.extend(closure.warnings)
         rules = {
             table.name: TableRule(table=table.name, rows_kept=table.name not in structure_only)
             for table in kept_tables
@@ -807,13 +988,11 @@ class _Planner:
                 for rule in rules.values()
                 if rule.seed is None and rule.table not in excluded and rule.rows_kept
             )
-        edges = self.edges(kept_tables)
         for edge in edges:
             self.check_edge(edge, rules, excluded)
-        kept = tuple(table.name for table in kept_tables)
         unselected = self.unselected(rules, edges, kept)
         graph = Graph(rules, tuple(edges))
-        groups = self.groups(kept, edges, rules)
+        groups = self.groups(kept, edges, rules, members)
         key_columns = frozenset(
             [ColumnRef(table=e.child, column=c) for e in edges for c in e.columns]
             + [ColumnRef(table=e.parent, column=c) for e in edges for c in e.parent_columns]
@@ -928,6 +1107,11 @@ class _Planner:
             template=template,
             match=given.match,
         )
+
+
+def _declarer(group: GroupName | None) -> str:
+    """Who declares roots: ``the spec`` or ``group 'billing'``."""
+    return "the spec" if group is None else f"group {group!r}"
 
 
 def _misfit(column: Column, rule: Rule) -> str | None:

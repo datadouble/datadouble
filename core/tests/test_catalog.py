@@ -19,6 +19,7 @@ from datadouble.catalog import (
     Requirement,
     RequirementKind,
     SourceObject,
+    Table,
     changes,
     definition_fingerprint,
     describe_changes,
@@ -227,6 +228,38 @@ def test_a_lock_without_objects_is_written_as_before(tmp_path: Path) -> None:
     assert read_lock(path) == lock
 
 
+def test_what_tables_need_is_written_only_when_they_need_something(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.lock"
+    bare = catalog(table("users", ["id"]), table("orders", ["id"]))
+    write_lock(CatalogLock.of(bare), path)
+    written = json.loads(path.read_text(encoding="utf-8"))["catalog"]["tables"]
+    assert all("depends_on" not in entry for entry in written)
+    sequence = ObjectRef(kind=ObjectKind.SEQUENCE, namespace=("public",), name="users_id_seq")
+    needing = bare.model_copy(
+        update={
+            "tables": (
+                bare.tables[0].model_copy(
+                    update={"depends_on": (Dependency(object=sequence),) * 2}
+                ),
+                bare.tables[1],
+            )
+        }
+    )
+    assert needing.fingerprint() != bare.fingerprint()
+    lock = CatalogLock.of(needing)
+    assert lock.catalog.tables[1].depends_on == (Dependency(object=sequence),)
+    write_lock(lock, path)
+    assert read_lock(path) == lock
+    assert Dependency(object=sequence).target == sequence
+    # A policy can read another table; that is a need too, not a foreign key.
+    reader = Table(
+        name=TableName.of("public", "users"),
+        columns=(),
+        depends_on=(Dependency(table=TableName.of("public", "orders")),),
+    )
+    assert reader.depends_on[0].target == TableName.of("public", "orders")
+
+
 def test_unmet_requirements() -> None:
     available = (
         VECTOR.model_copy(update={"version": "0.8.7"}),
@@ -370,6 +403,12 @@ def test_changes_to_objects() -> None:
         "removed view public.recent",
     ]
     assert changes(before, before) == ()
+    (plain,) = users.tables
+    needing = plain.model_copy(update={"depends_on": (Dependency(object=AUDIT),)})
+    needs = users.model_copy(update={"tables": (needing,)})
+    assert [str(change) for change in changes(users, needs)] == [
+        "changed table public.users: the objects it needs"
+    ]
 
 
 def test_changes_to_the_catalog_as_a_whole() -> None:

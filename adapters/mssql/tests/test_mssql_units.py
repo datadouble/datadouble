@@ -12,12 +12,23 @@ from pathlib import Path
 import pymssql
 import pytest
 
-from datadouble.catalog import Column, ColumnKind
-from datadouble.engine import EngineError, Tooling
-from datadouble.names import ColumnName, TableName
+from datadouble.catalog import (
+    Column,
+    ColumnKind,
+    Dependency,
+    ObjectKind,
+    ObjectRef,
+    SourceObject,
+    definition_fingerprint,
+)
+from datadouble.closure import Pulled
+from datadouble.engine import EngineError, Tooling, group_extract_path
+from datadouble.names import ColumnName, GroupName, TableName
+from datadouble.planner import PlannedGroup
 from datadouble.registry import installed
 from datadouble.runtime import Completed, Container, Server
 from datadouble.settings import SettingsError
+from datadouble.spec import PulledRows
 from datadouble.subset import (
     AllOf,
     AllRows,
@@ -31,15 +42,25 @@ from datadouble.subset import (
 from datadouble_mssql import MssqlEngine, double_quoted, parse_url, server_settings
 from datadouble_mssql.errors import database_error, redact, tool_error
 from datadouble_mssql.introspect import Physical, kind_of, table_problem, type_text
+from datadouble_mssql.objects import read_objects
 from datadouble_mssql.render import Renderer, as_of_value, native, quote
 from datadouble_mssql.script import Phase, Schema, Statement
 from datadouble_mssql.server import MssqlServer, Tools, default_image, literal
-from datadouble_mssql.source import ExtractIndex, as_text, extracted_table, field, schema_for
+from datadouble_mssql.source import (
+    ExtractedTable,
+    ExtractIndex,
+    as_text,
+    extracted_table,
+    field,
+    schema_for,
+)
 from datadouble_mssql.working import (
     DatabaseInfo,
+    LeftOut,
     MssqlWorking,
     format_file,
     from_text,
+    group_sources,
     placeholder,
 )
 
@@ -280,3 +301,137 @@ def test_engine(tmp_path: Path) -> None:
     assert "WITH PASSWORD = N'$password'" in script
     assert "MSSQL_PID=Developer " in script
     assert engine.server(tmp_path, "mirror/mssql:2022").image == "mirror/mssql:2022"
+
+
+class ScriptedCursor:
+    """Answers each catalog query with the rows of the one key it contains."""
+
+    def __init__(self, rows: dict[str, list[tuple[object, ...]]]) -> None:
+        self.rows = rows
+        self.found: list[tuple[object, ...]] = []
+
+    def execute(self, operation: str, /) -> None:
+        (key,) = [key for key in self.rows if key in operation]
+        self.found = self.rows[key]
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.found
+
+
+def test_tables_need_the_objects_their_constraints_and_columns_use() -> None:
+    orders, customers = TableName.of("shop", "orders"), TableName.of("shop", "customers")
+    total = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("shop",), name="total")
+    money = ObjectRef(kind=ObjectKind.TYPE, namespace=("shop",), name="money_t")
+    cursor = ScriptedCursor(
+        {
+            "FROM sys.tables t JOIN": [(1, "shop", "orders"), (2, "shop", "customers")],
+            "sys.sql_modules": [(10, "shop", "total", "FN", "RETURN 1", 0)],
+            "sys.sequences": [],
+            "FROM sys.types t JOIN": [(100, "shop", "money_t", "decimal(9,2)")],
+            "('D', 'C')": [(20, 1), (21, 1)],
+            "sql_expression_dependencies": [
+                (20, 1, 10, "shop", "total"),  # a check constraint on orders calls total
+                (21, 1, 1, "shop", "orders"),  # a default reads its own table
+                (21, 1, 2, "shop", "customers"),  # ... or another, which is no object to need
+            ],
+            "SELECT DISTINCT c.object_id": [
+                (1, 100),  # a column of orders has the alias type
+                (2, 999),  # a type the catalog does not list
+            ],
+        }
+    )
+    objects, needs = read_objects(cursor)
+    assert tuple(item.ref for item in objects) == (total, money)
+    assert needs == {orders: (Dependency(object=total), Dependency(object=money))}
+    assert customers not in needs
+
+
+def test_a_standalone_database_leaves_out_what_its_closure_lacks() -> None:
+    orders, customers = TableName.of("dbo", "orders"), TableName.of("dbo", "customers")
+    kept = ObjectRef(kind=ObjectKind.VIEW, namespace=("dbo",), name="kept")
+    lacked = ObjectRef(kind=ObjectKind.PROCEDURE, namespace=("sales",), name="lacked")
+    kind = ObjectRef(kind=ObjectKind.TYPE, namespace=("dbo",), name="kind")
+    objects = [
+        SourceObject(ref=ref, fingerprint=definition_fingerprint(ref.name))
+        for ref in (kept, lacked, kind)
+    ]
+    group = PlannedGroup(
+        name=GroupName("orders"),
+        tables=(orders,),
+        requires=(),
+        omitted_references=(),
+        fixups=(),
+        standalone=True,
+        objects=(kept,),
+        pulled=(
+            Pulled(table=customers, path=("dbo.orders", "dbo.customers"), rows=PulledRows.NONE),
+        ),
+    )
+    left_out = LeftOut.of(objects, group)
+    # Types are not scripted, so only the procedure is left out.
+    assert left_out == LeftOut(
+        objects=frozenset({(Phase.MODULE, "sales.lacked")}), rowless=frozenset({"dbo.customers"})
+    )
+    assert LeftOut.of(objects, group.model_copy(update={"standalone": False})) == LeftOut()
+
+    present = {"dbo.orders", "dbo.customers", "dbo.kept"}
+    tables = frozenset({orders, customers})
+
+    def wanted(statement: Statement, among: frozenset[TableName] | None = None) -> bool:
+        return left_out.wanted(statement, among, present)
+
+    assert not wanted(Statement(phase=Phase.MODULE, name="sales.lacked", sql="x"))
+    assert wanted(Statement(phase=Phase.MODULE, name="dbo.kept", sql="x", needs=("dbo.orders",)))
+    # A table with rows keeps no foreign key into one without; one without may.
+    into = ("dbo.customers",)
+    assert not wanted(
+        Statement(phase=Phase.FOREIGN_KEY, name="fk", sql="x", table=orders, needs=into)
+    )
+    assert wanted(
+        Statement(phase=Phase.FOREIGN_KEY, name="fk", sql="x", table=customers, needs=into)
+    )
+    assert wanted(Statement(phase=Phase.TABLE, name="dbo.orders", sql="x", table=orders), tables)
+    other = TableName.of("dbo", "other")
+    assert not wanted(Statement(phase=Phase.TABLE, name="dbo.other", sql="x", table=other), tables)
+    assert not wanted(Statement(phase=Phase.INDEX, name="ix", sql="x", table=other))
+    assert not wanted(Statement(phase=Phase.MODULE, name="v", sql="x", needs=("dbo.other",)))
+
+
+def _index(*tables: TableName) -> ExtractIndex:
+    return ExtractIndex(
+        database="shop",
+        server_version="16.0.4325.4",
+        tables=tuple(
+            ExtractedTable(table=t, file=f"{t.name}.dat", columns=(C("id"),), ordinals=(1,), rows=1)
+            for t in tables
+        ),
+    )
+
+
+def test_a_standalone_group_loads_its_own_extract_first(tmp_path: Path) -> None:
+    orders, lines = TableName.of("dbo", "orders"), TableName.of("dbo", "lines")
+    customers = TableName.of("dbo", "customers")
+    extract = tmp_path / "extract"
+    extract.mkdir()
+    shared = _index(orders, lines, customers)
+    group = PlannedGroup(
+        name=GroupName("orders"),
+        tables=(orders, lines),
+        requires=(),
+        omitted_references=(),
+        fixups=(),
+    )
+    assert [(f, t.table) for f, t in group_sources(group, shared, extract)] == [
+        (extract, orders),
+        (extract, lines),
+    ]
+    own = group_extract_path(extract, group.name)
+    own.mkdir(parents=True)
+    (own / "index.json").write_text(_index(customers, orders).model_dump_json(), "utf-8")
+    # The pulled-in rows and the own table that gained some come from the
+    # group's extract, the group's other tables from the shared one.
+    assert [(f, t.table) for f, t in group_sources(group, shared, extract)] == [
+        (own, customers),
+        (own, orders),
+        (extract, lines),
+    ]

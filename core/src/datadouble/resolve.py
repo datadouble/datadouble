@@ -11,6 +11,10 @@ references ``child.column -> parent``. A table's own name may hold dots (a
 MongoDB collection such as ``fs.files``); a dot in a spec name separates parts
 everywhere else. Names are matched case-insensitively unless the spec sets
 ``case_sensitive: true``, because engines fold identifier case differently.
+
+Objects (functions, views and the like) are named the same way, with their
+kind given separately, and a routine may add its argument types as the
+catalog spells them: ``public.total(integer)``.
 """
 
 import fnmatch
@@ -18,7 +22,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from datadouble.catalog import Catalog, Column, Table
+from datadouble.catalog import Catalog, Column, ObjectKind, SourceObject, Table
 from datadouble.names import ColumnName, ColumnRef, TableName
 
 
@@ -37,6 +41,7 @@ class Reference:
 
 
 _ARROW = re.compile(r"\s*->\s*")
+_SPACE = re.compile(r"\s+")
 
 
 def ends_with(
@@ -82,7 +87,11 @@ class Resolver:
         namespaces called ``audit``, and ``shop.*.*`` every table in
         PostgreSQL's database ``shop``.
         """
-        return ends_with(name.parts, pattern.split("."), self._glob_same)
+        return self.matches_parts(pattern, name.parts)
+
+    def matches_parts(self, pattern: str, parts: Sequence[str]) -> bool:
+        """Whether a glob matches a name given as its parts: a table's, or an object's."""
+        return ends_with(parts, pattern.split("."), self._glob_same)
 
     def glob(self, pattern: str) -> tuple[TableName, ...]:
         """Every table a glob matches, in catalog order."""
@@ -108,6 +117,30 @@ class Resolver:
             message = f"table {text!r} is not in the catalog"
             raise ResolveError(message)
         return table
+
+    def object(self, kind: ObjectKind, text: str) -> SourceObject:
+        """The object of ``kind`` a spec name refers to, with argument types if given."""
+        name, opened, rest = text.strip().partition("(")
+        signature = _SPACE.sub("", self._fold(opened + rest)) if opened else None
+        pieces = name.strip().split(".")
+        found = [
+            item
+            for item in self.catalog.objects
+            if item.ref.kind is kind
+            and ends_with((*item.ref.namespace, item.ref.name), pieces, self._same)
+            and (
+                signature is None
+                or _SPACE.sub("", self._fold(item.ref.signature or "")) == signature
+            )
+        ]
+        if not found:
+            message = f"{kind} {text.strip()!r} is not in the catalog"
+            raise ResolveError(message)
+        if len(found) > 1:
+            names = ", ".join(str(item.ref) for item in found)
+            message = f"{kind} {text.strip()!r} is ambiguous: it matches {names}; qualify it"
+            raise ResolveError(message)
+        return found[0]
 
     def column_of(self, table: Table, text: str) -> Column:
         """The column of ``table`` a spec name refers to."""
