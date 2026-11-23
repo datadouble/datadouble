@@ -76,6 +76,7 @@ class TableRule(_Model):
     table: TableName
     seed: str | None = None
     every_row: bool = False
+    """Every row is a source of rows, like a seed; ``drop`` references still restrict it."""
     rows_kept: bool = True
     """False for structure-only tables, which keep their definition and no rows."""
 
@@ -205,11 +206,9 @@ class Graph:
         return down, up, drop
 
     def takes_all(self, table: TableName) -> bool:
-        """Whether every row of ``table`` is chosen."""
+        """Whether ``follow: all`` on a reference to ``table`` takes its whole table."""
         rule = self.rules[table]
-        return rule.rows_kept and (
-            rule.every_row or any(e.mode is EdgeMode.ALL for e in self.by_parent.get(table, ()))
-        )
+        return rule.rows_kept and any(e.mode is EdgeMode.ALL for e in self.by_parent.get(table, ()))
 
     def is_acyclic(self) -> bool:
         """Whether strategy A can run."""
@@ -236,6 +235,14 @@ def _when(edge: Edge, condition: Condition) -> Condition:
 # foreign keys and virtual references to a primary key do.
 
 
+def _own_sources(rule: TableRule) -> list[Condition]:
+    """The rows a table's own rule chooses: its seed, or every row."""
+    sources: list[Condition] = [Predicate(rule.seed)] if rule.seed else []
+    if rule.every_row:
+        sources.append(AllRows())
+    return sources
+
+
 def _nested(graph: Graph, table: TableName, skip: Edge | None, stack: frozenset[Edge]) -> Condition:
     rule = graph.rules[table]
     if not rule.rows_kept:
@@ -243,7 +250,7 @@ def _nested(graph: Graph, table: TableName, skip: Edge | None, stack: frozenset[
     if graph.takes_all(table):
         return AllRows()
     down, up, drop = graph.incoming(table)
-    sources: list[Condition] = [Predicate(rule.seed)] if rule.seed else []
+    sources = _own_sources(rule)
     sources.extend(
         _when(e, SelectedBy(e.columns, e.parent, e.parent_columns)) for e in down if e != skip
     )
@@ -329,7 +336,7 @@ class _KeyState:
         if graph.takes_all(table):
             return AllRows()
         down, up, drop = graph.incoming(table)
-        sources: list[Condition] = [Predicate(rule.seed)] if rule.seed else []
+        sources = _own_sources(rule)
         sources.extend(
             _when(e, ValuesIn(e.columns, frozenset(self.values.get(e, ())))) for e in down
         )

@@ -7,12 +7,14 @@ import pytest
 
 from datadouble import jailer
 from datadouble.catalog import CatalogLock
+from datadouble.names import TableName
 from datadouble.planner import Capabilities, PlanError, PlanOptions, plan
 from datadouble.spec import (
     EdgePolicy,
     ImageFormat,
     OnMissing,
     SpecError,
+    Unselected,
     VirtualForeignKey,
     parse_spec,
 )
@@ -93,6 +95,7 @@ def test_translation(tmp_path: Path) -> None:
     assert subset.virtual_fks == {
         "public.events.(subject_id) -> public.posts.(id)": VirtualForeignKey()
     }
+    assert subset.unselected is Unselected.NONE
     assert translated.exclude == ("public.categories",)
     assert translated.report == (
         "ignored the layout block, which does not choose rows",
@@ -180,6 +183,9 @@ def test_planning_a_jailer_subset(tmp_path: Path) -> None:
     live = shop()
     planned = plan(spec, live, CatalogLock.of(live), capabilities, PlanOptions())
     assert "Jailer subset: ignored the layout block, which does not choose rows" in planned.warnings
+    # Tables the model doesn't reach keep no rows, as in Jailer, with a warning.
+    assert TableName.of("public", "film_actor") in planned.unselected
+    assert any("selects rows of public.film_actor" in w for w in planned.warnings)
     broken = parse_spec(
         HEADER + f"subset:\n  jailer: {{model: {tmp_path / 'nope.jm'}, datamodel: {datamodel}}}\n"
     )
@@ -196,3 +202,10 @@ def test_jailer_subsets_stand_alone(tmp_path: Path) -> None:
             + f"  jailer: {{model: {tmp_path}/m.jm, datamodel: {tmp_path}}}\n"
         )
     assert "cannot also have seeds" in str(caught.value.details)
+    with pytest.raises(SpecError) as caught:
+        parse_spec(
+            HEADER
+            + "subset:\n  unselected: all\n"
+            + f"  jailer: {{model: {tmp_path}/m.jm, datamodel: {tmp_path}}}\n"
+        )
+    assert "or unselected" in str(caught.value.details)

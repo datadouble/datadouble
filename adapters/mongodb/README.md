@@ -20,6 +20,7 @@ subset:
     users: '{"created": {"$lte": ":as_of"}}'   # JSON filters; ":as_of" is the plan's anchor
   virtual_fks:
     comments.user_id -> users: {}
+  unselected: none   # collections nothing reaches, such as comments here, are copied empty
 ```
 
 MongoDB declares no references, so every reference is virtual; subsets use

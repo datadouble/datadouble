@@ -58,6 +58,7 @@ source:
   connection: {url: {env: DATADOUBLE_TEST_MYSQL_URL}}
 exclude: ["dba_*"]
 subset:
+  unselected: none
   seeds:
     customer: "customer_id <= 40 AND create_date <= :as_of"
   follow:

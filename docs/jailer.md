@@ -46,6 +46,7 @@ What version 1 translates (decision 81):
 | Restriction `ignore` on a child direction | Not followed |
 | Restriction `ignore` on a parent direction, or an excluded association | `on_missing: null` (Jailer exports the row with the reference dangling; the key sets agree) |
 | `exclude-tables.csv` | Excludes, added to the spec's own |
+| A table no subject or association reaches | No rows, with a warning, as `subset.unselected: none`; `import-jailer` writes that setting, and a spec cannot set `unselected` beside `subset.jailer` |
 | Data model `table.csv` | Checked against the catalog: a primary key that differs fails the plan |
 | Layout, XML mapping, export mode, version and other display settings | Ignored, listed in the report |
 

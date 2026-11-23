@@ -110,6 +110,7 @@ name: scratch
 source: {engine: mssql, connection: CONNECTION, server: {accept_eula: true}}
 exclude: ["items"]
 subset:
+  unselected: none
   seeds: {child: "id <= 2", files: "id > 0", extra.notes: "id > 0"}
   edges:
     child.parent_id -> parent: {on_missing: stub}

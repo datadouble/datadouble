@@ -43,6 +43,7 @@ source:
     indices: ["*", "-items", "-added"]
   image: {IMAGE}
 subset:
+  unselected: none
   seeds:
     customers: '{{"range": {{"customer_id": {{"lte": 40}}}}}}'
     rentals: '{{"range": {{"rental_id": {{"gte": 295, "lte": 305}}}}}}'

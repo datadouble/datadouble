@@ -614,6 +614,8 @@ class Run:
                 "strategy": planned.strategy,
                 "strict": planned.strict,
                 "excludes": planned.excludes,
+                "seeds": planned.seeds,
+                "unselected": planned.unselected,
                 "group": group,
                 "transform": transformed.outputs,
                 "stages": {r.stage.value: r.status.value for r in self.records},

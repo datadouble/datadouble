@@ -807,7 +807,7 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
     source = SalesforceSource(org, "62.0", ("Account", "Contact"))
     spec = parse_spec(
         "name: crm\nsource: {engine: salesforce, connection: {fake: x}}\n"
-        "subset: {seeds: {Account: \"Industry = 'Retail'\"}}\n"
+        "subset: {seeds: {Account: \"Industry = 'Retail'\"}, unselected: none}\n"
         "store: [{filesystem: {path: /tmp/store}}]\n"
     )
     capabilities = SalesforceEngine().capabilities()

@@ -37,6 +37,7 @@ source:
   image: mongo:9.0.8@sha256:bdcd178c7ef0c0afca7f345e413f6e8960b20f65662c2db45f8380221f32338e
 exclude: ["maintenance_runs"]
 subset:
+  unselected: none
   seeds:
     users: '{"created": {"$lte": ":as_of"}, "tags": "critic"}'
   follow:

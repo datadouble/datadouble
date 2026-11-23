@@ -204,6 +204,16 @@ def test_every_row_rule(blog: FakeSource) -> None:
     assert both(graph, blog) == {"categories": [1, 2, 3]}
 
 
+def test_drop_restricts_every_row(blog: FakeSource) -> None:
+    # Every row is a source like a seed: a drop reference still leaves out rows
+    # whose parent was not chosen, in both strategies.
+    graph = Graph(
+        rules("posts", "comments", comments_all=True, seeds={"posts": "id = 13"}),
+        (edge("comments", "post_id", "posts", mode=EdgeMode.DROP),),
+    )
+    assert both(graph, blog) == {"posts": [13], "comments": [102]}
+
+
 def test_drop_leaves_out_children_without_parents(blog: FakeSource) -> None:
     graph = Graph(
         rules("users", "posts", "comments", seeds={"comments": "id >= 100", "posts": "id = 13"}),

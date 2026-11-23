@@ -31,7 +31,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Catalog, Table
-from datadouble.spec import EdgePolicy, Follow, OnMissing, Subset, VirtualForeignKey
+from datadouble.spec import EdgePolicy, Follow, OnMissing, Subset, Unselected, VirtualForeignKey
 
 _ALIAS_T = re.compile(r"(?<![\w.\"`])T\.(?=[\w\"`])", re.IGNORECASE)
 _PAIR = re.compile(r"^\s*(A|B)\.([\w$]+)\s*=\s*(A|B)\.([\w$]+)\s*$", re.IGNORECASE)
@@ -366,8 +366,14 @@ def translate(
         for name in datamodel.excluded_tables
         if (table := translator.table(name)) is not None
     )
+    # Jailer exports only what its subjects and associations reach, so a table
+    # they don't reach keeps no rows rather than failing the plan.
     subset = Subset(
-        seeds=seeds, follow=Follow(down=tuple(down)), edges=policies, virtual_fks=virtual
+        seeds=seeds,
+        follow=Follow(down=tuple(down)),
+        edges=policies,
+        virtual_fks=virtual,
+        unselected=Unselected.NONE,
     )
     report = tuple(
         f"ignored the {block} block, which does not choose rows" for block in model.ignored

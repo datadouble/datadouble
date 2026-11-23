@@ -605,6 +605,9 @@ def test_omitted_requirements_are_not_checked(
     build = json.loads(manifest)
     assert build["omitted"] == [{"kind": "extension", "name": "vector", "version": "0.8.2"}]
     assert build["requirements"] == []
+    # The manifest says what each seed chose and which tables nothing selected.
+    assert {s["pattern"] for s in build["seeds"]} == {"users", "comments"}
+    assert build["unselected"] == []
 
 
 def test_a_resumed_build_checks_the_image_too(

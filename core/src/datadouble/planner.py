@@ -11,7 +11,7 @@ problem it finds, not just the first.
 
 import datetime as dt
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from typing import assert_never
 
@@ -45,6 +45,7 @@ from datadouble.spec import (
     Spec,
     Strategy,
     StrictLevel,
+    Unselected,
 )
 from datadouble.strict import Excludes, StrictReport, check_strict, resolve_excludes
 from datadouble.subset import (
@@ -152,6 +153,15 @@ class PlannedPaths(_Model):
         return matched[1] if matched else None
 
 
+class PlannedSeed(_Model):
+    """One ``subset.seeds`` key and the tables it gave a seed to."""
+
+    pattern: str
+    """The key as the spec wrote it: a table name or a glob."""
+    tables: tuple[TableName, ...]
+    """The tables it gave its condition to; a table's own name wins over a pattern."""
+
+
 class Plan(_Model):
     """Everything the later stages need, recorded in the plan's manifest."""
 
@@ -177,6 +187,10 @@ class Plan(_Model):
     warnings: tuple[str, ...]
     paths_from: PlannedPaths | None = None
     """How the chosen rows name the files to copy too."""
+    seeds: tuple[PlannedSeed, ...] = ()
+    """Each seed key and the tables it matched."""
+    unselected: tuple[TableName, ...] = ()
+    """Kept tables no seed or followed reference selected, handled by ``subset.unselected``."""
 
     def graph(self) -> Graph:
         """The selection graph."""
@@ -559,17 +573,100 @@ class _Planner:
                     self.problems.append(f"{error}; the nested strategy cannot run, use keys")
         return wanted
 
-    def seeds(self, rules: dict[TableName, TableRule], excluded: frozenset[TableName]) -> None:
+    def seeds(
+        self, rules: dict[TableName, TableRule], excluded: frozenset[TableName]
+    ) -> tuple[PlannedSeed, ...]:
+        """Give each seeded table its condition; a table's own name wins over a pattern."""
+        exact: dict[TableName, tuple[str, str]] = {}
+        by_pattern: dict[TableName, list[tuple[str, str]]] = {}
         for text, predicate in self.spec.subset.seeds.items():
-            table = self.attempt(self.resolver.table, text)
-            if table is None:
+            if _is_glob(text):
+                for name in self.seed_pattern(text, rules, excluded):
+                    by_pattern.setdefault(name, []).append((text, predicate))
+            elif (seeded := self.seed_table(text, rules, excluded)) is not None:
+                if seeded in exact:
+                    self.problems.append(
+                        f"seeds {exact[seeded][0]!r} and {text!r} both name {seeded}"
+                    )
+                exact[seeded] = (text, predicate)
+        for name, found in by_pattern.items():
+            if name in exact:
                 continue
-            if table.name in excluded:
-                self.problems.append(f"seed {text!r} names {table.name}, which is excluded")
-            elif not rules[table.name].rows_kept:
-                self.problems.append(f"seed {text!r} names {table.name}, which is structure-only")
+            if len(found) > 1:
+                patterns = ", ".join(repr(text) for text, _ in found)
+                self.problems.append(
+                    f"{name} matches more than one seed pattern ({patterns}); "
+                    "give it a seed of its own, or narrow the patterns"
+                )
             else:
-                rules[table.name] = rules[table.name].model_copy(update={"seed": predicate})
+                exact[name] = found[0]
+        seeded_by: dict[str, list[TableName]] = {text: [] for text in self.spec.subset.seeds}
+        for name, (text, predicate) in exact.items():
+            rules[name] = rules[name].model_copy(update={"seed": predicate})
+            seeded_by[text].append(name)
+        return tuple(
+            PlannedSeed(pattern=text, tables=tuple(sorted(names, key=str)))
+            for text, names in seeded_by.items()
+        )
+
+    def seed_pattern(
+        self, text: str, rules: dict[TableName, TableRule], excluded: frozenset[TableName]
+    ) -> tuple[TableName, ...]:
+        """The tables a seed glob gives rows to: those it matches that keep rows."""
+        matched = tuple(
+            name
+            for name in self.resolver.glob(text.strip())
+            if name not in excluded and rules[name].rows_kept
+        )
+        if not matched:
+            self.problems.append(f"seed pattern {text!r} matches no table that keeps rows")
+        return matched
+
+    def seed_table(
+        self, text: str, rules: dict[TableName, TableRule], excluded: frozenset[TableName]
+    ) -> TableName | None:
+        """The table a seed names, if it can take a seed."""
+        table = self.attempt(self.resolver.table, text)
+        if table is None:
+            return None
+        if table.name in excluded:
+            self.problems.append(f"seed {text!r} names {table.name}, which is excluded")
+            return None
+        if not rules[table.name].rows_kept:
+            self.problems.append(f"seed {text!r} names {table.name}, which is structure-only")
+            return None
+        return table.name
+
+    def unselected(
+        self, rules: dict[TableName, TableRule], edges: list[Edge], kept: tuple[TableName, ...]
+    ) -> tuple[TableName, ...]:
+        """Kept tables nothing selects rows from, handled as ``subset.unselected`` says."""
+        if self.capabilities.complete:
+            return ()  # Every table must already be seeded or excluded.
+        keeps = frozenset(name for name in kept if rules[name].rows_kept)
+        chosen = _reached(rules, edges, keeps)
+        missing = tuple(name for name in kept if name in keeps and name not in chosen)
+        policy = self.spec.subset.unselected or Unselected.FAIL
+        match policy:
+            case Unselected.FAIL:
+                self.problems.extend(
+                    f"no seed or followed reference selects rows of {name}; seed it "
+                    "(seed keys take globs), follow a reference to it, make it "
+                    "structure_only, exclude it, or set subset.unselected to none or all"
+                    for name in missing
+                )
+            case Unselected.NONE:
+                self.warnings.extend(
+                    f"no seed or followed reference selects rows of {name}; "
+                    "it is copied without rows (subset.unselected: none)"
+                    for name in missing
+                )
+            case Unselected.ALL:
+                for name in missing:
+                    rules[name] = rules[name].model_copy(update={"every_row": True})
+            case _:
+                assert_never(policy)
+        return missing
 
     def plan(self) -> Plan:
         excludes = resolve_excludes(self.resolver, self.spec.exclude, self.spec.structure_only)
@@ -589,7 +686,7 @@ class _Planner:
             for table in kept_tables
         }
         rules.update({name: TableRule(table=name, rows_kept=False) for name in excluded})
-        self.seeds(rules, excluded)
+        seeds = self.seeds(rules, excluded)
         if self.capabilities.complete:
             self.problems.extend(
                 f"{rule.table} is neither selected nor excluded"
@@ -599,8 +696,9 @@ class _Planner:
         edges = self.edges(kept_tables)
         for edge in edges:
             self.check_edge(edge, rules, excluded)
-        graph = Graph(rules, tuple(edges))
         kept = tuple(table.name for table in kept_tables)
+        unselected = self.unselected(rules, edges, kept)
+        graph = Graph(rules, tuple(edges))
         groups = self.groups(kept, edges, rules)
         key_columns = frozenset(
             [ColumnRef(table=e.child, column=c) for e in edges for c in e.columns]
@@ -655,6 +753,8 @@ class _Planner:
             omitted=omitted,
             warnings=tuple(self.warnings),
             paths_from=paths_from,
+            seeds=seeds,
+            unselected=unselected,
         )
 
     def omitted(self) -> tuple[Requirement, ...]:
@@ -721,6 +821,38 @@ _FALLBACKS: dict[OnMissing, EdgeMode] = {
     OnMissing.STUB: EdgeMode.STUB,
     OnMissing.DROP: EdgeMode.DROP,
 }
+
+
+_PULLS_PARENTS = frozenset({EdgeMode.FOLLOW, EdgeMode.ALL})
+"""Edge modes under which a chosen child row brings in its parent rows."""
+
+
+def _is_glob(text: str) -> bool:
+    """Whether a seed key is a pattern rather than a table name."""
+    return any(character in text for character in "*?[")
+
+
+def _reached(
+    rules: Mapping[TableName, TableRule], edges: Iterable[Edge], keeps: frozenset[TableName]
+) -> set[TableName]:
+    """Tables among ``keeps`` that a seed, ``follow: all`` or a followed edge gives rows."""
+    edges = tuple(edges)
+    chosen = {name for name in keeps if rules[name].seed is not None or rules[name].every_row}
+    chosen |= {e.parent for e in edges if e.mode is EdgeMode.ALL and e.parent in keeps}
+    grew = True
+    while grew:
+        grew = False
+        for edge in edges:
+            pulled: list[TableName] = []
+            if edge.child in chosen and edge.mode in _PULLS_PARENTS:
+                pulled.append(edge.parent)
+            if edge.down and edge.parent in chosen:
+                pulled.append(edge.child)
+            for name in pulled:
+                if name in keeps and name not in chosen:
+                    chosen.add(name)
+                    grew = True
+    return chosen
 
 
 def _mode(policy: EdgePolicy) -> EdgeMode:

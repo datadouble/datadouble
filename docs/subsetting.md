@@ -46,6 +46,35 @@ subset:
   case. A helper can propose candidates from naming conventions (`*_id`) for a
   human to confirm.
 
+### Tables nothing selects
+
+A kept table gets rows from a seed, from `follow: all` on a reference to it,
+or through a followed edge from a table that has rows: parents of chosen rows
+always, children only along `follow.down`. A table none of these reach would
+be copied empty, which is easy to miss, so it fails the plan by default:
+
+```yaml
+subset:
+  seeds:
+    "*": "TRUE"                  # globs, as in excludes; a table's own name wins
+    orders: "created_at >= :as_of - interval '30 days'"
+  unselected: fail               # default; or none (no rows, with a warning) or all
+```
+
+- **Seed keys are table names or globs.** A glob gives its condition to every
+  table it matches that keeps rows, skipping excluded and structure-only
+  tables. A table's own name wins over a glob; a table two globs match, and a
+  glob matching nothing, fail the plan. The plan records what each key matched.
+- **`unselected`** says what happens to the rest. `fail` (the default) names
+  each table and the ways out: seed it, make it structure-only, exclude it, or
+  change `unselected`. `none` copies it without rows and warns. `all` copies
+  every row of each such table, even a parent that another unselected table
+  would otherwise bring in only part of; it is the engine-neutral way to copy
+  whole tables, since a seed's condition is in the source's own language.
+  `on_missing: drop` references still apply to those rows.
+- **Jailer subsets** keep Jailer's behaviour: tables no subject or association
+  reaches export nothing, as with `unselected: none` (see [Jailer](jailer.md)).
+
 ## Two execution strategies
 
 **A. Nested subqueries pushed to the source.** The planner generates SQL like the
