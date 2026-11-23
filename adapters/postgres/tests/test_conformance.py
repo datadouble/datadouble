@@ -315,9 +315,15 @@ def test_the_catalog_lists_pagilas_objects_and_their_dependencies() -> None:
         "table datadouble.public.rental (inferred)",
         "table datadouble.public.payment (inferred)",
     } <= edges(balance)
+    # A function's signature is PostgreSQL's identity argument list, which names a
+    # SQL function's OUT parameters too.
+    in_stock = (
+        "function datadouble.public.film_in_stock"
+        "(p_film_id integer, p_store_id integer, OUT p_film_count integer)"
+    )
     assert (
         "function datadouble.public.inventory_in_stock(p_inventory_id integer) (inferred)"
-        in edges("function datadouble.public.film_in_stock(p_film_id integer, p_store_id integer)")
+        in edges(in_stock)
     )
     # The same source gives the same objects, so locks and snapshots agree.
     with PostgresEngine().connect({"dsn": {"env": DSN_VARIABLE}}) as session:
