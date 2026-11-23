@@ -79,3 +79,24 @@ def test_output_held_open_by_another_program_is_not_waited_for(tmp_path: Path) -
     process = _HeldOpen(lambda: None, "")
     with pytest.raises(AssertionError, match="could not be read"):
         wait_for_stage(tmp_path, "transform", process)
+
+
+class _Running(_FakeProcess):
+    """A process that never exits."""
+
+    def poll(self) -> int | None:
+        return None
+
+
+def _no_sleep(seconds: float) -> None:
+    del seconds
+
+
+def test_a_run_past_the_deadline_is_reported_as_still_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = iter([0.0, 0.0, 901.0])
+    monkeypatch.setattr("datadouble_conformance.engine.time.monotonic", lambda: next(clock))
+    monkeypatch.setattr("datadouble_conformance.engine.time.sleep", _no_sleep)
+    with pytest.raises(AssertionError, match="never reached transform and is still running"):
+        wait_for_stage(tmp_path, "transform", _Running(lambda: None, ""))
