@@ -31,12 +31,28 @@ spec:
             sources:
               app:
                 engine: postgres
-                connection: {dsn: {env: SHOP_SOURCE_DSN}}
-            runtime: {kubernetes: {claim: datadouble, mount: /srv/datadouble}}
-            store: [{filesystem: {path: /srv/datadouble/store}}]
-            signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
-            trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}
-            promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
+                connection:
+                  dsn:
+                    env: SHOP_SOURCE_DSN
+            runtime:
+              kubernetes:
+                claim: datadouble
+                mount: /srv/datadouble
+            store:
+              - filesystem:
+                  path: /srv/datadouble/store
+            signing:
+              cosign:
+                key:
+                  env: SHOP_COSIGN_KEY
+            trust:
+              cosign:
+                public_key:
+                  env: SHOP_COSIGN_PUB
+            promote:
+              to:
+                - filesystem:
+                    path: /srv/datadouble/export
             fetch:
               from:
                 filesystem:

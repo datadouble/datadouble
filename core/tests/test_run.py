@@ -635,7 +635,9 @@ def test_omitted_requirements_are_not_checked(
 ) -> None:
     vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8.2")
     engine.catalog = shop().model_copy(update={"requirements": (vector,)})
-    spec = SPEC.replace("image: vendor/fake:1\n", "image: vendor/fake:1\n  omit: [vector]\n")
+    spec = SPEC.replace(
+        "    image: vendor/fake:1\n", "    image: vendor/fake:1\n    omit: [vector]\n"
+    )
     result = run(tmp_path, registry, spec=spec, lock=engine.catalog)
     assert not result.failed()
     (summary,) = [s for s in result.images if s.identity.group == "all"]

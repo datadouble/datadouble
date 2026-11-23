@@ -223,7 +223,7 @@ def test_sides(kinds: tuple[JobKind, ...], side: Side | None, problem: str) -> N
 def test_the_lock_job(tmp_path: Path) -> None:
     spec = parse_spec(
         SPEC.replace("STORE", str(tmp_path / "store")).replace(
-            "    where: here\n", "    dsn:\n      env: SHOP_SOURCE_DSN\n"
+            "      where: here\n", "      dsn:\n        env: SHOP_SOURCE_DSN\n"
         )
         + "secrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
