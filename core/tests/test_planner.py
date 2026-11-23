@@ -5,7 +5,18 @@ import datetime as dt
 
 import pytest
 
-from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, RequirementKind
+from datadouble.catalog import (
+    Catalog,
+    CatalogLock,
+    ColumnKind,
+    Dependency,
+    ObjectKind,
+    ObjectRef,
+    Requirement,
+    RequirementKind,
+    SourceObject,
+    definition_fingerprint,
+)
 from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import AccountNames, Capabilities, Plan, PlanError, PlanOptions, plan
 from datadouble.spec import (
@@ -260,6 +271,42 @@ def test_changed_columns_that_break_their_rule_fail_at_every_level(level: str) -
         assert caught.value.problems[0].startswith(
             f"strict mode: column-changed public.users.{column}"
         )
+
+
+def _objects(*objects: SourceObject) -> Catalog:
+    return shop().model_copy(update={"objects": objects})
+
+
+def test_object_changes_warn_and_removing_what_a_trigger_calls_fails() -> None:
+    function = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="stamp")
+    trigger = ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="users_stamp")
+    calls = SourceObject(
+        ref=trigger,
+        fingerprint=definition_fingerprint("EXECUTE FUNCTION stamp()"),
+        depends_on=(
+            Dependency(table=TableName.of("public", "users")),
+            Dependency(object=function),
+        ),
+    )
+    old = SourceObject(ref=function, fingerprint=definition_fingerprint("old"))
+    new = old.model_copy(update={"fingerprint": definition_fingerprint("new")})
+    rewritten = planned(live=_objects(new, calls), lock=_objects(old, calls))
+    assert [w for w in rewritten.warnings if w.startswith("strict mode")] == [
+        "strict mode: object-changed function public.stamp: its definition differs from the lock"
+    ]
+    hinted = calls.model_copy(update={"depends_on": (Dependency(object=function, inferred=True),)})
+    assert planned(live=_objects(new, hinted)).catalog.objects[1].depends_on[0].inferred
+    with pytest.raises(PlanError) as caught:
+        planned("strict: {functions: fail}", live=_objects(new, calls), lock=_objects(old, calls))
+    assert caught.value.problems[0].startswith("strict mode: object-changed function public.stamp")
+    with pytest.raises(PlanError) as caught:
+        planned(live=_objects(calls), lock=_objects(old, calls))
+    assert caught.value.problems == (
+        (
+            "strict mode: object-removed function public.stamp: the object is in the lock but "
+            "not in the live catalog; trigger public.users_stamp still needs it"
+        ),
+    )
 
 
 def test_excluded_parents_need_fallbacks() -> None:

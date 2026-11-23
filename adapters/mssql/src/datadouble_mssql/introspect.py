@@ -8,7 +8,8 @@ columns, primary keys and foreign keys. Table names are ``schema.table``.
 Beyond the neutral model, the adapter keeps each column's system type (for
 reading it as text and loading it back), the columns loading cannot write
 (computed columns and ``rowversion``), and what it does not support, which it
-refuses to extract rather than copy wrongly.
+refuses to extract rather than copy wrongly. Objects besides tables are read
+by :mod:`datadouble_mssql.objects`.
 """
 
 from collections import defaultdict
@@ -18,6 +19,7 @@ from pymssql import Connection
 
 from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
 from datadouble.names import ColumnName, EngineName, TableName
+from datadouble_mssql.objects import read_objects
 
 ENGINE = EngineName("mssql")
 
@@ -231,6 +233,7 @@ def introspect(connection: Connection) -> tuple[Catalog, Physical]:
             )
             entry[1].append(ColumnName(text[3]))
             entry[2].append(ColumnName(text[6]))
+        objects = read_objects(cursor)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -253,6 +256,7 @@ def introspect(connection: Connection) -> tuple[Catalog, Physical]:
             )
             for name in names
         ),
+        objects=objects,
     )
     physical = Physical(
         types=dict(types),

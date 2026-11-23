@@ -10,6 +10,7 @@ Beyond the neutral model, the adapter keeps each column's type family (for
 reading it as text and loading it back), the columns loading cannot write
 (virtual columns), the identity columns loading must write anyway, and what
 it does not support, which it refuses to extract rather than copy wrongly.
+Objects besides tables are read by :mod:`datadouble_oracle.objects`.
 """
 
 import re
@@ -28,6 +29,7 @@ from datadouble.catalog import (
 )
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble_oracle.driver import Connection, Cursor, Value
+from datadouble_oracle.objects import read_objects
 
 ENGINE = EngineName("oracle")
 
@@ -354,6 +356,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
                 identity[name] = column_name
         primary, references = keys(cursor, schemas)
         requirements = index_types(cursor, schemas)
+        objects = read_objects(cursor, schemas, frozenset(tables), names)
     catalog = Catalog(
         engine=ENGINE,
         tables=tuple(
@@ -375,6 +378,7 @@ def introspect(connection: Connection, schemas: tuple[str, ...]) -> tuple[Catalo
             for name in tables
         ),
         requirements=requirements,
+        objects=objects,
     )
     physical = Physical(
         types=dict(types),

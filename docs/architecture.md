@@ -290,6 +290,30 @@ working image that lacks one cannot load the data (decision 107).
 Each adapter's README lists what it reports and the images that provide
 common add-ons.
 
+### Source objects
+
+Functions, procedures, views, triggers, types, sequences and events can
+change what a copy holds or how it behaves, so the catalog lists them too
+(decision 130).
+
+- **The engine adapter lists them.** Each is a `SourceObject` in the
+  catalog: its kind, its namespaces and name like a table's
+  (`shop.public.total` in PostgreSQL), with the argument types of a routine
+  that can be overloaded, a fingerprint of its definition, and
+  dependency edges to the tables and objects it needs.
+- **Edges are exact where the engine records them** (PostgreSQL's
+  `pg_depend`, SQL Server's `sys.sql_expression_dependencies`, Oracle's
+  `ALL_DEPENDENCIES`, MySQL's view usage tables). Where it does not, the
+  adapter parses the definition for names (best effort, with the core's
+  `datadouble.objects` helper) and marks those edges `inferred`, so a
+  person knows which to check. The plan's catalog keeps the marks, and only
+  exact edges can fail a plan.
+- **The lock records them**, and strict mode compares them per kind (see
+  [strict mode](excludes-and-strict-mode.md#objects)). A catalog without
+  objects hashes as before, so locks of engines that have none stay valid.
+- **Engines without such objects report none:** MongoDB, Redis,
+  Elasticsearch, OpenSearch, Salesforce and file trees.
+
 Datadouble runs as the `uid:gid` the engine's copies are served as (decision
 86): 999:999 for the official PostgreSQL, MySQL and MongoDB images,
 10001:10001 for SQL Server and 54321:54321 for Oracle. A physical image's

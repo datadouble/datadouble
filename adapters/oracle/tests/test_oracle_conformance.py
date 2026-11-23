@@ -210,3 +210,29 @@ def harness() -> EngineHarness:
 
 class TestConformance(EngineConformance):
     """Oracle passes the engine conformance suite."""
+
+
+def test_the_catalog_lists_sakilas_objects_and_their_dependencies() -> None:
+    connection: dict[str, JsonValue] = {"url": {"env": URL_VARIABLE}, "schemas": ["SAKILA"]}
+    with OracleEngine().connect(connection) as session:
+        catalog = session.catalog()
+    objects = {str(item.ref): item for item in catalog.objects}
+
+    def edges(name: str) -> set[str]:
+        return {str(edge) for edge in objects[name].depends_on}
+
+    assert {
+        "view SAKILA.CUSTOMER_LIST",
+        "package SAKILA.RENTALS",
+        "type SAKILA.FILM_T",
+        "sequence SAKILA.ACTOR_SEQUENCE",
+    } <= set(objects)
+    # ALL_DEPENDENCIES is exact, PL/SQL included.
+    assert edges("trigger SAKILA.ACTOR_BEFORE_TRIGGER") == {
+        "table SAKILA.ACTOR",
+        "sequence SAKILA.ACTOR_SEQUENCE",
+    }
+    assert {"table SAKILA.ACTOR", "table SAKILA.FILM"} <= edges("view SAKILA.FILM_LIST")
+    assert "type SAKILA.FILM_T" in edges("type SAKILA.FILMS_T")
+    with OracleEngine().connect(connection) as session:
+        assert session.catalog().fingerprint() == catalog.fingerprint()

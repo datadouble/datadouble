@@ -277,3 +277,48 @@ def test_extensions_keep_their_versions_and_omitted_ones_go(tmp_path: Path) -> N
         preload = database.execute("SHOW shared_preload_libraries").fetchone()
     assert installed_now == {"plpgsql": "1.0", "hstore": "1.4"}
     assert preload == ("pg_stat_statements",)
+
+
+def test_the_catalog_lists_pagilas_objects_and_their_dependencies() -> None:
+    with PostgresEngine().connect({"dsn": {"env": DSN_VARIABLE}}) as session:
+        catalog = session.catalog()
+    objects = {str(item.ref): item for item in catalog.objects}
+
+    def edges(name: str) -> set[str]:
+        return {str(edge) for edge in objects[name].depends_on}
+
+    assert {
+        "type datadouble.public.mpaa_rating",
+        "type datadouble.public.year",
+        "sequence datadouble.public.actor_actor_id_seq",
+        "view datadouble.public.staff_list",
+    } <= set(objects)
+    # Exact edges from pg_depend: a trigger's table and function, a view's tables.
+    assert edges("trigger datadouble.public.actor.last_updated") == {
+        "table datadouble.public.actor",
+        "function datadouble.public.last_updated()",
+    }
+    assert {"table datadouble.public.actor", "table datadouble.public.film"} <= edges(
+        "view datadouble.public.actor_info"
+    )
+    assert {"table datadouble.public.rental", "table datadouble.public.category"} <= edges(
+        "materialized-view datadouble.public.rental_by_category"
+    )
+    assert edges("type datadouble.public.rating_note") == {"type datadouble.public.mpaa_rating"}
+    # PL/pgSQL bodies are parsed: their edges are inferred.
+    balance = (
+        "function datadouble.public.get_customer_balance"
+        "(p_customer_id integer, p_effective_date timestamp with time zone)"
+    )
+    assert {
+        "table datadouble.public.film (inferred)",
+        "table datadouble.public.rental (inferred)",
+        "table datadouble.public.payment (inferred)",
+    } <= edges(balance)
+    assert (
+        "function datadouble.public.inventory_in_stock(p_inventory_id integer) (inferred)"
+        in edges("function datadouble.public.film_in_stock(p_film_id integer, p_store_id integer)")
+    )
+    # The same source gives the same objects, so locks and snapshots agree.
+    with PostgresEngine().connect({"dsn": {"env": DSN_VARIABLE}}) as session:
+        assert session.catalog().fingerprint() == catalog.fingerprint()

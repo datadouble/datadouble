@@ -72,5 +72,13 @@ CREATE TABLE dba_maint_runs (
 INSERT INTO dba_maint_runs (ran_at) VALUES ('2022-03-01 00:00:00');
 CREATE VIEW dba_recent_runs AS SELECT run_id FROM dba_maint_runs;
 
+-- A view that calls a stored function, and a scheduled event, which the
+-- catalog lists with their dependencies. The event is disabled, so it never
+-- runs in the source or in a copy.
+CREATE VIEW inventory_available AS
+SELECT inventory_id, store_id FROM inventory WHERE inventory_in_stock(inventory_id);
+CREATE EVENT purge_old_notes ON SCHEDULE EVERY 1 DAY DISABLE
+DO DELETE FROM customer_note WHERE subject_id < 0;
+
 -- The test user reads Sakila and makes scratch databases of its own.
 GRANT ALL ON *.* TO 'datadouble'@'%';

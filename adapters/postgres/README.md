@@ -98,6 +98,8 @@ source:
   own table's database.
 - **Extensions are per database.** Each database's extensions are created in
   its copy at its versions, and the lock lists every one.
+Sources must be PostgreSQL 13 or later: reading which triggers a partition
+inherits from its parent needs `pg_trigger.tgparentid`.
 
 ## Extensions
 
@@ -145,3 +147,20 @@ source:
 
 `source.server` takes `shared_preload_libraries`, a list of library names.
 Nothing else.
+
+## Objects
+
+The catalog lists functions and procedures (by name and argument types),
+views and materialized views, triggers, enum, domain, composite and range
+types, and sequences, outside the system schemas and not owned by an
+extension, in every database read. Objects are named like tables,
+`database.schema.object`; a trigger's last part is `table.trigger`
+(`shop.public.users.audit`), since trigger names are only unique per table.
+Each database's objects are read under its own snapshot, and since
+PostgreSQL has nothing that refers across databases, their edges stay within
+it. Dependencies come from `pg_depend`, which is
+exact for views, materialized views, triggers, types, sequences and
+routines with SQL-standard bodies (`BEGIN ATOMIC`). Other routine bodies,
+such as PL/pgSQL, are parsed for the tables and objects they name, and those
+edges are marked inferred: a statement built with `EXECUTE` at run time is
+not seen.

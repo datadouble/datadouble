@@ -12,6 +12,19 @@ empty search path, so user-defined types come out schema-qualified.
 
 Every extension except ``plpgsql``, which every database has, is a
 requirement at the version the source runs.
+
+Objects are the functions and procedures, views and materialized views,
+triggers, user-defined types (enums, domains, composite and range types) and
+sequences outside the system schemas that no extension owns. Their
+definitions come from ``pg_get_functiondef``, ``pg_get_viewdef`` and
+``pg_get_triggerdef``, and from the catalog for types and sequences. Their
+dependencies come from ``pg_depend``, which is exact for views, triggers,
+types, sequences and routines with SQL-standard bodies; other routine bodies
+(PL/pgSQL and the like) are parsed for names, and those edges are marked
+inferred. Objects are named ``database.schema.object`` like tables, and a
+trigger ``database.schema.table.trigger``'s last part is ``table.trigger``,
+since trigger names are only unique per table. Each database is read on its
+own, so no edge crosses databases.
 """
 
 from collections import defaultdict
@@ -24,12 +37,18 @@ from datadouble.catalog import (
     Catalog,
     Column,
     ColumnKind,
+    Dependency,
     ForeignKey,
+    ObjectKind,
+    ObjectRef,
     Requirement,
     RequirementKind,
+    SourceObject,
     Table,
+    definition_fingerprint,
 )
 from datadouble.names import ColumnName, EngineName, TableName
+from datadouble.objects import Candidates, Dialect, infer_dependencies, merge
 
 ENGINE = EngineName("postgres")
 
@@ -82,6 +101,153 @@ JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
 WHERE e.extname <> 'plpgsql'
 ORDER BY e.oid
 """
+
+_ROUTINES = """
+SELECT 'pg_catalog.pg_proc'::regclass::oid, p.oid, n.nspname, p.proname, p.prokind,
+       '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
+       pg_catalog.pg_get_functiondef(p.oid),
+       CASE WHEN l.lanname IN ('c', 'internal') THEN '' ELSE p.prosrc END, l.lanname
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+WHERE p.prokind IN ('f', 'p')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg\\_toast%'
+  AND n.nspname NOT LIKE 'pg\\_temp%'
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_depend e
+    WHERE e.classid = 'pg_catalog.pg_proc'::regclass AND e.objid = p.oid AND e.deptype = 'e'
+  )
+"""
+
+_RELATIONS = """
+SELECT 'pg_catalog.pg_class'::regclass::oid, c.oid, n.nspname, c.relname, c.relkind, NULL,
+       CASE c.relkind
+         WHEN 'S' THEN (
+           SELECT 'sequence ' || pg_catalog.format_type(s.seqtypid, NULL)
+               || ' increment ' || s.seqincrement || ' minvalue ' || s.seqmin
+               || ' maxvalue ' || s.seqmax || ' start ' || s.seqstart
+               || ' cache ' || s.seqcache || CASE WHEN s.seqcycle THEN ' cycle' ELSE '' END
+           FROM pg_catalog.pg_sequence s WHERE s.seqrelid = c.oid)
+         ELSE pg_catalog.pg_get_viewdef(c.oid)
+       END,
+       '', ''
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('v', 'm', 'S')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg\\_toast%'
+  AND n.nspname NOT LIKE 'pg\\_temp%'
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_depend e
+    WHERE e.classid = 'pg_catalog.pg_class'::regclass AND e.objid = c.oid AND e.deptype = 'e'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_depend i
+    WHERE i.classid = 'pg_catalog.pg_class'::regclass AND i.objid = c.oid AND i.deptype = 'i'
+  )
+"""
+
+_TRIGGERS = """
+SELECT 'pg_catalog.pg_trigger'::regclass::oid, t.oid, n.nspname,
+       c.relname || '.' || t.tgname, 'T', NULL, pg_catalog.pg_get_triggerdef(t.oid), '', ''
+FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE NOT t.tgisinternal AND (NOT c.relispartition OR t.tgparentid = 0)
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg\\_toast%'
+  AND n.nspname NOT LIKE 'pg\\_temp%'
+"""
+
+_TYPES = """
+SELECT 'pg_catalog.pg_type'::regclass::oid, t.oid, n.nspname, t.typname, 't', NULL,
+       CASE t.typtype
+         WHEN 'e' THEN 'enum ' || (
+           SELECT pg_catalog.string_agg(pg_catalog.quote_literal(e.enumlabel), ', '
+                                        ORDER BY e.enumsortorder)
+           FROM pg_catalog.pg_enum e WHERE e.enumtypid = t.oid)
+         WHEN 'd' THEN 'domain ' || pg_catalog.format_type(t.typbasetype, t.typtypmod)
+           || coalesce(' default ' || t.typdefault, '')
+           || CASE WHEN t.typnotnull THEN ' not null' ELSE '' END
+           || coalesce((
+             SELECT ' ' || pg_catalog.string_agg(pg_catalog.pg_get_constraintdef(k.oid), ' '
+                                                ORDER BY k.conname)
+             FROM pg_catalog.pg_constraint k WHERE k.contypid = t.oid), '')
+         WHEN 'c' THEN 'composite ' || (
+           SELECT pg_catalog.string_agg(
+             pg_catalog.quote_ident(a.attname) || ' '
+               || pg_catalog.format_type(a.atttypid, a.atttypmod), ', ' ORDER BY a.attnum)
+           FROM pg_catalog.pg_attribute a
+           WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped)
+         ELSE 'range ' || (
+           SELECT pg_catalog.format_type(r.rngsubtype, NULL)
+           FROM pg_catalog.pg_range r WHERE r.rngtypid = t.oid)
+       END,
+       '', ''
+FROM pg_catalog.pg_type t
+JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+WHERE (t.typtype IN ('e', 'd', 'r')
+       OR (t.typtype = 'c' AND (
+         SELECT c.relkind FROM pg_catalog.pg_class c WHERE c.oid = t.typrelid) = 'c'))
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg\\_toast%'
+  AND n.nspname NOT LIKE 'pg\\_temp%'
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_depend e
+    WHERE e.classid = 'pg_catalog.pg_type'::regclass AND e.objid = t.oid AND e.deptype = 'e'
+  )
+"""
+
+_CATALOG_OIDS = "SELECT 'pg_catalog.pg_class'::regclass::oid, 'pg_catalog.pg_type'::regclass::oid"
+
+_PARTITIONS = """
+SELECT c.oid, pg_catalog.pg_partition_root(c.oid)::oid
+FROM pg_catalog.pg_class c
+WHERE c.relispartition
+"""
+"""Each partition and its partitioned root, which stands for it."""
+
+_TYPE_ALIASES = """
+SELECT t.oid, t.typrelid, t.typelem, t.typcategory = 'A'
+FROM pg_catalog.pg_type t
+WHERE t.typrelid <> 0 OR t.typcategory = 'A'
+ORDER BY t.typcategory = 'A', t.oid
+"""
+"""Row types stand for their relation, and array types for their element; row types
+come first, so an array of a row type finds the relation."""
+
+_DEPENDS = """
+SELECT DISTINCT
+  CASE WHEN d.classid = 'pg_catalog.pg_rewrite'::regclass
+       THEN 'pg_catalog.pg_class'::regclass ELSE d.classid END::oid,
+  CASE WHEN d.classid = 'pg_catalog.pg_rewrite'::regclass THEN r.ev_class ELSE d.objid END,
+  d.refclassid::oid, d.refobjid
+FROM pg_catalog.pg_depend d
+LEFT JOIN pg_catalog.pg_rewrite r
+  ON d.classid = 'pg_catalog.pg_rewrite'::regclass AND r.oid = d.objid
+WHERE d.deptype IN ('n', 'a')
+  AND d.classid IN ('pg_catalog.pg_proc'::regclass, 'pg_catalog.pg_class'::regclass,
+                    'pg_catalog.pg_trigger'::regclass, 'pg_catalog.pg_type'::regclass,
+                    'pg_catalog.pg_rewrite'::regclass)
+  AND d.refclassid IN ('pg_catalog.pg_proc'::regclass, 'pg_catalog.pg_class'::regclass,
+                       'pg_catalog.pg_type'::regclass)
+"""
+"""Every normal and automatic dependency, a view's rule standing for the view."""
+
+_OBJECT_KINDS = {
+    "f": ObjectKind.FUNCTION,
+    "p": ObjectKind.PROCEDURE,
+    "v": ObjectKind.VIEW,
+    "m": ObjectKind.MATERIALIZED_VIEW,
+    "S": ObjectKind.SEQUENCE,
+    "T": ObjectKind.TRIGGER,
+    "t": ObjectKind.TYPE,
+}
+
+_DIALECT = Dialect(quotes='"', dollar_quotes=True)
+_PYTHON = Dialect(quotes='"', dollar_quotes=True, hash_comments=True)
+"""PL/Python bodies, whose comments start with ``#``."""
 
 _KINDS = {
     "int2": ColumnKind.INTEGER,
@@ -196,6 +362,18 @@ def introspect(
                         target_columns=tuple(ColumnName(str(n)) for n in _strings(target_names)),
                     )
                 )
+        table_list = [
+            Table(
+                name=name,
+                columns=tuple(columns[oid]),
+                primary_key=primary.get(oid, ()),
+                foreign_keys=tuple(foreign[oid]),
+            )
+            for oid, (name, _) in tables.items()
+        ]
+        objects = _objects(
+            cursor, database, {oid: name for oid, (name, _) in tables.items()}, table_list
+        )
         cursor.execute(_EXTENSIONS)
         extensions = tuple(
             Extension(name=str(name), version=str(version), schema_=str(schema))
@@ -207,16 +385,9 @@ def introspect(
         )
     catalog = Catalog(
         engine=ENGINE,
-        tables=tuple(
-            Table(
-                name=name,
-                columns=tuple(columns[oid]),
-                primary_key=primary.get(oid, ()),
-                foreign_keys=tuple(foreign[oid]),
-            )
-            for oid, (name, _) in tables.items()
-        ),
+        tables=tuple(table_list),
         requirements=tuple(extension.requirement() for extension in extensions),
+        objects=objects,
     )
     physical = Physical(
         partitioned=frozenset(name for name, kind in tables.values() if kind == "p"),
@@ -224,6 +395,94 @@ def introspect(
         extensions={database: extensions},
     )
     return catalog, physical
+
+
+type _Node = TableName | ObjectRef
+type _Key = tuple[int, int]
+"""A catalog row: the OID of the system catalog it is in, and its own OID."""
+
+
+def _objects(
+    cursor: psycopg.Cursor[tuple[object, ...]],
+    database: str,
+    tables: dict[int, TableName],
+    table_list: list[Table],
+) -> tuple[SourceObject, ...]:
+    """The source's objects, with their exact and inferred dependencies."""
+    found = cursor.execute(_CATALOG_OIDS).fetchone() or (0, 0)
+    pg_class, pg_type = int(str(found[0])), int(str(found[1]))
+    nodes: dict[_Key, _Node] = {(pg_class, oid): name for oid, name in tables.items()}
+    cursor.execute(_PARTITIONS)
+    roots = {int(str(oid)): int(str(root)) for oid, root in cursor.fetchall()}
+    nodes |= {(pg_class, oid): tables[root] for oid, root in roots.items() if root in tables}
+    definitions: dict[ObjectRef, tuple[str, str, str]] = {}
+    for query in (_ROUTINES, _RELATIONS, _TRIGGERS, _TYPES):
+        cursor.execute(query)
+        for catalog, oid, namespace, name, kind, signature, *text in cursor.fetchall():
+            ref = ObjectRef(
+                kind=_OBJECT_KINDS[str(kind)],
+                namespace=(database, str(namespace)),
+                name=str(name),
+                signature=None if signature is None else str(signature),
+            )
+            nodes[(int(str(catalog)), int(str(oid)))] = ref
+            definition, body, language = (str(part or "") for part in text)
+            definitions[ref] = (definition, body, language)
+    _aliases(cursor, nodes, pg_class, pg_type)
+    exact: defaultdict[ObjectRef, list[Dependency]] = defaultdict(list)
+    cursor.execute(_DEPENDS)
+    for classid, objid, refclassid, refobjid in cursor.fetchall():
+        owner = nodes.get((int(str(classid)), int(str(objid))))
+        target = nodes.get((int(str(refclassid)), int(str(refobjid))))
+        if isinstance(owner, ObjectRef) and target is not None and target != owner:
+            edge = (
+                Dependency(table=target)
+                if isinstance(target, TableName)
+                else Dependency(object=target)
+            )
+            exact[owner].append(edge)
+    plain = [SourceObject(ref=ref, fingerprint="") for ref in definitions]
+    candidates = Candidates.of(table_list, plain)
+    return tuple(
+        SourceObject(
+            ref=ref,
+            fingerprint=definition_fingerprint(definition),
+            depends_on=merge(
+                exact[ref],
+                infer_dependencies(
+                    body,
+                    ref,
+                    candidates,
+                    _PYTHON if language.startswith("plpython") else _DIALECT,
+                ),
+            ),
+        )
+        for ref, (definition, body, language) in definitions.items()
+    )
+
+
+def _aliases(
+    cursor: psycopg.Cursor[tuple[object, ...]],
+    nodes: dict[_Key, _Node],
+    pg_class: int,
+    pg_type: int,
+) -> None:
+    """Map row types to their relations, arrays to their elements, composites' rows to the type.
+
+    A standalone composite type's dependencies are recorded on its ``pg_class``
+    row, which then stands for the type.
+    """
+    cursor.execute(_TYPE_ALIASES)
+    for oid, relid, element, is_array in cursor.fetchall():
+        own, relation = (pg_type, int(str(oid))), (pg_class, int(str(relid)))
+        if is_array:
+            element_node = nodes.get((pg_type, int(str(element))))
+            if element_node is not None:
+                nodes.setdefault(own, element_node)
+        elif own in nodes:
+            nodes[relation] = nodes[own]
+        elif relation in nodes:
+            nodes[own] = nodes[relation]
 
 
 def _strings(value: object) -> list[str]:

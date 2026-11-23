@@ -81,9 +81,10 @@ always fail; re-lock once the spec suits the new schema.
 
 `datadouble lock` reads the source, so it runs only inside the production
 boundary. It lists what changed since the lock it replaces: tables, columns,
-keys and requirements added, removed or changed (`changes` in `--json`;
-`null` for a first lock, where everything is new, and when the earlier lock
-cannot be read, which `unreadable` explains).
+keys, requirements and objects (functions, views, triggers...) added,
+removed or changed (`changes` in `--json`; `null` for a first lock, where
+everything is new, and when the earlier lock cannot be read, which
+`unreadable` explains).
 
 - **No shell inside the boundary?** Re-lock through the CI `lock` job.
   Generate it with the production jobs (`--job lock` in `datadouble-build`'s
@@ -99,6 +100,29 @@ cannot be read, which `unreadable` explains).
   the spec.
 - A lock holds names, types and versions, never values, so the person may
   share it or its changes with you.
+
+## When functions, views or triggers change
+
+The lock also lists the source's functions, procedures, views, triggers,
+types, sequences and events, each with a fingerprint and what it depends
+on. A new, changed or removed one warns by default (`strict.functions`,
+`views`, `triggers`, `types`, `sequences`, `events`: `off`, `warn` or
+`fail`). A warning is for the person to review: a changed trigger or
+function can change what the copies hold. Tell them which objects changed;
+once they have checked, `datadouble lock` records the new definitions.
+
+A removed object that another one still needs fails at every level, naming
+both, such as a function a trigger calls. Edges marked `inferred` were
+parsed from a body rather than recorded by the engine; a removal only they
+point at warns instead, saying what may still need it. Fix the source or
+the excludes; never lower a level to get past it (rule 4).
+
+Old locks have no objects, so every object warns as new until the person
+re-locks. Many objects suddenly removed or emptied usually means the
+connecting user lost privileges, not that the source changed: SQL Server
+needs `VIEW DEFINITION`, and Oracle shows bodies and objects only to their
+owner or to users granted them (see the adapters' READMEs). Say so rather
+than re-locking.
 
 ## When tables have no rows selected
 

@@ -18,6 +18,24 @@ source:
     accept_eula: true            # you accept the SQL Server licence for working databases
 ```
 
+## Objects
+
+The catalog lists views, procedures, functions, DML triggers and sequences
+from `sys.objects`, and user-defined alias and table types from
+`sys.types`. Dependencies come from `sys.sql_expression_dependencies`, which
+SQL Server keeps for every module, and are exact. A name SQL Server could
+not bind when the module was created (deferred name resolution) is matched
+to a table or object of that schema and name, and that edge is marked
+inferred; an exact edge to the same target wins. Three-part names in the
+source's own database count.
+
+Reading the catalog needs SQL Server 2017 or later, and the `VIEW
+DEFINITION` permission on the database (or on each schema): SQL Server's
+metadata visibility shows a user only the objects it has some permission
+on, and module text only with `VIEW DEFINITION`. Without it, an object
+looks empty (its definition reads as nothing) or missing (strict mode
+reports it removed), so grant it before locking.
+
 ## Requirements
 
 The adapter reports none. The add-ons a SQL Server database could need in its

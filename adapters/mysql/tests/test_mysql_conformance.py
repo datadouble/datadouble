@@ -222,3 +222,41 @@ def harness() -> EngineHarness:
 
 class TestConformance(EngineConformance):
     """MySQL passes the engine conformance suite."""
+
+
+def test_the_catalog_lists_sakilas_objects_and_their_dependencies() -> None:
+    with MysqlEngine().connect({"url": {"env": URL_VARIABLE}}) as session:
+        catalog = session.catalog()
+    objects = {str(item.ref): item for item in catalog.objects}
+
+    def edges(name: str) -> set[str]:
+        return {str(edge) for edge in objects[name].depends_on}
+
+    assert {
+        "view sakila.customer_list",
+        "procedure sakila.rewards_report",
+        "function sakila.inventory_held_by_customer",
+        "trigger sakila.del_film",
+    } <= set(objects)
+    # Views' tables, views and functions are exact.
+    assert {"table sakila.actor", "table sakila.film"} <= edges("view sakila.actor_info")
+    # A trigger's table is exact; what its body touches is inferred.
+    assert edges("trigger sakila.ins_film") == {
+        "table sakila.film",
+        "table sakila.film_text (inferred)",
+    }
+    assert {
+        "table sakila.inventory (inferred)",
+        "function sakila.inventory_in_stock (inferred)",
+    } <= edges("procedure sakila.film_in_stock")
+    assert {"table sakila.rental (inferred)", "table sakila.payment (inferred)"} <= edges(
+        "function sakila.get_customer_balance"
+    )
+    # VIEW_ROUTINE_USAGE gives a view's functions exactly.
+    assert edges("view sakila.inventory_available") == {
+        "table sakila.inventory",
+        "function sakila.inventory_in_stock",
+    }
+    assert edges("event sakila.purge_old_notes") == {"table sakila.customer_note (inferred)"}
+    with MysqlEngine().connect({"url": {"env": URL_VARIABLE}}) as session:
+        assert session.catalog().fingerprint() == catalog.fingerprint()

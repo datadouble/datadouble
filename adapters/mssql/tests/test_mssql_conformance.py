@@ -209,3 +209,21 @@ def harness() -> EngineHarness:
 
 class TestConformance(EngineConformance):
     """SQL Server passes the engine conformance suite."""
+
+
+def test_the_catalog_lists_sakilas_objects_and_their_dependencies() -> None:
+    with MssqlEngine().connect({"url": {"env": URL_VARIABLE}}) as session:
+        catalog = session.catalog()
+    objects = {str(item.ref): item for item in catalog.objects}
+
+    def edges(name: str) -> set[str]:
+        return {str(edge) for edge in objects[name].depends_on}
+
+    assert {"view dbo.customer_list", "view dbo.staff_list", "view dbo.dba_recent_runs"} <= set(
+        objects
+    )
+    # sys.sql_expression_dependencies is exact for views and triggers.
+    assert {"table dbo.actor", "table dbo.film"} <= edges("view dbo.film_list")
+    assert edges("trigger dbo.film_text_sync") == {"table dbo.film", "table dbo.film_text"}
+    with MssqlEngine().connect({"url": {"env": URL_VARIABLE}}) as session:
+        assert session.catalog().fingerprint() == catalog.fingerprint()
