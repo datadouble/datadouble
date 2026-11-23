@@ -257,6 +257,19 @@ spec, group, engine line (`engine-version`), exact server version
 (`server-version`) and generation, is itself the announcement consumers match
 in a PersistentVolumeClaim selector (decision 61).
 
+`k8s-pv`, `k8s-secret` and the `kubernetes` runtime reach the cluster they
+run in through its service account. A job that drives another cluster gives
+each of them a `kubeconfig`, a secret reference to the kubeconfig's content
+(`{env: NAME}`), and optionally a `context`. It is never the runner's own
+kubeconfig file: the job's container sees only the paths the spec names, and
+runs as the engine's user, not the runner's. A `{file: /path}` reference
+suits a secret file mounted for the purpose, which `ci init` mounts into the
+job and the engine's user must be able to read. The image has no exec
+credential plugins, so the kubeconfig carries a token or a client
+certificate. Like any secret reference, `ci init`
+lists the variable for the jobs whose part of the spec names it, and each
+system binds it from its own secret store (decision 124).
+
 A clone's credentials go only to secret-capable targets (`k8s-secret`,
 `vault`, `dotenv`). `ci-outputs` announces the endpoint without them, because
 job outputs on most systems are not secret.

@@ -16,9 +16,12 @@ the system's own form, with the exit code the system expects.
 import argparse
 import json
 import os
+import signal
 import sys
+import threading
 from collections.abc import Callable, Sequence
-from typing import TextIO, assert_never
+from types import FrameType
+from typing import NoReturn, TextIO, assert_never
 
 from pydantic import JsonValue
 
@@ -630,6 +633,21 @@ def _respond(raw: str) -> tuple[api.Response, ExitCode]:
     return response, adapter.report(report, request.ci.directory)
 
 
+def _terminated(signum: int, frame: FrameType | None) -> NoReturn:
+    del frame
+    raise SystemExit(128 + signum)
+
+
+def stop_on_sigterm() -> None:
+    """Turn SIGTERM into :class:`SystemExit`.
+
+    A CI system cancels a job with SIGTERM; unwinding instead of dying lets
+    ``finally`` blocks (temporary credentials, containers) clean up.
+    """
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, _terminated)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -637,6 +655,7 @@ def main(
     stdout: TextIO | None = None,
 ) -> int:
     """Run the command line and return the process exit code."""
+    stop_on_sigterm()
     source: TextIO = sys.stdin if stdin is None else stdin
     sink: TextIO = sys.stdout if stdout is None else stdout
     arguments = build_parser().parse_args(argv, namespace=_Arguments())

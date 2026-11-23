@@ -3,7 +3,11 @@
 
 import io
 import json
+import os
 import platform
+import signal
+import threading
+import time
 
 import pytest
 
@@ -69,3 +73,30 @@ def test_unknown_command_is_a_usage_error() -> None:
 def test_defaults_to_process_streams(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["--dry-run", "version"]) == ExitCode.SUCCESS
     assert json.loads(capsys.readouterr().out) == {"command": "version"}
+
+
+def test_sigterm_runs_cleanup() -> None:
+    """A cancelled job's SIGTERM unwinds the stack, so ``finally`` blocks run."""
+    previous = signal.getsignal(signal.SIGTERM)
+    cleaned: list[str] = []
+    try:
+        cli.stop_on_sigterm()
+
+        def cancelled() -> None:
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+                time.sleep(5)
+            finally:
+                cleaned.append("done")
+
+        with pytest.raises(SystemExit) as stopped:
+            cancelled()
+        assert stopped.value.code == 128 + signal.SIGTERM
+        assert cleaned == ["done"]
+        elsewhere = threading.Thread(target=cli.stop_on_sigterm)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        elsewhere.start()
+        elsewhere.join()
+        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+    finally:
+        signal.signal(signal.SIGTERM, previous)

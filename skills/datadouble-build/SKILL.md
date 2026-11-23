@@ -46,6 +46,12 @@ spec, such as `AWS_ACCESS_KEY_ID` for an S3 store.
   again with `--docker <command>` and `--docker-socket <absolute path>`.
   Never edit the generated files for it. Rootless Docker is not supported.
   Argo CD's jobs run without Docker and take neither.
+- With the `kubernetes` runtime driving a cluster the job does not run in,
+  the runtime's `kubeconfig` is a secret reference (`{env: NAME}`) to the
+  kubeconfig's content, never the runner's own kubeconfig file; `ci init`
+  lists `NAME` with the other secrets. It needs a token or client
+  certificate, since the image has no exec credential plugins (EKS, GKE and
+  AKS logins). Jobs running in that cluster need none.
 - That the operator marks the runner inside the boundary
   (`DATADOUBLE_BOUNDARY=inside` in its environment, or the
   `datadouble-boundary` ConfigMap on Kubernetes). Until then every run is

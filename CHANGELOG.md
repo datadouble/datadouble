@@ -83,6 +83,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the socket. The image is started on that daemon and sees its socket at
   `/var/run/docker.sock`. Rootless Docker is not supported, and Argo CD's
   jobs, which run without Docker, refuse both options.
+- **The Kubernetes adapters take their kubeconfig as a secret reference**
+  ([#68](https://github.com/datadouble/datadouble/issues/68)). `k8s-pv`,
+  `k8s-secret` and the `kubernetes` runtime accept `kubeconfig: {env: NAME}`
+  (or `{file: /path}` for a mounted secret file), the kubeconfig's content,
+  and an optional `context`, so a CI job can drive a cluster other than the
+  one it runs in. Datadouble writes the kubeconfig to a private temporary
+  file for each `kubectl` call and removes it afterwards, even after a
+  failure or a cancelled job. Its values of 16 characters or more are
+  redacted from `kubectl`'s output and are all CI systems mask. `ci init`
+  lists the variable among the secrets of the jobs that use it. Exec
+  credential plugins are not in the image: use token or certificate
+  credentials. Without the setting, nothing changes.
+- **A cancelled job cleans up.** `datadouble` turns SIGTERM, which CI
+  systems send to cancel a job, into a normal exit, so temporary
+  credentials and containers are removed.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

@@ -309,6 +309,8 @@ runtime:
     namespace: datadouble
     claim: datadouble-work       # the PersistentVolumeClaim holding the work directory
     mount: /work                 # where that claim is mounted in Datadouble's own pod
+    kubeconfig: {env: BUILD_KUBECONFIG}  # optional: another cluster, by secret reference
+    context: build               # optional: the kubeconfig's context
 ```
 
 - **Shared paths.** Every container sees the paths it works on at the same
@@ -318,6 +320,12 @@ runtime:
   engine pod mounts the same claim at the same path.
 - **One user.** Containers run as Datadouble's own user and group, so either
   side can read and remove the other's files.
+- **Which cluster.** The `kubernetes` runtime, like the `k8s-pv` and
+  `k8s-secret` adapters, uses the in-cluster service account or the ambient
+  configuration, unless its `kubeconfig` setting, a secret reference to a
+  kubeconfig's content, names another cluster. Datadouble writes it to a
+  private temporary file for each `kubectl` call and removes it afterwards
+  (decision 124).
 - **Credentials.** A working server accepts a password generated for that start,
   passed through the runtime's secret channel (the docker command's
   environment, or a Secret object) and never a command line. Tools that need
