@@ -1,0 +1,89 @@
+dev/ci/jenkins/plugins.txt
+  s_ad63f2bf16b775::t_51801e655ba3d0 8-9,13,41-43,45,48
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-prune-non-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_e0df20c986a3c7 1-76
+ci/jenkins/resources/datadouble/pod.sh
+  s_ad63f2bf16b775::t_4cf8832bd90a08 1-33
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_b85222b6ebc384 20-29,33,37-39,41-42,51,53-54,62-69,110-254,306-313,316,356,367-410,419-423,432-434
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-activate.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_5991111f7de50c 1-73
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_49d171bed43c0a 31-41,48-52,55-56
+ci/gitlab/src/datadouble_gitlab/__init__.py
+  s_ad63f2bf16b775::t_e63a56470ef468 35,262-266
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_8c0e1712b28856 9,20-21,31,37,67-70,336-339,379-380,389-390,392-416
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_864ac7aa3b871c 1-75
+ci/gitlab/tests/test_gitlab.py
+  s_ad63f2bf16b775::t_b21df613f6ee07 22,223
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_e329f09dbdabf6 19-30,33-36,54-57,65-67,78-79,81-84,94-105,212-364
+  s_ad63f2bf16b775::t_1c84eeadc0a67c 12,16
+ci/github-actions/src/datadouble_github_actions/__init__.py
+  s_ad63f2bf16b775::t_40f1265235baf3 28,243-247
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_945956910530cf 20,144-146,183
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_541b38d94d1822 1-87
+ci/jenkins/vars/datadouble.groovy
+  s_ad63f2bf16b775::t_b2e1d2bbfc46d9 13-17,21-22,32-38
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-promote.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_dc1cfec05a0ed4 1-76
+docs/using/ci-cd-libraries.md
+  s_ad63f2bf16b775::t_c6e66762e1d0c5 38-40,54-61
+  s_ad63f2bf16b775::t_8f508a6d87f04d 62-64
+CHANGELOG.md
+  s_ad63f2bf16b775::t_f32f920bde3579 12-23
+  s_ad63f2bf16b775::t_9bf6df6436dbaa 24-26,252-257
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_7476370f49d773 25,70-71,221-229,391-402
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_ad63f2bf16b775::t_a7ea2af87f759f 34,45,76-78,87,216-220
+  s_ad63f2bf16b775::t_23480ac0155e3f 33
+docs/using/cli-reference.md
+  s_ad63f2bf16b775::t_e0d5283ae9d7a5 188
+  s_ad63f2bf16b775::t_1faa17ebdae798 189
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_f170df7046723b 35,312-316,710-719,731
+  s_ad63f2bf16b775::t_7cf677248c295e 732
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-build.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_69a799a6a401f2 1-79
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_7f2828319952fb 295,389-411,423
+ci/github-actions/tests/test_github_actions.py
+  s_ad63f2bf16b775::t_fc982eb5dee3fd 19,196
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_23b7193ff0581e 7-10,69-161
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-prune-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_30c44d6423621f 1-86
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_a61e4683fe35c1 19-24
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_223e1404b3f360 17,57-65,144-149,198-202,303-307,495-496,553-555,557-592
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_bfde61a660a960 1-73
+docs/decisions.md
+  s_ad63f2bf16b775::t_867c9ec65ef873 127
+ci/kubernetes/chart/templates/_helpers.tpl
+  s_ad63f2bf16b775::t_b57a8381e7e92c 75-77
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_6ba31f56a8c83d 34,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b06d6ab7d1bc401ad76687f064c77e0e70e0ed0f",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}

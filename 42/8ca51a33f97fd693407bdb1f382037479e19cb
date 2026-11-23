@@ -1,0 +1,59 @@
+CHANGELOG.md
+  s_ad63f2bf16b775::t_f7e13ba90ccfc6 241-252
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_d576d53a3f3d55 37-56
+adapters/kubernetes/src/datadouble_kubernetes/runtime.py
+  s_ad63f2bf16b775::t_f2a0f167f10dff 10,24-28,82-83,93-109,146,162-169,221,230,237,250,273,278,363,384,413
+adapters/kubernetes/tests/test_kubernetes_runtime.py
+  s_ad63f2bf16b775::t_be52ba40b2695d 21,60-62,199-222
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_46b79169f0df13 113-123,148-153
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_78877b9d7568bb 25-26,55,72-106,121-133,198-199,201-202,216-219,435-436,444,450
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_996b646431d54e 56,81,283-286,294-298,304-306,341,349-351,353-356
+ci/kubernetes/README.md
+  s_ad63f2bf16b775::t_6de2744c6f6957 25-29
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_ad63f2bf16b775::t_fd1228d503ddfc 46,83
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_1706cf4a5fa19a 34
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_6757776e5bd0ef 34
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_ad63f2bf16b775::t_0c1281810e574f 34
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_33a714abc35f8e 32,144-148
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_80afd103a3af6d 565-586
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_769c48669d4717 36,420-433
+docs/architecture.md
+  s_ad63f2bf16b775::t_e119968f60ad8d 249,252-257
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_48a055baf323e8 397-403
+docs/decisions.md
+  s_ad63f2bf16b775::t_32ccfa7ce5c922 128
+docs/using/ci-cd-libraries.md
+  s_ad63f2bf16b775::t_8f2b2d4d762e28 60-65
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_b90041fc6d5c83 35-38,52-53
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_1ba1c5732595d7 23-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "428ca51a33f97fd693407bdb1f382037479e19cb",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
