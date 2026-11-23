@@ -6,7 +6,7 @@
 import io
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -260,6 +260,21 @@ def test_what_jobs_need(tmp_path: Path) -> None:
             pipeline(without, options(kind))
 
 
+def test_the_docker_command_and_socket(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    plain = pipeline(spec, options(JobKind.PROMOTE))
+    assert (plain.docker, plain.docker_socket) == (None, None)
+    chosen = replace(options(JobKind.PROMOTE), docker="podman", docker_socket=Path("/run/d.sock"))
+    planned = pipeline(spec, chosen)
+    assert (planned.docker, planned.docker_socket) == ("podman", "/run/d.sock")
+    for docker in ("", "sudo docker", "~/bin/docker"):
+        with pytest.raises(CiError, match="one program"):
+            pipeline(spec, replace(chosen, docker=docker))
+    for socket in ("run/d.sock", "/run/a:b.sock"):
+        with pytest.raises(CiError, match="socket must be an absolute path"):
+            pipeline(spec, replace(chosen, docker_socket=Path(socket)))
+
+
 def test_host_paths_and_secret_names() -> None:
     spec = parse_spec(
         """
@@ -358,6 +373,10 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
         str(repo),
         "--env",
         "AWS_ACCESS_KEY_ID",
+        "--docker",
+        "/opt/bin/docker",
+        "--docker-socket",
+        "/run/user/1000/docker.sock",
     )
     assert code == ExitCode.SUCCESS, out
     assert out == (
@@ -375,6 +394,8 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
     assert planned.image == f"ghcr.io/datadouble/datadouble:v{__version__}"
     assert planned.version == __version__
     assert all("AWS_ACCESS_KEY_ID" in job.environment for job in planned.jobs)
+    assert planned.docker == "/opt/bin/docker"
+    assert planned.docker_socket == "/run/user/1000/docker.sock"
 
 
 @pytest.mark.usefixtures("registry")

@@ -42,7 +42,8 @@ datadouble ci init --system <s> --job fetch,provision,release,prune,activate \
 
 It runs every 15 minutes, which is cheap: it reads the channel and a small
 image summary, and downloads only when there is something newer. A pool's
-`provision` follows it.
+`provision` follows it. On runners whose Docker is not `docker` at
+`/var/run/docker.sock`, add `--docker` and `--docker-socket`, as for build.
 
 Tell the person which variables to define as secrets on this side only; they
 must never be the source's or the production stores' credentials (rule 5).

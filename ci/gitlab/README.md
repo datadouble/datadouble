@@ -49,14 +49,39 @@ and versions, never values (decision 123).
 ## What a job needs on its runner
 
 - Tags matching `--runner`; `ci init` refuses GitLab.com's own `saas-` tags.
-- The shell executor, with Docker and its socket at `/var/run/docker.sock`.
-  The template runs the Datadouble image as the engine's user on the host's
-  network, with the project directory and every absolute path the spec names
-  mounted at the same path.
+- The shell executor, with Docker and its socket at `/var/run/docker.sock`,
+  unless the runner says otherwise (below). The template runs the Datadouble
+  image as the engine's user on the host's network, with the project
+  directory and every absolute path the spec names mounted at the same path.
 - Those paths, existing and owned by the engine's user (`999:999` for
   PostgreSQL).
 - On runners inside the production boundary, `DATADOUBLE_BOUNDARY=inside` in
   the runner's `environment` (decision 98).
+
+### Another Docker command or socket
+
+The job template runs the image with `docker` and the daemon at
+`/var/run/docker.sock`. Where Docker is installed outside `PATH`, or the
+daemon is another Docker-compatible one listening on another socket, set
+`DATADOUBLE_DOCKER` (one program, a name or an absolute path) and
+`DATADOUBLE_DOCKER_SOCKET` (an absolute path) in the runner's `environment`,
+once for every job on the runner. Or pass `--docker` and `--docker-socket`
+to `ci init`, which writes them into the generated configuration, where they
+take precedence over the runner's own (decision 126).
+
+Without `DATADOUBLE_DOCKER_SOCKET`, a `DOCKER_HOST` of the form
+`unix://PATH` in the runner's environment names the socket. A socket named
+either way is also the daemon the image is started on (`DOCKER_HOST`, and
+`CONTAINER_HOST` for podman), so the image and the engines' containers share
+one daemon. The socket is mounted at `/var/run/docker.sock` inside the
+Datadouble container, and `DOCKER_HOST` there always points at it, even when
+a job passes its own `DOCKER_HOST` on.
+
+Rootless Docker is not supported: its user namespace maps the engine's user
+to another one on the host, so neither the socket's group nor the files
+shared at the same paths (decision 73) line up. The job template reads the
+socket's group with GNU `stat`, so the runner needs GNU coreutils, as Linux
+distributions have.
 
 ## Outcomes
 

@@ -139,6 +139,12 @@ class Pipeline:
     notify: Notify | None = None
     """The spec's ``notify`` section: Datadouble posts its webhooks itself, and the
     adapter writes its email in the system's own form, or explains the setup."""
+    docker: str | None = None
+    """The Docker command native steps run the image with; None leaves the runner's
+    ``DATADOUBLE_DOCKER``, or ``docker``."""
+    docker_socket: str | None = None
+    """The Docker daemon's socket native steps mount; None leaves the runner's
+    ``DATADOUBLE_DOCKER_SOCKET``, or ``/var/run/docker.sock``."""
 
     def environment(self) -> tuple[str, ...]:
         """Every environment variable a job reads a secret from."""
@@ -282,6 +288,7 @@ webhooks it posts to."""
 _PRUNE_TARGETS = {Side.PRODUCTION: ("store", "export"), Side.NON_PRODUCTION: ("staging",)}
 _STAGES = "plan,extract,load,transform,package,verify,store"
 _HOST_PATH = re.compile(r"/[^\s*?\[\]{}:]+")
+_SPACE = re.compile(r"\s")
 _BUILD_MINUTES = 12 * 60
 LOCK_ARTIFACTS = "datadouble-lock"
 """Where the ``lock`` job writes the new lock and its changes, in the workspace."""
@@ -514,12 +521,32 @@ class PipelineOptions:
     environment: tuple[str, ...] = ()
     """More environment variables every job passes on, for credentials adapters read
     from the environment rather than the spec, such as ``AWS_ACCESS_KEY_ID``."""
+    docker: str | None = None
+    """The Docker command native steps use, written into the configuration."""
+    docker_socket: Path | None = None
+    """The Docker daemon's socket native steps use, written into the configuration."""
+
+
+def _docker(options: PipelineOptions) -> tuple[str | None, str | None]:
+    """The Docker command and socket to write into the configuration, checked."""
+    docker = options.docker
+    if docker is not None and (not docker or _SPACE.search(docker) or docker.startswith("~")):
+        message = (
+            "the Docker command is one program, a name or an absolute path, without arguments or ~"
+        )
+        raise CiError(message)
+    socket = options.docker_socket
+    if socket is not None and (not socket.is_absolute() or ":" in str(socket)):
+        message = "the Docker socket must be an absolute path without `:`"
+        raise CiError(message)
+    return options.docker, None if socket is None else str(socket)
 
 
 def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     """The jobs to generate for one side of the boundary, decided here for every system."""
     side = side_of(options.kinds, options.side)
     chosen = frozenset(options.kinds)
+    docker, docker_socket = _docker(options)
     if side is Side.PRODUCTION and not options.runner:
         message = (
             "build, promote and lock run only inside the production boundary; name the"
@@ -571,4 +598,6 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         spec_text=options.spec_text,
         lock_text=options.lock_text,
         notify=spec.notify,
+        docker=docker,
+        docker_socket=docker_socket,
     )

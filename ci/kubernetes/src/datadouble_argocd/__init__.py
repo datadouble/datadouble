@@ -247,11 +247,17 @@ class ArgoCd:
         return NAME
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
-        """One Application per side of the boundary; refuses notify's email."""
+        """One Application per side of the boundary; refuses notify's email and Docker."""
         if pipeline.notify is not None and pipeline.notify.emails():
             message = (
                 "argocd cannot send notify's email: Kubernetes Jobs have no mail mechanism;"
                 " list a webhook instead, whose service can mail people"
+            )
+            raise CiError(message)
+        if pipeline.docker is not None or pipeline.docker_socket is not None:
+            message = (
+                "Argo CD's jobs are pods that run the Datadouble image themselves, without"
+                " Docker; leave out the Docker command and socket"
             )
             raise CiError(message)
         return (GeneratedFile(path=_path(pipeline), content=render(pipeline)),)

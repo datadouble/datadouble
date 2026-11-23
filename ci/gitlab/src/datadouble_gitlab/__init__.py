@@ -182,6 +182,10 @@ def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str
         "DATADOUBLE_IMAGE": pipeline.image,
         "DATADOUBLE_USER": pipeline.user,
     }
+    if pipeline.docker is not None:
+        variables["DATADOUBLE_DOCKER"] = pipeline.docker
+    if pipeline.docker_socket is not None:
+        variables["DATADOUBLE_DOCKER_SOCKET"] = pipeline.docker_socket
     if job.mounts:
         variables["DATADOUBLE_MOUNTS"] = _lines(job.mounts)
     if job.environment:

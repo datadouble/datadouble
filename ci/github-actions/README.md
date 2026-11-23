@@ -49,13 +49,39 @@ and versions, never values (decision 123).
 
 - The mark `DATADOUBLE_BOUNDARY=inside` in the runner's `.env`, on runners
   inside the production boundary (decision 98).
-- Docker, with its socket at `/var/run/docker.sock`. The action runs the
-  Datadouble image on the host's network, with the workspace and every
-  absolute path the spec names mounted at the same path, so the engine
-  containers Datadouble starts can mount them too.
+- Docker, with its socket at `/var/run/docker.sock` unless the runner says
+  otherwise (below). The action runs the Datadouble image on the host's
+  network, with the workspace and every absolute path the spec names mounted
+  at the same path, so the engine containers Datadouble starts can mount
+  them too.
 - Those paths, existing and owned by the engine's user (`999:999` for
   PostgreSQL), which Datadouble runs as. The action fails on a path the
   runner lacks, rather than let Docker create it owned by root.
+
+### Another Docker command or socket
+
+The action runs the image with `docker` and the daemon at
+`/var/run/docker.sock`. Where Docker is installed outside `PATH`, or the
+daemon is another Docker-compatible one listening on another socket, set
+`DATADOUBLE_DOCKER` (one program, a name or an absolute path) and
+`DATADOUBLE_DOCKER_SOCKET` (an absolute path) in the runner's `.env` file,
+once for every job on the runner. Or pass `--docker` and `--docker-socket`
+to `ci init`, which writes them into the generated configuration, where they
+take precedence over the runner's own (decision 126).
+
+Without `DATADOUBLE_DOCKER_SOCKET`, a `DOCKER_HOST` of the form
+`unix://PATH` in the runner's environment names the socket. A socket named
+either way is also the daemon the image is started on (`DOCKER_HOST`, and
+`CONTAINER_HOST` for podman), so the image and the engines' containers share
+one daemon. The socket is mounted at `/var/run/docker.sock` inside the
+Datadouble container, and `DOCKER_HOST` there always points at it, even when
+a job passes its own `DOCKER_HOST` on.
+
+Rootless Docker is not supported: its user namespace maps the engine's user
+to another one on the host, so neither the socket's group nor the files
+shared at the same paths (decision 73) line up. The action reads the
+socket's group with GNU `stat`, so the runner needs GNU coreutils, as Linux
+distributions have.
 
 ## Outcomes
 

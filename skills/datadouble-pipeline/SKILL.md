@@ -18,6 +18,11 @@ Inspect first (rule 3), then ask in one round for what is missing:
 - The runner (label, tags, agent label or namespace) inside the production
   boundary, and the one outside it.
 - The build's work directory in production scratch space.
+- Whether either side's runners run Docker some other way than `docker` with
+  its socket at `/var/run/docker.sock` (installed outside `PATH`, or another
+  Docker-compatible daemon on another socket). If so, pass `--docker` and
+  `--docker-socket` to that side's `ci init`, or tell the operator to set
+  `DATADOUBLE_DOCKER` and `DATADOUBLE_DOCKER_SOCKET` on the runners.
 - Stores: where builds are kept, and the export store non-production reads,
   and how non-production reaches it: the same directory or bucket, or a web
   server serving it (the read-only `http` store; see `datadouble-fetch`).

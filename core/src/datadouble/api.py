@@ -322,6 +322,12 @@ class CiInitRequest(_Request):
     environment: tuple[str, ...] = ()
     """More environment variables every job passes on, for credentials adapters read
     from the environment, such as ``AWS_ACCESS_KEY_ID``."""
+    docker: str | None = None
+    """The Docker command steps run the image with, a name or a path; otherwise the
+    runner's ``DATADOUBLE_DOCKER``, or ``docker``."""
+    docker_socket: Path | None = None
+    """The Docker daemon's socket on the runner, an absolute path; otherwise the
+    runner's ``DATADOUBLE_DOCKER_SOCKET``, or ``/var/run/docker.sock``."""
 
 
 type Request = (
@@ -767,6 +773,8 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         work=request.work,
         side=request.side,
         environment=request.environment,
+        docker=request.docker,
+        docker_socket=request.docker_socket,
         spec_text=request.spec.read_text(encoding="utf-8"),
         lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
     )

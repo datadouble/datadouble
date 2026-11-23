@@ -530,6 +530,19 @@ secret file, the work directory), are mounted at the same path, because the engi
 Datadouble starts mount them by those paths. A job's runner therefore needs
 Docker, with those paths owned by the engine's user.
 
+The steps use `docker` and the daemon at `/var/run/docker.sock` unless the
+runner's environment names another command and socket
+(`DATADOUBLE_DOCKER`, `DATADOUBLE_DOCKER_SOCKET`, or a `unix://`
+`DOCKER_HOST`), or `ci init --docker` and `--docker-socket` wrote them into
+the configuration (decision 126). That covers Docker installed outside
+`PATH` and other Docker-compatible daemons on another socket. A step reads
+the socket's group from the configured path, starts the image on that daemon
+(`DOCKER_HOST`, and `CONTAINER_HOST` for podman), and mounts the socket at
+`/var/run/docker.sock` inside the Datadouble container, where `DOCKER_HOST`
+points and the `docker` runtime finds it as always. Rootless Docker is not
+supported: its user namespace breaks both the socket's group and the shared
+user decision 73 relies on.
+
 ## Testing
 
 Each CI/CD adapter is tested at three levels.

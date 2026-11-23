@@ -16,12 +16,14 @@
  * review, such as the lock job's new lock and its changes: it is emptied
  * first, made writable by the engine's user, and archived as the build's
  * artifacts.
+ * `docker` and `dockerSocket`, when given, set DATADOUBLE_DOCKER and
+ * DATADOUBLE_DOCKER_SOCKET; otherwise the agent's own values apply, and
+ * without those `docker` and /var/run/docker.sock.
  */
 def call(Map config) {
     writeFile(file: '.datadouble-run.sh', text: libraryResource('datadouble/run.sh'))
     List<String> arguments = config.arguments.findAll { it }
-    int status
-    withEnv([
+    List<String> variables = [
         "DATADOUBLE_ARGUMENTS=${arguments.join('\n')}",
         "DATADOUBLE_CI_JOB=${config.job ?: ''}",
         "DATADOUBLE_IMAGE=${config.image}",
@@ -29,7 +31,15 @@ def call(Map config) {
         "DATADOUBLE_MOUNTS=${(config.mounts ?: []).join('\n')}",
         "DATADOUBLE_ENVIRONMENT=${(config.environment ?: []).join('\n')}",
         "DATADOUBLE_ARTIFACTS=${config.artifacts ?: ''}",
-    ]) {
+    ]
+    if (config.docker) {
+        variables << "DATADOUBLE_DOCKER=${config.docker}"
+    }
+    if (config.dockerSocket) {
+        variables << "DATADOUBLE_DOCKER_SOCKET=${config.dockerSocket}"
+    }
+    int status
+    withEnv(variables) {
         status = sh(script: 'bash .datadouble-run.sh', returnStatus: true)
     }
     if (config.artifacts) {

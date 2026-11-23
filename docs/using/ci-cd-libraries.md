@@ -85,6 +85,15 @@ notify:
 - **Docker,** with every path the spec names existing and owned by the
   engine's user; jobs run the pinned Datadouble image as that user. On
   Kubernetes, one PersistentVolumeClaim holds those paths.
+- **Another Docker command or socket,** for Docker installed outside `PATH`
+  or another Docker-compatible daemon on another socket: set
+  `DATADOUBLE_DOCKER` (the command, `docker` by default) and
+  `DATADOUBLE_DOCKER_SOCKET` (the daemon's socket, `/var/run/docker.sock` by
+  default; a `unix://` `DOCKER_HOST` also names it) in the runner's
+  environment, or pass `ci init --docker` and `--docker-socket` to write them
+  into the generated configuration (decision 126). The socket is always
+  mounted at `/var/run/docker.sock` inside the Datadouble container. Rootless
+  Docker is not supported. Argo CD's jobs are pods and need neither.
 - **Outcomes** map to the system's own: a warning is a GitHub warning
   annotation, a GitLab allowed failure, an unstable Jenkins build, or a
   succeeding Kubernetes Job that says so in its log.
