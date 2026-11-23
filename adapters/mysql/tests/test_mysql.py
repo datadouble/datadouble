@@ -390,7 +390,8 @@ def test_plugins_the_data_needs_are_installed(source: MysqlScratch, tmp_path: Pa
         # Omitted, the plugin is not installed, and the table using it must go.
         omitted = (
             PLUGIN_SPEC.replace(
-                "  connection: CONNECTION\n", "  connection: CONNECTION\n  omit: [mypluglib.so]\n"
+                "    connection: CONNECTION\n",
+                "    connection: CONNECTION\n    omit: [mypluglib.so]\n",
             )
             .replace('["items"]', '["items", "notes"]')
             .replace('notes: "id > 0"', 'files: "id > 0"')
