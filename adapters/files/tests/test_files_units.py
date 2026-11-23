@@ -122,6 +122,8 @@ def test_snapshots_need_consent(tmp_path: Path) -> None:
     source = FilesSource(tree(tmp_path), accept_inconsistent=False)
     assert source.server_version() == "1"
     assert source.catalog().tables
+    # Every table of a tree sits in the one `files` namespace.
+    assert source.namespaces() == ("files",)
     with pytest.raises(EngineError, match="accept_inconsistent: true"), source.snapshot(AS_OF):
         pass
     with FilesSource(tmp_path, accept_inconsistent=True).snapshot(AS_OF) as accepted:
