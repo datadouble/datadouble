@@ -172,7 +172,8 @@ class MysqlScratch:
         self.execute("INSERT INTO items (id) VALUES (%s)", [item_id])
 
 
-def admin(statement: str) -> None:
+def admin(*statements: str) -> None:
+    """Run statements, in order, on one administrative connection."""
     options, _ = parse_url(os.environ[URL_VARIABLE])
     with pymysql.connect(
         host=options["host"],
@@ -181,7 +182,9 @@ def admin(statement: str) -> None:
         password=options["password"],
         autocommit=True,
     ) as connection:
-        connection.cursor().execute(statement)
+        cursor = connection.cursor()
+        for statement in statements:
+            cursor.execute(statement)
 
 
 @contextmanager

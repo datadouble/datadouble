@@ -3,15 +3,17 @@
 
 """The scratch side: working databases, anonymization, images and restores.
 
-``load`` builds a group's working database on a fresh server: ``before_load``
-hooks, the schema (tables, views and routines), the rows with ``LOAD DATA``
-and foreign-key checks off, fallbacks for missing parents, then the triggers,
-so loading does not fire them. Tables of other groups are dropped, with the
-foreign keys and views that would point at nothing. ``transform`` copies the
-stopped server's files and anonymizes the copy; MySQL cannot switch triggers
-off for a session, so they are set aside while the rules and hooks run in one
-transaction, and put back. ``package`` writes the data directory (physical)
-or a ``mysqldump`` script (logical); ``restore`` brings either back up.
+``load`` builds a group's working database on a fresh server: the default
+database, with ``before_load`` hooks run in it, the schema (tables, views and
+routines), the rows with ``LOAD DATA`` and foreign-key checks off, fallbacks
+for missing parents, then the triggers, so loading does not fire them. Tables
+of other groups are dropped, with the foreign keys and views that would point
+at nothing. ``transform`` copies the stopped server's files and anonymizes the
+copy; MySQL cannot switch triggers off for a session, so they are set aside
+while the rules and hooks run in one transaction, and put back. ``package``
+writes the data directory (physical) or a ``mysqldump`` script (logical);
+``restore`` brings either back up. A working database holds every database the
+source read, under its own name.
 """
 
 import re
@@ -60,7 +62,9 @@ class DatabaseInfo(BaseModel):
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
-    database: str
+    databases: tuple[str, ...]
+    default: str
+    """The database spec SQL without a table runs in, and copies announce."""
     server_version: str
 
 
@@ -81,6 +85,18 @@ def without_definers(script: str) -> str:
     return _DEFINER.sub("", script)
 
 
+def create_database(script: str, database: str) -> str:
+    """The dump's ``CREATE DATABASE`` for ``database``, keeping its character set.
+
+    ``mysqldump --databases`` writes one per database, ``IF NOT EXISTS``.
+    """
+    name = quote(database)
+    for line in script.splitlines():
+        if line.startswith("CREATE DATABASE") and f" {name} " in f"{line} ":
+            return line.rstrip().removesuffix(";")
+    return compose("CREATE DATABASE IF NOT EXISTS {}", name)
+
+
 def load_statement(table: ExtractedTable) -> str:
     """``LOAD DATA`` for one extracted table; hexadecimal columns pass through ``UNHEX``."""
     targets = ", ".join(
@@ -99,6 +115,11 @@ def load_statement(table: ExtractedTable) -> str:
         targets,
         tail,
     )
+
+
+def _listed(values: tuple[str, ...]) -> str:
+    """Placeholders for ``values``, for an ``IN`` list."""
+    return ", ".join(["%s"] * len(values))
 
 
 def _execute(
@@ -134,7 +155,7 @@ def _kept(connection: Connection, table: TableName, alias: str) -> list[str]:
         f"reading {table}",
         "SELECT COLUMN_NAME FROM information_schema.COLUMNS"
         " WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND EXTRA LIKE %s",
-        [table.namespace, table.name, "%on update%"],
+        [table.namespace[0], table.name, "%on update%"],
     )
     return [compose("{}.{} = {}.{}", alias, quote(str(n)), alias, quote(str(n))) for (n,) in found]
 
@@ -274,10 +295,18 @@ class MysqlWorking:
                             f"installing plugin {plugin.name}",
                             f"INSTALL PLUGIN {plugin.name} SONAME '{plugin.library}'",
                         )
+                schema = (directory / "schema.sql").read_text("utf-8")
+                _execute(
+                    connection,
+                    "creating the default database",
+                    create_database(schema, index.default),
+                )
+            # The dump's own CREATE DATABASE for it is IF NOT EXISTS.
+            with server.connect(index.default) as connection:
                 for hook in hooks:
                     _execute(connection, "a before_load hook", hook.sql)
             server.tool("mysql", [], directory / "schema.sql")
-            with server.connect(index.database) as connection:
+            with server.connect(index.default) as connection:
                 _execute(
                     connection, "preparing to load", "SET foreign_key_checks = 0, unique_checks = 0"
                 )
@@ -292,7 +321,7 @@ class MysqlWorking:
                 for fixup in group.fixups:
                     self._fixup(connection, plan, index, fixup)
             server.tool("mysql", [], directory / "triggers.sql")
-            with server.connect(index.database) as connection:
+            with server.connect(index.default) as connection:
                 _execute(connection, "preparing to prune", "SET foreign_key_checks = 0")
                 for table in index.tables:
                     if table.table not in members:
@@ -301,56 +330,65 @@ class MysqlWorking:
                             f"dropping {table.table}",
                             compose("DROP TABLE IF EXISTS {}", qualified(table.table)),
                         )
-                self._prune(connection, index.database)
+                self._prune(connection, index.databases)
                 counts = MysqlRestored(connection).counts(group.tables)
-        info = DatabaseInfo(database=index.database, server_version=self.server_version())
+        info = DatabaseInfo(
+            databases=index.databases, default=index.default, server_version=self.server_version()
+        )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod
-    def _prune(connection: Connection, database: str) -> None:
-        """Drop foreign keys and views that point at tables this database no longer has."""
+    def _prune(connection: Connection, databases: tuple[str, ...]) -> None:
+        """Drop foreign keys and views that point at tables the working database lacks."""
         dangling = _rows(
             connection,
             "finding dangling references",
-            """
-            SELECT r.TABLE_NAME, r.CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS r
-            WHERE r.CONSTRAINT_SCHEMA = %s AND (
-                r.UNIQUE_CONSTRAINT_SCHEMA <> r.CONSTRAINT_SCHEMA OR NOT EXISTS (
+            compose(
+                """
+                SELECT r.CONSTRAINT_SCHEMA, r.TABLE_NAME, r.CONSTRAINT_NAME
+                FROM information_schema.REFERENTIAL_CONSTRAINTS r
+                WHERE r.CONSTRAINT_SCHEMA IN ({}) AND NOT EXISTS (
                     SELECT 1 FROM information_schema.TABLES t
-                    WHERE t.TABLE_SCHEMA = r.CONSTRAINT_SCHEMA
-                      AND t.TABLE_NAME = r.REFERENCED_TABLE_NAME))
-            ORDER BY 1, 2
-            """,
-            [database],
+                    WHERE t.TABLE_SCHEMA = r.UNIQUE_CONSTRAINT_SCHEMA
+                      AND t.TABLE_NAME = r.REFERENCED_TABLE_NAME)
+                ORDER BY 1, 2, 3
+                """,
+                _listed(databases),
+            ),
+            list(databases),
         )
-        for table, constraint in dangling:
+        for database, table, constraint in dangling:
             _execute(
                 connection,
                 f"dropping {constraint}",
                 compose(
                     "ALTER TABLE {} DROP FOREIGN KEY {}",
-                    qualified(TableName.of(database, str(table))),
+                    qualified(TableName.of(str(database), str(table))),
                     quote(str(constraint)),
                 ),
             )
         while broken := _rows(
             connection,
             "finding broken views",
-            """
-            SELECT DISTINCT u.VIEW_NAME FROM information_schema.VIEW_TABLE_USAGE u
-            WHERE u.VIEW_SCHEMA = %s AND NOT EXISTS (
-                SELECT 1 FROM information_schema.TABLES t
-                WHERE t.TABLE_SCHEMA = u.TABLE_SCHEMA AND t.TABLE_NAME = u.TABLE_NAME)
-            ORDER BY 1
-            """,
-            [database],
+            compose(
+                """
+                SELECT DISTINCT u.VIEW_SCHEMA, u.VIEW_NAME
+                FROM information_schema.VIEW_TABLE_USAGE u
+                WHERE u.VIEW_SCHEMA IN ({}) AND NOT EXISTS (
+                    SELECT 1 FROM information_schema.TABLES t
+                    WHERE t.TABLE_SCHEMA = u.TABLE_SCHEMA AND t.TABLE_NAME = u.TABLE_NAME)
+                ORDER BY 1, 2
+                """,
+                _listed(databases),
+            ),
+            list(databases),
         ):
-            for (view,) in broken:
+            for database, view in broken:
                 _execute(
                     connection,
                     f"dropping {view}",
-                    compose("DROP VIEW {}", qualified(TableName.of(database, str(view)))),
+                    compose("DROP VIEW {}", qualified(TableName.of(str(database), str(view)))),
                 )
 
     @staticmethod
@@ -430,8 +468,8 @@ class MysqlWorking:
         _copy_tree(source, directory)
         info = DatabaseInfo.model_validate_json((directory / _INFO).read_bytes())
         server = MysqlServer(self.tools, directory / _DATADIR, directory)
-        with server.running(), server.connect(info.database) as connection:
-            triggers = self._set_aside_triggers(connection, info.database)
+        with server.running(), server.connect(info.default) as connection:
+            triggers = self._set_aside_triggers(connection, info.databases)
             _execute(connection, "starting the transformation", "START TRANSACTION")
             by_table: dict[TableName, list[PlannedRule]] = {}
             for rule in transformation.rules:
@@ -441,27 +479,36 @@ class MysqlWorking:
             for hook in transformation.hooks:
                 _execute(connection, "an after_transform hook", hook.sql)
             _execute(connection, "committing the transformation", "COMMIT")
-            for statement in triggers:
+            for database, statement in triggers:
+                # A trigger's statement does not name its database.
+                _execute(connection, "restoring a trigger", compose("USE {}", quote(database)))
                 _execute(connection, "restoring a trigger", statement)
+            _execute(connection, "restoring a trigger", compose("USE {}", quote(info.default)))
             counts = MysqlRestored(connection).counts(group.tables)
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     @staticmethod
-    def _set_aside_triggers(connection: Connection, database: str) -> list[str]:
-        """Drop every trigger and return the statements that recreate them."""
+    def _set_aside_triggers(
+        connection: Connection, databases: tuple[str, ...]
+    ) -> list[tuple[str, str]]:
+        """Drop every trigger and return each one's database and the statement recreating it."""
         names = _rows(
             connection,
             "listing triggers",
-            "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = %s",
-            [database],
+            compose(
+                "SELECT TRIGGER_SCHEMA, TRIGGER_NAME FROM information_schema.TRIGGERS"
+                " WHERE TRIGGER_SCHEMA IN ({}) ORDER BY 1, 2",
+                _listed(databases),
+            ),
+            list(databases),
         )
-        statements: list[str] = []
-        for (name,) in names:
-            trigger = qualified(TableName.of(database, str(name)))
+        statements: list[tuple[str, str]] = []
+        for database, name in names:
+            trigger = qualified(TableName.of(str(database), str(name)))
             rows = _rows(
                 connection, f"reading {name}", compose("SHOW CREATE TRIGGER {}", trigger), []
             )
-            statements.append(str(rows[0][2]))
+            statements.append((str(database), str(rows[0][2])))
             _execute(connection, f"setting aside {name}", compose("DROP TRIGGER {}", trigger))
         return statements
 
@@ -574,7 +621,7 @@ class MysqlWorking:
                     "--skip-dump-date",
                     f"--result-file={directory / _DUMP}",
                     "--databases",
-                    info.database,
+                    *info.databases,
                 ],
             )
 
@@ -610,7 +657,7 @@ class MysqlWorking:
         with server.running():
             if image_format is ImageFormat.LOGICAL:
                 server.tool("mysql", [], image / _DUMP)
-            with server.connect(info.database) as connection:
+            with server.connect(info.default) as connection:
                 yield MysqlRestored(connection)
 
 

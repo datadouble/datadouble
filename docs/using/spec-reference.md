@@ -15,7 +15,7 @@ A whole spec.
 |---|---|---|---|
 | `name` (required) | string |  | The spec's name: the first part of its images' identity. |
 | `source` (required) | [Source](#source) |  | The system to copy from: its engine and connection. |
-| `exclude` | list of string |  | Tables left out of every image, as `namespace.table` globs. |
+| `exclude` | list of string |  | Tables left out of every image, as globs matched from the right: `audit.*` is every table in a namespace `audit`, `shop.*.*` every table in PostgreSQL's database `shop`. |
 | `structure_only` | list of string |  | Tables copied without their rows, as globs. |
 | `case_sensitive` | boolean | `false` | Whether table and column names match case-sensitively. |
 | `strict` | [StrictLevel](#strictlevel) | `"columns"` | How new objects in the catalog fail the plan: `off`, `tables` or `columns`. |

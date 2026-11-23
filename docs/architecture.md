@@ -167,7 +167,8 @@ With no `images:` section there is one group containing everything.
 5. **Independent life cycles.** Each image has its own manifest, identity and
    channels, so it can be promoted, fetched, rolled back and pruned on its own.
 
-Groups match on whatever namespace an engine has: databases and schemas for
+Groups match on whatever namespace an engine has, like every name in a spec
+([table names](subsetting.md#table-names)): databases and schemas for
 relational engines and MongoDB, database numbers or key prefixes for Redis,
 index patterns for Elasticsearch and OpenSearch, object sets for Salesforce, and
 top-level directories for the filesystem adapter. A spec with several sources
@@ -415,7 +416,11 @@ is "stringly typed":
   kinds and replicate modes are `StrEnum`s, not string literals.
 - **Identifiers have types.** Table names, column paths, generations and channel
   names are distinct types (`NewType` or small value classes), so one can't be
-  passed where another is expected.
+  passed where another is expected. A table name is its namespace path,
+  outermost first, and its name: `(shop, public)` and `users` for PostgreSQL,
+  `(shop,)` and `users` for MySQL, nothing and `Account` for Salesforce. Each
+  engine's path has a fixed length, and the core matches spec names against it
+  from the right without knowing what each part means.
 - **Adapter interfaces are typed `Protocol`s,** and every package ships
   `py.typed`, so third-party adapters are checked against them too.
 - `Any`, `cast` and `# type: ignore` need a comment explaining why, and CI

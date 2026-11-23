@@ -151,7 +151,7 @@ def normalize(catalog: Catalog) -> Catalog:
 
     Column order is kept: it is part of a table's definition.
     """
-    tables = sorted(catalog.tables, key=lambda table: (table.name.namespace, table.name.name))
+    tables = sorted(catalog.tables, key=lambda table: table.name.parts)
     return Catalog(
         engine=catalog.engine,
         tables=tuple(

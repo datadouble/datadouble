@@ -18,6 +18,7 @@ from datadouble.runtime import Completed, Container, Endpoint
 from datadouble_postgres import PostgresEngine
 from datadouble_postgres.cluster import Cluster, Tools, default_image
 from datadouble_postgres.errors import database_error
+from datadouble_postgres.working import DatabaseInfo
 
 
 @dataclass
@@ -116,8 +117,19 @@ def test_database_errors_without_details() -> None:
     assert str(error) == "loading failed: UniqueViolation"
 
 
-def test_the_adapter_is_installed() -> None:
+def test_the_adapter_is_installed(tmp_path: Path) -> None:
     engine = installed().engine("postgres")
     assert isinstance(engine, PostgresEngine)
     assert engine.name == "postgres"
-    assert engine.capabilities().nested
+    capabilities = engine.capabilities()
+    assert (capabilities.nested, capabilities.joins_outermost) == (True, False)
+    info = DatabaseInfo(
+        databases=("billing", "shop"), default="shop", server_version="18.1", partitioned=()
+    )
+    (tmp_path / "database.json").write_text(info.model_dump_json(), "utf-8")
+    plan = engine.server(tmp_path, None)
+    assert (plan.image, plan.database, plan.ready[-1]) == (
+        "postgres:18.1-trixie",
+        "shop",
+        "--dbname=shop",
+    )

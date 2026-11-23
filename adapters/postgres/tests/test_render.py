@@ -28,9 +28,9 @@ from datadouble_postgres.render import Renderer, native
 from datadouble_postgres.working import filter_toc, only_toc, placeholder
 
 AS_OF = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
-USERS = TableName.of("public", "users")
-POSTS = TableName.of("public", "posts")
-PAYMENT = TableName.of("public", "payment")
+USERS = TableName.of("shop", "public", "users")
+POSTS = TableName.of("shop", "public", "posts")
+PAYMENT = TableName.of("shop", "public", "payment")
 ODD_TYPE = 'public."b\u0131g\u0131nt"'  # Pagila's domain name has dotless i's
 
 
@@ -92,7 +92,7 @@ def test_unknown_columns_fail() -> None:
     with pytest.raises(EngineError, match=r"public\.users\.nope is not in the catalog"):
         render(ValuesIn((C("nope"),), frozenset({(1,)})))
     with pytest.raises(EngineError, match=r"nowhere\.x\.id is not in the catalog"):
-        render(ValuesIn((C("id"),), frozenset({(1,)})), TableName.of("nowhere", "x"))
+        render(ValuesIn((C("id"),), frozenset({(1,)})), TableName.of("shop", "nowhere", "x"))
 
 
 def test_nested_selections_use_ctes() -> None:
@@ -135,7 +135,7 @@ def test_partial_sources_are_inlined() -> None:
 
 
 def test_missing_selection() -> None:
-    with pytest.raises(EngineError, match=r"no selection for public\.posts"):
+    with pytest.raises(EngineError, match=r"no selection for shop\.public\.posts"):
         render(SelectedBy((C("id"),), POSTS, (C("user_id"),)))
 
 

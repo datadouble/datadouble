@@ -123,12 +123,12 @@ def _table(description: ObjectDescription, names: frozenset[str]) -> Table:
                 ForeignKey(
                     name=f"{description.name}.{field.name}",
                     columns=(ColumnName(field.name),),
-                    target=TableName.of("", targets[0]),
+                    target=TableName.of(targets[0]),
                     target_columns=(ID,),
                 )
             )
     return Table(
-        name=TableName.of("", description.name),
+        name=TableName.of(description.name),
         columns=tuple(columns),
         primary_key=(ID,),
         foreign_keys=tuple(keys),

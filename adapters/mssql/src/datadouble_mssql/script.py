@@ -416,7 +416,7 @@ def _foreign_keys(connection: Connection) -> list[Statement]:
                 name=f"{schema}.{table}.{name}",
                 sql=statement,
                 table=child,
-                needs=(object_name(parent.namespace, parent.name),),
+                needs=(object_name(parent.namespace[-1], parent.name),),
             )
         )
     return statements

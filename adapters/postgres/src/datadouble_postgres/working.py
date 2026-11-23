@@ -3,20 +3,24 @@
 
 """The scratch side: working databases, anonymization, images and restores.
 
-``load`` builds a group's working database in a fresh cluster: hooks, the
+``load`` builds a group's working database in a fresh cluster holding every
+database the source read, under its own name: hooks, then in each database the
 source's extensions at the source's versions, the schema's pre-data section,
 the rows (with triggers off), fallbacks for missing parents, the post-data
 section (indexes and constraints, which also check the data), sequences, and
 finally dropping the tables that belong to other groups.
 ``transform`` copies the stopped cluster and anonymizes the copy in one
-transaction. ``package`` writes the data directory (physical) or a ``pg_dump``
-archive (logical); ``restore`` brings either back up for verification.
+transaction per database. ``package`` writes the data directory (physical) or
+a ``pg_dump`` archive per database (logical); ``restore`` brings either back
+up for verification. Spec SQL that names no table (hooks and assertions) runs
+in the default database.
 """
 
 import re
 import shutil
-from collections.abc import Generator, Iterable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
@@ -33,13 +37,18 @@ from datadouble.spec import AccountPrivileges, ExpressionRule, Hook, ImageFormat
 from datadouble.subset import Edge, EdgeMode
 from datadouble_postgres.cluster import SUPERUSER, Cluster, Tools
 from datadouble_postgres.errors import database_error
-from datadouble_postgres.render import Statement, columns, trusted
-from datadouble_postgres.source import ExtractIndex
+from datadouble_postgres.render import (
+    Statement,
+    columns,
+    database_of,
+    trusted,
+    unqualified,
+)
+from datadouble_postgres.source import ExtractedDatabase, ExtractIndex
 
 type Connection = psycopg.Connection[tuple[object, ...]]
 
 _DATADIR = "pgdata"
-_DUMP = "database.dump"
 _INFO = "database.json"
 # An entry ends with its owner; extensions have none, so their lines end in a space.
 _TOC = re.compile(r"^\d+; \d+ \d+ (.+) \S*$")
@@ -73,13 +82,19 @@ class DatabaseInfo(BaseModel):
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
-    database: str
+    databases: tuple[str, ...]
+    default: str
+    """The database spec SQL without a table runs in, and copies announce."""
     server_version: str
     partitioned: tuple[TableName, ...]
 
 
-def _qualified(name: TableName) -> sql.Identifier:
-    return sql.Identifier(name.namespace, name.name)
+def dump_name(position: int) -> str:
+    """The file holding the ``position``-th database's archive in a logical image."""
+    return f"database-{position:03d}.dump"
+
+
+_qualified = unqualified
 
 
 def _table(name: TableName, partitioned: frozenset[TableName]) -> sql.Composable:
@@ -156,16 +171,37 @@ def _execute(connection: Connection, action: str, statement: Statement) -> None:
 
 
 class PostgresRestored:
-    """A database open for checks: a restored image, or a working database."""
+    """Databases open for checks: a restored image, or a working database.
 
-    def __init__(self, connection: Connection, partitioned: frozenset[TableName]) -> None:
-        """Wrap a connection to the database."""
-        self.connection = connection
+    Each database gets its connection when a check first needs it; checks that
+    name no table run in the default database.
+    """
+
+    def __init__(
+        self,
+        connect: Callable[[str], Connection],
+        default: str,
+        partitioned: frozenset[TableName],
+    ) -> None:
+        """Open connections with ``connect``, by database name."""
+        self.connect = connect
+        self.default = default
         self.partitioned = partitioned
+        self.connections: dict[str, Connection] = {}
 
-    def _scalar(self, action: str, statement: Statement) -> int:
+    def close(self) -> None:
+        """Close every connection opened."""
+        for connection in self.connections.values():
+            connection.close()
+
+    def _connection(self, database: str) -> Connection:
+        if database not in self.connections:
+            self.connections[database] = self.connect(database)
+        return self.connections[database]
+
+    def _scalar(self, database: str, action: str, statement: Statement) -> int:
         try:
-            row = self.connection.execute(statement).fetchone()
+            row = self._connection(database).execute(statement).fetchone()
         except psycopg.Error as error:
             raise database_error(error, action) from None
         return int(str(row[0])) if row else 0
@@ -174,6 +210,7 @@ class PostgresRestored:
         """Rows per table."""
         return {
             table: self._scalar(
+                database_of(table),
                 f"counting {table}",
                 sql.SQL("SELECT count(*) FROM {}").format(_table(table, self.partitioned)),
             )
@@ -191,6 +228,7 @@ class PostgresRestored:
         )
         when = sql.SQL(" AND ({})").format(trusted(edge.when)) if edge.when else sql.SQL("")
         return self._scalar(
+            database_of(edge.child),
             f"checking {edge.name}",
             sql.SQL(
                 "SELECT count(*) FROM {} c WHERE {}{} AND NOT EXISTS (SELECT 1 FROM {} p WHERE {})"
@@ -210,11 +248,9 @@ class PostgresRestored:
             _table(column.table, self.partitioned),
             sql.Identifier(column.column),
         )
+        connection = self._connection(database_of(column.table))
         try:
-            with (
-                self.connection.transaction(),
-                self.connection.cursor(name="dd_values") as cursor,
-            ):
+            with connection.transaction(), connection.cursor(name="dd_values") as cursor:
                 cursor.execute(statement)
                 for (value,) in cursor:
                     yield str(value)
@@ -224,9 +260,21 @@ class PostgresRestored:
     def failing_rows(self, query: str) -> int:
         """Rows a spec assertion returns."""
         return self._scalar(
+            self.default,
             "running an assertion",
             sql.SQL("SELECT count(*) FROM ({}) AS assertion").format(trusted(query)),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _Loading:
+    """What loading each database of a group's working database needs."""
+
+    cluster: Cluster
+    plan: Plan
+    group: PlannedGroup
+    index: ExtractIndex
+    extract: Path
 
 
 class PostgresWorking:
@@ -274,65 +322,83 @@ class PostgresWorking:
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
-        """Build the group's working database."""
+        """Build the group's working database, holding every database the source read."""
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         partitioned = frozenset(index.partitioned)
-        members = frozenset(group.tables)
         cluster = Cluster(self.tools, directory / _DATADIR, directory, [extract])
         cluster.initialize()
-        dump = extract / "schema.dump"
-        listing = self.tools.run("pg_restore", ["--list", str(dump)], directory, [extract])
-        views = frozenset(
-            (kind, view.namespace, view.name)
-            for view in index.omitted_views
-            for kind in ("VIEW", "MATERIALIZED VIEW", "MATERIALIZED VIEW DATA")
-        )
-        # A constraint whose table is in the group but whose target is not (in
-        # another group, or excluded) would fail on the rows: leave it out.
-        foreign = frozenset(
-            ("FK CONSTRAINT", constraint.namespace, f"{constraint.table} {constraint.name}")
-            for constraint in index.constraints
-            if constraint.child in members and constraint.parent not in members
-        )
         with cluster.running():
-            cluster.create_database(index.database)
-            with cluster.connect(index.database) as connection:
+            for database in index.databases:
+                cluster.create_database(database.name)
+            with cluster.connect(index.default) as connection:
                 for hook in hooks:
                     _execute(connection, "a before_load hook", trusted(hook.sql))
-            listing = self._extensions(cluster, index, plan, dump, listing)
-            self._restore(cluster, index.database, dump, "pre-data", filter_toc(listing, views))
-            with cluster.connect(index.database) as connection, connection.transaction():
-                connection.execute("SET LOCAL session_replication_role = replica")
-                for table in index.tables:
-                    if table.table in members:
-                        self._copy_in(connection, extract / table.file, table.table, table.columns)
-                for fixup in group.fixups:
-                    self._fixup(connection, plan, index, fixup)
-            self._restore(
-                cluster, index.database, dump, "post-data", filter_toc(listing, views | foreign)
-            )
-            with cluster.connect(index.database) as connection:
-                self._sequences(connection)
-                for table in index.tables:
-                    if table.table not in members:
-                        _execute(
-                            connection,
-                            f"dropping {table.table}",
-                            sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(
-                                _qualified(table.table)
-                            ),
-                        )
-                counts = PostgresRestored(connection, partitioned).counts(group.tables)
+            loading = _Loading(cluster, plan, group, index, extract)
+            for database in index.databases:
+                self._load_database(loading, database)
+            restored = PostgresRestored(cluster.connect, index.default, partitioned)
+            try:
+                counts = restored.counts(group.tables)
+            finally:
+                restored.close()
         info = DatabaseInfo(
-            database=index.database,
+            databases=tuple(database.name for database in index.databases),
+            default=index.default,
             server_version=self.server_version(),
             partitioned=index.partitioned,
         )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
+    def _load_database(self, loading: "_Loading", database: ExtractedDatabase) -> None:
+        """Restore one database's schema and load its rows."""
+        cluster, plan, group, index, extract = (
+            loading.cluster,
+            loading.plan,
+            loading.group,
+            loading.index,
+            loading.extract,
+        )
+        name = database.name
+        members = frozenset(group.tables)
+        dump = extract / database.schema_file
+        listing = cluster.execute("pg_restore", ["--list", str(dump)])
+        views = frozenset(
+            (kind, view.namespace[-1], view.name)
+            for view in database.omitted_views
+            for kind in ("VIEW", "MATERIALIZED VIEW", "MATERIALIZED VIEW DATA")
+        )
+        # A constraint whose table is in the group but whose target is not (in
+        # another group, or excluded) would fail on the rows: leave it out.
+        foreign = frozenset(
+            ("FK CONSTRAINT", constraint.namespace, f"{constraint.table} {constraint.name}")
+            for constraint in database.constraints
+            if constraint.child in members and constraint.parent not in members
+        )
+        listing = self._extensions(cluster, database, plan, dump, listing)
+        self._restore(cluster, name, dump, "pre-data", filter_toc(listing, views))
+        own = [table for table in index.tables if database_of(table.table) == name]
+        with cluster.connect(name) as connection, connection.transaction():
+            connection.execute("SET LOCAL session_replication_role = replica")
+            for table in own:
+                if table.table in members:
+                    self._copy_in(connection, extract / table.file, table.table, table.columns)
+            for fixup in group.fixups:
+                if database_of(fixup.edge.child) == name:
+                    self._fixup(connection, plan, index, fixup)
+        self._restore(cluster, name, dump, "post-data", filter_toc(listing, views | foreign))
+        with cluster.connect(name) as connection:
+            self._sequences(connection)
+            for table in own:
+                if table.table not in members:
+                    _execute(
+                        connection,
+                        f"dropping {table.table}",
+                        sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(_qualified(table.table)),
+                    )
+
     def _extensions(
-        self, cluster: Cluster, index: ExtractIndex, plan: Plan, dump: Path, listing: str
+        self, cluster: Cluster, database: ExtractedDatabase, plan: Plan, dump: Path, listing: str
     ) -> str:
         """Create the kept extensions at the source's versions; the listing left to restore.
 
@@ -342,15 +408,15 @@ class PostgresWorking:
         holds neither. Omitted extensions are left out; whatever uses one fails
         to restore.
         """
-        if not index.extensions:
+        if not database.extensions:
             return listing
         omitted = frozenset(r.name for r in plan.omitted)
         schemas, schema_entries = only_toc(listing, "SCHEMA")
         _, extension_entries = only_toc(listing, "EXTENSION")
         if schema_entries:
-            self._restore(cluster, index.database, dump, "pre-data", schemas)
-        with cluster.connect(index.database) as connection:
-            for extension in index.extensions:
+            self._restore(cluster, database.name, dump, "pre-data", schemas)
+        with cluster.connect(database.name) as connection:
+            for extension in database.extensions:
                 if extension.name in omitted:
                     continue
                 _execute(
@@ -501,25 +567,36 @@ class PostgresWorking:
         directory: Path,
         transformation: Transformation,
     ) -> tuple[TableCount, ...]:
-        """Copy the working database and anonymize the copy in one transaction."""
+        """Copy the working database and anonymize the copy, one transaction per database.
+
+        Hooks run in the default database's transaction, after its rules.
+        """
         directory.parent.mkdir(parents=True, exist_ok=True)
         _copy_tree(source, directory)
         info = DatabaseInfo.model_validate_json((directory / _INFO).read_bytes())
         partitioned = frozenset(info.partitioned)
+        by_table: dict[TableName, list[PlannedRule]] = {}
+        for rule in transformation.rules:
+            by_table.setdefault(rule.column.table, []).append(rule)
         cluster = Cluster(self.tools, directory / _DATADIR, directory)
-        with cluster.running(), cluster.connect(info.database) as connection:
-            with connection.transaction():
-                connection.execute("SET LOCAL session_replication_role = replica")
-                by_table: dict[TableName, list[PlannedRule]] = {}
-                for rule in transformation.rules:
-                    by_table.setdefault(rule.column.table, []).append(rule)
-                for position, (table, rules) in enumerate(by_table.items()):
-                    self._anonymize(
-                        connection, (position, table), rules, transformation, partitioned
-                    )
-                for hook in transformation.hooks:
-                    _execute(connection, "an after_transform hook", trusted(hook.sql))
-            counts = PostgresRestored(connection, partitioned).counts(group.tables)
+        last = [name for name in info.databases if name != info.default] + [info.default]
+        with cluster.running():
+            for database in last:
+                with cluster.connect(database) as connection, connection.transaction():
+                    connection.execute("SET LOCAL session_replication_role = replica")
+                    for position, (table, rules) in enumerate(by_table.items()):
+                        if database_of(table) == database:
+                            self._anonymize(
+                                connection, (position, table), rules, transformation, partitioned
+                            )
+                    if database == info.default:
+                        for hook in transformation.hooks:
+                            _execute(connection, "an after_transform hook", trusted(hook.sql))
+            restored = PostgresRestored(cluster.connect, info.default, partitioned)
+            try:
+                counts = restored.counts(group.tables)
+            finally:
+                restored.close()
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 
     def _anonymize(
@@ -596,16 +673,17 @@ class PostgresWorking:
             return
         cluster = Cluster(self.tools, source / _DATADIR, directory, [directory])
         with cluster.running():
-            cluster.execute(
-                "pg_dump",
-                [
-                    "--format=custom",
-                    "--no-owner",
-                    "--no-privileges",
-                    f"--file={directory / _DUMP}",
-                    f"--dbname={cluster.local_conninfo(info.database)}",
-                ],
-            )
+            for position, database in enumerate(info.databases):
+                cluster.execute(
+                    "pg_dump",
+                    [
+                        "--format=custom",
+                        "--no-owner",
+                        "--no-privileges",
+                        f"--file={directory / dump_name(position)}",
+                        f"--dbname={cluster.local_conninfo(database)}",
+                    ],
+                )
 
     def add_accounts(self, image: Path, accounts: Sequence[Account]) -> None:
         """Give the physical image each account as a role that logs in with a password.
@@ -673,21 +751,23 @@ class PostgresWorking:
             datadir.chmod(0o700)
         else:
             cluster.initialize()
-        with cluster.running():
+        with cluster.running(), ExitStack() as stack:
             if image_format is ImageFormat.LOGICAL:
-                cluster.create_database(info.database)
-                cluster.execute(
-                    "pg_restore",
-                    [
-                        "--no-owner",
-                        "--no-privileges",
-                        "--exit-on-error",
-                        f"--dbname={cluster.local_conninfo(info.database)}",
-                        str(image / _DUMP),
-                    ],
-                )
-            with cluster.connect(info.database) as connection:
-                yield PostgresRestored(connection, frozenset(info.partitioned))
+                for position, database in enumerate(info.databases):
+                    cluster.create_database(database)
+                    cluster.execute(
+                        "pg_restore",
+                        [
+                            "--no-owner",
+                            "--no-privileges",
+                            "--exit-on-error",
+                            f"--dbname={cluster.local_conninfo(database)}",
+                            str(image / dump_name(position)),
+                        ],
+                    )
+            restored = PostgresRestored(cluster.connect, info.default, frozenset(info.partitioned))
+            stack.callback(restored.close)
+            yield restored
 
 
 def _copy_tree(source: Path, destination: Path) -> None:

@@ -18,7 +18,7 @@ from datadouble.spec import (
     VirtualForeignKey,
     parse_spec,
 )
-from fakes import shop
+from fakes import shop, table
 
 TABLES = """# Name; Upsert; Primary Key; ; Author
 USERS; N; ID INTEGER; ; Jailer
@@ -168,6 +168,19 @@ def test_case_sensitive_names(tmp_path: Path) -> None:
         jailer.JailerError, match="table USERS is in the Jailer model but not in the catalog"
     ):
         jailer.load(jm, datamodel, shop(), case_sensitive=True)
+
+
+def test_ambiguous_names(tmp_path: Path) -> None:
+    jm, datamodel = model_files(tmp_path)
+    live = shop()
+    doubled = live.model_copy(
+        update={"tables": (*live.tables, table("users", ["id"], namespace="audit"))}
+    )
+    with pytest.raises(
+        jailer.JailerError,
+        match=r"USERS in the Jailer model is ambiguous: it matches public\.users, audit\.users",
+    ):
+        jailer.load(jm, datamodel, doubled)
 
 
 HEADER = "name: shop\nsource: {engine: fake}\n"

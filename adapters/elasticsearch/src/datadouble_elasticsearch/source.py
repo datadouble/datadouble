@@ -251,7 +251,7 @@ def introspect(client: Client, layout: Layout) -> Catalog:
             )
             sampled = items(document(found.get("hits"), "search hits").get("hits"), "hits")
         columns = table_columns(index, mappings, (document(hit, "a hit") for hit in sampled))
-        tables.append(Table(name=TableName.of("", index), columns=columns, primary_key=(ID,)))
+        tables.append(Table(name=TableName.of(index), columns=columns, primary_key=(ID,)))
     return Catalog(engine=client.product.engine, tables=tuple(tables), requirements=plugins(client))
 
 
@@ -332,9 +332,7 @@ class ElasticSnapshot:
             server_version=server_version(self.source.client),
             snapshot=hashlib.sha256(self.pit.pit.encode()).hexdigest()[:16],
             snapshot_seconds=round(time.monotonic() - self.opened, 3),
-            counts=tuple(
-                TableCount(table=TableName.of("", f.index), rows=f.documents) for f in files
-            ),
+            counts=tuple(TableCount(table=TableName.of(f.index), rows=f.documents) for f in files),
         )
 
 

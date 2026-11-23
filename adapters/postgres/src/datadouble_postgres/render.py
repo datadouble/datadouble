@@ -7,6 +7,8 @@ Seeds and ``when`` clauses are SQL from the spec, inserted as written, with
 ``:as_of`` bound to the plan's anchor time. Strategy B's value sets become
 typed array parameters. Strategy A's references to other tables' selections
 become materialized common table expressions, one per referenced table.
+Every query runs in the database its tables are in, so tables are named by
+schema and table alone.
 """
 
 import datetime as dt
@@ -54,6 +56,16 @@ def native(text: str) -> sql.SQL:
     return trusted(_AS_OF.sub("%(as_of)s", text.replace("%", "%%")))
 
 
+def database_of(table: TableName) -> str:
+    """The database a table is in: its name's first part."""
+    return table.namespace[0]
+
+
+def unqualified(table: TableName) -> sql.Identifier:
+    """``schema.table``, as a query inside the table's own database names it."""
+    return sql.Identifier(*table.parts[1:])
+
+
 def columns(names: Sequence[ColumnName]) -> sql.Composed:
     """A comma-separated list of quoted column names."""
     return sql.SQL(", ").join(sql.Identifier(name) for name in names)
@@ -86,7 +98,7 @@ class Renderer:
 
     def table(self, name: TableName) -> sql.Composable:
         """A table reference; ``ONLY`` keeps inheritance children out of plain tables."""
-        qualified = sql.Identifier(name.namespace, name.name)
+        qualified = unqualified(name)
         if name in self.partitioned:
             return qualified
         return sql.SQL("ONLY {}").format(qualified)

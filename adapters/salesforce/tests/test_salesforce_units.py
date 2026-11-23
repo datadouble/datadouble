@@ -103,8 +103,8 @@ HIDDEN = (
     "Contact.Pronouns",
 )
 AS_OF = dt.datetime(2026, 1, 2, 3, 4, 5, 6000, tzinfo=dt.UTC)
-ACCOUNT = TableName.of("", "Account")
-CONTACT = TableName.of("", "Contact")
+ACCOUNT = TableName.of("Account")
+CONTACT = TableName.of("Contact")
 
 
 @contextmanager
@@ -671,11 +671,20 @@ def _working(tmp_path: Path) -> tuple[SalesforceWorking, Path]:
         {"name": "Kind", "type": "string", "kind": "text"},
         {"name": "Score", "type": "currency", "kind": "decimal"},
     ]
+    no_namespace: list[str] = []
     objects = {
         "api_version": "62.0",
         "objects": [
-            {"table": {"namespace": "", "name": "Account"}, "columns": columns[:1], "records": 1},
-            {"table": {"namespace": "", "name": "Contact"}, "columns": columns, "records": 3},
+            {
+                "table": {"namespace": no_namespace, "name": "Account"},
+                "columns": columns[:1],
+                "records": 1,
+            },
+            {
+                "table": {"namespace": no_namespace, "name": "Contact"},
+                "columns": columns,
+                "records": 3,
+            },
         ],
     }
     (extract / "objects.json").write_text(json.dumps(objects))
@@ -738,10 +747,10 @@ def test_fixups(tmp_path: Path) -> None:
     working.transform(stubbed, tmp_path / "stubbed", tmp_path / "copy", transformation)
     working.package(tmp_path / "copy", ImageFormat.LOGICAL, tmp_path / "image")
     with working.restore(tmp_path / "image", ImageFormat.LOGICAL, tmp_path / "restored") as image:
-        assert image.counts([ACCOUNT, CONTACT, TableName.of("", "Lead")]) == {
+        assert image.counts([ACCOUNT, CONTACT, TableName.of("Lead")]) == {
             ACCOUNT: 3,
             CONTACT: 3,
-            TableName.of("", "Lead"): 0,
+            TableName.of("Lead"): 0,
         }
         assert image.orphans(_edge()) == 0
         assert image.orphans(_edge("Kind = 'x'")) == 0
@@ -769,7 +778,7 @@ def test_working_copies_refuse_what_they_cannot_do(tmp_path: Path) -> None:
         name="Contact.OwnerId",
         child=CONTACT,
         columns=(ColumnName("AccountId"),),
-        parent=TableName.of("", "User"),
+        parent=TableName.of("User"),
         parent_columns=(ColumnName("Id"),),
     )
     stub = _group(Fixup(edge=elsewhere, mode=EdgeMode.STUB, parent_present=False))

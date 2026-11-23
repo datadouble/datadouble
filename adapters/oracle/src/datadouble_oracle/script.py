@@ -235,8 +235,8 @@ def _foreign_keys(connection: Connection, schemas: tuple[str, ...]) -> list[Stat
     return [
         Statement(
             phase=Phase.FOREIGN_KEY,
-            owner=r.table.namespace,
-            name=object_name(r.table.namespace, r.name),
+            owner=r.table.namespace[-1],
+            name=object_name(r.table.namespace[-1], r.name),
             sql=compose(
                 "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({}){}{} {} {}",
                 qualified(r.table),
@@ -252,7 +252,7 @@ def _foreign_keys(connection: Connection, schemas: tuple[str, ...]) -> list[Stat
                 "VALIDATE" if r.validated else "NOVALIDATE",
             ),
             table=r.table,
-            needs=(object_name(r.target.namespace, r.target.name),),
+            needs=(object_name(r.target.namespace[-1], r.target.name),),
         )
         for r in references
     ]

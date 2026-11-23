@@ -3,10 +3,11 @@
 
 """Reading a MySQL catalog into Datadouble's engine-neutral model.
 
-The catalog is one database (MySQL's schema): its base tables, their columns,
-primary keys and foreign keys. A foreign key into another database keeps its
-real target, so the planner asks for a fallback. Generated columns are noted,
-since loading leaves them out.
+The catalog is one or more databases (MySQL's schemas): their base tables,
+named ``database.table``, with their columns, primary keys and foreign keys. A
+foreign key between two databases read is an ordinary reference; one into a
+database not read keeps its real target, so the planner asks for a fallback.
+Generated columns are noted, since loading leaves them out.
 """
 
 from collections import defaultdict
@@ -25,20 +26,24 @@ from datadouble.catalog import (
     Table,
 )
 from datadouble.names import ColumnName, EngineName, TableName
+from datadouble_mysql.render import compose
 
 ENGINE = EngineName("mysql")
 
+SYSTEM_DATABASES = frozenset({"mysql", "information_schema", "performance_schema", "sys"})
+"""MySQL's own databases, which are never read and exist in every server."""
+
 _TABLES = """
-SELECT TABLE_NAME FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = %s AND TABLE_TYPE = 'BASE TABLE'
-ORDER BY TABLE_NAME
+SELECT TABLE_SCHEMA, TABLE_NAME FROM information_schema.TABLES
+WHERE TABLE_SCHEMA IN ({}) AND TABLE_TYPE = 'BASE TABLE'
+ORDER BY TABLE_SCHEMA, TABLE_NAME
 """
 
 _COLUMNS = """
-SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE, EXTRA
+SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE, EXTRA
 FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = %s
-ORDER BY TABLE_NAME, ORDINAL_POSITION
+WHERE TABLE_SCHEMA IN ({})
+ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
 """
 
 # Only plugins the data needs: storage engines and full-text parsers. Others
@@ -52,14 +57,14 @@ ORDER BY PLUGIN_LIBRARY, PLUGIN_NAME
 """
 
 _KEYS = """
-SELECT k.TABLE_NAME, k.CONSTRAINT_NAME, k.COLUMN_NAME,
+SELECT k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.COLUMN_NAME,
        k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME
 FROM information_schema.KEY_COLUMN_USAGE k
 JOIN information_schema.TABLE_CONSTRAINTS c
   ON c.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND c.TABLE_NAME = k.TABLE_NAME
  AND c.CONSTRAINT_NAME = k.CONSTRAINT_NAME
-WHERE k.TABLE_SCHEMA = %s AND c.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'FOREIGN KEY')
-ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
+WHERE k.TABLE_SCHEMA IN ({}) AND c.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'FOREIGN KEY')
+ORDER BY k.TABLE_SCHEMA, k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION
 """
 
 _KINDS = {
@@ -128,34 +133,39 @@ def _text(value: object) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
-def introspect(connection: Connection, database: str) -> tuple[Catalog, Physical]:
-    """Read the catalog of ``database``."""
+def introspect(connection: Connection, databases: tuple[str, ...]) -> tuple[Catalog, Physical]:
+    """Read the catalog of ``databases``."""
+    listed = ", ".join(["%s"] * len(databases))
     with connection.cursor() as cursor:
-        cursor.execute(_TABLES, (database,))
-        names = [_text(row[0]) for row in cursor.fetchall()]
-        columns: defaultdict[str, list[Column]] = defaultdict(list)
+        cursor.execute(compose(_TABLES, listed), databases)
+        names = [TableName.of(_text(db), _text(name)) for db, name in cursor.fetchall()]
+        columns: defaultdict[TableName, list[Column]] = defaultdict(list)
         generated: defaultdict[TableName, set[ColumnName]] = defaultdict(set)
-        cursor.execute(_COLUMNS, (database,))
-        for table, name, column_type, data_type, nullable, extra in cursor.fetchall():
+        cursor.execute(compose(_COLUMNS, listed), databases)
+        for db, table, name, column_type, data_type, nullable, extra in cursor.fetchall():
             column = Column(
                 name=ColumnName(_text(name)),
                 type=_text(column_type),
                 kind=kind_of(_text(data_type)),
                 nullable=_text(nullable) == "YES",
             )
-            columns[_text(table)].append(column)
+            owner = TableName.of(_text(db), _text(table))
+            columns[owner].append(column)
             # EXTRA says VIRTUAL GENERATED or STORED GENERATED for generated
             # columns, and DEFAULT_GENERATED for ones with a default expression.
             if _text(extra).upper().split(" ")[0] in {"VIRTUAL", "STORED"}:
-                generated[TableName.of(database, _text(table))].add(column.name)
-        primary: defaultdict[str, list[ColumnName]] = defaultdict(list)
-        foreign: dict[tuple[str, str], tuple[TableName, list[ColumnName], list[ColumnName]]] = {}
-        cursor.execute(_KEYS, (database,))
-        for table, constraint, column_name, schema, target, target_column in cursor.fetchall():
+                generated[owner].add(column.name)
+        primary: defaultdict[TableName, list[ColumnName]] = defaultdict(list)
+        foreign: dict[
+            tuple[TableName, str], tuple[TableName, list[ColumnName], list[ColumnName]]
+        ] = {}
+        cursor.execute(compose(_KEYS, listed), databases)
+        for db, table, constraint, column_name, schema, target, target_column in cursor.fetchall():
+            owner = TableName.of(_text(db), _text(table))
             if target is None:
-                primary[_text(table)].append(ColumnName(_text(column_name)))
+                primary[owner].append(ColumnName(_text(column_name)))
                 continue
-            key = (_text(table), _text(constraint))
+            key = (owner, _text(constraint))
             entry = foreign.setdefault(key, (TableName.of(_text(schema), _text(target)), [], []))
             entry[1].append(ColumnName(_text(column_name)))
             entry[2].append(ColumnName(_text(target_column)))
@@ -167,7 +177,7 @@ def introspect(connection: Connection, database: str) -> tuple[Catalog, Physical
         engine=ENGINE,
         tables=tuple(
             Table(
-                name=TableName.of(database, name),
+                name=name,
                 columns=tuple(columns[name]),
                 primary_key=tuple(primary.get(name, [])),
                 foreign_keys=tuple(

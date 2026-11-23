@@ -122,6 +122,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   though Jenkins' own environment sets the mark. One spec serves both
   sides, each in its own namespace, and each side's engine pods start in
   its namespace.
+- **Several databases from one server in one source**
+  ([#76](https://github.com/datadouble/datadouble/issues/76)). MySQL and
+  PostgreSQL take `source.connection.databases`, a list of names or globs
+  (`["*"]` for every database), and read them all into one catalog; working
+  databases, images and copies hold every one under its own name. MySQL reads
+  them under its one consistent snapshot, so foreign keys, views and triggers
+  between databases are copied as they are; views over a database that is
+  not read are left out. PostgreSQL cannot share a
+  snapshot between databases, so it reads each under its own, opened
+  together, records each in the manifest (`snapshots`), and fails the plan on
+  a virtual reference between two databases. A database a glob picks up
+  later is new tables to strict mode. Hooks and assertions run in a default
+  database: the connection's own when it is read, otherwise the first read.
+  The MySQL URL's database is now optional when `databases` is given.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and
@@ -347,6 +361,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   give a Jenkins Kubernetes cloud the Role the Kubernetes plugin documents:
   pods (with `patch` and `update`), `pods/exec`, `pods/log` and watching
   events.
+- **BREAKING: PostgreSQL tables are named `database.schema.table`, and spec
+  names match from the right**
+  ([#76](https://github.com/datadouble/datadouble/issues/76)). A spec may
+  still write `public.users` or `users` wherever only one table fits; a name
+  that fits several, even only by case, now fails the plan naming each
+  instead of taking the first. Globs match part by part, so `*` no longer
+  crosses a dot: `shop.*.*` is every table in PostgreSQL's database `shop`.
+  Every catalog lock records a table's namespaces as a list now, so
+  re-run `datadouble lock` for every spec; PostgreSQL locks also gain the
+  database's name, and plans, manifests and messages show three-part names.
 
 - Oracle builds run every stage on one Oracle container, plugging each
   stage's database in and out, instead of starting a container per stage;

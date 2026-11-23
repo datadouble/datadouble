@@ -32,7 +32,12 @@ from datadouble_mysql.introspect import kind_of
 from datadouble_mysql.render import Renderer, native, quote
 from datadouble_mysql.server import MysqlServer, Tools, create_user, default_image
 from datadouble_mysql.source import field
-from datadouble_mysql.working import DatabaseInfo, placeholder, without_definers
+from datadouble_mysql.working import (
+    DatabaseInfo,
+    create_database,
+    placeholder,
+    without_definers,
+)
 
 AS_OF = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 C = ColumnName
@@ -115,7 +120,8 @@ def test_urls() -> None:
         {"host": "db.internal", "port": "3306", "user": "u@x", "password": "p/w"},
         "shop",
     )
-    for bad in ("postgres://h/db", "mysql:///db", "mysql://h/"):
+    assert parse_url("mysql://u@db.internal:3307")[1] is None
+    for bad in ("postgres://h/db", "mysql:///db"):
         with pytest.raises(EngineError, match="mysql url must look like"):
             parse_url(bad)
 
@@ -129,6 +135,18 @@ def test_kinds_and_placeholders() -> None:
     )
     with pytest.raises(EngineError, match="no placeholder for g"):
         placeholder(T, Column(name=C("g"), type="point", kind=ColumnKind.OTHER, nullable=False))
+
+
+def test_default_databases_keep_their_character_sets() -> None:
+    script = (
+        "USE `shop`;\n"
+        "CREATE DATABASE /*!32312 IF NOT EXISTS*/ `shop_eu` /*!40100 CHARACTER SET latin1 */;\n"
+        "CREATE DATABASE /*!32312 IF NOT EXISTS*/ `shop` /*!40100 CHARACTER SET utf8mb4 */;\n"
+    )
+    assert create_database(script, "shop") == (
+        "CREATE DATABASE /*!32312 IF NOT EXISTS*/ `shop` /*!40100 CHARACTER SET utf8mb4 */"
+    )
+    assert create_database("", "shop") == "CREATE DATABASE IF NOT EXISTS `shop`"
 
 
 def test_dumps_lose_their_definers() -> None:
@@ -172,6 +190,15 @@ def test_tools(tmp_path: Path) -> None:
     assert '"$DATADOUBLE_PASSWORD"' in script
 
 
+def test_connections_name_a_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DD_NO_DATABASE", "mysql://u@db.internal")
+    with (
+        pytest.raises(EngineError, match="name a database in the mysql url"),
+        MysqlEngine().connect({"url": {"env": "DD_NO_DATABASE"}}),
+    ):
+        pass
+
+
 def test_engine(tmp_path: Path) -> None:
     engine = installed().engine("mysql")
     assert isinstance(engine, MysqlEngine)
@@ -179,7 +206,10 @@ def test_engine(tmp_path: Path) -> None:
     assert (capabilities.nested, capabilities.hooks, capabilities.expressions) == (True, True, True)
     assert capabilities.version_line == 2  # 8.0 and 8.4 are separate lines
     (tmp_path / "database.json").write_text(
-        DatabaseInfo(database="shop", server_version="8.4.13").model_dump_json(), "utf-8"
+        DatabaseInfo(
+            databases=("billing", "shop"), default="shop", server_version="8.4.13"
+        ).model_dump_json(),
+        "utf-8",
     )
     plan = engine.server(tmp_path, None)
     assert (plan.image, plan.port, plan.database, plan.user, plan.owner) == (
