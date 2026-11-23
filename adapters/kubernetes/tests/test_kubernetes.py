@@ -22,7 +22,7 @@ from datadouble.registry import installed
 from datadouble.replicate import ClaimState, Copy, CopyKind, CopyState, ReplicateError
 from datadouble.secrets import SecretError
 from datadouble.settings import SettingsError
-from datadouble.spec import EnvSecret, FileSecret, ReplicateMode, StrictLevel, parse_spec
+from datadouble.spec import EnvSecret, FileSecret, ReplicateMode, Strict, parse_spec
 from datadouble_kubernetes import (
     Kubectl,
     KubectlError,
@@ -90,7 +90,7 @@ SUMMARY = ImageSummary(
     archives=(),
     manifest_sha256="0" * 64,
     verification=Verification(passed=True, checks=1, failed=0),
-    strict=StrictLevel.COLUMNS,
+    strict=Strict(),
 )
 
 

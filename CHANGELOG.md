@@ -372,6 +372,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-run `datadouble lock` for every spec; PostgreSQL locks also gain the
   database's name, and plans, manifests and messages show three-part names.
 
+- **BREAKING: `strict` is a mapping of levels per kind**
+  ([#78](https://github.com/datadouble/datadouble/issues/78)). Today's
+  levels move under `data` (`strict: {data: tables}`), beside `functions`,
+  `views`, `triggers`, `types`, `sequences` and `events` (`off`, `warn` or
+  `fail`, default `warn`); kinds left out take their defaults, and a bare
+  level is refused. On the command line `--strict KIND=LEVEL`, repeatable,
+  replaces `--strict LEVEL` and `--no-strict`; JSON requests take
+  `"strict": {"data": "tables"}`. `promote.strict` takes the same mapping,
+  and image summaries record the levels per kind. A known column whose type,
+  kind or nullability changed now fails only at `data: columns` and warns at
+  `tables` and `off`, unless the change breaks its anonymization rule, which
+  fails at every level, saying so. Removed tables and columns and changed
+  keys still always fail.
 - Oracle builds run every stage on one Oracle container, plugging each
   stage's database in and out, instead of starting a container per stage;
   each start takes about 35 seconds before any work.

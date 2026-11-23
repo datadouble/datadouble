@@ -29,7 +29,7 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from datadouble.names import EngineName, Generation, GroupName, SpecName
-from datadouble.spec import ImageFormat, StrictLevel
+from datadouble.spec import ImageFormat, Strict
 from datadouble.storage import ListingUnsupportedError, Store
 
 CODEC: Literal["gz"] = "gz"
@@ -119,8 +119,8 @@ class ImageSummary(_Model):
     archives: tuple[ImageArchive, ...]
     manifest_sha256: str
     verification: Verification
-    strict: StrictLevel
-    """The strict-mode level the image was built with."""
+    strict: Strict
+    """The strict-mode levels the image was built with."""
     server_version: str | None = None
     """The exact version of the server that wrote the image; the identity names its line."""
     accounts: tuple[str, ...] = ()

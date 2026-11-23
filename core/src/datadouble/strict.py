@@ -4,12 +4,15 @@
 """Excludes and strict mode.
 
 Excludes are resolved first, against the live catalog. Strict mode then
-compares what is left with the catalog lock:
+compares what is left with the catalog lock. ``strict.data`` sets how tables,
+columns and requirements are treated:
 
 =========================================  =======  ========  ===========
 Difference from the lock                   off      tables    columns
 =========================================  =======  ========  ===========
-Known table or column removed or changed   fail     fail      fail
+Known table or column removed              fail     fail      fail
+Known table's keys changed                 fail     fail      fail
+Known column's type or nullability changed warn     warn      fail
 New table matching an exclude pattern      ignored  ignored   ignored
 New table, not excluded                    warn     fail      fail
 New column in a known table                warn     warn      fail
@@ -17,18 +20,24 @@ Requirement removed or at another version  fail     fail      fail
 New requirement                            warn     fail      fail
 =========================================  =======  ========  ===========
 
+A difference that breaks something fails whatever the level. The caller says
+which do through a :data:`Breaks` function, since only planning knows what a
+difference breaks: a changed column whose anonymization rule no longer fits
+it, for one.
+
 Requirements are the extensions, plugins and modules the source uses; see
 :class:`~datadouble.catalog.Requirement`.
 """
 
+from collections.abc import Callable
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Catalog, Requirement, Table
+from datadouble.catalog import Catalog, CatalogLock, Requirement, Table
 from datadouble.names import TableName
 from datadouble.resolve import Resolver
-from datadouble.spec import StrictLevel
+from datadouble.spec import Strict, StrictLevel
 
 
 class _Model(BaseModel):
@@ -103,6 +112,14 @@ REQUIREMENT_RESOLUTIONS = (
 )
 """The ways to resolve a new requirement."""
 
+CHANGE_RESOLUTIONS = (
+    (
+        "check that the copies and the anonymization rules still suit it, "
+        "then re-lock with `datadouble lock`"
+    ),
+)
+"""The way to resolve a changed column or object."""
+
 
 class Finding(_Model):
     """One difference between the live catalog and the lock."""
@@ -112,12 +129,28 @@ class Finding(_Model):
     object: str
     detail: str
     resolutions: tuple[str, ...] = ()
+    breaks: str | None = None
+    """What the difference breaks, when it does; such a difference always fails."""
+
+    def __str__(self) -> str:
+        """``new-column public.users.phone: detail``, and what it breaks, if anything."""
+        text = f"{self.difference} {self.object}: {self.detail}"
+        return text if self.breaks is None else f"{text}; {self.breaks}"
+
+
+type Breaks = Callable[[Finding], str | None]
+"""What a difference breaks, if anything: planning's judgement, given to strict mode."""
+
+
+def _breaks_nothing(_finding: Finding) -> str | None:
+    return None
 
 
 class StrictReport(_Model):
     """Strict mode's verdict on a plan."""
 
-    level: StrictLevel
+    strict: Strict
+    """The levels the catalog was compared at."""
     lock_fingerprint: str
     findings: tuple[Finding, ...]
 
@@ -153,12 +186,13 @@ def _compare_table(live: Table, locked: Table, level: StrictLevel) -> list[Findi
             findings.append(
                 Finding(
                     difference=Difference.COLUMN_CHANGED,
-                    severity=Severity.FAIL,
+                    severity=_severity_new_column(level),
                     object=name,
                     detail=(
                         f"locked as {column.type} ({'null' if column.nullable else 'not null'}),"
                         f" now {found.type} ({'null' if found.nullable else 'not null'})"
                     ),
+                    resolutions=CHANGE_RESOLUTIONS,
                 )
             )
     findings.extend(
@@ -221,30 +255,58 @@ def _compare_requirements(
     return findings
 
 
+def _judged(finding: Finding, breaks: Breaks) -> Finding:
+    """``finding``, failing with the reason when it breaks something."""
+    if finding.severity is Severity.FAIL and finding.difference in _ALWAYS_FAIL:
+        return finding
+    reason = breaks(finding)
+    if reason is None:
+        return finding
+    return finding.model_copy(update={"severity": Severity.FAIL, "breaks": reason})
+
+
+_ALWAYS_FAIL = frozenset(
+    {
+        Difference.TABLE_REMOVED,
+        Difference.TABLE_CHANGED,
+        Difference.COLUMN_REMOVED,
+        Difference.REQUIREMENT_REMOVED,
+        Difference.REQUIREMENT_CHANGED,
+    }
+)
+"""Differences that fail at every level, whatever they break."""
+
+
 def check_strict(
     live: Catalog,
-    lock: Catalog,
-    lock_fingerprint: str,
+    locked: CatalogLock,
     excluded: frozenset[TableName],
-    level: StrictLevel,
+    strict: Strict,
+    breaks: Breaks = _breaks_nothing,
 ) -> StrictReport:
-    """Compare the live catalog, minus excluded tables, with the lock."""
+    """Compare the live catalog, minus excluded tables, with the lock.
+
+    ``breaks`` says what a difference breaks, if anything; one that breaks
+    something fails whatever the levels.
+    """
+    level = strict.data
+    lock = locked.catalog
     findings: list[Finding] = []
-    for locked in lock.tables:
-        if locked.name in excluded:
+    for locked_table in lock.tables:
+        if locked_table.name in excluded:
             continue
-        current = live.table(locked.name)
+        current = live.table(locked_table.name)
         if current is None:
             findings.append(
                 Finding(
                     difference=Difference.TABLE_REMOVED,
                     severity=Severity.FAIL,
-                    object=str(locked.name),
+                    object=str(locked_table.name),
                     detail="the table is in the lock but not in the live catalog",
                 )
             )
         else:
-            findings.extend(_compare_table(current, locked, level))
+            findings.extend(_compare_table(current, locked_table, level))
     locked_names = set(lock.names())
     findings.extend(
         Finding(
@@ -258,4 +320,8 @@ def check_strict(
         if table.name not in locked_names and table.name not in excluded
     )
     findings.extend(_compare_requirements(live.requirements, lock.requirements, level))
-    return StrictReport(level=level, lock_fingerprint=lock_fingerprint, findings=tuple(findings))
+    return StrictReport(
+        strict=strict,
+        lock_fingerprint=locked.fingerprint,
+        findings=tuple(_judged(finding, breaks) for finding in findings),
+    )

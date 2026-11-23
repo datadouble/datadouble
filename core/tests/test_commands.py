@@ -108,7 +108,7 @@ def test_lock_then_plan_then_run(spec_file: Path, tmp_path: Path) -> None:
 
 
 def test_plan_warnings(spec_file: Path) -> None:
-    code, out = cli_run("plan", "--spec", str(spec_file), "--no-strict")
+    code, out = cli_run("plan", "--spec", str(spec_file), "--strict", "data=off")
     assert code == ExitCode.WARNING
     assert "warning: no catalog lock" in out
     code, out = cli_run(
@@ -117,7 +117,7 @@ def test_plan_warnings(spec_file: Path) -> None:
         "--spec",
         str(spec_file),
         "--strict",
-        "off",
+        "data=off",
         "--strategy",
         "keys",
         "--format",
@@ -136,7 +136,8 @@ def test_run_warnings_and_failures(spec_file: Path, tmp_path: Path) -> None:
         str(spec_file),
         "--work",
         work,
-        "--no-strict",
+        "--strict",
+        "data=off",
     )
     assert code == ExitCode.WARNING
     assert "warning: no catalog lock" in out
@@ -184,7 +185,9 @@ def test_dry_run_builds_complete_requests() -> None:
         "--lock",
         "l.lock",
         "--strict",
-        "tables",
+        "data=tables",
+        "--strict",
+        "functions=fail",
         "--strategy",
         "nested",
         "--format",
@@ -199,7 +202,7 @@ def test_dry_run_builds_complete_requests() -> None:
         "command": "run",
         "spec": "s.yml",
         "lock": "l.lock",
-        "strict": "tables",
+        "strict": {"data": "tables", "functions": "fail"},
         "strategy": "nested",
         "formats": ["physical"],
         "stages": ["plan", "extract"],
@@ -229,6 +232,14 @@ def test_bad_stage_lists_are_usage_errors() -> None:
         with pytest.raises(SystemExit) as caught:
             cli_run("run", stages, "--spec", "x")
         assert caught.value.code == ExitCode.USAGE
+
+
+@pytest.mark.parametrize("setting", ["off", "data=warn", "functions=tables", "rules=off"])
+def test_strict_takes_kind_and_level(setting: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as caught:
+        cli_run("plan", "--spec", "x", "--strict", setting)
+    assert caught.value.code == ExitCode.USAGE
+    assert "give KIND=LEVEL: data=off|tables|columns" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

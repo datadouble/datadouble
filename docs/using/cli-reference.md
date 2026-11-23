@@ -54,8 +54,7 @@ Plan a build without extracting.
 |---|---|
 | `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
 | `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--strict` `STRICT` | override strict mode (one of off, tables, columns) |
-| `--no-strict` | shorthand for --strict=off |
+| `--strict` `KIND=LEVEL` | override strict mode for one kind, such as data=tables or functions=fail (repeatable) |
 | `--strategy` `STRATEGY` | override the subset strategy (one of auto, nested, keys) |
 | `--format` `FORMATS` | an image format to produce (repeatable); overrides package.formats (one of physical, logical) |
 
@@ -68,8 +67,7 @@ Run build stages, or resume a generation.
 | `STAGES` | comma-separated stages: plan,extract,load,transform,package,verify,store (required) |
 | `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
 | `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--strict` `STRICT` | override strict mode (one of off, tables, columns) |
-| `--no-strict` | shorthand for --strict=off |
+| `--strict` `KIND=LEVEL` | override strict mode for one kind, such as data=tables or functions=fail (repeatable) |
 | `--strategy` `STRATEGY` | override the subset strategy (one of auto, nested, keys) |
 | `--format` `FORMATS` | an image format to produce (repeatable); overrides package.formats (one of physical, logical) |
 | `--work` `WORK` | the work directory (default: .datadouble) |

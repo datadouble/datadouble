@@ -60,11 +60,22 @@ re-locking below).
 
 ## When strict mode fails
 
-`strict: columns` is the default. A new table or column fails the plan with
-each object and the ways to resolve it: anonymize it, exclude it, or accept
-it in the lock once someone has checked it holds no personal data. Show the
-person those options and let them choose (rule 4). `datadouble lock` records
-the current catalog after they have.
+`strict` is a mapping with a level per kind; `data: columns` is the
+default, and kinds left out keep their defaults. Never write a bare level
+such as `strict: tables`: the schema refuses it.
+
+A new table or column fails the plan with each object and the ways to
+resolve it: anonymize it, exclude it, or accept it in the lock once someone
+has checked it holds no personal data. Show the person those options and let
+them choose (rule 4). `datadouble lock` records the current catalog after
+they have.
+
+A known column whose type or nullability changed fails at `data: columns`
+and warns at `tables` and `off`. If the change means its anonymization rule
+no longer fits (a `faker` column that is no longer text, a `null` rule on a
+column that can no longer be null), it fails at every level, saying so:
+change the rule, not the level. Removed tables and columns and changed keys
+always fail; re-lock once the spec suits the new schema.
 
 ## Re-locking
 

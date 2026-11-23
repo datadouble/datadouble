@@ -6,8 +6,8 @@ import pytest
 from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind, Table
 from datadouble.names import ColumnName, TableName
 from datadouble.resolve import ResolveError, Resolver
-from datadouble.spec import StrictLevel
-from datadouble.strict import Difference, Severity, check_strict, resolve_excludes
+from datadouble.spec import Strict, StrictLevel
+from datadouble.strict import Difference, Finding, Severity, check_strict, resolve_excludes
 from fakes import catalog, shop, table
 
 
@@ -127,8 +127,8 @@ def findings(
     level: StrictLevel,
     excluded: frozenset[TableName] = frozenset(),
 ) -> set[tuple[str, str, str]]:
-    report = check_strict(live, lock.catalog, lock.fingerprint, excluded, level)
-    assert report.level is level
+    report = check_strict(live, lock, excluded, Strict(data=level))
+    assert report.strict.data is level
     return {(f.difference.value, f.severity.value, f.object) for f in report.findings}
 
 
@@ -153,7 +153,7 @@ def test_strict_levels(
     }
 
 
-def test_removed_and_changed_objects_always_fail() -> None:
+def test_removed_tables_and_columns_and_changed_keys_always_fail() -> None:
     lock = lock_of(
         USERS,
         table("orders", ["id", "user_id"], references=[("fk", ("user_id",), "users", ("id",))]),
@@ -182,21 +182,46 @@ def test_removed_and_changed_objects_always_fail() -> None:
     result = findings(live, lock, StrictLevel.OFF, frozenset({TableName.of("public", "ignored")}))
     assert result == {
         ("column-removed", "fail", "public.users.email"),
-        ("column-changed", "fail", "public.orders.user_id"),
+        ("column-changed", "warn", "public.orders.user_id"),
         ("table-changed", "fail", "public.orders"),
         ("table-removed", "fail", "public.gone"),
     }
-    report = check_strict(live, lock.catalog, lock.fingerprint, frozenset(), StrictLevel.OFF)
+    report = check_strict(live, lock, frozenset(), Strict(data=StrictLevel.OFF))
     assert report.failed()
     changed = next(f for f in report.findings if f.difference is Difference.COLUMN_CHANGED)
     assert changed.detail == "locked as integer (not null), now integer (null)"
+    assert "re-lock" in changed.resolutions[0]
+
+
+@pytest.mark.parametrize(
+    ("level", "severity"),
+    [(StrictLevel.OFF, "warn"), (StrictLevel.TABLES, "warn"), (StrictLevel.COLUMNS, "fail")],
+)
+def test_changed_columns(level: StrictLevel, severity: str) -> None:
+    lock = lock_of(USERS)
+    live = catalog(table("users", ["id", "email"], nullable=["email"]))
+    assert findings(live, lock, level) == {("column-changed", severity, "public.users.email")}
+
+
+def test_breaking_differences_fail_at_every_level() -> None:
+    lock = lock_of(USERS, table("gone", ["id"]))
+    live = catalog(table("users", ["id", "email"], nullable=["email"]))
+
+    def breaks(finding: Finding) -> str | None:
+        return f"it breaks {finding.object}"
+
+    report = check_strict(live, lock, frozenset(), Strict(data=StrictLevel.OFF), breaks)
+    assert {(f.object, f.severity.value, f.breaks) for f in report.findings} == {
+        ("public.users.email", "fail", "it breaks public.users.email"),
+        ("public.gone", "fail", None),
+    }
+    changed = next(f for f in report.findings if f.breaks is not None)
+    assert str(changed).endswith("(null); it breaks public.users.email")
 
 
 def test_clean_report() -> None:
     lock = lock_of(USERS)
-    report = check_strict(
-        catalog(USERS), lock.catalog, lock.fingerprint, frozenset(), StrictLevel.COLUMNS
-    )
+    report = check_strict(catalog(USERS), lock, frozenset(), Strict())
     assert not report.failed()
     assert report.findings == ()
     assert ColumnName("id") in USERS.primary_key
@@ -216,7 +241,7 @@ def test_requirement_drift(level: StrictLevel, severity: str) -> None:
     hstore = Requirement(kind=RequirementKind.EXTENSION, name="hstore", version="1.8")
     lock = CatalogLock.of(_requiring(vector, cube))
     live = _requiring(vector.model_copy(update={"version": "0.8.7"}), hstore)
-    report = check_strict(live, lock.catalog, lock.fingerprint, frozenset(), level)
+    report = check_strict(live, lock, frozenset(), Strict(data=level))
     assert {(f.difference.value, f.severity.value, f.object) for f in report.findings} == {
         ("requirement-changed", "fail", "extension vector 0.8.7"),
         ("requirement-removed", "fail", "extension cube 1.5"),

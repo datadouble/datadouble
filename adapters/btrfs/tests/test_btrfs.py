@@ -15,7 +15,7 @@ from datadouble.images import ImageIdentity, ImageSummary, Verification
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.registry import installed
 from datadouble.replicate import ClaimState, Copy, CopyKind, CopyState, ReplicateError
-from datadouble.spec import ReplicateMode, StrictLevel
+from datadouble.spec import ReplicateMode, Strict
 from datadouble_btrfs import BtrfsReplicator, BtrfsSettings, btrfs_binary, btrfs_replicator
 
 FAKE_BTRFS = """#!/bin/sh
@@ -39,7 +39,7 @@ SUMMARY = ImageSummary(
     archives=(),
     manifest_sha256="0" * 64,
     verification=Verification(passed=True, checks=1, failed=0),
-    strict=StrictLevel.COLUMNS,
+    strict=Strict(),
 )
 
 

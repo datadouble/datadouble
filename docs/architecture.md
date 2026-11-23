@@ -358,13 +358,13 @@ serves jobs that run as pods in each side's own namespace (decision 133).
 **JSON is primary.** Every operation is a JSON request with a JSON response:
 
 ```json
-{"command": "run", "stages": ["plan", "extract"], "spec": "prod.yml", "strict": "columns"}
+{"command": "run", "stages": ["plan", "extract"], "spec": "prod.yml", "strict": {"data": "columns"}}
 ```
 
 **The CLI is a thin layer** that builds those requests:
 
 ```
-datadouble run plan,extract --spec prod.yml --strict=columns
+datadouble run plan,extract --spec prod.yml --strict data=columns
 datadouble run plan,extract --spec prod.yml --dry-run --json   # print the request only
 datadouble plan --spec prod.yml --estimate --json               # machine-readable plan
 ```

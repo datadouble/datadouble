@@ -61,7 +61,9 @@ from datadouble.spec import (
     Fetch,
     FileSecret,
     ImageFormat,
+    ObjectLevel,
     Spec,
+    Strict,
     StrictLevel,
     parse_spec,
 )
@@ -116,13 +118,16 @@ announce:
     )
 
 
+DEFAULT_STRICT = Strict()
+
+
 def build(
     tmp_path: Path,
     generation: str,
     *,
     passed: bool = True,
     signed: bool = True,
-    strict: StrictLevel = StrictLevel.COLUMNS,
+    strict: Strict = DEFAULT_STRICT,
     version: str = "18",
     built_at: dt.datetime = T0,
 ) -> ImageSummary:
@@ -201,9 +206,20 @@ def test_promote_copies_and_advances_the_channel(tmp_path: Path, registry: Regis
 @pytest.mark.parametrize(
     ("passed", "signed", "strict", "problem"),
     [
-        (False, True, StrictLevel.COLUMNS, "verification did not pass"),
-        (True, False, StrictLevel.COLUMNS, "the image is not signed"),
-        (True, True, StrictLevel.TABLES, "built with strict mode tables, but columns is required"),
+        (False, True, Strict(), "verification did not pass"),
+        (True, False, Strict(), "the image is not signed"),
+        (
+            True,
+            True,
+            Strict(data=StrictLevel.TABLES),
+            "built with strict mode data tables, but columns is required",
+        ),
+        (
+            True,
+            True,
+            Strict(functions=ObjectLevel.OFF),
+            "built with strict mode functions off, but warn is required",
+        ),
     ],
 )
 def test_promote_refuses(
@@ -211,7 +227,7 @@ def test_promote_refuses(
     registry: Registry,
     passed: bool,
     signed: bool,
-    strict: StrictLevel,
+    strict: Strict,
     problem: str,
 ) -> None:
     build(tmp_path, "0000000000010001", passed=passed, signed=signed, strict=strict)
@@ -225,7 +241,7 @@ def test_promote_refuses(
 def test_promote_refuses_tampering(tmp_path: Path, registry: Registry) -> None:
     summary = build(tmp_path, "0000000000010001")
     store = FilesystemStore(tmp_path / "build")
-    forged = summary.model_copy(update={"strict": StrictLevel.OFF})
+    forged = summary.model_copy(update={"strict": Strict.lowest()})
     store.put_bytes(summary.identity.summary_key(), forged.model_dump_json().encode())
     with pytest.raises(PromoteError) as caught:
         promote(make_spec(tmp_path), registry)

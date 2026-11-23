@@ -79,7 +79,7 @@ from datadouble.spec import (
     Spec,
     SpecError,
     Strategy,
-    StrictLevel,
+    StrictOverrides,
     load_spec,
     spec_schema,
 )
@@ -196,7 +196,8 @@ class ImportJailerRequest(_SpecRequest):
 
 
 class _Overrides(_SpecRequest):
-    strict: StrictLevel | None = None
+    strict: StrictOverrides | None = None
+    """Strict-mode levels over the spec's, for the kinds named, such as ``{"data": "tables"}``."""
     strategy: Strategy | None = None
     formats: tuple[ImageFormat, ...] | None = Field(default=None, min_length=1)
 

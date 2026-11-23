@@ -33,7 +33,7 @@ from datadouble.prune import PruneTarget
 from datadouble.registry import RegistryError, installed
 from datadouble.replicate import Copy
 from datadouble.run import Stage
-from datadouble.spec import ImageFormat, Strategy, StrictLevel
+from datadouble.spec import ImageFormat, ObjectLevel, Strategy, StrictKind, StrictLevel
 
 
 class _Arguments(argparse.Namespace):
@@ -48,7 +48,7 @@ class _Arguments(argparse.Namespace):
     ci_job: str | None
     spec: str | None
     lock: str | None
-    strict: str | None
+    strict: list[tuple[str, str]] | None
     strategy: str | None
     formats: list[str] | None
     stages: list[str]
@@ -121,17 +121,28 @@ def _spec_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lock", help="the catalog lock (default: catalog.lock beside the spec)")
 
 
+def _strict_setting(text: str) -> tuple[str, str]:
+    kind, _, level = text.partition("=")
+    kinds = {k.value for k in StrictKind}
+    levels = {lv.value for lv in (StrictLevel if kind == StrictKind.DATA else ObjectLevel)}
+    if kind not in kinds or level not in levels:
+        message = (
+            f"give KIND=LEVEL: data=off|tables|columns, or one of "
+            f"{', '.join(k.value for k in StrictKind if k is not StrictKind.DATA)}=off|warn|fail"
+        )
+        raise argparse.ArgumentTypeError(message)
+    return kind, level
+
+
 def _override_arguments(parser: argparse.ArgumentParser) -> None:
-    strictness = parser.add_mutually_exclusive_group()
-    strictness.add_argument(
-        "--strict", choices=[level.value for level in StrictLevel], help="override strict mode"
-    )
-    strictness.add_argument(
-        "--no-strict",
-        dest="strict",
-        action="store_const",
-        const=StrictLevel.OFF.value,
-        help="shorthand for --strict=off",
+    parser.add_argument(
+        "--strict",
+        metavar="KIND=LEVEL",
+        type=_strict_setting,
+        action="append",
+        help=(
+            "override strict mode for one kind, such as data=tables or functions=fail (repeatable)"
+        ),
     )
     parser.add_argument(
         "--strategy", choices=[s.value for s in Strategy], help="override the subset strategy"
@@ -348,7 +359,7 @@ def _spec_fields(arguments: _Arguments) -> dict[str, JsonValue]:
 def _override_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     fields = _spec_fields(arguments)
     if arguments.strict:
-        fields["strict"] = arguments.strict
+        fields["strict"] = dict[str, JsonValue](arguments.strict)
     if arguments.strategy:
         fields["strategy"] = arguments.strategy
     if arguments.formats:

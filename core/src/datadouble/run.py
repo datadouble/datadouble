@@ -72,7 +72,7 @@ from datadouble.spec import (
     HashRule,
     ImageFormat,
     Spec,
-    StrictLevel,
+    Strict,
 )
 from datadouble.storage import Store
 from datadouble.subset import (
@@ -713,7 +713,7 @@ class Run:
             built_at=packaged.finished_at,
             archives=_load(tuple[ImageArchive, ...], packaged.outputs["archives"]),
             manifest_sha256=str(packaged.outputs["manifest_sha256"]),
-            strict=StrictLevel.OFF if planned.strict is None else planned.strict.level,
+            strict=Strict.lowest() if planned.strict is None else planned.strict.strict,
             server_version=str(packaged.outputs["server_version"]),
             accounts=tuple(account.user for account in self.spec.package.accounts),
             verification=Verification(

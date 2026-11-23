@@ -54,28 +54,55 @@ compared against the lock.
 
 ### Levels
 
-One setting with three levels; each includes the one before it.
+`strict` is a mapping with a level for each kind of thing in the catalog.
+Kinds left out take their defaults:
 
 ```yaml
-strict: columns   # default: fail on new tables or new columns
-# strict: tables  # fail on new tables only
-# strict: off     # warn only
+strict:
+  data: columns       # tables, columns, requirements: off | tables | columns
+  functions: warn     # functions and procedures: off | warn | fail
+  views: warn
+  triggers: warn
+  types: warn
+  sequences: warn
+  events: warn
 ```
 
-CLI: `--strict=columns` (default), `--strict=tables`, `--strict=off`, and
-`--no-strict` as shorthand for `off`. JSON: `{"strict": "columns"}`.
+CLI: `--strict KIND=LEVEL`, repeatable, such as `--strict data=tables
+--strict functions=fail`; each sets one kind over the spec's levels. JSON:
+`{"strict": {"data": "tables"}}`, with the same meaning. A bare level
+(`strict: tables`) is refused: say which kind it is for.
+
+`data` has three levels, each stricter than the one before:
 
 | Difference from the lock | `off` | `tables` | `columns` (default) |
 |---|---|---|---|
-| Known table or column removed or changed | **Fail** | **Fail** | **Fail** |
+| Known table or column removed | **Fail** | **Fail** | **Fail** |
+| Known table's primary key or foreign keys changed | **Fail** | **Fail** | **Fail** |
+| Known column's type, kind or nullability changed | Warn | Warn | **Fail** |
 | New table matching an exclude pattern | Ignored | Ignored | Ignored |
 | New table, not excluded | Warn, include | **Fail** | **Fail** |
 | New column in a known table | Warn | Warn | **Fail** |
 | Requirement removed, or at another version | **Fail** | **Fail** | **Fail** |
 | New requirement | Warn | **Fail** | **Fail** |
 
-Removed or changed objects always fail: the plan cannot run correctly against
-them, whatever the strictness.
+Removed tables and columns always fail: the plan cannot run against them,
+whatever the level. Changed keys fail too, since the subset model follows
+them.
+
+### Differences that break something
+
+A difference that breaks something fails the plan at every level, even
+`off`, and the failure says what it breaks. Planning reads the live catalog,
+so most changes to a known column break nothing: a widened `varchar` is
+copied as it now is. A change does break the column's anonymization rule
+when the rule no longer fits it, such as a `faker: email` column that became
+an integer, or a `null` rule on a column that can no longer be null. Such a
+change fails whatever `data` says; any other change to a known column fails
+at `data: columns` and warns at `tables` and `off`.
+
+After reviewing a warned change, re-lock with `datadouble lock` so the next
+plan compares against what you checked.
 
 A source that reads several databases (MySQL's and PostgreSQL's
 `connection.databases`) has every database's tables in one lock, each named

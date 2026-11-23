@@ -10,7 +10,8 @@ that cannot list keys are read through. It checks every image before copying
 any, and refuses an image unless:
 
 - verification passed, with every check run and none failed;
-- it was built with a strict-mode level at least as strict as required;
+- it was built with strict-mode levels, for every kind, at least as strict as
+  required;
 - it carries a signature the spec's ``trust`` settings accept;
 - every archive's content matches the hash in its summary.
 """
@@ -34,13 +35,11 @@ from datadouble.images import (
 )
 from datadouble.names import Generation, GroupName
 from datadouble.signing import SigningError, bundle_key, verify
-from datadouble.spec import CosignTrust, Spec, StrictLevel
+from datadouble.spec import CosignTrust, Spec, Strict
 from datadouble.storage import Store
 
 if TYPE_CHECKING:
     from datadouble.registry import Registry
-
-_STRICTNESS = {StrictLevel.OFF: 0, StrictLevel.TABLES: 1, StrictLevel.COLUMNS: 2}
 
 
 class PromoteError(Exception):
@@ -84,16 +83,17 @@ def check_signature(store: Store, summary: ImageSummary, trust: CosignTrust) -> 
     return bundle
 
 
-def _problems(summary: ImageSummary, required: StrictLevel) -> list[str]:
+def _problems(summary: ImageSummary, required: Strict) -> list[str]:
     name = f"{summary.identity.prefix()}/{summary.identity.generation}"
     problems: list[str] = []
     verification = summary.verification
     if not verification.passed or verification.failed or not verification.checks:
         problems.append(f"{name}: verification did not pass")
-    if _STRICTNESS[summary.strict] < _STRICTNESS[required]:
-        problems.append(
-            f"{name}: built with strict mode {summary.strict}, but {required} is required"
-        )
+    problems.extend(
+        f"{name}: built with strict mode {kind} {summary.strict.level(kind)}, "
+        f"but {required.level(kind)} is required"
+        for kind in summary.strict.weaker(required)
+    )
     return problems
 
 

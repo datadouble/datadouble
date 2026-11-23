@@ -36,7 +36,14 @@ from datadouble.planner import Plan, PlanError, PlanOptions
 from datadouble.programs import start_program
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage, StageManifest, StageStatus
-from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, parse_spec
+from datadouble.spec import (
+    ImageFormat,
+    Spec,
+    Strategy,
+    StrictLevel,
+    StrictOverrides,
+    parse_spec,
+)
 from datadouble.storage import filesystem_store
 from datadouble.strict import Difference, Severity
 from datadouble.subset import AllRows
@@ -349,7 +356,7 @@ class EngineConformance:
                         lock,
                         f"strict-{level}",
                         stages=(Stage.PLAN,),
-                        options=PlanOptions(strict=level),
+                        options=PlanOptions(strict=StrictOverrides(data=level)),
                     )
                 assert caught.value.strict is not None
                 return {(f.difference, f.severity) for f in caught.value.strict.findings}
@@ -367,10 +374,10 @@ class EngineConformance:
                 lock,
                 "strict-off",
                 stages=(Stage.PLAN,),
-                options=PlanOptions(strict=StrictLevel.OFF),
+                options=PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF)),
             )
             assert len(relaxed.warnings) == 2
-            excluded = builds.scratch_spec(source, 'exclude: ["added"]\nstrict: tables\n')
+            excluded = builds.scratch_spec(source, 'exclude: ["added"]\nstrict: {data: tables}\n')
             result = builds.run(excluded, lock, "strict-excluded", stages=(Stage.PLAN,))
             assert [w for w in result.warnings if "new-column" in w]
             assert not [w for w in result.warnings if "new-table" in w]
