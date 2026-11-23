@@ -564,9 +564,13 @@ and the pod mounts that namespace's `datadouble` PersistentVolumeClaim;
 `--cloud` names the plugin's cloud, its default otherwise. The two sides need
 separate namespaces, ideally separate clusters, since each claim holds its
 side's data. Jobs that start engine software need the spec's `kubernetes`
-runtime naming that namespace and claim, with every path the spec names
-under its `mount`, where the pod mounts the claim, the path the engine pods
-use; other jobs mount it at their paths' common directory. The pinned image
+runtime on that claim, with every path the spec names under its `mount`,
+where the pod mounts the claim, the path the engine pods use; other jobs
+mount it at their paths' common directory. The runtime's `namespace` is best
+left out: engine pods then start in the namespace of the pod that starts
+them, each side's own, so one spec serves both sides. A runtime that names a
+namespace must name the side's own, for every job that starts engines, with
+Jenkins or Argo CD alike (decision 133). The pinned image
 runs as a container of the pod as the engine's user, and the step runs
 `datadouble` in it; the plugin's own agent container keeps its image's user
 and starts with a umask that lets both write the pod's workspace. The

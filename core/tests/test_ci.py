@@ -33,6 +33,7 @@ from datadouble.ci import (
     mask,
     masking,
     pipeline,
+    runtime_namespace,
     secret_names,
     sections,
     side_of,
@@ -491,6 +492,20 @@ def test_claim_mount(tmp_path: Path) -> None:
     apart = replace(planned, jobs=(replace(planned.jobs[0], mounts=("/a", "/b")),))
     with pytest.raises(CiError, match="must share a directory; these do not: /a, /b"):
         claim_mount(apart)
+
+
+def test_runtime_namespace(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
+    named = {"kubernetes": {"namespace": "other", "claim": "work", "mount": str(tmp_path)}}
+    spec = spec.model_copy(update={"runtime": named})
+    with pytest.raises(CiError, match="namespace is other, but the non-production side's pods"):
+        runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "other")
+    runtime_namespace(pipeline(spec, options(JobKind.FETCH, runner=None)), "shop")
+    unnamed = {"kubernetes": {"claim": "work", "mount": str(tmp_path)}}
+    spec = spec.model_copy(update={"runtime": unnamed})
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
 
 
 def test_jobs_must_be_known() -> None:

@@ -50,6 +50,7 @@ from datadouble.ci import (
     Side,
     Trigger,
     claim_mount,
+    runtime_namespace,
 )
 from datadouble.outcome import ExitCode, Outcome
 
@@ -86,6 +87,7 @@ def _namespace(pipeline: Pipeline) -> str:
     if not pipeline.runner:
         message = "name the Kubernetes namespace the jobs run in (--runner)"
         raise CiError(message)
+    runtime_namespace(pipeline, pipeline.runner)
     return pipeline.runner
 
 

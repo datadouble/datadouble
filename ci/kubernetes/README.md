@@ -22,7 +22,11 @@ either. The response lists what to set up:
 - **A PersistentVolumeClaim** named `datadouble` in the namespace. Every path
   the spec names (stores, staging, copies, the work directory) lives on it,
   mounted at the same path in every pod, as the `kubernetes` runtime needs,
-  so they must share one directory, which `ci init` checks.
+  so they must share one directory, which `ci init` checks. Leave the spec's
+  `runtime.kubernetes.namespace` out: the engine pods then start in the
+  namespace of the job's pod, each side's own, so one spec serves both
+  sides. A namespace that is set must be `--runner` for jobs that start
+  engines, or `ci init` refuses.
 - **A Secret,** `datadouble-<spec>`, holding the environment variables the
   jobs read secrets from, one key each. Each job reads only its own.
 - **The boundary mark,** in production namespaces only: a ConfigMap named

@@ -646,6 +646,28 @@ DEFAULT_MOUNT = "/srv/datadouble"
 """Where the work claim is mounted when the spec names no path."""
 
 
+def runtime_namespace(pipeline: Pipeline, namespace: str) -> None:
+    """Refuse a ``kubernetes`` runtime that starts a side's engine pods in another namespace.
+
+    Engine pods mount the side's claim, which lives in the side's namespace
+    (``--runner``). Left out, the runtime's namespace is the one Datadouble's
+    own pod runs in, which is that side's, so one spec serves both sides; set,
+    it must be this side's for jobs that start engines.
+    """
+    settings = (pipeline.runtime or {}).get("kubernetes")
+    if not isinstance(settings, dict):
+        return
+    named = settings.get("namespace")
+    starting = any("runtime" in sections(job.kind, pipeline.side) for job in pipeline.jobs)
+    if starting and named is not None and named != namespace:
+        message = (
+            f"the spec's runtime.kubernetes.namespace is {named}, but the {pipeline.side}"
+            f" side's pods run in {namespace} (--runner), whose claim the engine pods mount;"
+            " leave the namespace out, so engine pods start in each side's own namespace"
+        )
+        raise CiError(message)
+
+
 def claim_mount(pipeline: Pipeline, mount: str | None = None) -> str:
     """The directory of the one PersistentVolumeClaim every path the jobs mount is on.
 

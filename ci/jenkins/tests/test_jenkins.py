@@ -58,7 +58,7 @@ replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
 """
 KUBERNETES = (
     SPEC.replace("docker-volume", "k8s-pv")
-    + "runtime: {kubernetes: {namespace: NAMESPACE, claim: datadouble, mount: /srv/datadouble"
+    + "runtime: {kubernetes: {claim: datadouble, mount: /srv/datadouble"
 )
 
 
@@ -83,8 +83,7 @@ def planned(
         agent=agent,
         cloud=cloud,
     )
-    namespace = runner or "default"
-    kubernetes = KUBERNETES.replace("NAMESPACE", namespace) + runtime + "}}\n"
+    kubernetes = KUBERNETES + runtime + "}}\n"
     text = kubernetes if agent is Agent.KUBERNETES else SPEC
     return pipeline(parse_spec(text.replace("MODE", mode)), options)
 
@@ -329,8 +328,10 @@ def test_kubernetes_instructions() -> None:
         " side's, ideally in its own cluster: its claim holds that side's data"
     )
     assert production[1] == (
-        "install the Kubernetes plugin and set up the cloud prod-k8s, whose credentials may"
-        " create, get, list, watch and delete pods and use pods/exec in shop-production"
+        "install the Kubernetes plugin and set up the cloud prod-k8s, whose credentials need a"
+        " Role in shop-production allowing create, delete, get, list, patch, update and watch"
+        " on pods; create and get on pods/exec; get, list and watch on pods/log; and watch on"
+        " events"
     )
     assert production[2] == (
         "in shop-production, create the PersistentVolumeClaim datadouble (ReadWriteMany, or"
@@ -338,13 +339,19 @@ def test_kubernetes_instructions() -> None:
         " /srv/datadouble, owned by 999:999"
     )
     assert "service account datadouble-shop-production" in production[3]
-    assert "pods/portforward" in production[3]
+    assert production[3] == (
+        "in shop-production, create the service account datadouble-shop-production, bound to a"
+        " Role allowing get, list, watch, create, delete and patch on pods, pods/log, pods/exec,"
+        " pods/portforward and secrets; and get and list on persistentvolumeclaims"
+    )
     assert production[4].startswith("inside the production boundary only, create the ConfigMap")
     assert production[5].startswith("create the Pipeline job datadouble-shop-build")
     on_demand = jenkins.instructions(SCENARIOS["kubernetes-on-demand"])
     assert "its default cloud" in on_demand[1]
     assert "ReadWriteOnce is enough" in on_demand[2]
-    assert on_demand[4].startswith("for the k8s-pv replicate adapter")
+    assert on_demand[4].endswith(
+        "ClusterRole allowing get, list, watch, create, delete and patch on persistentvolumes"
+    )
     assert not any("datadouble-boundary" in step for step in on_demand)
 
 
@@ -379,7 +386,7 @@ def test_kubernetes_engines_need_the_kubernetes_runtime() -> None:
     other = replace(docker, runtime={"docker": {"network": "host"}})
     with pytest.raises(CiError, match="the spec's runtime must be kubernetes"):
         Jenkins().instructions(other)
-    missing = replace(docker, runtime={"kubernetes": {"namespace": "shop-staging"}})
+    missing = replace(docker, runtime={"kubernetes": {"node": "worker-3"}})
     with pytest.raises(CiError, match="settings are invalid: claim, mount"):
         Jenkins().generate(missing)
     elsewhere: dict[str, JsonValue] = {
@@ -387,10 +394,14 @@ def test_kubernetes_engines_need_the_kubernetes_runtime() -> None:
         "claim": "datadouble",
         "mount": "/srv",
     }
-    with pytest.raises(CiError, match=r"must name the namespace shop-staging \(--runner\)"):
+    with pytest.raises(
+        CiError, match=r"namespace is shop-production, but the non-production side's pods run in"
+    ):
         Jenkins().generate(replace(docker, runtime={"kubernetes": elsewhere}))
-    claim: dict[str, JsonValue] = {"namespace": "shop-staging", "claim": "work", "mount": "/srv"}
-    with pytest.raises(CiError, match="and the claim datadouble"):
+    own = replace(docker, runtime={"kubernetes": {**elsewhere, "namespace": "shop-staging"}})
+    assert "namespace 'shop-staging'" in Jenkins().generate(own)[0].content
+    claim: dict[str, JsonValue] = {"claim": "work", "mount": "/srv"}
+    with pytest.raises(CiError, match="must name the claim datadouble"):
         Jenkins().generate(replace(docker, runtime={"kubernetes": claim}))
     relative: dict[str, JsonValue] = {
         "namespace": "shop-staging",

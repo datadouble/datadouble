@@ -148,13 +148,17 @@ agent {
   Generate each side with its own `--runner`.
 - **The pod mounts its namespace's `datadouble` claim** where the side's paths
   are. Jobs that start engine software (`build`, `provision`, `release`) need
-  the spec's `kubernetes` runtime naming that namespace and the claim
-  `datadouble`, with every path the spec names (stores, staging, the work
-  directory) under its `mount`, which is where the pod mounts the claim, the
-  same path the engine pods use. Other jobs mount the claim at their paths'
-  common directory, as Argo CD does. `ci init` refuses anything else. The pod
-  keeps to the runtime's `node` when one is set, and uses its
-  `image_pull_secrets`.
+  the spec's `kubernetes` runtime on the claim `datadouble`, with every path
+  the spec names (stores, staging, the work directory) under its `mount`,
+  which is where the pod mounts the claim, the same path the engine pods
+  use. Other jobs mount the claim at their paths' common directory, as Argo
+  CD does. `ci init` refuses anything else. The pod keeps to the runtime's
+  `node` when one is set, and uses its `image_pull_secrets`.
+- **Leave the runtime's `namespace` out.** The engine pods then start in the
+  namespace of the job's own pod, read from its service account, so one
+  spec serves both sides, each in its own namespace. A runtime that names a
+  namespace must name this side's `--runner`, so `ci init` refuses a spec
+  naming production's namespace for the non-production jobs.
 - **Only the Datadouble container runs as the engine's user** (decision 86).
   The plugin's agent container (`jnlp`) keeps its image's user, whose account
   and home an SCM checkout over SSH needs. The two share the workspace, so
@@ -183,8 +187,12 @@ agent {
 The response's `instructions` list what to set up:
 
 - Separate namespaces for the two sides.
-- The Kubernetes plugin and its cloud, whose credentials may create, get,
-  list, watch and delete pods and use `pods/exec` in the namespace.
+- The Kubernetes plugin and its cloud, whose credentials need a Role in the
+  namespace with the rights the plugin's own documentation lists: `create`,
+  `delete`, `get`, `list`, `patch`, `update` and `watch` on pods, `create`
+  and `get` on `pods/exec` (the `container` step), `get`, `list` and `watch`
+  on `pods/log`, and `watch` on events. `CLOUD_RULES` in the package holds
+  them, and `ACCOUNT_RULES` the service account's below.
 - The `datadouble` claim: `ReadWriteMany`, or `ReadWriteOnce` with the
   runtime's `node` set so every pod runs on that node, owned by the engine's
   user.

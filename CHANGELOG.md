@@ -326,6 +326,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING: the `kubernetes` runtime's `namespace` is optional, and no
+  longer defaults to `default`** (decision 133). Left out, engine pods start
+  where `kubectl` would put them: in a cluster, the namespace of
+  Datadouble's own pod, read from its service account; outside one, the
+  kubeconfig context's namespace, or `default`. One spec now serves Jenkins
+  Kubernetes agents and Argo CD jobs on both sides, each in its own
+  namespace. A spec that names a namespace is refused by `ci init` for a
+  side whose `--runner` differs, for jobs that start engines. `instructions`
+  give a Jenkins Kubernetes cloud the Role the Kubernetes plugin documents:
+  pods (with `patch` and `update`), `pods/exec`, `pods/log` and watching
+  events.
+
 - Oracle builds run every stage on one Oracle container, plugging each
   stage's database in and out, instead of starting a container per stage;
   each start takes about 35 seconds before any work.

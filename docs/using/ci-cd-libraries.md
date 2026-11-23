@@ -103,8 +103,12 @@ notify:
   mounts that namespace's `datadouble` claim; `--cloud` names the Jenkins
   Kubernetes plugin's cloud (its default otherwise). Each side needs its own
   namespace, ideally its own cluster. Jobs that start engines need the spec's
-  `kubernetes` runtime in that namespace, on that claim, with every path the
-  spec names under its `mount`. The pods' service account needs RBAC for
+  `kubernetes` runtime on that claim, with every path the spec names under
+  its `mount`. Leave the runtime's `namespace` out: engine pods then start in
+  the namespace of the job's own pod, so one spec serves both sides. If it
+  is set, it must be the side's `--runner`, or `ci init` refuses. The
+  plugin's cloud needs the Role the plugin documents (pods, `pods/exec`,
+  `pods/log`, events), and the pods' service account RBAC for
   engine pods (pods, their logs, exec and port forwarding, Secrets, and
   PersistentVolumes for `k8s-pv`), and the boundary mark is only the
   namespace's `datadouble-boundary` ConfigMap. `ci init` lists each step.

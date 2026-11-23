@@ -28,7 +28,8 @@ Jobs run on agents with Docker by default: the step runs the pinned image
 with ``docker run``. With Kubernetes agents (``--agent kubernetes``) each job
 is a pod of the Kubernetes plugin instead, beside the engine pods of the
 spec's ``kubernetes`` runtime. As for Argo CD, ``--runner`` names the side's
-namespace, whose ``datadouble`` claim the pod mounts where the runtime does;
+namespace, whose ``datadouble`` claim the pod mounts where the runtime does,
+and the engine pods start there too when the runtime names no namespace;
 the pinned image is one of its containers, running as the engine's user, and
 the step runs ``datadouble`` in it. The production boundary mark is then only
 the namespace's ``datadouble-boundary`` ConfigMap, mounted as a file, and
@@ -57,6 +58,7 @@ from datadouble.ci import (
     Side,
     Trigger,
     claim_mount,
+    runtime_namespace,
     sections,
 )
 from datadouble.outcome import ExitCode, Outcome
@@ -74,6 +76,41 @@ the step reads on a Kubernetes agent."""
 AGENT_COMMAND = 'umask 0000 && exec /usr/local/bin/jenkins-agent "$@"'
 """The plugin's agent container, started with a umask that lets Datadouble's container,
 running as another user, write the workspace they share."""
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One rule of a Role over Kubernetes' core API group: verbs on resources."""
+
+    resources: tuple[str, ...]
+    verbs: tuple[str, ...]
+
+    def describe(self) -> str:
+        """The rule in words, such as ``get and list on persistentvolumeclaims``."""
+        return f"{_series(self.verbs)} on {_series(self.resources)}"
+
+
+CLOUD_RULES = (
+    Rule(("pods",), ("create", "delete", "get", "list", "patch", "update", "watch")),
+    Rule(("pods/exec",), ("create", "get")),
+    Rule(("pods/log",), ("get", "list", "watch")),
+    Rule(("events",), ("watch",)),
+)
+"""What the Kubernetes plugin's cloud credentials need in a side's namespace: the Role
+the plugin's own documentation gives, with ``pods/exec`` for the ``container`` step."""
+ACCOUNT_RULES = (
+    Rule(
+        ("pods", "pods/log", "pods/exec", "pods/portforward", "secrets"),
+        ("get", "list", "watch", "create", "delete", "patch"),
+    ),
+    Rule(("persistentvolumeclaims",), ("get", "list")),
+)
+"""What a side's service account needs in its namespace, for the ``kubernetes`` runtime's
+engine pods: the Helm chart's Role."""
+VOLUME_RULES = (
+    Rule(("persistentvolumes",), ("get", "list", "watch", "create", "delete", "patch")),
+)
+"""What the non-production service account also needs cluster-wide, for ``k8s-pv``."""
 _PLACEHOLDERS = {
     Placeholder.RUN: "(params.RETRY_KEY ?: env.BUILD_TAG)",
     Placeholder.OWNER: "params.OWNER",
@@ -86,6 +123,19 @@ _HEADER = """\
 // the options and generate it again, rather than editing it by hand. Run it
 // as the Pipeline job {job}.
 """
+
+
+def _series(words: tuple[str, ...]) -> str:
+    """``a``, ``a and b``, ``a, b and c``."""
+    return words[0] if len(words) == 1 else f"{', '.join(words[:-1])} and {words[-1]}"
+
+
+def _allowing(rules: tuple[Rule, ...]) -> str:
+    """Rules in words, separated by semicolons."""
+    described = [rule.describe() for rule in rules]
+    if len(described) == 1:
+        return described[0]
+    return f"{'; '.join(described[:-1])}; and {described[-1]}"
 
 
 def _quote(text: str) -> str:
@@ -119,7 +169,6 @@ class _Runtime(BaseModel):
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
-    namespace: str = "default"
     claim: str
     mount: PurePosixPath
     node: str | None = None
@@ -153,11 +202,11 @@ def _runtime(pipeline: Pipeline, namespace: str) -> _Runtime:
         fields = ", ".join(".".join(str(part) for part in e["loc"]) for e in error.errors())
         message = f"the spec's runtime.kubernetes settings are invalid: {fields}"
         raise CiError(message) from None
-    if runtime.namespace != namespace or runtime.claim != CLAIM:
+    runtime_namespace(pipeline, namespace)
+    if runtime.claim != CLAIM:
         message = (
-            f"the spec's runtime.kubernetes must name the namespace {namespace} (--runner) and"
-            f" the claim {CLAIM}, which this side's pods mount, so that the engine pods share"
-            " their files"
+            f"the spec's runtime.kubernetes must name the claim {CLAIM}, which this side's pods"
+            " mount, so that the engine pods share their files"
         )
         raise CiError(message)
     if not runtime.mount.is_absolute():
@@ -171,9 +220,10 @@ def _placement(pipeline: Pipeline) -> _Placement:
 
     As for Argo CD (decision 103), ``--runner`` names the side's namespace, whose
     ``datadouble`` claim holds the side's paths. Jobs that start engine software
-    need the spec's ``kubernetes`` runtime, in that namespace on that claim, with
-    every path under its mount; other jobs mount the claim at the paths' common
-    directory.
+    need the spec's ``kubernetes`` runtime on that claim, with every path under
+    its mount, and its namespace left out (engine pods then start in the pod's
+    own namespace) or this side's; other jobs mount the claim at the paths'
+    common directory.
     """
     if not pipeline.runner:
         message = "name the Kubernetes namespace the jobs' pods run in (--runner)"
@@ -431,8 +481,8 @@ def _kubernetes(pipeline: Pipeline) -> list[str]:
             " other side's, ideally in its own cluster: its claim holds that side's data"
         ),
         (
-            f"install the Kubernetes plugin and set up {cloud}, whose credentials may create,"
-            f" get, list, watch and delete pods and use pods/exec in {namespace}"
+            f"install the Kubernetes plugin and set up {cloud}, whose credentials need a Role"
+            f" in {namespace} allowing {_allowing(CLOUD_RULES)}"
         ),
         (
             f"in {namespace}, create the PersistentVolumeClaim {CLAIM} ({access}),"
@@ -440,14 +490,13 @@ def _kubernetes(pipeline: Pipeline) -> list[str]:
         ),
         (
             f"in {namespace}, create the service account {account}, bound to a Role allowing"
-            " get, list, watch, create, delete and patch on pods, pods/log, pods/exec,"
-            " pods/portforward and secrets, and get and list on persistentvolumeclaims"
+            f" {_allowing(ACCOUNT_RULES)}"
         ),
     ]
     if pipeline.side is Side.NON_PRODUCTION:
         steps.append(
             f"for the k8s-pv replicate adapter, also bind {account} to a ClusterRole allowing"
-            " get, list, watch, create, delete and patch on persistentvolumes"
+            f" {_allowing(VOLUME_RULES)}"
         )
     else:
         steps.append(

@@ -36,8 +36,10 @@ If the team's Jenkins agents are pods of the Kubernetes plugin, often with no
 Docker, add `--agent kubernetes`. Then `--runner` names the production
 namespace, as for Argo CD, and `--cloud` the plugin's cloud (its default
 otherwise). The namespace must be production's alone, never shared with the
-non-production side. `build` needs the spec's `runtime: kubernetes` naming
-that namespace and the claim `datadouble`, with every path the spec names
+non-production side. `build` needs the spec's `runtime: kubernetes` on the
+claim `datadouble`, with no `namespace` (engine pods then start in the job's
+own namespace, so the same spec serves the non-production side) or this one,
+and every path the spec names
 (stores, the work directory) under the runtime's `mount`, since the job's pod
 mounts that claim there as the engine pods do; `ci init` refuses otherwise.
 Change the spec with `datadouble-spec` first if it uses Docker. Without
@@ -51,7 +53,8 @@ Change the spec with `datadouble-spec` first if it uses Docker. Without
   existing and owned by the engine's user (`999:999` for PostgreSQL); on
   Kubernetes, one PersistentVolumeClaim holding them. With Kubernetes agents,
   the `instructions` also list separate namespaces per side, the Kubernetes
-  plugin's cloud, the `datadouble` claim (`ReadWriteMany`, or
+  plugin's cloud with the Role its credentials need (pods, `pods/exec`,
+  `pods/log`, events), the `datadouble` claim (`ReadWriteMany`, or
   `ReadWriteOnce` with the runtime's `node`) and the RBAC its service
   account needs to run engine pods.
 - Where Docker is not `docker` with its socket at `/var/run/docker.sock`

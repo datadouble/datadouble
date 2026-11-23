@@ -30,7 +30,7 @@ name: shop
 source:
   engine: postgres
   connection: {dsn: {env: SHOP_SOURCE_DSN}}
-runtime: {kubernetes: {namespace: shop, claim: datadouble, mount: /srv/datadouble}}
+runtime: {kubernetes: {claim: datadouble, mount: /srv/datadouble}}
 store: [{filesystem: {path: /srv/datadouble/store}}]
 signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
 trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}
@@ -157,6 +157,11 @@ def test_paths_share_one_claim() -> None:
         ArgoCd().generate(planned(JobKind.PROMOTE, spec=scattered))
     with pytest.raises(CiError, match="name the Kubernetes namespace"):
         ArgoCd().generate(planned(JobKind.FETCH, runner=None))
+    named = SPEC.replace("{claim: datadouble,", "{namespace: shop-staging, claim: datadouble,")
+    with pytest.raises(CiError, match=r"namespace is shop-staging, but the production side's"):
+        ArgoCd().generate(planned(JobKind.BUILD, spec=named))
+    assert ArgoCd().generate(planned(JobKind.BUILD, spec=named, runner="shop-staging"))
+    assert ArgoCd().generate(planned(JobKind.PROMOTE, spec=named))
     clouded = replace(planned(JobKind.FETCH), cloud="prod-k8s")
     with pytest.raises(CiError, match="a cloud is for Jenkins"):
         ArgoCd().generate(clouded)

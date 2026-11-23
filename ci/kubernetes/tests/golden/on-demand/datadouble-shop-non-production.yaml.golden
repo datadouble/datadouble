@@ -31,7 +31,7 @@ spec:
             source:
               engine: postgres
               connection: {dsn: {env: SHOP_SOURCE_DSN}}
-            runtime: {kubernetes: {namespace: shop, claim: datadouble, mount: /srv/datadouble}}
+            runtime: {kubernetes: {claim: datadouble, mount: /srv/datadouble}}
             store: [{filesystem: {path: /srv/datadouble/store}}]
             signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
             trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}

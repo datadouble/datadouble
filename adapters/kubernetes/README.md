@@ -37,6 +37,26 @@ line, or look up an available volume's `server-version` before rendering.
 
 All three drive `kubectl` (`DATADOUBLE_KUBECTL` names another binary).
 
+## The runtime's namespace
+
+```yaml
+runtime:
+  kubernetes:
+    claim: datadouble          # the PersistentVolumeClaim holding the work directory
+    mount: /srv/datadouble     # where Datadouble's own pod mounts it
+    # namespace: shop-staging  # optional
+```
+
+Leave `namespace` out unless pods must start somewhere else. Then they start
+where `kubectl` would put them unasked: inside a cluster (no `kubeconfig` in
+the settings, no `KUBECONFIG`, and a service account namespace file in
+Datadouble's pod), that pod's own namespace, read from
+`/var/run/secrets/kubernetes.io/serviceaccount/namespace`; otherwise the
+namespace of the kubeconfig's context (the settings' `context`, or its current
+one), or `default` when it names none. So one spec serves CI/CD jobs that run
+as pods in each side's own namespace, which `ci init` requires a set
+namespace to match (decision 133).
+
 ## Reaching the cluster
 
 Without settings, `kubectl` uses the pod's service account when Datadouble

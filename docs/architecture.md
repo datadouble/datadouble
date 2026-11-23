@@ -306,12 +306,18 @@ runtime:
 ```yaml
 runtime:
   kubernetes:                    # pods, through kubectl
-    namespace: datadouble
     claim: datadouble-work       # the PersistentVolumeClaim holding the work directory
     mount: /work                 # where that claim is mounted in Datadouble's own pod
     kubeconfig: {env: BUILD_KUBECONFIG}  # optional: another cluster, by secret reference
     context: build               # optional: the kubeconfig's context
+    namespace: datadouble        # optional
 ```
+
+Without `namespace`, pods start where `kubectl` would put them unasked:
+inside a cluster (no `kubeconfig` in the settings, no `KUBECONFIG`, and the
+pod's service account namespace file), the namespace of Datadouble's own pod;
+otherwise the kubeconfig context's namespace, or `default`. So one spec
+serves jobs that run as pods in each side's own namespace (decision 133).
 
 - **Shared paths.** Every container sees the paths it works on at the same
   absolute path as Datadouble. With Docker they are bind-mounted, so the work
