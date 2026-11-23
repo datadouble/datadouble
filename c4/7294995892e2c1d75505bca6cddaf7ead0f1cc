@@ -1,0 +1,27 @@
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_58654d12df5991 34-55
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_db803bc1f50678 34-55
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_ad63f2bf16b775::t_ccfdf217721b9b 34-55
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_ff097a5dcd5471 226
+core/tests/test_run.py
+  s_ad63f2bf16b775::t_97c65dedcb2785 638-640
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c47294995892e2c1d75505bca6cddaf7ead0f1cc",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
