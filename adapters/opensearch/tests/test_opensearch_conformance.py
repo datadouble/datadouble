@@ -52,7 +52,7 @@ def harness() -> EngineHarness:
     return EngineHarness(
         engine=ElasticEngine(OPENSEARCH),
         sample_spec=SAMPLE_SPEC,
-        sample_column=ColumnRef(table=TableName.of("", "customers"), column=ColumnName("email")),
+        sample_column=ColumnRef(table=TableName.of("customers"), column=ColumnName("email")),
         scratch=_scratch,
         runtime=runtime_for_tests(),
     )

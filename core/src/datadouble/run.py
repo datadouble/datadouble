@@ -627,6 +627,7 @@ class Run:
                 "requirements": planned.catalog.requirements,
                 "omitted": planned.omitted,
                 "snapshot": extract.snapshot,
+                "snapshots": extract.snapshots,
                 "snapshot_seconds": extract.snapshot_seconds,
                 "as_of": planned.as_of,
                 "strategy": planned.strategy,

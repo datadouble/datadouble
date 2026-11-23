@@ -126,6 +126,10 @@ class Capabilities(BaseModel):
     accounts: AccountNames | None = None
     """The names physical images' accounts (``package.accounts``) can have; None
     when the adapter cannot give images accounts."""
+    joins_outermost: bool = True
+    """Whether one query can join tables in different outermost namespaces.
+    PostgreSQL's databases cannot be joined, so a virtual reference between
+    two of them fails the plan."""
 
 
 class PlanError(Exception):
@@ -349,6 +353,13 @@ class _Planner:
                 continue
             if reference.columns is None:
                 self.problems.append(f"virtual reference {text!r} must name the child columns")
+                continue
+            child, parent = reference.child.name, reference.parent.name
+            if not self.capabilities.joins_outermost and child.outermost != parent.outermost:
+                self.problems.append(
+                    f"virtual reference {text!r} joins {child.outermost} and {parent.outermost},"
+                    f" which one {self.catalog.engine} query cannot read together"
+                )
                 continue
             parent_columns = reference.parent_columns or reference.parent.primary_key
             if len(parent_columns) != len(reference.columns):

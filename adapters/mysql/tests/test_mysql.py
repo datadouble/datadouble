@@ -5,11 +5,14 @@
 
 import datetime as dt
 import json
+import os
 import uuid
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
+from urllib.parse import urlsplit, urlunsplit
 
 import pymysql
 import pytest
@@ -26,19 +29,24 @@ from datadouble.engine import (
 )
 from datadouble.images import unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
-from datadouble.planner import Plan, PlannedRule, PlanOptions
+from datadouble.planner import Plan, PlanError, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.runtime import Container, Server
 from datadouble.spec import AccountPrivileges, HashOptions, HashRule, Strategy, parse_spec
 from datadouble.storage import filesystem_store
+from datadouble.strict import Difference
 from datadouble.subset import AllRows, Predicate
 from datadouble_conformance.engine import runtime_for_tests
-from datadouble_mysql import MysqlEngine
+from datadouble_mysql import MysqlEngine, list_databases
 from datadouble_mysql import working as mysql_working
+from datadouble_mysql.render import quote
 from datadouble_mysql.server import MysqlServer, Tools, default_image
 from datadouble_mysql.source import MysqlSession
-from test_mysql_conformance import MysqlScratch, admin, scratch
+from test_mysql_conformance import URL_VARIABLE, MysqlScratch, admin, scratch
+
+if TYPE_CHECKING:
+    from pydantic import JsonValue
 
 pytestmark = pytest.mark.integration
 
@@ -496,3 +504,176 @@ def test_images_get_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(mysql_working, "secrets", SimpleNamespace(token_hex=the_password))
     with pytest.raises(EngineError, match="the server accepted a wrong password"):
         working.add_accounts(image, [Account("reports", second, AccountPrivileges.READ)])
+
+
+# Three databases on one server: customers in the first, orders referring to
+# them from the second, and notes on the orders, with a view joining all three,
+# in the third. The second has a trigger, which transform sets aside.
+DATABASES_SPEC = """
+name: scratch
+source:
+  engine: mysql
+  connection:
+    url:
+      env: VARIABLE
+    databases: ["PREFIX_*"]
+subset:
+  unselected: none
+  seeds:
+    customers: "id <= 2"
+  follow:
+    down: [customers -> orders, orders -> notes]
+hooks:
+  # Fails without a default database, so it shows before_load hooks get one.
+  before_load:
+    - sql: "CREATE TEMPORARY TABLE hook_check (id INT)"
+  after_transform:
+    - sql: "UPDATE PREFIX_b.orders SET status = 'done'"
+anonymize:
+  customers:
+    email:
+      faker: email
+verify:
+  assertions:
+    - name: every order has an email
+      sql: "SELECT 1 FROM PREFIX_c.order_emails WHERE email IS NULL"
+store:
+  - filesystem:
+      path: STORE
+"""
+
+
+DATABASES_SCHEMA = [
+    "CREATE DATABASE PREFIX_a",
+    "CREATE DATABASE PREFIX_b",
+    "CREATE DATABASE PREFIX_c",
+    "CREATE TABLE PREFIX_a.customers (id INT PRIMARY KEY, email VARCHAR(80) NOT NULL)",
+    """CREATE TABLE PREFIX_b.orders (
+        id INT PRIMARY KEY, customer_id INT NOT NULL, status VARCHAR(10),
+        CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES PREFIX_a.customers (id)
+    )""",
+    "CREATE TABLE PREFIX_b.order_log (order_id INT)",
+    """CREATE TRIGGER PREFIX_b.orders_changed AFTER UPDATE ON PREFIX_b.orders FOR EACH ROW
+        INSERT INTO PREFIX_b.order_log (order_id) VALUES (NEW.id)""",
+    """CREATE TABLE PREFIX_c.notes (
+        id INT PRIMARY KEY, order_id INT NOT NULL, body TEXT,
+        CONSTRAINT fk_notes_order FOREIGN KEY (order_id) REFERENCES PREFIX_b.orders (id)
+    )""",
+    """CREATE VIEW PREFIX_c.order_emails AS SELECT o.id, cu.email
+        FROM PREFIX_b.orders o JOIN PREFIX_a.customers cu ON cu.id = o.customer_id""",
+    # A database the spec does not read, and a view over it, which copies leave out.
+    "CREATE DATABASE PREFIXx",
+    "CREATE TABLE PREFIXx.archive (id INT PRIMARY KEY)",
+    "CREATE VIEW PREFIX_a.archived AS SELECT id FROM PREFIXx.archive",
+    "INSERT INTO PREFIX_a.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x')",
+    "INSERT INTO PREFIX_b.orders VALUES (10, 1, 'new'), (11, 2, 'new'), (12, 3, 'new')",
+    "INSERT INTO PREFIX_c.notes VALUES (100, 10, 'x'), (101, 12, 'y')",
+]
+
+# Checks on a restored image: the references and the view across databases
+# survive, and the hook's update left the trigger's log empty and the trigger
+# in place. Spec SQL without a database runs in the default one, the URL's.
+DATABASES_CHECKS = {
+    "SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS"
+    " WHERE CONSTRAINT_SCHEMA LIKE 'PREFIX%'": 2,
+    "SELECT 1 FROM PREFIX_c.order_emails": 2,
+    "SELECT 1 FROM PREFIX_b.order_log": 0,
+    "SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'PREFIX_b'": 1,
+    "SELECT 1 FROM customers": 2,
+    "SELECT 1 FROM information_schema.TABLES WHERE TABLE_NAME = 'archived'"
+    " AND TABLE_SCHEMA = 'PREFIX_a'": 0,
+}
+
+
+@pytest.fixture
+def databases() -> Generator[tuple[str, str]]:
+    """Three scratch databases, ``<prefix>_a`` to ``_c``; the prefix and a URL variable."""
+    prefix = f"dd_many_{uuid.uuid4().hex[:8]}"
+    variable = f"DD_{prefix.upper()}"
+    parts = urlsplit(os.environ[URL_VARIABLE])
+    os.environ[variable] = urlunsplit((parts.scheme, parts.netloc, f"/{prefix}_a", "", ""))
+    try:
+        for statement in DATABASES_SCHEMA:
+            admin(statement.replace("PREFIX", prefix))
+        yield prefix, variable
+    finally:
+        os.environ.pop(variable, None)
+        for suffix in ("_a", "_b", "_c", "_d", "x"):
+            admin(f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}")
+
+
+def test_several_databases_build_as_one(databases: tuple[str, str], tmp_path: Path) -> None:
+    prefix, variable = databases
+    text = (
+        DATABASES_SPEC.replace("PREFIX", prefix)
+        .replace("VARIABLE", variable)
+        .replace("STORE", str(tmp_path / "store"))
+        + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
+    )
+    spec = parse_spec(text)
+    with MysqlEngine().connect(spec.source.connection) as session:
+        assert isinstance(session, MysqlSession)
+        assert session.databases == (f"{prefix}_a", f"{prefix}_b", f"{prefix}_c")
+        assert session.default == f"{prefix}_a"
+        lock = CatalogLock.of(session.catalog())
+    # Without a database in the URL, the first database read is the default.
+    parts = urlsplit(os.environ[variable])
+    os.environ[f"{variable}_BARE"] = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+    try:
+        bare: dict[str, JsonValue] = {
+            "url": {"env": f"{variable}_BARE"},
+            "databases": [f"{prefix}_c", f"{prefix}_b"],
+        }
+        with MysqlEngine().connect(bare) as session:
+            assert isinstance(session, MysqlSession)
+            assert (session.databases, session.default) == (
+                (f"{prefix}_b", f"{prefix}_c"),
+                f"{prefix}_b",
+            )
+    finally:
+        os.environ.pop(f"{variable}_BARE", None)
+    orders = TableName.of(f"{prefix}_b", "orders")
+    (fk,) = next(t for t in lock.catalog.tables if t.name == orders).foreign_keys
+    assert fk.target == TableName.of(f"{prefix}_a", "customers")
+    options = RunOptions(stages=tuple(Stage), work=tmp_path / "work")
+    result = Run(spec, lock, registry(), options).execute()
+    assert not result.failed(), result.verification
+    extracted = json.loads(
+        (
+            tmp_path / "work" / "scratch" / result.generation / "extract" / "manifest.json"
+        ).read_text()
+    )
+    assert extracted["outputs"]["result"]["snapshots"] == {}
+    (summary,) = result.images
+    working = working_databases(tmp_path / "check")
+    customers, notes = (
+        TableName.of(f"{prefix}_a", "customers"),
+        TableName.of(f"{prefix}_c", "notes"),
+    )
+    for archive in summary.archives:
+        image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / f"unpacked-{archive.format}")
+        with working.restore(image, archive.format, tmp_path / f"r-{archive.format}") as restored:
+            assert restored.counts([customers, orders, notes]) == {
+                customers: 2,
+                orders: 2,
+                notes: 1,
+            }
+            for query, rows in DATABASES_CHECKS.items():
+                assert restored.failing_rows(query.replace("PREFIX", prefix)) == rows, query
+    # A new database the pattern matches is new tables to strict mode.
+    admin(f"CREATE DATABASE {quote(f'{prefix}_d')}")
+    admin(f"CREATE TABLE {quote(f'{prefix}_d')}.extra (id INT PRIMARY KEY)")
+    with pytest.raises(PlanError) as caught:
+        Run(spec, lock, registry(), RunOptions(stages=(Stage.PLAN,), work=tmp_path / "w")).execute()
+    assert caught.value.strict is not None
+    assert {(f.difference, f.object) for f in caught.value.strict.findings} == {
+        (Difference.NEW_TABLE, f"{prefix}_d.extra")
+    }
+
+
+def test_listing_databases_fails_on_a_closed_connection(source: MysqlScratch) -> None:
+    with MysqlEngine().connect(source.connection) as session:
+        assert isinstance(session, MysqlSession)
+        session.connection.close()
+        with pytest.raises(EngineError, match="listing the databases failed"):
+            list_databases(session.connection)

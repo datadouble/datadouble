@@ -19,13 +19,14 @@ entry point names a zero-argument callable that returns an
 """
 
 import datetime as dt
+import fnmatch
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.catalog import Catalog, Requirement
 from datadouble.names import ColumnRef, EngineName, TableName
@@ -90,6 +91,9 @@ class ExtractResult(_Model):
     server_version: str
     snapshot: str
     """The engine's identifier for the snapshot, for the manifest."""
+    snapshots: dict[str, str] = Field(default_factory=dict[str, str])
+    """Each database's snapshot, by database, for engines that read each
+    database under its own (``snapshot`` is then empty)."""
     snapshot_seconds: float
     """How long the snapshot was held open."""
     counts: tuple[TableCount, ...]
@@ -281,7 +285,39 @@ class ServerPlan(_Model):
     ready: tuple[str, ...]
     port: int
     database: str
+    """The database clients connect to by default; a copy holds every database
+    its image does, and this is the source's default one."""
     user: str
+
+
+def choose_databases(
+    present: Iterable[str], wanted: Iterable[str], reserved: frozenset[str] = frozenset()
+) -> tuple[str, ...]:
+    """The databases a source's ``connection.databases`` names or matches, sorted.
+
+    Each entry is a name or a shell-style glob. A name must be ``present`` and a
+    glob must match at least one present database, so a typing mistake fails
+    rather than quietly reading less. ``reserved`` databases (the engine's own)
+    are never matched, and naming one fails.
+    """
+    available = frozenset(present)
+    chosen: set[str] = set()
+    for entry in wanted:
+        if not any(character in entry for character in "*?["):
+            if entry in reserved:
+                message = f"database {entry} belongs to the server itself and cannot be read"
+                raise EngineError(message)
+            if entry not in available:
+                message = f"database {entry} is not on the source, or the user cannot see it"
+                raise EngineError(message)
+            chosen.add(entry)
+            continue
+        matched = {name for name in available - reserved if fnmatch.fnmatchcase(name, entry)}
+        if not matched:
+            message = f"the database pattern {entry} matches no database on the source"
+            raise EngineError(message)
+        chosen |= matched
+    return tuple(sorted(chosen))
 
 
 def check_owner(engine: "EngineAdapter") -> None:

@@ -55,7 +55,7 @@ def quote(name: str) -> str:
 
 def qualified(table: TableName) -> str:
     """``[schema].[table]``."""
-    return f"{quote(table.namespace)}.{quote(table.name)}"
+    return f"{quote(table.namespace[-1])}.{quote(table.name)}"
 
 
 def columns(names: Sequence[str], alias: str | None = None) -> str:

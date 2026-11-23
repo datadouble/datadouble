@@ -74,7 +74,7 @@ def table(
     nullable = set(nullable)
     kinds = kinds or {}
     return Table(
-        name=TableName.of(namespace, name),
+        name=TableName.of(*namespace.split("."), name),
         columns=tuple(
             Column(
                 name=ColumnName(column),
@@ -89,7 +89,7 @@ def table(
             ForeignKey(
                 name=fk,
                 columns=tuple(ColumnName(c) for c in fk_columns),
-                target=TableName.of(namespace, parent),
+                target=TableName.of(*namespace.split("."), parent),
                 target_columns=tuple(ColumnName(c) for c in parent_columns),
             )
             for fk, fk_columns, parent, parent_columns in references

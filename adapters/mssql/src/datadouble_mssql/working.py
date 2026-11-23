@@ -257,7 +257,7 @@ class _Builder:
         if statement.table is not None:
             if tables is not None and statement.table not in tables:
                 return False
-            name = f"{statement.table.namespace}.{statement.table.name}"
+            name = str(statement.table)
             if tables is None and name not in self.present:
                 return False
         return all(need in self.present for need in statement.needs)

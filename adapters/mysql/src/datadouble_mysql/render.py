@@ -40,7 +40,7 @@ def quote(name: str) -> str:
 
 def qualified(table: TableName) -> str:
     """``database``.``table``."""
-    return f"{quote(table.namespace)}.{quote(table.name)}"
+    return ".".join(quote(part) for part in table.parts)
 
 
 def columns(names: Sequence[str]) -> str:

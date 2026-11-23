@@ -106,6 +106,37 @@ only depend on posts chosen some other way (decision 51). Cycles in the schema,
 self-references and children that pull in further parents are true recursions
 and run with B.
 
+### Table names
+
+A spec names a table by its parts joined with dots, and may leave out leading
+parts. Names match from the right, like a path read from its end:
+
+| Engine | Full name | Shorter names that work |
+|---|---|---|
+| PostgreSQL | `shop.public.users` (database, schema, table) | `public.users`, `users` |
+| MySQL | `shop.users` (database, table) | `users` |
+| SQL Server, Oracle | `dbo.users` (schema, table) | `users` |
+| MongoDB, Redis | `cinema.movies`, `db0.user:{}` (database, collection or key pattern) | `movies`, `user:{}` |
+| Elasticsearch, OpenSearch | `customers` (index) | |
+| Salesforce | `Account` (object) | |
+| Files | `files.documents` (the `files` namespace, a top-level directory) | `documents` |
+
+- **A name must fit one table.** When it fits several, as `users` does when two
+  databases both have `public.users`, the plan fails naming every table it
+  fits; write enough of the name to choose one.
+- **Globs match part by part.** `*` stays within one part: `audit.*` is every
+  table in namespaces called `audit` (a schema in PostgreSQL, a database in
+  MySQL), and `shop.*.*` is every table in PostgreSQL's database `shop`.
+  Excludes, `structure_only`, seed patterns and image groups all match this
+  way.
+- **A table's own name may hold dots,** as MongoDB's `fs.files` does; such a
+  name still matches whole (`fs.files`, `fs.*`).
+- **Excluding every table of a database does not leave it unread.** A
+  PostgreSQL database matched by `shop.*.*` in `exclude` is still snapshotted
+  and is an empty database in the copies, with whatever schema objects do not
+  depend on its tables. To leave a database out altogether, leave it out of
+  `connection.databases`.
+
 ### References in detail
 
 - A **virtual reference** with `when` applies only to the child rows matching
@@ -129,10 +160,20 @@ Every read in a run sees the same point in time.
   Parallel workers can attach with `SET TRANSACTION SNAPSHOT`. The catalog is
   read again inside the snapshot, and the extract fails if it changed since
   planning.
+- **PostgreSQL with several databases** (`connection.databases`): PostgreSQL
+  cannot share a snapshot between databases, so each database gets its own
+  coordinator transaction and exported snapshot, opened one after another
+  when the extract starts. No query reads across databases (a virtual
+  reference between two of them fails the plan), so each database is
+  consistent on its own; the manifest records every database's snapshot
+  (`snapshots`).
 - **MySQL:** `START TRANSACTION WITH CONSISTENT SNAPSHOT` on one connection,
-  which reads every key and row; the extract runs single-connection. MySQL's
-  catalog is not versioned with the data, so `mysqldump` writes the schema
-  separately and the catalog fingerprint is checked again inside the snapshot.
+  which reads every key and row; the extract runs single-connection. The
+  snapshot covers every InnoDB table on the server, so a source reading several
+  databases (`connection.databases`) is still one consistent read, references
+  between them included. MySQL's catalog is not versioned with the data, so
+  `mysqldump` writes the schema separately and the catalog fingerprint is
+  checked again inside the snapshot.
 - **SQL Server / Oracle:** snapshot isolation and flashback/SCN-based reads
   respectively; details to be designed per adapter.
 - **MongoDB:** a snapshot session (read concern `snapshot`, pinned to one cluster

@@ -6,11 +6,12 @@
 A connection opens ``START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY``;
 key reads (strategy B) and every table's rows are read in that transaction.
 Rows come back exactly as the server writes them as text, without conversion,
-and are written in ``LOAD DATA``'s format. MySQL's catalog is not versioned
-with the data, so the schema is read just before the snapshot opens and
-checked again inside it; ``mysqldump`` then writes the schema (tables, views
-and routines, and triggers separately) from a container of the source's
-version. Nothing is written to the source.
+and are written in ``LOAD DATA``'s format. The snapshot covers every InnoDB
+table on the server, so one transaction reads every database consistently.
+MySQL's catalog is not versioned with the data, so the schema is read just
+before the snapshot opens and checked again inside it; ``mysqldump`` then
+writes the schema (tables, views and routines, and triggers separately) from a
+container of the source's version. Nothing is written to the source.
 """
 
 import datetime as dt
@@ -31,15 +32,21 @@ from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
 from datadouble_mysql.errors import database_error
-from datadouble_mysql.introspect import Physical, Plugin, introspect
+from datadouble_mysql.introspect import SYSTEM_DATABASES, Physical, Plugin, introspect
 from datadouble_mysql.render import Renderer, compose
 from datadouble_mysql.server import Tools, checked, default_image
 
 _LOGIN_ENV = "DATADOUBLE_PASSWORD"
 
+# MySQL's own databases exist in every copy, so views over them load.
+_ELSEWHERE_VIEWS = """
+SELECT DISTINCT VIEW_SCHEMA, VIEW_NAME FROM information_schema.VIEW_TABLE_USAGE
+WHERE VIEW_SCHEMA IN ({}) AND TABLE_SCHEMA NOT IN ({})
+"""
+
 _DEPENDENT_VIEWS = """
-SELECT DISTINCT VIEW_NAME FROM information_schema.VIEW_TABLE_USAGE
-WHERE VIEW_SCHEMA = %s AND TABLE_SCHEMA = %s AND TABLE_NAME IN ({})
+SELECT DISTINCT VIEW_SCHEMA, VIEW_NAME FROM information_schema.VIEW_TABLE_USAGE
+WHERE VIEW_SCHEMA IN ({}) AND (TABLE_SCHEMA, TABLE_NAME) IN ({})
 """
 
 _ESCAPES = {
@@ -67,10 +74,13 @@ class ExtractIndex(BaseModel):
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
-    database: str
+    databases: tuple[str, ...]
+    default: str
+    """The database spec SQL without a table runs in."""
     tables: tuple[ExtractedTable, ...]
-    omitted_views: tuple[str, ...]
-    """Views that depend on excluded tables, left out of the schema."""
+    omitted_views: tuple[TableName, ...]
+    """Views that depend on excluded tables or on databases not read, left out
+    of the schema."""
     plugins: tuple[Plugin, ...] = ()
     """Plugins the source installed from libraries, which ``load`` installs."""
 
@@ -139,7 +149,7 @@ class MysqlSnapshot:
         self.session = session
         self.as_of = as_of
         self.opened = time.monotonic()
-        self.catalog, self.physical = introspect(session.connection, session.database)
+        self.catalog, self.physical = introspect(session.connection, session.databases)
 
     def project(
         self, table: TableName, condition: Condition, columns: tuple[ColumnName, ...]
@@ -196,7 +206,8 @@ class MysqlSnapshot:
             )
         (directory / "index.json").write_text(
             ExtractIndex(
-                database=self.session.database,
+                databases=self.session.databases,
+                default=self.session.default,
                 tables=tuple(tables),
                 omitted_views=omitted,
                 plugins=self.physical.plugins,
@@ -233,35 +244,59 @@ class MysqlSnapshot:
             raise database_error(error, f"extracting {table}") from None
         return rows
 
-    def _dependent_views(self, excluded: frozenset[TableName]) -> tuple[str, ...]:
-        """Views that read an excluded table, directly or through other views."""
-        database = self.session.database
-        pending = sorted(t.name for t in excluded if t.namespace == database)
-        found: set[str] = set()
+    def _dependent_views(self, excluded: frozenset[TableName]) -> tuple[TableName, ...]:
+        """Views that read an excluded table or a database not read, directly or not.
+
+        A copy holds only the databases read, so a view over another one
+        could not be created there; it is left out, like one over an excluded
+        table.
+        """
+        databases = self.session.databases
+        listed = ", ".join(["%s"] * len(databases))
+        present = (*databases, *sorted(SYSTEM_DATABASES))
         with self.session.connection.cursor() as cursor:
+            cursor.execute(
+                compose(_ELSEWHERE_VIEWS, listed, ", ".join(["%s"] * len(present))),
+                (*databases, *present),
+            )
+            found = {TableName.of(str(db), str(view)) for db, view in cursor.fetchall()}
+            pending = sorted({*excluded, *found})
             while pending:
-                names = ", ".join(["%s"] * len(pending))
-                statement = compose(_DEPENDENT_VIEWS, names)
-                cursor.execute(statement, (database, database, *pending))
-                new = {str(row[0]) for row in cursor.fetchall()} - found
+                statement = compose(
+                    _DEPENDENT_VIEWS, listed, ", ".join(["(%s, %s)"] * len(pending))
+                )
+                pairs = [part for name in pending for part in (name.namespace[0], name.name)]
+                cursor.execute(statement, (*databases, *pairs))
+                new = {TableName.of(str(db), str(view)) for db, view in cursor.fetchall()} - found
                 found |= new
                 pending = sorted(new)
         return tuple(sorted(found))
 
 
 class MysqlSession:
-    """An open connection to the source database."""
+    """An open connection to the source server, and the databases it reads."""
 
-    def __init__(self, connection: Connection, settings: dict[str, str], database: str) -> None:
-        """Wrap a connection; ``settings`` (host, port, user, password) are for new ones."""
+    def __init__(
+        self,
+        connection: Connection,
+        settings: dict[str, str],
+        databases: tuple[str, ...],
+        default: str,
+    ) -> None:
+        """Wrap a connection; ``settings`` (host, port, user, password) are for new ones.
+
+        ``default`` is the database spec SQL runs in: the URL's, when it is
+        read, or else the first read.
+        """
         self.connection = connection
         self.settings = settings
-        self.database = database
+        self.databases = databases
+        self.default = default
 
     def catalog(self) -> Catalog:
         """Introspect the source."""
         try:
-            return introspect(self.connection, self.database)[0]
+            return introspect(self.connection, self.databases)[0]
         except pymysql.MySQLError as error:
             raise database_error(error, "reading the catalog") from None
 
@@ -283,7 +318,7 @@ class MysqlSession:
         self,
         tools: Tools,
         excluded: frozenset[TableName],
-        omitted_views: tuple[str, ...],
+        omitted_views: tuple[TableName, ...],
         directory: Path,
     ) -> None:
         """``mysqldump`` the schema (and, separately, the triggers) into ``directory``.
@@ -292,11 +327,7 @@ class MysqlSession:
         address in its URL. Its password reaches ``mysqldump`` as an option
         file on standard input.
         """
-        ignored = [
-            f"--ignore-table={self.database}.{name}"
-            for name in sorted({t.name for t in excluded if t.namespace == self.database})
-            + list(omitted_views)
-        ]
+        ignored = [f"--ignore-table={name}" for name in sorted({*excluded, *omitted_views})]
         common = [
             f"--host={self.settings['host']}",
             f"--port={self.settings['port']}",
@@ -309,7 +340,7 @@ class MysqlSession:
             "--skip-dump-date",
             *ignored,
             "--databases",
-            self.database,
+            *self.databases,
         ]
         dumps = {
             "schema.sql": ["--no-data", "--skip-triggers", "--routines", "--events"],
@@ -335,7 +366,7 @@ class MysqlSession:
                 port=int(self.settings["port"]),
                 user=self.settings["user"],
                 password=self.settings["password"],
-                database=self.database,
+                database=self.default,
                 charset="utf8mb4",
             )
         except pymysql.MySQLError as error:

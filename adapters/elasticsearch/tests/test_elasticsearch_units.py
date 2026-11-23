@@ -146,7 +146,7 @@ def test_conditions_become_query_dsl() -> None:
     with pytest.raises(EngineError, match="text field, which no query matches exactly"):
         query(ValuesIn((ColumnName("body"),), frozenset({("x",)})), AS_OF, fields)
     with pytest.raises(EngineError, match="keys strategy"):
-        query(SelectedBy((CITY,), TableName.of("", "x"), (CITY,)), AS_OF, fields)
+        query(SelectedBy((CITY,), TableName.of("x"), (CITY,)), AS_OF, fields)
     with pytest.raises(EngineError, match="not valid JSON"):
         parse("{", AS_OF, "a seed")
     with pytest.raises(EngineError, match="must be a JSON object"):
@@ -326,7 +326,7 @@ def test_the_image_lists_its_plugins(tmp_path: Path) -> None:
 
 
 def test_null_and_value_changers() -> None:
-    column = ColumnRef(table=TableName.of("", "t"), column=ColumnName("n"))
+    column = ColumnRef(table=TableName.of("t"), column=ColumnName("n"))
 
     def rule(chosen: Rule) -> PlannedRule:
         return PlannedRule(column=column, kind=ColumnKind.TEXT, type="keyword", rule=chosen)

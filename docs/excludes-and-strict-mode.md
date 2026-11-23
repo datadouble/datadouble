@@ -11,11 +11,14 @@ exclude:
   - "test_*"
   - "audit.*"            # an entire schema
   - "*.tmp_*"            # schema.table patterns
+  - "archive.*.*"        # an entire PostgreSQL database
 structure_only:          # keep the definition, copy no rows
   - "event_log"
 ```
 
-- **Shell-style globs**, matched against catalog names. Case-insensitive by
+- **Shell-style globs**, matched against catalog names from the right, part
+  by part: a pattern may leave out leading parts, and `*` stays within one
+  part ([table names](subsetting.md#table-names)). Case-insensitive by
   default, since engines fold identifier case differently (PostgreSQL to lower,
   Oracle to upper, SQL Server by collation). `case_sensitive: true` is available.
 - **Resolved once, at plan time.** The plan and manifest record exactly which
@@ -73,6 +76,12 @@ CLI: `--strict=columns` (default), `--strict=tables`, `--strict=off`, and
 
 Removed or changed objects always fail: the plan cannot run correctly against
 them, whatever the strictness.
+
+A source that reads several databases (MySQL's and PostgreSQL's
+`connection.databases`) has every database's tables in one lock, each named
+with its database. A new database that a pattern such as `["*"]` picks up is
+new tables, and strict mode treats them like any other; a renamed database is
+its tables removed and new ones added.
 
 Requirements are the add-ons a source uses beyond the server itself, such as
 PostgreSQL extensions (see [architecture](architecture.md#source-requirements)).

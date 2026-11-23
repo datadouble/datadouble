@@ -90,7 +90,7 @@ def namespace(database: int) -> str:
 
 def database_of(table: TableName) -> int:
     """The database a table's keys live in."""
-    return int(table.namespace.removeprefix("db"))
+    return int(table.namespace[0].removeprefix("db"))
 
 
 def scan(client: Client, match: str = "*") -> Iterator[bytes]:

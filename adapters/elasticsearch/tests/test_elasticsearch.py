@@ -221,7 +221,7 @@ def replying(reply: Document) -> Callable[..., Document]:
 
 
 def table(name: str) -> TableName:
-    return TableName.of("", name)
+    return TableName.of(name)
 
 
 def sources(client: Client, index: str) -> dict[str, Document]:

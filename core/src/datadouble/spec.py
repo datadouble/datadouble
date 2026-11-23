@@ -626,7 +626,9 @@ class Spec(_Model):
     source: Source
     """The system to copy from: its engine and connection."""
     exclude: tuple[str, ...] = ()
-    """Tables left out of every image, as ``namespace.table`` globs."""
+    """Tables left out of every image, as globs matched from the right: ``audit.*``
+    is every table in a namespace ``audit``, ``shop.*.*`` every table in
+    PostgreSQL's database ``shop``."""
     structure_only: tuple[str, ...] = ()
     """Tables copied without their rows, as globs."""
     case_sensitive: bool = False

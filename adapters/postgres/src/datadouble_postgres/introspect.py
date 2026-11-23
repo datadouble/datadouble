@@ -3,7 +3,8 @@
 
 """Reading a PostgreSQL catalog into Datadouble's engine-neutral model.
 
-Tables are ordinary and partitioned tables outside the system schemas;
+Each database is read on its own connection, and its tables are named
+``database.schema.table``. Tables are ordinary and partitioned tables outside the system schemas;
 partitions are represented by their partitioned root (a reference to a
 partition becomes a reference to its root), and tables owned by extensions are
 left out. Types are spelled with ``format_type`` under an
@@ -136,12 +137,22 @@ class Physical:
     """Partitioned tables, read without ``ONLY`` so their partitions are included."""
     generated: dict[TableName, frozenset[ColumnName]]
     """Generated columns, which COPY leaves out."""
-    extensions: tuple[Extension, ...]
-    """Installed extensions, in the order they were created."""
+    extensions: dict[str, tuple[Extension, ...]]
+    """Each database's installed extensions, in the order they were created."""
+
+    def merged(self, other: "Physical") -> "Physical":
+        """This and another database's details together."""
+        return Physical(
+            partitioned=self.partitioned | other.partitioned,
+            generated={**self.generated, **other.generated},
+            extensions={**self.extensions, **other.extensions},
+        )
 
 
-def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Catalog, Physical]:
-    """Read the catalog in one transaction with an empty search path."""
+def introspect(
+    connection: psycopg.Connection[tuple[object, ...]], database: str
+) -> tuple[Catalog, Physical]:
+    """Read one database's catalog in one transaction with an empty search path."""
     with connection.transaction(), connection.cursor() as cursor:
         # An empty search path makes format_type qualify user-defined types. It
         # is put back afterwards, since this may run inside the snapshot's
@@ -150,7 +161,7 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
         cursor.execute("SELECT pg_catalog.set_config('search_path', '', true)")
         cursor.execute(_TABLES)
         tables = {
-            int(str(oid)): (TableName.of(str(nsp), str(rel)), str(kind))
+            int(str(oid)): (TableName.of(database, str(nsp), str(rel)), str(kind))
             for oid, nsp, rel, kind in cursor.fetchall()
         }
         oids = list(tables)
@@ -181,7 +192,7 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
                     ForeignKey(
                         name=str(name),
                         columns=own,
-                        target=TableName.of(str(namespace), str(target)),
+                        target=TableName.of(database, str(namespace), str(target)),
                         target_columns=tuple(ColumnName(str(n)) for n in _strings(target_names)),
                     )
                 )
@@ -210,7 +221,7 @@ def introspect(connection: psycopg.Connection[tuple[object, ...]]) -> tuple[Cata
     physical = Physical(
         partitioned=frozenset(name for name, kind in tables.values() if kind == "p"),
         generated={name: frozenset(cols) for name, cols in generated.items()},
-        extensions=extensions,
+        extensions={database: extensions},
     )
     return catalog, physical
 

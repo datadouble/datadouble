@@ -310,6 +310,23 @@ subset:
     assert any("'nope.x' is not a table" in p or "'nope'" in p for p in reasons)
 
 
+def test_virtual_references_between_unjoinable_namespaces_fail() -> None:
+    caps = CAPABILITIES.model_copy(update={"joins_outermost": False})
+    body = CYCLE_FREE.replace(', "audit.*"', "") + "subset:\n  virtual_fks:\n"
+    across = body + "    audit.log.user_id -> public.users: {}\n"
+    with pytest.raises(PlanError) as caught:
+        planned(across, capabilities=caps)
+    assert caught.value.problems == (
+        (
+            "virtual reference 'audit.log.user_id -> public.users' joins audit and public,"
+            " which one fake query cannot read together"
+        ),
+    )
+    within = body + "    events.subject_id -> posts: {}\n"
+    assert any(e.virtual for e in planned(within, capabilities=caps).edges)
+    assert any(e.virtual for e in planned(across).edges)
+
+
 def test_drop_needs_an_unconditional_reference() -> None:
     reasons = problems(
         """

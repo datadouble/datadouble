@@ -89,7 +89,10 @@ class Keyspace:
 
     def client(self, table: TableName) -> Client:
         """A client for the table's database, opened once."""
-        database = database_of(table)
+        return self.database_client(database_of(table))
+
+    def database_client(self, database: int) -> Client:
+        """A client for one database, opened once."""
         if database not in self._clients:
             self._clients[database] = self.server.client(database)
         return self._clients[database]
@@ -153,9 +156,9 @@ class RedisRestored:
 
     def failing_rows(self, query: str) -> int:
         """The integer a Lua assertion returns, run against the first database."""
-        table = TableName.of(f"db{self.database.layout.databases[0]}", "")
+        first = self.database.database_client(self.database.layout.databases[0])
         with redacted("running an assertion"):
-            return number(self.database.client(table).command("EVAL", query, 0))
+            return number(first.command("EVAL", query, 0))
 
 
 def _copy(source: Path, destination: Path) -> None:

@@ -2,10 +2,10 @@
 
 The PostgreSQL engine adapter for [Datadouble](https://datadouble.tightlinesoftware.com/).
 
-It reads one consistent snapshot of the source with an exported snapshot,
-builds working databases as throwaway PostgreSQL clusters in scratch space,
-and packages golden images as a data directory (`physical`) or a `pg_dump`
-archive (`logical`). Clusters, restores and `pg_dump` run in the official
+It reads one or more databases, each under an exported snapshot, builds
+working databases as throwaway PostgreSQL clusters in scratch space, and
+packages golden images as a data directory (`physical`) or `pg_dump` archives
+(`logical`). Clusters, restores and `pg_dump` run in the official
 PostgreSQL image of the source's exact version, through the spec's container
 runtime; a source that uses extensions names an image that has them in
 `source.image`.
@@ -54,9 +54,54 @@ names PostgreSQL reserves (`public`, `none`, `current_user`, `session_user`,
 `current_role`), and `postgres` with `privileges: read`, since the bootstrap
 superuser can't stop being one.
 
+## Databases
+
+The connection string's database is the one read, unless
+`connection.databases` lists others. Tables are named `database.schema.table`
+even when only one database is read, and a spec may leave out leading parts
+wherever only one table fits: `public.users` or `users` for
+`shop.public.users`. A name that fits tables in several databases fails the
+plan, naming each; write enough of it to choose one.
+
+```yaml
+source:
+  engine: postgres
+  connection:
+    dsn:                             # which database it names matters only as the default
+      env: SHOP_DSN
+    databases: [shop, "billing_*"]   # names or globs; ["*"] for every database
+```
+
+- **Choosing databases.** Each entry is a name or a glob. A name must exist
+  and a glob must match at least one database the user may connect to, so a
+  typing mistake fails instead of quietly reading less. `["*"]` reads every
+  database the user can connect to except templates; `postgres` is an
+  ordinary database here, since some services keep an application's data in
+  it. With a glob, a database created later is read too, and strict mode
+  stops the build at its tables until they are locked.
+- **A snapshot per database.** PostgreSQL cannot share a snapshot between
+  databases, so each is read under its own, all opened together as the
+  extract starts. PostgreSQL has no references between databases, so each
+  database is consistent on its own; a virtual reference between two
+  databases fails the plan, since no query could follow it. The manifest
+  records each database's snapshot under `snapshots`.
+- **The copies hold every database,** under its own name, in one cluster:
+  working databases, physical images, and logical images (one `pg_dump`
+  archive per database).
+  Excluding every table of a database (`shop.*.*`) still reads it under its
+  snapshot and leaves it empty in the copies; leave it out of `databases` to
+  leave it out altogether.
+- **The default database.** Spec SQL that names no table (hooks and
+  assertions) runs in a default database: the connection string's, when it
+  is read, or else the first database read in name order. Copies announce it
+  as their `database`. Seeds, `when` clauses and expression rules run in their
+  own table's database.
+- **Extensions are per database.** Each database's extensions are created in
+  its copy at its versions, and the lock lists every one.
+
 ## Extensions
 
-Every extension installed in the source database, except `plpgsql`, is a
+Every extension installed in a database read, except `plpgsql`, is a
 requirement at the version the source runs (`pg_extension.extversion`).
 
 - **The image must have it.** Before reading the snapshot, a build lists the

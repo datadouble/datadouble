@@ -91,7 +91,7 @@ class FakeScratch:
     @property
     def items(self) -> TableName:
         """The scratch object."""
-        return TableName.of("", "items")
+        return TableName.of("items")
 
     def add_table(self, name: str) -> None:
         """Add another object."""
@@ -122,7 +122,7 @@ def harness(tmp_path: Path) -> EngineHarness:
     return EngineHarness(
         engine=SalesforceEngine(),
         sample_spec=SAMPLE_SPEC.replace("ORG", str(tmp_path / "org.sqlite")),
-        sample_column=ColumnRef(table=TableName.of("", "Contact"), column=ColumnName("Email")),
+        sample_column=ColumnRef(table=TableName.of("Contact"), column=ColumnName("Email")),
         scratch=scratch,
         runtime=runtime_for_tests(),
         snapshot=False,

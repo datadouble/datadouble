@@ -21,7 +21,7 @@ from datadouble.catalog import (
     read_lock,
     write_lock,
 )
-from datadouble.engine import unmet
+from datadouble.engine import EngineError, choose_databases, unmet
 from datadouble.names import ColumnName, ColumnRef, EngineName, TableName, check_name
 from fakes import catalog, table
 
@@ -88,12 +88,40 @@ def test_hand_edited_lock(tmp_path: Path) -> None:
 
 def test_names() -> None:
     assert str(TableName.of("public", "users")) == "public.users"
-    assert str(TableName.of("", "users")) == "users"
+    assert str(TableName.of("users")) == "users"
+    three = TableName.of("shop", "public", "users")
+    assert (three.namespace, three.name, three.parts) == (
+        ("shop", "public"),
+        "users",
+        ("shop", "public", "users"),
+    )
+    assert (three.outermost, TableName.of("users").outermost) == ("shop", "users")
+    for bad in ((), ("", "users"), ("public", "")):
+        with pytest.raises(ValueError, match="table name"):
+            TableName.of(*bad)
     ref = ColumnRef(table=TableName.of("public", "users"), column=ColumnName("email"))
     assert str(ref) == "public.users.email"
     assert check_name("spec name", "pagila-1") == "pagila-1"
     with pytest.raises(ValueError, match="lowercase"):
         check_name("spec name", "Pagila")
+
+
+def test_choosing_databases() -> None:
+    present = ("shop", "billing_eu", "billing_us", "admin")
+    reserved = frozenset({"admin"})
+    assert choose_databases(present, ("*",), reserved) == ("billing_eu", "billing_us", "shop")
+    assert choose_databases(present, ("shop", "billing_*", "shop")) == (
+        "billing_eu",
+        "billing_us",
+        "shop",
+    )
+    for wanted, problem in (
+        (("admin",), "admin belongs to the server itself"),
+        (("nowhere",), "nowhere is not on the source"),
+        (("archive_*",), "archive_\\* matches no database"),
+    ):
+        with pytest.raises(EngineError, match=problem):
+            choose_databases(present, wanted, reserved)
 
 
 def test_a_lock_it_cannot_write(tmp_path: Path) -> None:

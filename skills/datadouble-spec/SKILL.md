@@ -33,6 +33,31 @@ person can share the plan's output, which names tables and columns but never
 values. The first lock comes the same way, from the `lock` job (see
 re-locking below).
 
+## Table names and databases
+
+- **Names match from the right.** A table's full name is its parts joined
+  with dots (`shop.public.users` in PostgreSQL: database, schema, table;
+  `shop.users` in MySQL). A spec may leave out leading parts (`users`,
+  `public.users`) wherever only one table fits. When a plan fails with
+  "is ambiguous: it matches ...", write enough of the name to pick one of
+  the tables it lists; do not guess which one the person meant.
+- **Globs stay within a part.** `audit.*` is every table in namespaces called
+  `audit`; `shop.*.*` is every table in PostgreSQL's database `shop`.
+- **Several databases from one server** go in one spec with
+  `source.connection.databases`, names or globs, for MySQL and PostgreSQL
+  (`["*"]` for all). The copies then hold every database. Read the adapter's
+  README before choosing: MySQL reads them all under one snapshot, references
+  between them included, and leaves out views over databases it does not
+  read; PostgreSQL reads each under its own and refuses virtual references
+  between them. Excluding every table of a database still leaves it, empty,
+  in the copies; to drop it, leave it out of `databases`. Hooks and
+  assertions run in the default database (the connection's own when it is
+  read, otherwise the first in name order); in MySQL, qualify table names in
+  them to reach the others, while PostgreSQL's cannot reach other databases
+  at all.
+- **A new database a glob picks up** shows up as new tables in strict mode,
+  handled like any other new table below.
+
 ## When strict mode fails
 
 `strict: columns` is the default. A new table or column fails the plan with

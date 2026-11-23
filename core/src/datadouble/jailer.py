@@ -31,6 +31,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Catalog, Table
+from datadouble.resolve import ends_with
 from datadouble.spec import EdgePolicy, Follow, OnMissing, Subset, Unselected, VirtualForeignKey
 
 _ALIAS_T = re.compile(r"(?<![\w.\"`])T\.(?=[\w\"`])", re.IGNORECASE)
@@ -202,14 +203,23 @@ class _Translator:
         return name if self.case_sensitive else name.lower()
 
     def table(self, jailer: str) -> Table | None:
-        """The catalog table a Jailer table name means, with or without a schema."""
-        wanted = self.fold(jailer)
-        for table in self.catalog.tables:
-            qualified = self.fold(f"{table.name.namespace}.{table.name.name}")
-            if wanted in {qualified, self.fold(table.name.name)}:
-                return table
-        self.problems.append(f"table {jailer} is in the Jailer model but not in the catalog")
-        return None
+        """The catalog table a Jailer table name means, matching from the right."""
+        pieces = jailer.split(".")
+        found = [
+            table
+            for table in self.catalog.tables
+            if ends_with(table.name.parts, pieces, lambda a, b: self.fold(a) == self.fold(b))
+        ]
+        if len(found) > 1:
+            names = ", ".join(str(table.name) for table in found)
+            self.problems.append(
+                f"table {jailer} in the Jailer model is ambiguous: it matches {names}"
+            )
+            return None
+        if not found:
+            self.problems.append(f"table {jailer} is in the Jailer model but not in the catalog")
+            return None
+        return found[0]
 
     def column(self, table: Table, jailer: str) -> str | None:
         for column in table.columns:

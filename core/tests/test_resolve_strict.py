@@ -46,6 +46,37 @@ def test_ambiguous_tables() -> None:
     assert str(r.table("x.t").name) == "x.t"
 
 
+def test_names_match_from_the_right() -> None:
+    r = Resolver(
+        catalog(
+            table("users", ["id"], namespace="shop.public"),
+            table("orders", ["id"], namespace="shop.public"),
+            table("users", ["id"], namespace="billing.public"),
+            table("fs.files", ["id"], namespace="media"),
+        ),
+        case_sensitive=False,
+    )
+    assert str(r.table("orders").name) == "shop.public.orders"
+    assert str(r.table("public.orders").name) == "shop.public.orders"
+    assert str(r.table("billing.public.users").name) == "billing.public.users"
+    with pytest.raises(
+        ResolveError,
+        match=r"'public.users' is ambiguous: it matches shop.public.users, billing.public.users",
+    ):
+        r.table("public.users")
+    with pytest.raises(ResolveError, match="not in the catalog"):
+        r.table("other.shop.public.users")
+    assert str(r.column("shop.public.users.id")) == "shop.public.users.id"
+    # A glob's star stays within one part: shop.* is a schema, shop.*.* a database.
+    assert [str(n) for n in r.glob("shop.*")] == []
+    assert [str(n) for n in r.glob("shop.*.*")] == ["shop.public.users", "shop.public.orders"]
+    assert [str(n) for n in r.glob("*.users")] == ["shop.public.users", "billing.public.users"]
+    # Names that hold dots still match whole, and by their dotted pieces.
+    assert str(r.table("fs.files").name) == "media.fs.files"
+    assert [str(n) for n in r.glob("fs.*")] == ["media.fs.files"]
+    assert [str(n) for n in r.glob("media.*")] == ["media.fs.files"]
+
+
 def test_references() -> None:
     r = resolver()
     ref = r.reference("comments.author_id -> users")

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from datadouble.catalog import CatalogLock, ColumnKind
@@ -26,7 +27,7 @@ from datadouble.engine import (
 )
 from datadouble.images import unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
-from datadouble.planner import Plan, PlannedRule, PlanOptions
+from datadouble.planner import Plan, PlanError, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.runtime import Container, Server
@@ -35,19 +36,21 @@ from datadouble.spec import (
     HashOptions,
     HashRule,
     ImageFormat,
+    Spec,
     Strategy,
     parse_spec,
 )
 from datadouble.storage import filesystem_store
+from datadouble.strict import Difference
 from datadouble.subset import AllRows, Predicate
 from datadouble_conformance.engine import ScratchSource, runtime_for_tests
-from datadouble_postgres import PostgresEngine
+from datadouble_postgres import PostgresEngine, list_databases
 from datadouble_postgres import working as postgres_working
 from datadouble_postgres.cluster import Cluster, Tools, default_image
 from datadouble_postgres.render import trusted
 from datadouble_postgres.source import PostgresSession
 from datadouble_s3 import S3Store, s3_store
-from test_conformance import PostgresScratch, scratch
+from test_conformance import DSN_VARIABLE, PostgresScratch, scratch
 
 pytestmark = pytest.mark.integration
 
@@ -167,8 +170,8 @@ def test_fallbacks_hooks_and_partition_references(source: PostgresScratch, tmp_p
     image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / "unpacked")
     working = working_databases(tmp_path / "check")
     with working.restore(image, ImageFormat.LOGICAL, tmp_path / "check" / "db") as restored:
-        parents = TableName.of("public", "parent")
-        children = TableName.of("public", "child")
+        parents = TableName.of(source.database, "public", "parent")
+        children = TableName.of(source.database, "public", "child")
         assert restored.counts([parents, children]) == {parents: 2, children: 2}
         # Children 1 and 2 are chosen; parents are not followed, so stubs stand in.
         assert set(restored.text_values(ColumnRef(table=parents, column=ColumnName("born")))) == {
@@ -284,7 +287,7 @@ def test_snapshot_reads(source: PostgresScratch) -> None:
         PostgresEngine().connect(source.connection) as session,
         session.snapshot(dt.datetime.now(tz=dt.UTC)) as snapshot,
     ):
-        child = TableName.of("public", "child")
+        child = TableName.of(source.database, "public", "child")
         assert len(list(snapshot.project(child, AllRows(), (ColumnName("id"),)))) == 3
         with pytest.raises(EngineError, match=r"reading keys of public\.child failed"):
             snapshot.project(child, Predicate("nope = 1"), (ColumnName("id"),))
@@ -305,7 +308,9 @@ def test_working_failures(source: PostgresScratch, tmp_path: Path) -> None:
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
     working = working_databases(work / "scratch")
     missing = PlannedRule(
-        column=ColumnRef(table=TableName.of("public", "child"), column=ColumnName("nope")),
+        column=ColumnRef(
+            table=TableName.of(source.database, "public", "child"), column=ColumnName("nope")
+        ),
         kind=ColumnKind.TEXT,
         type="text",
         rule=HashRule(hash=HashOptions()),
@@ -419,3 +424,213 @@ def test_images_get_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(postgres_working, "make_conninfo", unreachable)
     with pytest.raises(EngineError, match="logging in with the image's account 'copyadmin'"):
         working.add_accounts(image, [Account("copyadmin", first)])
+
+
+# Three databases on one server, as an application spread across them keeps
+# them: customers and their addresses in the first, another set of customers
+# and their invoices in the second, orders in the third. Both customer tables
+# are public.customers, so only their database tells them apart.
+DATABASES_SCHEMA = {
+    "a": """
+CREATE TABLE public.customers (id integer PRIMARY KEY, email text NOT NULL);
+CREATE TABLE public.addresses (
+    id integer PRIMARY KEY, customer_id integer NOT NULL REFERENCES public.customers, line text
+);
+INSERT INTO public.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x.test');
+INSERT INTO public.addresses VALUES (10, 1, 'one'), (11, 2, 'two'), (12, 3, 'three');
+""",
+    "b": """
+CREATE SCHEMA billing;
+CREATE TABLE public.customers (id integer PRIMARY KEY, email text NOT NULL);
+CREATE TABLE billing.invoices (
+    id integer PRIMARY KEY, customer_id integer NOT NULL REFERENCES public.customers, amount int,
+    referred_by integer REFERENCES public.customers
+);
+INSERT INTO public.customers VALUES (1, 'dee@pay.test'), (2, 'ed@pay.test');
+INSERT INTO billing.invoices VALUES (20, 1, 5, 2), (21, 1, 6, NULL), (22, 2, 7, 1);
+""",
+    "c": """
+CREATE TABLE public.orders (id integer PRIMARY KEY, note text);
+INSERT INTO public.orders VALUES (30, 'x'), (31, 'y');
+""",
+}
+
+DATABASES_SPEC = """
+name: scratch
+source:
+  engine: postgres
+  connection:
+    dsn:
+      env: VARIABLE
+    databases: ["PREFIX_*"]
+subset:
+  unselected: none
+  seeds:
+    PREFIX_a.public.customers: "id <= 2"
+    PREFIX_b.public.customers: "id = 1"
+    orders: "true"
+  follow:
+    down:
+      - PREFIX_a.public.customers -> addresses
+      - PREFIX_b.public.customers -> invoices.customer_id
+  edges:
+    invoices.referred_by -> PREFIX_b.public.customers:
+      on_missing: null
+hooks:
+  after_transform:
+    - sql: "UPDATE public.addresses SET line = 'moved'"
+anonymize:
+  PREFIX_a.public.customers:
+    email:
+      faker: email
+  PREFIX_b.public.customers:
+    email:
+      faker: email
+verify:
+  assertions:
+    - name: addresses moved
+      sql: "SELECT 1 FROM public.addresses WHERE line <> 'moved'"
+store:
+  - filesystem:
+      path: STORE
+"""
+
+
+@pytest.fixture
+def databases() -> Generator[tuple[str, str]]:
+    """Three scratch databases, ``<prefix>_a`` to ``_c``; the prefix and a DSN variable.
+
+    The DSN names the server's own database, which is not read, so the first
+    database read is the default.
+    """
+    admin = os.environ[DSN_VARIABLE]
+    prefix = f"dd_many_{uuid.uuid4().hex[:8]}"
+    variable = f"DD_{prefix.upper()}"
+    os.environ[variable] = admin
+    try:
+        for suffix, schema in DATABASES_SCHEMA.items():
+            name = f"{prefix}_{suffix}"
+            with psycopg.connect(admin, autocommit=True) as connection:
+                connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+            with psycopg.connect(make_conninfo(admin, dbname=name), autocommit=True) as connection:
+                connection.execute(trusted(schema))
+        yield prefix, variable
+    finally:
+        os.environ.pop(variable, None)
+        with psycopg.connect(admin, autocommit=True) as connection:
+            for suffix in "abcd":
+                dropped = sql.Identifier(f"{prefix}_{suffix}")
+                connection.execute(
+                    sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(dropped)
+                )
+
+
+def databases_spec(prefix: str, variable: str, tmp_path: Path, spec: str = DATABASES_SPEC) -> Spec:
+    return parse_spec(
+        spec.replace("PREFIX", prefix)
+        .replace("VARIABLE", variable)
+        .replace("STORE", str(tmp_path / "store"))
+        + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
+    )
+
+
+def test_several_databases_build_one_image(databases: tuple[str, str], tmp_path: Path) -> None:
+    prefix, variable = databases
+    a, b, c = (f"{prefix}_{suffix}" for suffix in "abc")
+    spec = databases_spec(prefix, variable, tmp_path)
+    with PostgresEngine().connect(spec.source.connection) as session:
+        assert isinstance(session, PostgresSession)
+        assert (tuple(session.connections), session.default) == ((a, b, c), a)
+        lock = CatalogLock.of(session.catalog())
+    options = RunOptions(stages=tuple(Stage), work=tmp_path / "work")
+    result = Run(spec, lock, registry(), options).execute()
+    assert not result.failed(), result.verification
+    manifest = tmp_path / "work" / "scratch" / result.generation / "extract" / "manifest.json"
+    extracted = json.loads(manifest.read_text())["outputs"]["result"]
+    assert extracted["snapshot"] == ""
+    assert set(extracted["snapshots"]) == {a, b, c}
+    tables = {
+        name: TableName.of(*name.split("."))
+        for name in (
+            f"{a}.public.customers",
+            f"{a}.public.addresses",
+            f"{b}.public.customers",
+            f"{b}.billing.invoices",
+            f"{c}.public.orders",
+        )
+    }
+    (summary,) = result.images
+    working = working_databases(tmp_path / "check")
+    for archive in summary.archives:
+        image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / f"unpacked-{archive.format}")
+        with working.restore(image, archive.format, tmp_path / f"r-{archive.format}") as restored:
+            counts = restored.counts(tables.values())
+            assert {str(table): rows for table, rows in counts.items()} == {
+                f"{a}.public.customers": 2,
+                f"{a}.public.addresses": 2,
+                f"{b}.public.customers": 1,
+                f"{b}.billing.invoices": 2,
+                f"{c}.public.orders": 2,
+            }
+            # Spec SQL that names no table runs in the default database.
+            assert restored.failing_rows("SELECT 1 FROM public.addresses") == 2
+            # Invoice 20 was referred by customer 2, who is not copied: nulled.
+            referred = ColumnRef(
+                table=tables[f"{b}.billing.invoices"], column=ColumnName("referred_by")
+            )
+            assert set(restored.text_values(referred)) == set()
+            emails = ColumnRef(table=tables[f"{b}.public.customers"], column=ColumnName("email"))
+            assert "dee@pay.test" not in set(restored.text_values(emails))
+
+
+def test_names_across_databases(databases: tuple[str, str], tmp_path: Path) -> None:
+    prefix, variable = databases
+    a, c = f"{prefix}_a", f"{prefix}_c"
+    plan_only = RunOptions(stages=(Stage.PLAN,), work=tmp_path / "work")
+    spec = databases_spec(prefix, variable, tmp_path)
+    with PostgresEngine().connect(spec.source.connection) as session:
+        lock = CatalogLock.of(session.catalog())
+    # A name two databases share fails, naming both; a virtual reference
+    # between databases cannot be read in one query.
+    broken = databases_spec(
+        prefix,
+        variable,
+        tmp_path,
+        DATABASES_SPEC.replace(
+            '    orders: "true"\n', '    orders: "true"\n    customers: "true"\n'
+        ).replace(
+            "  follow:\n",
+            "  virtual_fks: {orders.id -> PREFIX_a.public.customers: {}}\n  follow:\n",
+        ),
+    )
+    with pytest.raises(PlanError) as caught:
+        Run(broken, lock, registry(), plan_only).execute()
+    problems = caught.value.problems
+    assert (
+        f"table 'customers' is ambiguous: it matches {a}.public.customers,"
+        f" {prefix}_b.public.customers; qualify it"
+    ) in problems
+    assert (
+        f"virtual reference 'orders.id -> {a}.public.customers' joins {c} and {a},"
+        " which one postgres query cannot read together"
+    ) in problems
+    # A new database the pattern matches is new tables to strict mode.
+    admin = os.environ[DSN_VARIABLE]
+    with psycopg.connect(admin, autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(f"{prefix}_d")))
+    with psycopg.connect(make_conninfo(admin, dbname=f"{prefix}_d"), autocommit=True) as connection:
+        connection.execute("CREATE TABLE public.extra (id integer PRIMARY KEY)")
+    with pytest.raises(PlanError) as caught:
+        Run(spec, lock, registry(), plan_only).execute()
+    assert caught.value.strict is not None
+    assert {(f.difference, f.object) for f in caught.value.strict.findings} == {
+        (Difference.NEW_TABLE, f"{prefix}_d.public.extra")
+    }
+
+
+def test_listing_databases_fails_on_a_closed_connection(source: PostgresScratch) -> None:
+    with PostgresEngine().connect(source.connection) as session:
+        assert isinstance(session, PostgresSession)
+        session.connection.close()
+        with pytest.raises(EngineError, match="listing the databases failed"):
+            list_databases(session.connection)

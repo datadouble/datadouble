@@ -133,7 +133,7 @@ class ElasticScratch:
     @property
     def items(self) -> TableName:
         """The scratch table."""
-        return TableName.of("", "items")
+        return TableName.of("items")
 
     def add_table(self, name: str) -> None:
         """Create another index."""
@@ -198,7 +198,7 @@ def harness() -> EngineHarness:
     return EngineHarness(
         engine=ElasticEngine(),
         sample_spec=SAMPLE_SPEC,
-        sample_column=ColumnRef(table=TableName.of("", "customers"), column=ColumnName("email")),
+        sample_column=ColumnRef(table=TableName.of("customers"), column=ColumnName("email")),
         scratch=_scratch,
         runtime=runtime_for_tests(),
     )

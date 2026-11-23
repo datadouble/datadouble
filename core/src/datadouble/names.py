@@ -51,26 +51,47 @@ def check_name(kind: str, value: str) -> str:
 
 @dataclass(frozen=True, order=True, slots=True)
 class TableName:
-    """A table (or collection, index, object set) in a namespace.
+    """A table (or collection, index, object set) and the namespaces it sits in.
 
-    ``namespace`` is the engine's namespace: a schema for relational engines,
-    a database for MongoDB, and so on. It is empty for engines with a single
-    namespace.
+    ``namespace`` is the path of namespaces that hold the table, outermost
+    first: a schema for SQL Server and Oracle, a database for MySQL, MongoDB
+    and Redis, a database and a schema for PostgreSQL, and nothing for engines
+    with a single namespace. Its length is fixed per engine, so names compare
+    and sort part by part.
     """
 
     __pydantic_config__ = ConfigDict(strict=True, extra="forbid")
 
-    namespace: str
+    namespace: tuple[str, ...]
     name: str
 
+    def __post_init__(self) -> None:
+        """Refuse empty parts, which would print as stray dots."""
+        if not self.name or not all(self.namespace):
+            message = f"a table name has an empty part: {self.parts!r}"
+            raise ValueError(message)
+
     def __str__(self) -> str:
-        """``namespace.name``, or ``name`` when there is no namespace."""
-        return f"{self.namespace}.{self.name}" if self.namespace else self.name
+        """The parts joined with dots, such as ``shop.public.users``."""
+        return ".".join(self.parts)
+
+    @property
+    def parts(self) -> tuple[str, ...]:
+        """The namespaces and then the name."""
+        return (*self.namespace, self.name)
+
+    @property
+    def outermost(self) -> str:
+        """The outermost namespace (a database, say), or the name when there is none."""
+        return self.parts[0]
 
     @classmethod
-    def of(cls, namespace: str, name: str) -> Self:
-        """Build a table name."""
-        return cls(namespace=namespace, name=name)
+    def of(cls, *parts: str) -> Self:
+        """Build a table name from its namespaces and name, outermost first."""
+        if not parts:
+            message = "a table name needs at least its name"
+            raise ValueError(message)
+        return cls(namespace=parts[:-1], name=parts[-1])
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -83,5 +104,5 @@ class ColumnRef:
     column: ColumnName
 
     def __str__(self) -> str:
-        """``schema.table.column``."""
+        """The table's name and then the column's, such as ``public.users.email``."""
         return f"{self.table}.{self.column}"

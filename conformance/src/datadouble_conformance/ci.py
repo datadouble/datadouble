@@ -709,7 +709,7 @@ class CiConformance:
         done = ci_harness.run(shop.repository, "lock", Event.MANUAL, shop.context(run_id="501"))
         assert done.state is State.SUCCESS, done.log
         assert done.outputs.get("changes") == "1", done.log
-        assert "added column public.customer.phone: text (text) null" in done.log
+        assert "added column postgres.public.customer.phone: text (text) null" in done.log
         assert lock.read_bytes() == committed
         assert _history(shop.repository) == history
         if ci_harness.artifact_storage:

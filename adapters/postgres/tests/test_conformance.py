@@ -160,7 +160,7 @@ class PostgresScratch:
     @property
     def items(self) -> TableName:
         """The scratch table."""
-        return TableName.of("public", "items")
+        return TableName.of(self.database, "public", "items")
 
     def execute(self, statement: sql.Composed | sql.SQL) -> None:
         """Run a statement in the scratch database."""
@@ -214,7 +214,7 @@ def harness() -> EngineHarness:
         engine=PostgresEngine(),
         sample_spec=SAMPLE_SPEC.replace("PGVECTOR", PGVECTOR),
         sample_column=ColumnRef(
-            table=TableName.of("public", "customer"), column=ColumnName("email")
+            table=TableName.of("datadouble", "public", "customer"), column=ColumnName("email")
         ),
         scratch=scratch,
         runtime=runtime_for_tests(),
