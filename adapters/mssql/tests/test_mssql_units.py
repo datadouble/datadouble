@@ -136,7 +136,7 @@ def test_errors() -> None:
     message = b"Violation of PRIMARY KEY constraint 'PK_x'. The duplicate key value is (alice, 1)."
     error = pymssql.IntegrityError(2627, message + b"DB-Lib error message 20018, severity 14:\n")
     assert str(database_error(error, "loading")) == (
-        "loading failed: [2627] Violation of PRIMARY KEY constraint '…'."
+        "loading failed: [2627] Violation of PRIMARY KEY constraint 'PK_x'."
         " The duplicate key value is (…)."
     )
     assert str(database_error(pymssql.OperationalError(241, "converting 'x'"), "loading")) == (
@@ -145,9 +145,71 @@ def test_errors() -> None:
     assert str(database_error(pymssql.InterfaceError(), "loading")) == (
         "loading failed: InterfaceError"
     )
-    assert redact('name "secret" here') == "name '…' here"
+    assert redact('name "secret" here') == 'name "…" here'
     assert str(tool_error("sqlcmd", 1, "line 'one'\n\n")) == "sqlcmd exited with status 1: line '…'"
     assert str(tool_error("sqlcmd", 2, "")) == "sqlcmd exited with status 2: no output"
+
+
+def test_redaction() -> None:
+    # Data values are hidden, in every shape listed.
+    hidden = {
+        "Cannot insert duplicate key row in object 'dbo.t' with unique index 'ix_email'."
+        " The duplicate key value is (a (b)).": (
+            "Cannot insert duplicate key row in object 'dbo.t' with unique index 'ix_email'."
+            " The duplicate key value is (…)."
+        ),
+        "Conversion failed when converting the varchar value 'O'Brien' to data type int.": (
+            "Conversion failed when converting the varchar value '…' to data type int."
+        ),
+        "The conversion of the varchar value '99999999999' overflowed an int column.": (
+            "The conversion of the varchar value '…' overflowed an int column."
+        ),
+        "String or binary data would be truncated in table 'shop.dbo.t', column 'name'."
+        " Truncated value: 'Alice'.": (
+            "String or binary data would be truncated in table 'shop.dbo.t', column 'name'."
+            " Truncated value: '…'."
+        ),
+        "Unclosed quotation mark after the character string 'a', 'b'.": (
+            "Unclosed quotation mark after the character string '…'."
+        ),
+    }
+    for message, redacted in hidden.items():
+        assert redact(message) == redacted
+    # A user-raised message (RAISERROR, THROW) hides every quoted string.
+    thrown = pymssql.OperationalError(50001, b"unknown user 'a@b.c' in table 'users'")
+    assert str(database_error(thrown, "loading")) == (
+        "loading failed: [50001] unknown user '…' in table '…'"
+    )
+    raised = tool_error("sqlcmd", 1, "Msg 50001, Level 16, State 1\nno user 'a@b.c' in table 'u'")
+    assert str(raised) == (
+        "sqlcmd exited with status 1: Msg 50001, Level 16, State 1; no user '…' in table '…'"
+    )
+    assert redact("x = N'secret'") == "x = N'…'"
+    # Object names are kept.
+    for message in (
+        "Invalid object name 'dbo.nope'.",
+        "Invalid column name 'nope'.",
+        (
+            "Cannot insert the value NULL into column 'name', table 'shop.dbo.t';"
+            " column does not allow nulls. INSERT fails."
+        ),
+        (
+            'The INSERT statement conflicted with the FOREIGN KEY constraint "FK_a".'
+            ' The conflict occurred in database "shop", table "dbo.p", column \'id\'.'
+        ),
+        "Login failed for user 'app'.",
+    ):
+        assert redact(message) == message
+
+
+def test_runtime_errors_kept() -> None:
+    image = "mcr.microsoft.com/mssql/server:2022-CU20-ubuntu-22.04"
+    pulled = tool_error("sqlcmd", 125, f'Unable to find image "{image}" locally\n')
+    assert str(pulled) == f'sqlcmd exited with status 125: Unable to find image "{image}" locally'
+    assert "'sqlcmd'" in str(tool_error("sqlcmd", 127, "sh: 'sqlcmd': not found"))
+    assert str(tool_error("sqlcmd", 1, "Msg 2627 'secret'")) == (
+        "sqlcmd exited with status 1: Msg 2627 '…'"
+    )
 
 
 def test_types() -> None:

@@ -41,6 +41,7 @@ __all__ = [
     "absolute",
     "check",
     "identity",
+    "runtime_failure",
 ]
 
 
@@ -116,6 +117,24 @@ type RuntimeFactory = Callable[[Mapping[str, JsonValue]], ContainerRuntime]
 def identity() -> str:
     """Datadouble's own ``uid:gid``, which containers run as."""
     return f"{os.getuid()}:{os.getgid()}"
+
+
+_RUNTIME_STATUSES = frozenset({125, 126, 127})
+
+
+def runtime_failure(status: int) -> bool:
+    """Whether exit ``status`` reports the container runtime failing, not the program.
+
+    ``docker run`` and ``podman run`` exit with 125 when they fail before the
+    program starts (an image that cannot be pulled, an option the daemon
+    refuses), and with 126 or 127, as a shell does, when the command cannot be
+    run or is not found; ``docker exec`` and the ``kubernetes`` runtime's
+    ``sh`` wrapper exit with 126 and 127 the same way. That output is the
+    runtime's own and holds no data, so engine adapters that redact a failed
+    program's output keep it whole (decision 139). A program exiting with one
+    of these statuses itself is not told apart; the engines' tools do not.
+    """
+    return status in _RUNTIME_STATUSES
 
 
 def check(completed: Completed, what: str) -> Completed:

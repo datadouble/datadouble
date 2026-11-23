@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 
 from datadouble.registry import Registry, RegistryError
-from datadouble.runtime import Completed, ContainerError, absolute, check, identity
+from datadouble.runtime import (
+    Completed,
+    ContainerError,
+    absolute,
+    check,
+    identity,
+    runtime_failure,
+)
 from fake_engine import FakeRuntime
 
 
@@ -18,6 +25,10 @@ def test_check() -> None:
         check(Completed(status=1, stdout="", stderr="first\nlast\n"), "dumping")
     with pytest.raises(ContainerError, match="dumping failed: status 3"):
         check(Completed(status=3, stdout="", stderr=""), "dumping")
+
+
+def test_runtime_failure() -> None:
+    assert [status for status in range(256) if runtime_failure(status)] == [125, 126, 127]
 
 
 def test_paths_and_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
