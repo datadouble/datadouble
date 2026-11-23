@@ -1,0 +1,256 @@
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_822a535bb826d3 17,332,336-340
+adapters/mssql/README.md
+  s_ad63f2bf16b775::t_a25755f5f1a817 13-18
+core/tests/test_api.py
+  s_ad63f2bf16b775::t_285fb7db05c86e 72,79-81
+  s_ad63f2bf16b775::t_42dc3740057525 78
+adapters/redis/src/datadouble_redis/__init__.py
+  s_ad63f2bf16b775::t_8059e29f08896a 8-16,21,47
+adapters/files/tests/test_files_units.py
+  s_ad63f2bf16b775::t_b05f99cf1a590f 17,20-27,180,183,189,245,248
+adapters/oracle/src/datadouble_oracle/server.py
+  s_ad63f2bf16b775::t_253cdf7f831bad 75
+adapters/mysql/src/datadouble_mysql/working.py
+  s_ad63f2bf16b775::t_e6c6ec573c63ed 99-121,296,300-310,312-318,320,333,343-344,349-355,358-359
+adapters/elasticsearch/src/datadouble_elasticsearch/working.py
+  s_ad63f2bf16b775::t_2cb88c63efae3d 28,335,340
+evals/fixtures/repository.sh
+  s_ad63f2bf16b775::t_026149f3d39b23 22-25
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_347f115e9bea48 31-34
+adapters/salesforce/tests/test_salesforce_units.py
+  s_ad63f2bf16b775::t_70fc1fc697c4c6 19,21-29,661,714,718-719,750,753,781,785,795-796,827,832-835
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_12c13994a69899 29-32
+adapters/redis/README.md
+  s_ad63f2bf16b775::t_85b3086717f13c 19-25
+core/tests/test_spec.py
+  s_ad63f2bf16b775::t_6d95791ce4faa0 26,42-45,112,123,137-154,194-203
+core/tests/test_operations.py
+  s_ad63f2bf16b775::t_60c3296ad229c9 75,227,231,311,336,505,638
+core/tests/test_jailer.py
+  s_ad63f2bf16b775::t_38c3a71f2d774c 21,186,197,206
+adapters/postgres/README.md
+  s_ad63f2bf16b775::t_f0df29a52492c2 11,23-28,58-84,106,111,116-123,128
+adapters/salesforce/README.md
+  s_ad63f2bf16b775::t_354857299d5f59 11-19,109-112
+adapters/mssql/src/datadouble_mssql/__init__.py
+  s_ad63f2bf16b775::t_7706ec164a30db 8-15,21,23,87,95,130,135-136
+adapters/opensearch/tests/test_opensearch.py
+  s_ad63f2bf16b775::t_02d6cd206c1fd6 45-46
+adapters/postgres/tests/test_conformance.py
+  s_ad63f2bf16b775::t_46f5117c035c16 69-73,233,235
+adapters/salesforce/src/datadouble_salesforce/working.py
+  s_ad63f2bf16b775::t_6764080c7dbaaa 26,271,276
+conformance/src/datadouble_conformance/ci.py
+  s_ad63f2bf16b775::t_3910c606f47969 63-66
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_c852141e9ab33b 237-247,259-263
+core/tests/fake_engine.py
+  s_ad63f2bf16b775::t_a89a2f70e33839 35,353
+  s_ad63f2bf16b775::t_6d275e12e4f9c5 97,102,113,120,127-136,140,143-146,149,154-158,237,245-248,326-332,348-349,352
+adapters/postgres/tests/test_sources.py
+  s_ad63f2bf16b775::t_41925e79a33f38 1-167
+docs/using/source-requirements.md
+  s_ad63f2bf16b775::t_bd5cb4bc065f0c 46,48,55,61-62,68-74,76-83
+core/tests/test_commands_operations.py
+  s_ad63f2bf16b775::t_2f9469b315b5ae 139
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_e2b1f26860e9d0 238
+core/src/datadouble/planner.py
+  s_ad63f2bf16b775::t_dbd10856c21563 14-15,30-39,59-66,100-118,199-222,253,261-265,276-312,348-351,378-380,388-401,696,700-708,826,868,870-871,903-904,907-920,1015-1145,1148,1155-1157,1159-1162,1180-1189
+adapters/redis/src/datadouble_redis/source.py
+  s_ad63f2bf16b775::t_99c2e4bede0ecd 27,399-402
+adapters/files/src/datadouble_files/source.py
+  s_ad63f2bf16b775::t_765c9a7171d5f1 23,105-108
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_f0e9baf1b401fe 29-36,140,146,148,151-152,154-155,157,514-515,548-551,601-632,640-642,712-717,734-737
+adapters/postgres/src/datadouble_postgres/working.py
+  s_ad63f2bf16b775::t_b860ee8b368270 7,320,324-335,338-340,343-347,353-354,356
+adapters/files/src/datadouble_files/working.py
+  s_ad63f2bf16b775::t_97458fd8dfb0fb 26,128,133
+adapters/oracle/README.md
+  s_ad63f2bf16b775::t_d092585f39557b 12-17,27
+adapters/mssql/tests/test_mssql_conformance.py
+  s_ad63f2bf16b775::t_f5918ba767b7cf 38-42
+tests/nightly/nightly.yml
+  s_ad63f2bf16b775::t_24545c27fad59c 9-12
+docs/subsetting.md
+  s_ad63f2bf16b775::t_066835d47e6e6f 167-178,245
+TESTING.md
+  s_ad63f2bf16b775::t_c81845946ed1c2 105,166
+adapters/oracle/src/datadouble_oracle/__init__.py
+  s_ad63f2bf16b775::t_3f968608248bab 8-13,22,72
+adapters/mysql/tests/test_mysql_conformance.py
+  s_ad63f2bf16b775::t_ceb2c63c54eb5c 56-59
+adapters/postgres/src/datadouble_postgres/source.py
+  s_ad63f2bf16b775::t_051f760811c42a 321-324
+adapters/mysql/README.md
+  s_ad63f2bf16b775::t_d59c1ab843cf8b 13-17,27-32,61-87,100
+adapters/files/tests/test_files_adapter.py
+  s_ad63f2bf16b775::t_b6d584d9eb33e9 40,149
+adapters/oracle/src/datadouble_oracle/working.py
+  s_ad63f2bf16b775::t_e361112de20cc2 36,445-446,458,463
+docs/agent-skills.md
+  s_ad63f2bf16b775::t_f1403dab3f3c48 89,126
+adapters/elasticsearch/tests/test_elasticsearch.py
+  s_ad63f2bf16b775::t_83cf593e38ade5 65,407,409,415
+evals/missing-extension/prompt.md
+  s_ad63f2bf16b775::t_bf4623ab178f40 10-12
+ci/gitlab/tests/test_gitlab.py
+  s_ad63f2bf16b775::t_45daa9b79134be 32-35
+adapters/redis/tests/test_redis_conformance.py
+  s_ad63f2bf16b775::t_8d266576a63f7a 36-43
+adapters/mongodb/src/datadouble_mongodb/source.py
+  s_ad63f2bf16b775::t_434216a435cac2 39,288-291
+adapters/mongodb/src/datadouble_mongodb/__init__.py
+  s_ad63f2bf16b775::t_547cd630ee89a9 8-14,19,46
+adapters/oracle/tests/test_oracle.py
+  s_ad63f2bf16b775::t_f02702bc819e31 84,325,403,407-409,431
+adapters/elasticsearch/src/datadouble_elasticsearch/source.py
+  s_ad63f2bf16b775::t_1484e590a7b205 32,361-364
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_3b308b1e5ef6af 27-30
+adapters/mongodb/src/datadouble_mongodb/working.py
+  s_ad63f2bf16b775::t_24855b28697fda 26,171,176
+adapters/redis/src/datadouble_redis/working.py
+  s_ad63f2bf16b775::t_f89cb969219b68 32,217,222
+adapters/mssql/src/datadouble_mssql/source.py
+  s_ad63f2bf16b775::t_0aab19291f6351 33,237-240
+adapters/mssql/src/datadouble_mssql/working.py
+  s_ad63f2bf16b775::t_c01f7b3a9ba9bd 29,518-519,531,536
+core/tests/test_commands.py
+  s_ad63f2bf16b775::t_d388245edff39a 24-25,374-388
+  s_ad63f2bf16b775::t_3147fdfe2c6dc8 255
+adapters/elasticsearch/tests/test_elasticsearch_conformance.py
+  s_ad63f2bf16b775::t_4922fab0f5c7e5 39-45
+docs/using/quickstart.md
+  s_ad63f2bf16b775::t_9bf8190372ea78 36-39
+adapters/mongodb/tests/test_mongodb.py
+  s_ad63f2bf16b775::t_e755641079c138 45,246-248,256
+core/src/datadouble/names.py
+  s_ad63f2bf16b775::t_b8856935daff0c 22-24
+adapters/mssql/tests/test_mssql_units.py
+  s_ad63f2bf16b775::t_9bee7be4c3f9f8 202
+tests/integration-groups.txt
+  s_ad63f2bf16b775::t_034ad6b88c0a7a 14
+adapters/elasticsearch/README.md
+  s_ad63f2bf16b775::t_ea2cadd271f919 15-21,59,77-78
+ci/github-actions/tests/test_github_actions.py
+  s_ad63f2bf16b775::t_7b51d4b9d0753a 28-31
+adapters/mysql/tests/test_mysql.py
+  s_ad63f2bf16b775::t_12990b7365286c 71,231,330,384-387,483,515-516
+adapters/mysql/src/datadouble_mysql/__init__.py
+  s_ad63f2bf16b775::t_0db5c97ce92dc1 8-13,19,58,117
+core/src/datadouble/versions.py
+  s_ad63f2bf16b775::t_0e61b7b4f62421 1-25
+adapters/mongodb/tests/test_mongodb_conformance.py
+  s_ad63f2bf16b775::t_30c58704ae4734 34-38
+adapters/mysql/src/datadouble_mysql/source.py
+  s_ad63f2bf16b775::t_9d795171cac766 296-299
+conformance/src/datadouble_conformance/engine.py
+  s_ad63f2bf16b775::t_24c9925eb7a1a3 22,31,34,37-46,61,136-147,149-153,156,160-168,202-203,240-245,266,287,294-295,374,418,455,482-516,533
+adapters/postgres/src/datadouble_postgres/__init__.py
+  s_ad63f2bf16b775::t_9049538bdd6301 8-13,19,57,90,120
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_ad63f2bf16b775::t_439727e91addd6 31-34
+core/src/datadouble/strict.py
+  s_ad63f2bf16b775::t_5e88c5505146eb 102
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_38d8657061236c 15-16
+adapters/mysql/tests/test_jailer_sakila.py
+  s_ad63f2bf16b775::t_710cbea2efb013 90,96,109
+adapters/opensearch/src/datadouble_opensearch/__init__.py
+  s_ad63f2bf16b775::t_6f1561e03de13a 8-16
+docs/architecture.md
+  s_ad63f2bf16b775::t_f0dbdb89709c05 104-181,258-263,285,291
+  s_ad63f2bf16b775::t_6c9eb5fb6ea987 15
+adapters/elasticsearch/src/datadouble_elasticsearch/__init__.py
+  s_ad63f2bf16b775::t_4a4cfbf64bee40 8-17,21,48
+core/src/datadouble/staging.py
+  s_ad63f2bf16b775::t_812ae882b864b5 187
+adapters/oracle/tests/test_oracle_conformance.py
+  s_ad63f2bf16b775::t_97ed1df2067032 39-42
+core/src/datadouble/settings.py
+  s_ad63f2bf16b775::t_570046725d1859 6
+adapters/salesforce/src/datadouble_salesforce/__init__.py
+  s_ad63f2bf16b775::t_9f1cb9f16c3bff 8-15,57,71,133-135
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_4c9e49e18997a3 31-34
+core/src/datadouble/run.py
+  s_ad63f2bf16b775::t_6b27c501b52c99 62-71,81-82,88,166-174,240,247,251,415-416,420-422,424-428,438,440,443,456-461,469,477-486,490,493-504,508,511,520,527,582,635,654-664,864,871-873,911,922-949,968
+  s_ad63f2bf16b775::t_44fd9bcae9232e 964-967
+adapters/redis/src/datadouble_redis/keys.py
+  s_ad63f2bf16b775::t_c4fd11ba49dff9 152-153
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_51a0fc910b72ba 12,32,49-57,71,567-568,582-602,610,620,642-644,721
+adapters/salesforce/src/datadouble_salesforce/source.py
+  s_ad63f2bf16b775::t_e502a2a3fc022f 227
+  s_ad63f2bf16b775::t_bcf1572d62bf07 45,403-406
+core/tests/fakes.py
+  s_ad63f2bf16b775::t_c3d46aac86feff 17-18,226-236
+adapters/docker/tests/test_docker.py
+  s_ad63f2bf16b775::t_65a94f1b9ddca4 66
+adapters/mssql/src/datadouble_mssql/server.py
+  s_ad63f2bf16b775::t_a5aaab5ce49997 75,82-83
+adapters/salesforce/tests/test_salesforce_conformance.py
+  s_ad63f2bf16b775::t_d57c1520c6951d 32-35
+adapters/mssql/tests/test_mssql.py
+  s_ad63f2bf16b775::t_09c23c4f3c8f78 110,364,428,432-434
+core/tests/test_planner.py
+  s_ad63f2bf16b775::t_d06e0352bbcb7f 9-10,13,19,34,148,152,468,476,545-547,549,556,566,687-817,821,823-824,826-832,836,838,842,846-847,853-855,858-859,863-865,869,874
+  s_ad63f2bf16b775::t_3d5bcb122fe10c 818-820,822,825,833-835,837,839-841,843-845,848-852,856-857,860-862,866-868,870-873,875-876
+core/src/datadouble/replicate.py
+  s_ad63f2bf16b775::t_4b2827fea9f068 199
+adapters/opensearch/README.md
+  s_ad63f2bf16b775::t_0f33f537e76d4a 11-16
+adapters/postgres/tests/test_postgres.py
+  s_ad63f2bf16b775::t_4dcdaa43b793c9 62,236,344-347,416,424-425,467
+adapters/mongodb/README.md
+  s_ad63f2bf16b775::t_73fa0234d37de6 13-18
+core/src/datadouble/engine.py
+  s_ad63f2bf16b775::t_61a102790cac54 44,46-50,52,315-317
+  s_ad63f2bf16b775::t_b0dc9a01d7bdf8 318-319
+  s_ad63f2bf16b775::t_6b7a99d289fc8a 53-54,112,114,152-160,221,225-232,320-327,363,370-371
+adapters/redis/tests/test_redis.py
+  s_ad63f2bf16b775::t_e58d43ceed9aaf 49,267,269,275,385
+adapters/elasticsearch/src/datadouble_elasticsearch/server.py
+  s_ad63f2bf16b775::t_0bd324173ba9f5 50
+compose.yaml
+  s_ad63f2bf16b775::t_964a1169ce72f7 21,66-79
+core/tests/test_resolve_strict.py
+  s_ad63f2bf16b775::t_3457b64c28f5b5 226
+CHANGELOG.md
+  s_ad63f2bf16b775::t_e521e1b95916b0 12-29,259-272
+adapters/oracle/src/datadouble_oracle/source.py
+  s_ad63f2bf16b775::t_5efcb43504fc4e 30,285-288
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_fbcba6d8d363fd 42,56-81,114,116,118
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_650ed77e3593e1 267-269,357
+core/tests/test_run.py
+  s_ad63f2bf16b775::t_77fa8ecd9278e5 13,16,40-41,83,490-492,582,590,655-756
+evals/missing-extension/graders/image-first.md
+  s_ad63f2bf16b775::t_831505edeab912 5,8
+skills/RULES.md
+  s_ad63f2bf16b775::t_81a9c6a13f99e3 20
+docs/decisions.md
+  s_ad63f2bf16b775::t_1926983ea2771c 128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "af024931311a536d586a6963262484c9203343e1",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
