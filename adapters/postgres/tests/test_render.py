@@ -206,11 +206,91 @@ def test_schemas_and_extensions_split_out() -> None:
 
 
 def test_redaction() -> None:
-    assert redact('duplicate key value violates unique constraint "users_email_key"') == (
-        'duplicate key value violates unique constraint "…"'
+    # Data values are hidden, in every shape listed.
+    hidden = {
+        'invalid input syntax for type integer: "12a"': (
+            'invalid input syntax for type integer: "…"'
+        ),
+        'invalid input value for enum mood: "glum"': 'invalid input value for enum mood: "…"',
+        'value "99999999999" is out of range for type integer': (
+            'value "…" is out of range for type integer'
+        ),
+        'date/time field value out of range: "2026-13-01"': (
+            'date/time field value out of range: "…"'
+        ),
+        'invalid value "zz" for "MM"': 'invalid value "…" for "…"',
+        'malformed array literal: "{1,"': 'malformed array literal: "…"',
+        'Token "nope" is invalid.': 'Token "…" is invalid.',
+        'invalid byte sequence for encoding "UTF8": 0xc3 0x28': (
+            'invalid byte sequence for encoding "UTF8": …'
+        ),
+        'character with byte sequence 0xe2 0x82 in encoding "UTF8" has no equivalent': (
+            'character with byte sequence … in encoding "UTF8" has no equivalent'
+        ),
+        "Key (email)=(a@b.c) already exists.": "Key (email)=(…) already exists.",
+        "Key (lower(email::text))=(a@b.c) already exists.": (
+            "Key (lower(email::text))=(…) already exists."
+        ),
+        'Key (owner)=(7) is not present in table "users".': (
+            'Key (owner)=(…) is not present in table "users".'
+        ),
+        "Key (a, b)=(1, x)) conflicts with existing key (a, b)=(2, y).": (
+            "Key (a, b)=(…) conflicts with existing key (a, b)=(…)."
+        ),
+        "Failing row contains (1, null, O'Brien).": "Failing row contains (…).",
+        'COPY users, line 3, column email: "a@b.c"': 'COPY users, line 3, column email: "…"',
+        'COPY users, line 3: "3\ta@b.c"': 'COPY users, line 3: "…"',
+        # A value holding the quote mark is hidden whole.
+        'invalid input syntax for type json: "say "hi" now"': (
+            'invalid input syntax for type json: "…"'
+        ),
+    }
+    for message, redacted in hidden.items():
+        assert redact(message) == redacted
+    # Object names are kept.
+    for message in (
+        'duplicate key value violates unique constraint "users_email_key"',
+        'null value in column "name" of relation "parent" violates not-null constraint',
+        'insert or update on table "orders" violates foreign key constraint "orders_user_fk"',
+        'role "app" does not exist',
+        'could not open file "base/16384/2619": No such file or directory',
+        'extension "hstore" is not available',
+        "value too long for type character varying(5)",
+    ):
+        assert redact(message) == message
+    # A quoted string nothing classifies is hidden, as before, with its introducer.
+    assert redact("syntax error at or near 'secret'") == "syntax error at or near '…'"
+    assert redact("at or near E'sec ret' and U&'x'") == "at or near E'…' and U&'…'"
+    # A value stops at the end of its line, and one running over a line break
+    # is still hidden.
+    assert redact('value "1" is out of range for type integer\ntable "t" is fine') == (
+        'value "…" is out of range for type integer\ntable "t" is fine'
     )
-    assert redact("invalid input syntax for type integer: 'abc'") == (
+    assert redact("Key (email)=(a@b\n.c) already exists.") == "Key (email)=(…) already exists."
+    assert redact('invalid input syntax for type integer: "a\nb" SECRET"') == (
         'invalid input syntax for type integer: "…"'
+    )
+    # A user-raised message hides every quoted string, names included.
+    assert redact('unknown user "a@b.c" in table "users"', raised=True) == (
+        'unknown user "…" in table "…"'
+    )
+    trigger = tool_error(
+        "pg_restore",
+        1,
+        'pg_restore: error: ERROR:  unknown user "a@b.c"\n'
+        "CONTEXT:  PL/pgSQL function check_user() line 3 at RAISE\n",
+    )
+    for context in (
+        'CONTEXT:  Traceback (most recent call last):\n  PL/Python function "f", line 2',
+        'CONTEXT:  PL/Perl function "f"',
+        'CONTEXT:  while executing "error x" in PL/Tcl function "f"',
+    ):
+        other = tool_error("psql", 3, f'ERROR:  unknown user "a@b.c"\n{context}\n')
+        assert 'ERROR:  unknown user "…"' in str(other)
+        assert "a@b.c" not in str(other)
+    assert (
+        str(trigger)
+        == 'pg_restore exited with status 1: pg_restore: error: ERROR:  unknown user "…"'
     )
     error = tool_error(
         "pg_restore",
@@ -224,6 +304,24 @@ def test_redaction() -> None:
     )
     assert "a@b.c" not in str(error)
     assert str(tool_error("initdb", 2, "")) == "initdb exited with status 2: no output"
+
+
+def test_runtime_errors_kept() -> None:
+    pulled = tool_error(
+        "pg_dump",
+        125,
+        'Unable to find image "postgres:18.7-trixie" locally\n'
+        'docker: Error response from daemon: toomanyrequests: "429 Too Many Requests".\n',
+    )
+    assert str(pulled) == (
+        'pg_dump exited with status 125: Unable to find image "postgres:18.7-trixie" locally;'
+        ' docker: Error response from daemon: toomanyrequests: "429 Too Many Requests".'
+    )
+    missing = tool_error("pg_dump", 127, 'exec: "pg_dump": executable file not found in $PATH')
+    assert '"pg_dump"' in str(missing)
+    assert str(tool_error("pg_dump", 1, 'pg_dump: error: "secret"')) == (
+        'pg_dump exited with status 1: pg_dump: error: "…"'
+    )
 
 
 def test_placeholders() -> None:

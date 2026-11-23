@@ -76,5 +76,22 @@ Change the spec with `datadouble-spec` first if it uses Docker. Without
   `datadouble-boundary` ConfigMap on Kubernetes, which is also the only mark
   a Jenkins Kubernetes agent's pod reads). Until then every run is
   refused with `outside_boundary`; never set it yourself.
-- Keyless signing (`signing: {cosign: {keyless: true}}`) uses the CI system's
-  identity token; GitHub workflows get `id-token: write` for it.
+- Error messages name tables, columns, constraints and other objects, but
+  show data values as `…` (`Key (email)=(…) already exists`, `Duplicate
+  entry '…' for key 'users.email'`), and so is any quoted string the engine
+  adapter cannot tell is an object's name, or any quoted string at all in a
+  message a trigger or procedure raised. A `…` is never something to ask
+  the person to reveal. When a build fails with `<tool> exited with status
+  N: ...` and N is 125, 126 or 127, the message is the container runtime's
+  own and is shown whole: 125 means `docker run` failed before the tool
+  started (an image that is not published or could not be pulled, a
+  registry's rate limit, an option the daemon refused), 126 and 127 that the
+  command could not run or was not found in the image.
+- Keyless signing uses the CI system's identity token; GitHub workflows get
+  `id-token: write` for it. In the spec:
+
+    ```yaml
+    signing:
+      cosign:
+        keyless: true
+    ```

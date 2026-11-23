@@ -97,7 +97,7 @@ def test_errors() -> None:
     )
     error = pymysql.err.IntegrityError(1062, "Duplicate entry 'x' for key 'p'")
     assert str(database_error(error, "loading")) == (
-        "loading failed: [1062] Duplicate entry '…' for key '…'"
+        "loading failed: [1062] Duplicate entry '…' for key 'p'"
     )
     assert str(database_error(pymysql.err.InterfaceError(), "loading")) == (
         "loading failed: InterfaceError"
@@ -105,6 +105,146 @@ def test_errors() -> None:
     message = tool_error("mysql", 1, "mysql: [Warning] insecure\nERROR 1 'secret'\n")
     assert str(message) == "mysql exited with status 1: ERROR 1 '…'"
     assert str(tool_error("mysql", 2, "")) == "mysql exited with status 2: no output"
+
+
+def test_redaction() -> None:
+    # Data values are hidden, in every shape listed.
+    hidden = {
+        "Duplicate entry 'alice@example.com' for key 'users.email'": (
+            "Duplicate entry '…' for key 'users.email'"
+        ),
+        "Duplicate entry 'O'Brien-1' for key 'PRIMARY'": "Duplicate entry '…' for key 'PRIMARY'",
+        "Incorrect integer value: 'abc' for column 'age' at row 1": (
+            "Incorrect integer value: '…' for column 'age' at row 1"
+        ),
+        "Incorrect DATE value: '2026-13-01'": "Incorrect DATE value: '…'",
+        "Truncated incorrect DOUBLE value: '1x'": "Truncated incorrect DOUBLE value: '…'",
+        "Variable 'sql_mode' can't be set to the value of 'NOPE'": (
+            "Variable '…' can't be set to the value of '…'"
+        ),
+        "You have an error in your SQL syntax; check the manual near"
+        " 'INSERT INTO t VALUES (' SECRET', 2)' at line 1": (
+            "You have an error in your SQL syntax; check the manual near '…' at line 1"
+        ),
+        "Invalid utf8mb4 character string: 'F09F'": "Invalid utf8mb4 character string: '…'",
+        "Cannot convert string 'x\\xF0' from binary to utf8mb4": (
+            "Cannot convert string '…' from binary to utf8mb4"
+        ),
+    }
+    for message, redacted in hidden.items():
+        assert redact(message) == redacted
+    # Object names are kept.
+    for message in (
+        "Table 'shop.orders' doesn't exist",
+        "Unknown column 'nope' in 'field list'",
+        "Access denied for user 'app'@'%' to database 'shop'",
+        "Data too long for column 'name' at row 1",
+        "Check constraint 'orders_chk_1' is violated.",
+    ):
+        assert redact(message) == message
+    # A quoted string nothing classifies is hidden, as before, with its introducer.
+    assert redact("Can't connect to MySQL server on 'db' (111)") == (
+        "Can't connect to MySQL server on '…' (111)"
+    )
+    assert redact("x = _utf8mb4'secret' or N'more'") == "x = _utf8mb4'…' or N'…'"
+    # An option file line split by a password: a variable is not an object.
+    assert redact("mysqldump: [ERROR] unknown variable 'foo=secret'.") == (
+        "mysqldump: [ERROR] unknown variable '…'."
+    )
+    # A user-raised message (SIGNAL) hides every quoted string.
+    signal = pymysql.err.OperationalError(1644, "unknown user 'a@b.c' for table 'users'")
+    assert str(database_error(signal, "loading")) == (
+        "loading failed: [1644] unknown user '…' for table '…'"
+    )
+    # A trigger can SIGNAL with any number, a real one included: only the
+    # server's own text for that number keeps names.
+    for errno in (5001, 1062):
+        custom = pymysql.err.OperationalError(errno, "unknown user 'x' for table 'users'")
+        assert str(database_error(custom, "loading")) == (
+            f"loading failed: [{errno}] unknown user '…' for table '…'"
+        )
+    duplicate = pymysql.err.IntegrityError(1062, "Duplicate entry 'a@b.c' for key 'users.email'")
+    assert str(database_error(duplicate, "loading")) == (
+        "loading failed: [1062] Duplicate entry '…' for key 'users.email'"
+    )
+    unknown = pymysql.err.OperationalError(1054, "Unknown column 'nope' in 'field list'")
+    assert str(database_error(unknown, "loading")) == (
+        "loading failed: [1054] Unknown column 'nope' in 'field list'"
+    )
+    genuine = tool_error("mysql", 1, "ERROR 1146 (42S02) at line 3: Table 'shop.t' doesn't exist")
+    assert str(genuine) == (
+        "mysql exited with status 1: ERROR 1146 (42S02) at line 3: Table 'shop.t' doesn't exist"
+    )
+    signalled = tool_error("mysql", 1, "ERROR 1062 (23000) at line 1: no user 'x' in table 'u'")
+    assert str(signalled) == (
+        "mysql exited with status 1: ERROR 1062 (23000) at line 1: no user '…' in table '…'"
+    )
+    for errno, message in (
+        (1064, "You have an error in your SQL syntax; unknown user 'SECRET' near 'x' at line 1"),
+        (1452, "Cannot add or update a child row: a foreign key constraint fails (table 'SECRET')"),
+    ):
+        forged = pymysql.err.OperationalError(errno, message)
+        assert "SECRET" not in str(database_error(forged, "loading"))
+    syntax = pymysql.err.ProgrammingError(
+        1064,
+        "You have an error in your SQL syntax; check the manual that corresponds to your MySQL"
+        " server version for the right syntax to use near 'x' at line 1",
+    )
+    assert str(database_error(syntax, "loading")).endswith("near '…' at line 1")
+    child = pymysql.err.IntegrityError(
+        1452,
+        "Cannot add or update a child row: a foreign key constraint fails"
+        " (`shop`.`orders`, CONSTRAINT `fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`))",
+    )
+    assert "`fk`" in str(database_error(child, "loading"))
+    continued = tool_error(
+        "mysql",
+        1,
+        "ERROR 1054 (42S22) at line 1: Unknown column 'a' in 'field list'\nuser 'SECRET'\n",
+    )
+    assert "SECRET" not in str(continued)
+    assert "'a'" not in str(continued)
+    dumped = tool_error(
+        "mysqldump",
+        2,
+        "mysqldump: Got error: 1054: unknown user 'SECRET' when using LOCK TABLES\n",
+    )
+    assert "SECRET" not in str(dumped)
+    locked = tool_error(
+        "mysqldump",
+        2,
+        "mysqldump: Got error: 1146: Table 'd.t' doesn't exist when using LOCK TABLES\n",
+    )
+    assert str(locked) == (
+        "mysqldump exited with status 2:"
+        " mysqldump: Got error: 1146: Table 'd.t' doesn't exist when using LOCK TABLES"
+    )
+    two = tool_error(
+        "mysql",
+        1,
+        "ERROR 1146 (42S02) at line 1: Table 'shop.t' doesn't exist\n"
+        "ERROR 1049 (42000): Unknown database 'shop'\n",
+    )
+    assert "'shop.t'" in str(two)
+    assert "'shop'" in str(two)
+    classed = tool_error("mysql", 1, "ERROR 5001 (45001) at line 1: Table 'x' doesn't exist")
+    assert "'x'" not in str(classed)
+    raised = tool_error("mysql", 1, "ERROR 1644 (45000) at line 1: no user 'a@b.c' in table 'u'")
+    assert (
+        str(raised)
+        == "mysql exited with status 1: ERROR 1644 (45000) at line 1: no user '…' in table '…'"
+    )
+
+
+def test_runtime_errors_kept() -> None:
+    pulled = tool_error("mysqldump", 125, 'Unable to find image "mysql:8.4.6" locally\n')
+    assert str(pulled) == (
+        'mysqldump exited with status 125: Unable to find image "mysql:8.4.6" locally'
+    )
+    assert "'mysqld'" in str(tool_error("mysqld", 126, "cannot run 'mysqld': permission denied"))
+    assert str(tool_error("mysql", 1, "ERROR 1062 'secret'")) == (
+        "mysql exited with status 1: ERROR 1062 '…'"
+    )
 
 
 def test_fields() -> None:
@@ -124,6 +264,11 @@ def test_urls() -> None:
     for bad in ("postgres://h/db", "mysql:///db"):
         with pytest.raises(EngineError, match="mysql url must look like"):
             parse_url(bad)
+    for broken, password in (("se%0Acret", "se\ncret"), ("se%0Dcret", "se\rcret")):
+        with pytest.raises(EngineError, match="url's password holds a line break") as caught:
+            parse_url(f"mysql://u:{broken}@db.internal/shop")
+        assert password not in str(caught.value)
+        assert "cret" not in str(caught.value)
 
 
 def test_kinds_and_placeholders() -> None:
