@@ -809,5 +809,12 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
                     assert found.failing_rows(query.replace("PREFIX", prefix)) == expected, query
     finally:
         os.environ.pop(variable, None)
-        for suffix in ("_a", "_b", "_c"):
-            admin(f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}")
+        # Foreign keys run between the databases, so whichever goes first
+        # would be referenced by one still there.
+        admin(
+            "SET foreign_key_checks = 0",
+            *(
+                f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}"
+                for suffix in ("_a", "_b", "_c")
+            ),
+        )
