@@ -598,8 +598,15 @@ def databases() -> Generator[tuple[str, str]]:
         yield prefix, variable
     finally:
         os.environ.pop(variable, None)
-        for suffix in ("_a", "_b", "_c", "_d", "x"):
-            admin(f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}")
+        # Foreign keys run between the databases, so whichever goes first
+        # would be referenced by one still there.
+        admin(
+            "SET foreign_key_checks = 0",
+            *(
+                f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}"
+                for suffix in ("_a", "_b", "_c", "_d", "x")
+            ),
+        )
 
 
 def test_several_databases_build_as_one(databases: tuple[str, str], tmp_path: Path) -> None:
