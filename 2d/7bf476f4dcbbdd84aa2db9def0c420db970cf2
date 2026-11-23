@@ -1,0 +1,74 @@
+adapters/kubernetes/tests/test_kubernetes.py
+  s_ad63f2bf16b775::t_49637a3de411ca 78
+  s_ad63f2bf16b775::t_11a90b16c6ee78 17,67-77,280-287,292,364-367,370-418,422-424,426,432,434,443,449-451,453,455-456,459
+  s_ad63f2bf16b775::t_e4b625a19f6ab5 233,235,240,421,425,427-431,433,435-442,444-448,452,454,457-458,460-507,572
+  s_ad63f2bf16b775::t_9ea928f7af53c2 278,368-369,419-420
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_5755c669464e34 30,37
+adapters/vault/tests/test_vault.py
+  s_ad63f2bf16b775::t_df403d9b9e14f5 76,101,108-142,164
+  s_ad63f2bf16b775::t_3e0ab4ea6a7f46 41,47-48,62
+  s_ad63f2bf16b775::t_53094b73c81524 7
+adapters/kubernetes/src/datadouble_kubernetes/runtime.py
+  s_ad63f2bf16b775::t_0783d361f86698 59,141-144
+core/src/datadouble/replicate.py
+  s_ad63f2bf16b775::t_93ea36aec2b209 110-115,411-443
+CHANGELOG.md
+  s_ad63f2bf16b775::t_b46b0b36c734e6 433-459
+  s_ad63f2bf16b775::t_524bddc8c9a639 460
+adapters/vault/src/datadouble_vault/__init__.py
+  s_ad63f2bf16b775::t_293e905f88d240 101-103
+  s_ad63f2bf16b775::t_c68d9bff70434b 92-97,104-107,109,111-120
+  s_ad63f2bf16b775::t_e892714e9db88a 20,76-78
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_a4e19cb4c4b0c1 289-297
+  s_ad63f2bf16b775::t_eac9e94e4b8e38 298-300
+  s_ad63f2bf16b775::t_c082726379561e 301-303
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_9265860869da2b 24-37
+  s_ad63f2bf16b775::t_bdf668d59da840 38
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_f2f2040722b5e8 23,40,60-95
+skills/datadouble-provision/SKILL.md
+  s_ad63f2bf16b775::t_546f001a6f5d6a 36-41
+  s_ad63f2bf16b775::t_bf5fc679614550 27-35
+core/tests/test_operations.py
+  s_ad63f2bf16b775::t_aeeffbec129e5f 686,695-697,701-702,704-710,712-865,1053-1062
+  s_ad63f2bf16b775::t_9762c231801744 13,17,19,21
+docs/decisions.md
+  s_ad63f2bf16b775::t_48f7d5a86e964b 139
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_1f193a5ba72d93 866-867,882-884
+core/src/datadouble/announce.py
+  s_ad63f2bf16b775::t_d780036e341dad 354-355,357-364
+  s_ad63f2bf16b775::t_6b98952ebb4616 27,31,38-43,89-96,160-162,250-252,280,283,303-304,306-324,326,336-340,342,347-348
+  s_ad63f2bf16b775::t_639c2f55b9f1c9 356,373-376
+  s_ad63f2bf16b775::t_d52a2b8afe174b 28-29,165-174,269-279,284,288-300,325,327-335,343-346,349-353,365-371
+adapters/kubernetes/src/datadouble_kubernetes/__init__.py
+  s_ad63f2bf16b775::t_a77de1a424b5ea 14-16,215-256,444-445,452,455-465,480,488-489,528,530-539
+  s_ad63f2bf16b775::t_110da189e1252b 52,54,529
+  s_ad63f2bf16b775::t_c414185a5fda49 493-526
+  s_ad63f2bf16b775::t_27c1640f806373 492,527
+adapters/kubernetes/tests/test_kubernetes_runtime.py
+  s_ad63f2bf16b775::t_05a6d93b9d353d 21,215
+  s_ad63f2bf16b775::t_3f3fb348a1e0bb 222-224,232
+  s_ad63f2bf16b775::t_be52ba40b2695d 233
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_9ec20038059839 763
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2d7bf476f4dcbbdd84aa2db9def0c420db970cf2",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
