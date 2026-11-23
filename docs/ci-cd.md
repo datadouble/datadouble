@@ -369,7 +369,7 @@ and `build` an absolute work directory (see [where jobs run](#where-jobs-run)).
 |---|---|---|---|---|
 | GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository/environment secrets, OIDC to cloud storage and for keyless signing | `pull_request: closed` workflow |
 | GitLab CI | An included file of jobs extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`); CI/CD Catalog components once the GitLab mirror exists | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
-| Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step; `activate` takes the generation as a parameter | Step return values, the build's description | Credentials binding | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
+| Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step, on an agent with Docker or, with `--agent kubernetes`, in a pod of the Kubernetes plugin; `activate` takes the generation as a parameter | Step return values, the build's description | Credentials binding | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
 | Argo CD | An Application per side, installing this repository's Helm chart at the release's tag: a CronJob per job, a following job also running as a later step of its leader's pod; PreSync hook Job for on-demand provision; PostDelete hook Job for release; ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` / `k8s-secret`; containers' termination messages | Kubernetes Secrets, External Secrets | PostDelete hook |
 
 The Kubernetes pieces (container image, Job templates, RBAC) form a shared base
@@ -556,6 +556,30 @@ points and the `docker` runtime finds it as always. Rootless Docker is not
 supported: its user namespace breaks both the socket's group and the shared
 user decision 73 relies on.
 
+Where a system's agents are Kubernetes pods, `ci init --agent kubernetes`
+runs each job in a pod of its own instead (decision 127; Jenkins, through
+the Kubernetes plugin's `agent { kubernetes { ... } }`). It names things as
+the Argo CD adapter does (decision 103): `--runner` is the side's namespace,
+and the pod mounts that namespace's `datadouble` PersistentVolumeClaim;
+`--cloud` names the plugin's cloud, its default otherwise. The two sides need
+separate namespaces, ideally separate clusters, since each claim holds its
+side's data. Jobs that start engine software need the spec's `kubernetes`
+runtime naming that namespace and claim, with every path the spec names
+under its `mount`, where the pod mounts the claim, the path the engine pods
+use; other jobs mount it at their paths' common directory. The pinned image
+runs as a container of the pod as the engine's user, and the step runs
+`datadouble` in it; the plugin's own agent container keeps its image's user
+and starts with a umask that lets both write the pod's workspace. The
+boundary mark is only the namespace's `datadouble-boundary` ConfigMap,
+mounted as a file, because the CI system lays its own environment over the
+container's. The pods run as a service account, `datadouble-<spec>-<side>`,
+whose RBAC lets Datadouble run engine pods (pods, their logs, exec and port
+forwarding, and Secrets) and, for `k8s-pv`, PersistentVolumes; `ci init`'s
+`instructions` list it with the plugin's cloud and the claim. Docker stays
+the default, and Kubernetes agents refuse a Docker command or socket.
+GitLab's Kubernetes executor and GitHub's Actions Runner
+Controller could follow the same model.
+
 ## Testing
 
 Each CI/CD adapter is tested at three levels.
@@ -567,7 +591,7 @@ combination, plus validation with each system's own tooling:
 |---|---|
 | GitHub Actions | `actionlint` |
 | GitLab CI | CI Lint API against the containerized GitLab below |
-| Jenkins | Declarative pipeline validator in the Jenkins container; the conformance suite runs the shared library itself |
+| Jenkins | Declarative pipeline validator in the Jenkins container, with the Kubernetes plugin installed for Kubernetes agents' Jenkinsfiles; the conformance suite runs the shared library itself |
 | Argo CD / Kubernetes | `helm lint`, `kubeconform` |
 
 **2. Local end-to-end.** Each system runs locally, and runs every job, as

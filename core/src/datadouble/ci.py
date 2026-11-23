@@ -14,6 +14,7 @@ CI/CD adapters register under ``datadouble.ci``; the entry point names a
 callable that returns a :class:`CiAdapter`.
 """
 
+import posixpath
 import re
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -52,6 +53,15 @@ class Side(StrEnum):
 
     PRODUCTION = "production"
     NON_PRODUCTION = "non-production"
+
+
+class Agent(StrEnum):
+    """Where a system's jobs run Datadouble."""
+
+    DOCKER = "docker"
+    """On a runner with Docker, which runs the pinned image (decision 100)."""
+    KUBERNETES = "kubernetes"
+    """In a pod of the pinned image, beside the engine pods of the ``kubernetes`` runtime."""
 
 
 class Trigger(StrEnum):
@@ -145,6 +155,12 @@ class Pipeline:
     docker_socket: str | None = None
     """The Docker daemon's socket native steps mount; None leaves the runner's
     ``DATADOUBLE_DOCKER_SOCKET``, or ``/var/run/docker.sock``."""
+    agent: Agent = Agent.DOCKER
+    """Where the jobs run Datadouble."""
+    cloud: str | None = None
+    """The Kubernetes cloud Kubernetes agents' pods start in; None for the system's default."""
+    runtime: Mapping[str, JsonValue] | None = None
+    """The spec's ``runtime`` section, for systems whose jobs run beside its pods."""
 
     def environment(self) -> tuple[str, ...]:
         """Every environment variable a job reads a secret from."""
@@ -196,6 +212,11 @@ class CiAdapter(Protocol):
     @property
     def name(self) -> str:
         """The name requests use for this system."""
+        ...
+
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        """Where the system's jobs can run Datadouble, its default first."""
         ...
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
@@ -313,6 +334,11 @@ def side_of(kinds: Iterable[JobKind], side: Side | None) -> Side:
         message = f"those jobs run on the {found} side, not {side}"
         raise CiError(message)
     return found
+
+
+def sections(kind: JobKind, side: Side) -> tuple[str, ...]:
+    """The spec sections a job reads, such as ``runtime`` for jobs that start engines."""
+    return _SECTIONS[kind, side]
 
 
 def _sections(spec: Spec, kind: JobKind, side: Side) -> list[JsonValue]:
@@ -525,6 +551,8 @@ class PipelineOptions:
     """The Docker command native steps use, written into the configuration."""
     docker_socket: Path | None = None
     """The Docker daemon's socket native steps use, written into the configuration."""
+    agent: Agent = Agent.DOCKER
+    cloud: str | None = None
 
 
 def _docker(options: PipelineOptions) -> tuple[str | None, str | None]:
@@ -547,6 +575,12 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     side = side_of(options.kinds, options.side)
     chosen = frozenset(options.kinds)
     docker, docker_socket = _docker(options)
+    if options.agent is Agent.KUBERNETES and (docker is not None or docker_socket is not None):
+        message = (
+            "kubernetes agents are pods that run the Datadouble image themselves, without"
+            " Docker; leave out the Docker command and socket"
+        )
+        raise CiError(message)
     if side is Side.PRODUCTION and not options.runner:
         message = (
             "build, promote and lock run only inside the production boundary; name the"
@@ -600,4 +634,43 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         notify=spec.notify,
         docker=docker,
         docker_socket=docker_socket,
+        agent=options.agent,
+        cloud=options.cloud,
+        runtime=spec.runtime,
     )
+
+
+CLAIM = "datadouble"
+"""The PersistentVolumeClaim, in each side's namespace, that its pods share."""
+DEFAULT_MOUNT = "/srv/datadouble"
+"""Where the work claim is mounted when the spec names no path."""
+
+
+def claim_mount(pipeline: Pipeline, mount: str | None = None) -> str:
+    """The directory of the one PersistentVolumeClaim every path the jobs mount is on.
+
+    On Kubernetes, Datadouble's pod and the engine pods share files through one
+    claim, mounted at the same path in each, so every path the spec names must
+    be under its mount: ``mount`` when the spec's runtime names it, otherwise
+    the paths' common directory.
+    """
+    paths = sorted({path for job in pipeline.jobs for path in job.mounts})
+    if mount is not None:
+        outside = [path for path in paths if not PurePosixPath(path).is_relative_to(mount)]
+        if outside:
+            message = (
+                "on Kubernetes every path the spec names lives on the work claim, mounted at"
+                f" {mount}; these are not under it: {', '.join(outside)}"
+            )
+            raise CiError(message)
+        return mount
+    if not paths:
+        return DEFAULT_MOUNT
+    common = posixpath.commonpath(paths)
+    if common == "/":
+        message = (
+            "on Kubernetes every path the spec names lives on one PersistentVolumeClaim,"
+            f" so they must share a directory; these do not: {', '.join(paths)}"
+        )
+        raise CiError(message)
+    return common

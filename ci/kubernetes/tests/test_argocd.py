@@ -18,7 +18,7 @@ import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import parse_spec
 from datadouble_argocd import NAME, ArgoCd, adapter
@@ -157,6 +157,9 @@ def test_paths_share_one_claim() -> None:
         ArgoCd().generate(planned(JobKind.PROMOTE, spec=scattered))
     with pytest.raises(CiError, match="name the Kubernetes namespace"):
         ArgoCd().generate(planned(JobKind.FETCH, runner=None))
+    clouded = replace(planned(JobKind.FETCH), cloud="prod-k8s")
+    with pytest.raises(CiError, match="a cloud is for Jenkins"):
+        ArgoCd().generate(clouded)
 
 
 def test_instructions() -> None:
@@ -232,6 +235,7 @@ def test_published_files_go_to_the_log(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "argocd"
+    assert adapter().agents == (Agent.KUBERNETES,)
 
 
 def test_jobs_without_host_paths() -> None:

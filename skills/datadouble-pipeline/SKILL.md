@@ -16,7 +16,12 @@ Inspect first (rule 3), then ask in one round for what is missing:
 - The CI/CD system on each side of the boundary (they can differ): GitHub
   Actions, GitLab CI, Jenkins or Argo CD.
 - The runner (label, tags, agent label or namespace) inside the production
-  boundary, and the one outside it.
+  boundary, and the one outside it. For Jenkins, whether its agents have
+  Docker or are Kubernetes pods (`--agent kubernetes`): then each side's
+  runner is its own namespace (never shared, ideally a separate cluster) and
+  `--cloud` the plugin's cloud; jobs that start engines need the spec's
+  `kubernetes` runtime in that namespace on the claim `datadouble`, every
+  path under its `mount`, and RBAC for engine pods.
 - The build's work directory in production scratch space.
 - Whether either side's runners run Docker some other way than `docker` with
   its socket at `/var/run/docker.sock` (installed outside `PATH`, or another

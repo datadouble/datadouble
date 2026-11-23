@@ -19,7 +19,7 @@ import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import FileSecret, NotifyOn, Webhook, WebhookTarget, parse_spec
 from datadouble_gitlab import NAME, TEMPLATE_URL, GitLab, adapter, integrity, template
@@ -266,6 +266,7 @@ def test_reports(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "gitlab"
+    assert adapter().agents == (Agent.DOCKER,)
 
 
 def test_jobs_without_host_paths() -> None:

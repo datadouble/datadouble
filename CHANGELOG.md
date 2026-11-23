@@ -98,6 +98,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A cancelled job cleans up.** `datadouble` turns SIGTERM, which CI
   systems send to cancel a job, into a normal exit, so temporary
   credentials and containers are removed.
+- **Jenkins jobs can run as Kubernetes pods**
+  ([#72](https://github.com/datadouble/datadouble/issues/72)). `ci init
+  --system jenkins --agent kubernetes` writes Jenkinsfiles whose agent is a
+  pod of the Kubernetes plugin, for installations whose agents have no
+  Docker and for specs on the `kubernetes` runtime. As for Argo CD,
+  `--runner` names the side's namespace, whose `datadouble` claim the pod
+  mounts; the new `--cloud` names the plugin's cloud. Keep the two sides in
+  separate namespaces, ideally clusters. The pinned Datadouble image runs in
+  the pod as the engine's user, and the step runs `datadouble` in it. Jobs
+  that start engines need the spec's `kubernetes` runtime in that namespace
+  and claim, with every path under its mount. The boundary mark is only the
+  namespace's `datadouble-boundary` ConfigMap, read from a mounted file.
+  `instructions` list the plugin, the claim and the RBAC. Agents with Docker
+  stay the default; other systems refuse `--agent kubernetes` for now.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and
@@ -329,6 +343,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follower's failure now fails the Job at once (`podFailurePolicy`), and
   its own CronJob runs it again
   ([#69](https://github.com/datadouble/datadouble/issues/69)).
+- **The Helm chart no longer changes the work claim's ownership on every
+  start** ([#72](https://github.com/datadouble/datadouble/issues/72)). Its
+  pods' `fsGroup` now applies only when the claim's root has another group
+  (`fsGroupChangePolicy: OnRootMismatch`), so a terabyte-scale work
+  directory is not walked each time a job starts.
 - **BREAKING: a kept table that no seed or followed reference selects now
   fails the plan** ([#65](https://github.com/datadouble/datadouble/issues/65)).
   Until now such a table was copied without rows and nothing said so: a spec

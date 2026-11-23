@@ -5,9 +5,12 @@
 # from the Jenkins project's Maven repository, whose files come from one
 # storage host CI's egress rules can name. The download mirrors vary, and the
 # plugin archive served about 14 KB/s in November 2026, too slow to build in CI.
+# The Kubernetes plugin and its dependencies are here so the declarative
+# validator accepts the Jenkinsfiles that Kubernetes agents run.
 antisamy-markup-formatter:173.v680e3a_b_69ff3:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/antisamy-markup-formatter/173.v680e3a_b_69ff3/antisamy-markup-formatter-173.v680e3a_b_69ff3.hpi
 apache-httpcomponents-client-4-api:4.5.14-269.vfa_2321039a_83:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/apache-httpcomponents-client-4-api/4.5.14-269.vfa_2321039a_83/apache-httpcomponents-client-4-api-4.5.14-269.vfa_2321039a_83.hpi
 asm-api:9.11.1-226.vff833a_e4c58e:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/asm-api/9.11.1-226.vff833a_e4c58e/asm-api-9.11.1-226.vff833a_e4c58e.hpi
+authentication-tokens:1.144.v5ff4a_5ec5c33:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/authentication-tokens/1.144.v5ff4a_5ec5c33/authentication-tokens-1.144.v5ff4a_5ec5c33.hpi
 bootstrap5-api:5.3.8-1048.va_c299057e35c:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/bootstrap5-api/5.3.8-1048.va_c299057e35c/bootstrap5-api-5.3.8-1048.va_c299057e35c.hpi
 bouncycastle-api:2.30.1.86.2-310.v4655f6742752:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/bouncycastle-api/2.30.1.86.2-310.v4655f6742752/bouncycastle-api-2.30.1.86.2-310.v4655f6742752.hpi
 branch-api:2.1303.v9f3b_95dc329d:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/branch-api/2.1303.v9f3b_95dc329d/branch-api-2.1303.v9f3b_95dc329d.hpi
@@ -35,9 +38,14 @@ javax-activation-api:1.2.0-8:https://repo.jenkins-ci.org/releases/io/jenkins/plu
 jaxb:2.3.9-143.v5979df3304e6:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/jaxb/2.3.9-143.v5979df3304e6/jaxb-2.3.9-143.v5979df3304e6.hpi
 joda-time-api:2.15.1-211.ve499f52b_da_33:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/joda-time-api/2.15.1-211.ve499f52b_da_33/joda-time-api-2.15.1-211.ve499f52b_da_33.hpi
 json-api:20260814-226.v20f9685d642c:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/json-api/20260814-226.v20f9685d642c/json-api-20260814-226.v20f9685d642c.hpi
+kubernetes:4560.vc25b_83890c34:https://repo.jenkins-ci.org/releases/org/csanchez/jenkins/plugins/kubernetes/4560.vc25b_83890c34/kubernetes-4560.vc25b_83890c34.hpi
+kubernetes-client-api:7.3.1-256.v788a_0b_787114:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/kubernetes-client-api/7.3.1-256.v788a_0b_787114/kubernetes-client-api-7.3.1-256.v788a_0b_787114.hpi
+kubernetes-credentials:207.v492f58828b_ed:https://repo.jenkins-ci.org/releases/org/jenkinsci/plugins/kubernetes-credentials/207.v492f58828b_ed/kubernetes-credentials-207.v492f58828b_ed.hpi
 mailer:534.v1b_36f5864073:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/mailer/534.v1b_36f5864073/mailer-534.v1b_36f5864073.hpi
+metrics:4.2.37-494.v06f9a_939d33a_:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/metrics/4.2.37-494.v06f9a_939d33a_/metrics-4.2.37-494.v06f9a_939d33a_.hpi
 mina-sshd-api-common:2.20.1-199.v8ce76b_c93542:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/mina-sshd-api/mina-sshd-api-common/2.20.1-199.v8ce76b_c93542/mina-sshd-api-common-2.20.1-199.v8ce76b_c93542.hpi
 mina-sshd-api-core:2.20.1-199.v8ce76b_c93542:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/mina-sshd-api/mina-sshd-api-core/2.20.1-199.v8ce76b_c93542/mina-sshd-api-core-2.20.1-199.v8ce76b_c93542.hpi
+okhttp-api:5.5.0-242.v1482d48d3ea_3:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/okhttp-api/5.5.0-242.v1482d48d3ea_3/okhttp-api-5.5.0-242.v1482d48d3ea_3.hpi
 pipeline-build-step:605.v00486e8f4b_3e:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/pipeline-build-step/605.v00486e8f4b_3e/pipeline-build-step-605.v00486e8f4b_3e.hpi
 pipeline-groovy-lib:822.vc95f70dea_db_7:https://repo.jenkins-ci.org/releases/io/jenkins/plugins/pipeline-groovy-lib/822.vc95f70dea_db_7/pipeline-groovy-lib-822.vc95f70dea_db_7.hpi
 pipeline-input-step:568.v0c9db_2652741:https://repo.jenkins-ci.org/releases/org/jenkins-ci/plugins/pipeline-input-step/568.v0c9db_2652741/pipeline-input-step-568.v0c9db_2652741.hpi

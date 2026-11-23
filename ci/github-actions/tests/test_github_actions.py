@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 from datadouble import api
-from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import NotifyOn, Spec, parse_spec
 from datadouble_github_actions import NAME, GitHubActions, adapter, render
@@ -207,6 +207,7 @@ def test_reports_to_the_runner(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "github-actions"
+    assert adapter().agents == (Agent.DOCKER,)
 
 
 def test_jobs_without_host_paths() -> None:

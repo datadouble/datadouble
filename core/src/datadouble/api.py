@@ -40,6 +40,7 @@ from datadouble.catalog import (
 from datadouble.channels import Channel
 from datadouble.ci import (
     IMAGE,
+    Agent,
     CiBridge,
     CiError,
     JobKind,
@@ -328,6 +329,11 @@ class CiInitRequest(_Request):
     docker_socket: Path | None = None
     """The Docker daemon's socket on the runner, an absolute path; otherwise the
     runner's ``DATADOUBLE_DOCKER_SOCKET``, or ``/var/run/docker.sock``."""
+    agent: Agent | None = None
+    """Where jobs run Datadouble: ``docker`` (a runner with Docker) or ``kubernetes`` (a pod
+    beside the ``kubernetes`` runtime's); the system's default when unset."""
+    cloud: str | None = None
+    """The Kubernetes cloud a system's Kubernetes agents start in; its default when unset."""
 
 
 type Request = (
@@ -762,6 +768,16 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     except ValueError:
         message = f"the spec {request.spec} is not inside {request.output}, the repository root"
         raise CiError(message) from None
+    agent = request.agent or adapter.agents[0]
+    if agent not in adapter.agents:
+        message = (
+            f"{adapter.name} jobs cannot run on {agent} agents; they run on"
+            f" {', '.join(adapter.agents)}"
+        )
+        raise CiError(message)
+    if request.cloud and agent is not Agent.KUBERNETES:
+        message = "a cloud applies only to kubernetes agents"
+        raise CiError(message)
     lock = request.spec.parent / "catalog.lock"
     options = PipelineOptions(
         kinds=request.jobs,
@@ -775,6 +791,8 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         environment=request.environment,
         docker=request.docker,
         docker_socket=request.docker_socket,
+        agent=agent,
+        cloud=request.cloud,
         spec_text=request.spec.read_text(encoding="utf-8"),
         lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
     )

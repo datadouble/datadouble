@@ -10,6 +10,12 @@
  *   datadouble(job: 'build', image: '...', user: '999:999', mounts: ['/srv/...'],
  *              environment: ['SHOP_SOURCE_DSN'], arguments: ['run', ...])
  *
+ * On a Kubernetes agent, `container` names the pod's Datadouble container
+ * instead, which runs datadouble itself, as the engine's user:
+ *
+ *   datadouble(job: 'build', container: 'datadouble', environment: [...],
+ *              arguments: [...])
+ *
  * Empty arguments, such as an unset --dry-run, are left out. `job` names the
  * generated job, so the command posts the spec's notify webhooks itself.
  * `artifacts` names a workspace directory the command writes files into for
@@ -21,7 +27,8 @@
  * without those `docker` and /var/run/docker.sock.
  */
 def call(Map config) {
-    writeFile(file: '.datadouble-run.sh', text: libraryResource('datadouble/run.sh'))
+    String script = config.container ? 'datadouble/pod.sh' : 'datadouble/run.sh'
+    writeFile(file: '.datadouble-run.sh', text: libraryResource(script))
     List<String> arguments = config.arguments.findAll { it }
     List<String> variables = [
         "DATADOUBLE_ARGUMENTS=${arguments.join('\n')}",
@@ -40,7 +47,13 @@ def call(Map config) {
     }
     int status
     withEnv(variables) {
-        status = sh(script: 'bash .datadouble-run.sh', returnStatus: true)
+        if (config.container) {
+            container(config.container) {
+                status = sh(script: 'bash .datadouble-run.sh', returnStatus: true)
+            }
+        } else {
+            status = sh(script: 'bash .datadouble-run.sh', returnStatus: true)
+        }
     }
     if (config.artifacts) {
         archiveArtifacts(artifacts: "${config.artifacts}/**", allowEmptyArchive: true)
