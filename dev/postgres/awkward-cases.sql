@@ -55,3 +55,7 @@ CREATE SCHEMA dba;
 CREATE TABLE dba.dba_maint_runs (run_id serial PRIMARY KEY, ran_at timestamptz NOT NULL);
 INSERT INTO dba.dba_maint_runs (ran_at) VALUES (timestamptz '2022-03-01 00:00:00+00');
 CREATE VIEW dba.recent_runs AS SELECT run_id FROM dba.dba_maint_runs;
+
+-- A standalone composite type, whose dependencies PostgreSQL records on its
+-- pg_class row.
+CREATE TYPE public.rating_note AS (rating public.mpaa_rating, note text);

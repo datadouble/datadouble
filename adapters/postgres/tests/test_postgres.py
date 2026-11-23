@@ -445,6 +445,7 @@ CREATE TABLE public.addresses (
 );
 INSERT INTO public.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x.test');
 INSERT INTO public.addresses VALUES (10, 1, 'one'), (11, 2, 'two'), (12, 3, 'three');
+CREATE VIEW public.emails AS SELECT email FROM public.customers;
 """,
     "b": """
 CREATE SCHEMA billing;
@@ -455,6 +456,7 @@ CREATE TABLE billing.invoices (
 );
 INSERT INTO public.customers VALUES (1, 'dee@pay.test'), (2, 'ed@pay.test');
 INSERT INTO billing.invoices VALUES (20, 1, 5, 2), (21, 1, 6, NULL), (22, 2, 7, 1);
+CREATE VIEW public.emails AS SELECT email FROM public.customers;
 """,
     "c": """
 CREATE TABLE public.orders (id integer PRIMARY KEY, note text);
@@ -549,6 +551,13 @@ def test_several_databases_build_one_image(databases: tuple[str, str], tmp_path:
         assert isinstance(session, PostgresSession)
         assert (tuple(session.connections), session.default) == ((a, b, c), a)
         lock = CatalogLock.of(session.catalog())
+    # Each database's objects, named with it, depend only on its own tables.
+    assert {
+        str(item.ref): {str(edge) for edge in item.depends_on} for item in lock.catalog.objects
+    } == {
+        f"view {a}.public.emails": {f"table {a}.public.customers"},
+        f"view {b}.public.emails": {f"table {b}.public.customers"},
+    }
     options = RunOptions(stages=tuple(Stage), work=tmp_path / "work")
     result = Run(spec, lock, registry(), options).execute()
     assert not result.failed(), result.verification

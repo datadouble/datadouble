@@ -470,3 +470,19 @@ def test_instances_take_only_their_password(tmp_path: Path) -> None:
         server.running(),
     ):
         raise pymssql.OperationalError(1, b"boom")
+
+
+def test_unbound_references_are_matched_by_name(source: MssqlScratch) -> None:
+    source.execute("CREATE PROCEDURE dbo.later AS SELECT id FROM dbo.not_yet")
+    source.execute("CREATE PROCEDURE dbo.missing AS SELECT id FROM dbo.nowhere")
+    source.execute("CREATE TABLE dbo.not_yet (id INT PRIMARY KEY)")
+    with MssqlEngine().connect(source.connection) as session:
+        catalog = session.catalog()
+    edges = {str(item.ref): {str(edge) for edge in item.depends_on} for item in catalog.objects}
+    # A name SQL Server could not bind, and nothing in the catalog has: no edge.
+    assert edges["procedure dbo.missing"] == set()
+    # One it bound later, or matched by name here.
+    assert edges["procedure dbo.later"] in (
+        {"table dbo.not_yet"},
+        {"table dbo.not_yet (inferred)"},
+    )

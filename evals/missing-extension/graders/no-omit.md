@@ -1,6 +1,6 @@
 ---
 type: regex
 target: {source: file, path: datadouble/shop.yml}
-pattern: "omit:|strict:\\s*(off|tables)"
+pattern: "omit:|strict:"
 match: not_contains
 ---

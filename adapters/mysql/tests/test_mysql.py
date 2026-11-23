@@ -639,6 +639,21 @@ def test_several_databases_build_as_one(databases: tuple[str, str], tmp_path: Pa
             )
     finally:
         os.environ.pop(f"{variable}_BARE", None)
+    # Objects are read in every database, with edges across them; a view over a
+    # database not read is left out, as copies leave it out.
+    edges = {
+        str(item.ref): {str(edge) for edge in item.depends_on} for item in lock.catalog.objects
+    }
+    assert edges == {
+        f"view {prefix}_c.order_emails": {
+            f"table {prefix}_b.orders",
+            f"table {prefix}_a.customers",
+        },
+        f"trigger {prefix}_b.orders_changed": {
+            f"table {prefix}_b.orders",
+            f"table {prefix}_b.order_log (inferred)",
+        },
+    }
     orders = TableName.of(f"{prefix}_b", "orders")
     (fk,) = next(t for t in lock.catalog.tables if t.name == orders).foreign_keys
     assert fk.target == TableName.of(f"{prefix}_a", "customers")

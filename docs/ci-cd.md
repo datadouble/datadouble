@@ -34,8 +34,8 @@ as `extract`. The only thing that leaves production is a golden image.
 unless its manifest records:
 
 - A passing `verify` report, with no checks skipped
-- A strict-mode level at least as strict as the export store requires (default
-  `columns`)
+- Strict-mode levels, for every kind, at least as strict as `promote.strict`
+  requires (by default `data: columns` and `warn` for each kind of object)
 - Content hashes that match the stored artifacts
 
 `fetch` then pulls from the export store with read-only credentials for that

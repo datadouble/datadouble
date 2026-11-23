@@ -136,6 +136,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later is new tables to strict mode. Hooks and assertions run in a default
   database: the connection's own when it is read, otherwise the first read.
   The MySQL URL's database is now optional when `databases` is given.
+- **Functions, views, triggers and other objects in the catalog**
+  ([#78](https://github.com/datadouble/datadouble/issues/78)). PostgreSQL,
+  MySQL, SQL Server and Oracle report their functions and procedures
+  (Oracle's packages too), views, triggers, types, sequences and events,
+  each with a fingerprint of its definition and the tables and objects it
+  depends on, named like tables. A MySQL source's objects come from every
+  database it reads, with edges across them; a PostgreSQL source's are read
+  per database, under that database's snapshot. Edges come from the
+  engine's own records where it keeps them
+  (`pg_depend`, `sys.sql_expression_dependencies`, `ALL_DEPENDENCIES`,
+  MySQL's view usage tables); the rest are parsed from bodies and marked
+  inferred. The lock records them, `datadouble lock` lists objects added,
+  removed or changed in its `changes`, and strict mode warns on a new, changed
+  or removed one by default, per kind under `strict`. Removing an object
+  that a remaining one depends on, such as a function a trigger calls,
+  fails at every level, naming both; a removal that only inferred edges
+  point at warns. Definitions are fingerprinted as written, apart from line
+  endings and trailing spaces. Other engines report none, and their locks
+  stay valid. **Re-lock PostgreSQL, MySQL, SQL Server and Oracle sources**
+  with `datadouble lock`: older locks have no objects, so every object warns
+  as new. An object that changes between planning and extracting stops the
+  extract, as a changed table does. The MySQL adapter now needs MySQL
+  8.0.13 or later and says so.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and
@@ -372,6 +395,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-run `datadouble lock` for every spec; PostgreSQL locks also gain the
   database's name, and plans, manifests and messages show three-part names.
 
+- **BREAKING: `strict` is a mapping of levels per kind**
+  ([#78](https://github.com/datadouble/datadouble/issues/78)). Today's
+  levels move under `data` (`strict: {data: tables}`), beside `functions`,
+  `views`, `triggers`, `types`, `sequences` and `events` (`off`, `warn` or
+  `fail`, default `warn`); kinds left out take their defaults, and a bare
+  level is refused. On the command line `--strict KIND=LEVEL`, repeatable,
+  replaces `--strict LEVEL` and `--no-strict`; JSON requests take
+  `"strict": {"data": "tables"}`. `promote.strict` takes the same mapping,
+  and image summaries record the levels per kind. A known column whose type,
+  kind or nullability changed now fails only at `data: columns` and warns at
+  `tables` and `off`, unless the change breaks its anonymization rule, which
+  fails at every level, saying so. Removed tables and columns and changed
+  keys still always fail.
 - Oracle builds run every stage on one Oracle container, plugging each
   stage's database in and out, instead of starting a container per stage;
   each start takes about 35 seconds before any work.

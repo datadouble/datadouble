@@ -170,7 +170,7 @@ def test_working_copies(tmp_path: Path) -> None:
     assert working.available() == ()
     planned = plan(
         parse_spec(
-            "name: t\nsource: {engine: files}\nstrict: off\nexclude: [tmp]\n"
+            "name: t\nsource: {engine: files}\nstrict: {data: off}\nexclude: [tmp]\n"
             "subset: {seeds: {documents: '-type f', avatars: '-type f'}}"
         ),
         catalog(root),
@@ -235,7 +235,7 @@ def test_extract_copies_the_chosen_files(tmp_path: Path, monkeypatch: pytest.Mon
     root = tree(tmp_path / "source")
     planned = plan(
         parse_spec(
-            "name: t\nsource: {engine: files}\nstrict: off\nexclude: [tmp]\n"
+            "name: t\nsource: {engine: files}\nstrict: {data: off}\nexclude: [tmp]\n"
             "subset: {seeds: {documents: \"-name '2*'\", avatars: '-type f'}}"
         ),
         catalog(root),

@@ -27,3 +27,21 @@ Spatial's `MDSYS.SPATIAL_INDEX_V2`, is an option, listed in the lock as
 `-lite` image leaves components out. `source.omit` names an
 index type to leave out, and the copies then have no indexes of that type;
 the rows are the same.
+
+## Objects
+
+The catalog lists the schemas' views and materialized views, functions,
+procedures and packages (specification and body as one object), triggers,
+types (with their bodies) and sequences; names Oracle generates, such as
+identity columns' sequences, are left out. A sequence's fingerprint covers
+its settings, not its next number. Dependencies come from `ALL_DEPENDENCIES`,
+which Oracle keeps for PL/SQL too, so every edge is exact. Scheduler jobs are
+not listed.
+
+The `ALL_*` views show only what the connecting user owns or has been
+granted. Connecting as each schema's owner, as by default, sees everything.
+Another user needs privileges on the objects (or `SELECT ANY DICTIONARY`):
+`ALL_OBJECTS` follows grants, and `ALL_SOURCE` shows trigger, package and
+type bodies only to their owner or to a user with `EXECUTE` on them, or an
+`ANY` privilege. A user without them sees objects as missing (strict mode
+reports them removed) or their text as empty, so check before locking.

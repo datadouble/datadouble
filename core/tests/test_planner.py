@@ -5,10 +5,30 @@ import datetime as dt
 
 import pytest
 
-from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind
+from datadouble.catalog import (
+    Catalog,
+    CatalogLock,
+    ColumnKind,
+    Dependency,
+    ObjectKind,
+    ObjectRef,
+    Requirement,
+    RequirementKind,
+    SourceObject,
+    definition_fingerprint,
+)
 from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import AccountNames, Capabilities, Plan, PlanError, PlanOptions, plan
-from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, Unselected, parse_spec
+from datadouble.spec import (
+    ImageFormat,
+    ObjectLevel,
+    Spec,
+    Strategy,
+    StrictLevel,
+    StrictOverrides,
+    Unselected,
+    parse_spec,
+)
 from datadouble.subset import AllRows, EdgeMode, NoRows, nested_conditions
 from fakes import catalog, shop, table
 
@@ -156,7 +176,7 @@ def test_spec_as_of_wins_and_the_clock_defaults_to_now() -> None:
 
 
 def test_no_lock() -> None:
-    spec = quiet(parse_spec(HEADER + "strict: off"))
+    spec = quiet(parse_spec(HEADER + "strict: {data: off}"))
     result = plan(spec, shop(), None, CAPABILITIES)
     assert result.strict is None
     assert "no catalog lock" in result.warnings[0]
@@ -172,19 +192,121 @@ def test_strict_failures_stop_planning() -> None:
     assert caught.value.strict is not None
     assert caught.value.problems == (
         (
-            "strict mode (columns): new-table public.secrets: "
+            "strict mode: new-table public.secrets: "
             "the table is not in the lock and matches no exclude pattern"
         ),
     )
-    relaxed = planned("strict: off", live=live, lock=shop(), options=PlanOptions(now=NOW))
+    relaxed = planned("strict: {data: off}", live=live, lock=shop(), options=PlanOptions(now=NOW))
     assert any("new-table public.secrets" in w for w in relaxed.warnings)
     excluded = planned('exclude: ["secrets"]', live=live, lock=shop())
     assert TableName.of("public", "secrets") in excluded.excludes.excluded()
     overridden = planned(
-        live=live, lock=shop(), options=PlanOptions(now=NOW, strict=StrictLevel.OFF)
+        live=live,
+        lock=shop(),
+        options=PlanOptions(now=NOW, strict=StrictOverrides(data=StrictLevel.OFF)),
     )
     assert overridden.strict is not None
-    assert overridden.strict.level is StrictLevel.OFF
+    assert overridden.strict.strict.data is StrictLevel.OFF
+    assert overridden.strict.strict.functions is ObjectLevel.WARN
+
+
+def _with_column(name: str, **changes: object) -> Catalog:
+    """The shop with one column of ``users`` changed."""
+    live = shop()
+    users = live.tables[0]
+    columns = tuple(
+        column.model_copy(update=changes) if column.name == name else column
+        for column in users.columns
+    )
+    return live.model_copy(
+        update={"tables": (users.model_copy(update={"columns": columns}), *live.tables[1:])}
+    )
+
+
+def test_changed_columns_fail_only_at_data_columns() -> None:
+    widened = _with_column("note", type="varchar(400)")
+    tables = planned(
+        "strict: {data: tables}", live=widened, lock=shop(), options=PlanOptions(now=NOW)
+    )
+    assert any("column-changed public.users.note" in w for w in tables.warnings)
+    off = planned(
+        live=widened,
+        lock=shop(),
+        options=PlanOptions(now=NOW, strict=StrictOverrides(data=StrictLevel.OFF)),
+    )
+    assert off.strict is not None
+    assert {f.severity.value for f in off.strict.findings} == {"warn"}
+    with pytest.raises(PlanError) as unknown:
+        planned(
+            "strict: {data: tables}\nanonymize: {nope: {x: {faker: name}}}",
+            live=widened,
+            lock=shop(),
+        )
+    assert unknown.value.problems == ("table 'nope' is not in the catalog",)
+    with pytest.raises(PlanError) as caught:
+        planned(live=widened, lock=shop())
+    assert caught.value.problems == (
+        (
+            "strict mode: column-changed public.users.note: locked as text (null), "
+            "now varchar(400) (null)"
+        ),
+    )
+
+
+@pytest.mark.parametrize("level", ["off", "tables", "columns"])
+def test_changed_columns_that_break_their_rule_fail_at_every_level(level: str) -> None:
+    rules = "anonymize: {users: {email: {faker: email}, note: {null: {}}}}"
+    body = f"strict: {{data: {level}}}\n{rules}"
+    for column, changes, why in (
+        ("email", {"kind": ColumnKind.INTEGER, "type": "integer"}, "this rule needs text"),
+        ("note", {"nullable": False}, "the null rule cannot apply"),
+    ):
+        with pytest.raises(PlanError) as caught:
+            planned(body, live=_with_column(column, **changes), lock=shop())
+        assert caught.value.strict is not None
+        (finding,) = caught.value.strict.findings
+        assert finding.object == f"public.users.{column}"
+        assert finding.breaks is not None
+        assert why in finding.breaks
+        assert caught.value.problems[0].startswith(
+            f"strict mode: column-changed public.users.{column}"
+        )
+
+
+def _objects(*objects: SourceObject) -> Catalog:
+    return shop().model_copy(update={"objects": objects})
+
+
+def test_object_changes_warn_and_removing_what_a_trigger_calls_fails() -> None:
+    function = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="stamp")
+    trigger = ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="users_stamp")
+    calls = SourceObject(
+        ref=trigger,
+        fingerprint=definition_fingerprint("EXECUTE FUNCTION stamp()"),
+        depends_on=(
+            Dependency(table=TableName.of("public", "users")),
+            Dependency(object=function),
+        ),
+    )
+    old = SourceObject(ref=function, fingerprint=definition_fingerprint("old"))
+    new = old.model_copy(update={"fingerprint": definition_fingerprint("new")})
+    rewritten = planned(live=_objects(new, calls), lock=_objects(old, calls))
+    assert [w for w in rewritten.warnings if w.startswith("strict mode")] == [
+        "strict mode: object-changed function public.stamp: its definition differs from the lock"
+    ]
+    hinted = calls.model_copy(update={"depends_on": (Dependency(object=function, inferred=True),)})
+    assert planned(live=_objects(new, hinted)).catalog.objects[1].depends_on[0].inferred
+    with pytest.raises(PlanError) as caught:
+        planned("strict: {functions: fail}", live=_objects(new, calls), lock=_objects(old, calls))
+    assert caught.value.problems[0].startswith("strict mode: object-changed function public.stamp")
+    with pytest.raises(PlanError) as caught:
+        planned(live=_objects(calls), lock=_objects(old, calls))
+    assert caught.value.problems == (
+        (
+            "strict mode: object-removed function public.stamp: the object is in the lock but "
+            "not in the live catalog; trigger public.users_stamp still needs it"
+        ),
+    )
 
 
 def test_excluded_parents_need_fallbacks() -> None:
@@ -523,7 +645,7 @@ def test_complete_engines_need_every_table_selected_or_excluded() -> None:
     tree = catalog(table("avatars", ["path"], key=("path",)), table("tmp", ["path"], key=("path",)))
     with pytest.raises(PlanError) as caught:
         plan(
-            parse_spec(HEADER + "strict: off\nsubset: {seeds: {avatars: '-type f'}}"),
+            parse_spec(HEADER + "strict: {data: off}\nsubset: {seeds: {avatars: '-type f'}}"),
             tree,
             None,
             caps,
@@ -531,7 +653,9 @@ def test_complete_engines_need_every_table_selected_or_excluded() -> None:
         )
     assert caught.value.problems == ("public.tmp is neither selected nor excluded",)
     chosen = plan(
-        parse_spec(HEADER + "strict: off\nexclude: [tmp]\nsubset: {seeds: {avatars: '-type f'}}"),
+        parse_spec(
+            HEADER + "strict: {data: off}\nexclude: [tmp]\nsubset: {seeds: {avatars: '-type f'}}"
+        ),
         tree,
         None,
         caps,

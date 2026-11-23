@@ -45,10 +45,19 @@ from datadouble.spec import (
     Rule,
     Spec,
     Strategy,
+    Strict,
     StrictLevel,
+    StrictOverrides,
     Unselected,
 )
-from datadouble.strict import Excludes, StrictReport, check_strict, resolve_excludes
+from datadouble.strict import (
+    Difference,
+    Excludes,
+    Finding,
+    StrictReport,
+    check_strict,
+    resolve_excludes,
+)
 from datadouble.subset import (
     Edge,
     EdgeMode,
@@ -264,7 +273,8 @@ class PlanOptions(_Model):
 
     now: AwareDatetime | None = None
     """The time ``as_of`` defaults to when the spec has none; the current time if omitted."""
-    strict: StrictLevel | None = None
+    strict: StrictOverrides | None = None
+    """Levels set over the spec's ``strict``, for the kinds named."""
     strategy: Strategy | None = None
     formats: tuple[ImageFormat, ...] | None = None
 
@@ -305,26 +315,57 @@ class _Planner:
 
     # Excludes and strict mode
 
+    def levels(self) -> Strict:
+        overrides = self.options.strict
+        return self.spec.strict if overrides is None else overrides.over(self.spec.strict)
+
     def strict_report(self, excluded: frozenset[TableName]) -> StrictReport | None:
-        level = self.options.strict or self.spec.strict
+        strict = self.levels()
         if self.lock is None:
-            if level is StrictLevel.OFF:
+            if strict.data is StrictLevel.OFF and not strict.failing():
                 self.warnings.append("no catalog lock: strict mode cannot compare anything")
             else:
                 self.problems.append(
-                    f"strict mode is {level} but there is no catalog lock; "
+                    "strict mode cannot compare the catalog without a catalog lock; "
                     "write one with `datadouble lock`"
                 )
             return None
-        report = check_strict(
-            self.catalog, self.lock.catalog, self.lock.fingerprint, excluded, level
-        )
+        report = check_strict(self.catalog, self.lock, excluded, strict, self.breaks)
         self.warnings.extend(
-            f"strict mode: {finding.difference} {finding.object}: {finding.detail}"
-            for finding in report.findings
-            if finding.severity == "warn"
+            f"strict mode: {finding}" for finding in report.findings if finding.severity == "warn"
         )
         return report
+
+    def breaks(self, finding: Finding) -> str | None:
+        """What a difference from the lock breaks, if anything.
+
+        A changed column breaks its anonymization rule when the rule no longer
+        fits it.
+        """
+        if finding.difference is not Difference.COLUMN_CHANGED:
+            return None
+        found = self.rules_by_column().get(finding.object)
+        if found is None:
+            return None
+        column, rule = found
+        misfit = _misfit(column, rule)
+        return None if misfit is None else f"its anonymization rule no longer fits: {misfit}"
+
+    def rules_by_column(self) -> dict[str, tuple[Column, Rule]]:
+        """Each anonymized column, by name, with its rule.
+
+        Names that do not resolve are skipped here and reported by :meth:`anonymization`.
+        """
+        found: dict[str, tuple[Column, Rule]] = {}
+        for table_text, columns in self.spec.anonymize.items():
+            try:
+                table = self.resolver.table(table_text)
+                for column_text, rule in columns.items():
+                    column = self.resolver.column_of(table, column_text)
+                    found[str(ColumnRef(table=table.name, column=column.name))] = (column, rule)
+            except ResolveError:
+                continue
+        return found
 
     # References
 
@@ -585,27 +626,13 @@ class _Planner:
                 f"{ref} is part of a primary or foreign key; anonymizing key columns "
                 "is not supported"
             )
-        allowed: frozenset[ColumnKind] | None
-        match rule:
-            case FakerRule():
-                allowed = _FAKER_KINDS.get(rule.faker, _TEXT)
-            case HashRule() | FormatPreservingRule():
-                allowed = _TEXT_OR_INTEGER
-            case NullRule():
-                allowed = None
-                if not column.nullable:
-                    self.problems.append(f"{ref} cannot be null, so the null rule cannot apply")
-            case ExpressionRule():
-                allowed = None
-                if not self.capabilities.expressions:
-                    self.problems.append(
-                        f"{ref}: the {self.catalog.engine} adapter has no expression language"
-                    )
-            case _:
-                assert_never(rule)
-        if allowed is not None and column.kind not in allowed:
-            kinds = ", ".join(sorted(allowed))
-            self.problems.append(f"{ref} is a {column.kind} column; this rule needs {kinds}")
+        if isinstance(rule, ExpressionRule) and not self.capabilities.expressions:
+            self.problems.append(
+                f"{ref}: the {self.catalog.engine} adapter has no expression language"
+            )
+        misfit = _misfit(column, rule)
+        if misfit is not None:
+            self.problems.append(f"{ref} {misfit}")
 
     # The whole plan
 
@@ -765,11 +792,7 @@ class _Planner:
         structure_only = excludes.structure_only_tables()
         strict = self.strict_report(excluded)
         if strict is not None and strict.failed():
-            failures = tuple(
-                f"strict mode ({strict.level}): {f.difference} {f.object}: {f.detail}"
-                for f in strict.findings
-                if f.severity == "fail"
-            )
+            failures = tuple(f"strict mode: {f}" for f in strict.findings if f.severity == "fail")
             raise PlanError(failures, strict)
         kept_tables = [t for t in self.catalog.tables if t.name not in excluded]
         rules = {
@@ -905,6 +928,25 @@ class _Planner:
             template=template,
             match=given.match,
         )
+
+
+def _misfit(column: Column, rule: Rule) -> str | None:
+    """Why ``rule`` cannot apply to ``column``, if it cannot."""
+    allowed: frozenset[ColumnKind] | None
+    match rule:
+        case FakerRule():
+            allowed = _FAKER_KINDS.get(rule.faker, _TEXT)
+        case HashRule() | FormatPreservingRule():
+            allowed = _TEXT_OR_INTEGER
+        case NullRule():
+            return None if column.nullable else "cannot be null, so the null rule cannot apply"
+        case ExpressionRule():
+            return None
+        case _:
+            assert_never(rule)
+    if column.kind in allowed:
+        return None
+    return f"is a {column.kind} column; this rule needs {', '.join(sorted(allowed))}"
 
 
 _FALLBACKS: dict[OnMissing, EdgeMode] = {

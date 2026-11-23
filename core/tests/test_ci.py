@@ -542,7 +542,7 @@ def test_bridged_requests(tmp_path: Path, ci: FakeCi, monkeypatch: pytest.Monkey
     monkeypatch.setenv("SHOP_KEY", "key-material")
     code, out = run(
         "--ci", "fake-ci", "--ci-directory", str(tmp_path / "bridge"),
-        "run", "plan,extract", "--spec", str(spec), "--no-strict",
+        "run", "plan,extract", "--spec", str(spec), "--strict", "data=off",
         "--work", str(tmp_path / "work"), "--retry-key", "run-1",
     )  # fmt: skip
     assert code == ExitCode.SUCCESS, out
@@ -555,7 +555,8 @@ def test_bridged_requests(tmp_path: Path, ci: FakeCi, monkeypatch: pytest.Monkey
     assert report.summary == out.rstrip("\n")
     assert ci.masked == []
     code, out = run(
-        "--ci", "fake-ci", "run", "plan,extract,load,transform", "--spec", str(spec), "--no-strict",
+        "--ci", "fake-ci", "run", "plan,extract,load,transform", "--spec", str(spec),
+        "--strict", "data=off",
         "--work", str(tmp_path / "work"), "--retry-key", "run-1",
     )  # fmt: skip
     assert code == ExitCode.SUCCESS, out
@@ -602,7 +603,11 @@ def test_bridged_lock(tmp_path: Path, ci: FakeCi) -> None:
 
 
 def test_reports_carry_warnings(tmp_path: Path, registry: Registry) -> None:
-    request = {"command": "plan", "spec": str(spec_with_secret(tmp_path)), "strict": "off"}
+    request = {
+        "command": "plan",
+        "spec": str(spec_with_secret(tmp_path)),
+        "strict": {"data": "off"},
+    }
     planned = api.handle_json(json.dumps(request), registry)
     assert isinstance(planned, api.PlanResponse)
     warned = planned.model_copy(
@@ -623,7 +628,7 @@ def test_retry_keys(tmp_path: Path, registry: Registry) -> None:
         "command": "run",
         "spec": str(spec),
         "stages": ["plan"],
-        "strict": "off",
+        "strict": {"data": "off"},
         "work": str(tmp_path / "work"),
     }
     first = api.handle_json(json.dumps({**base, "retry_key": "a"}), registry)
@@ -651,7 +656,7 @@ def test_a_failed_notification_changes_nothing(
     monkeypatch.setenv("ALERTS_WEBHOOK", "ftp://hooks.example.com/shop")
     monkeypatch.setenv("FAKE_RUN_URL", "https://ci.example.com/runs/7")
     arguments = (
-        "run", "plan,extract", "--spec", str(spec), "--no-strict",
+        "run", "plan,extract", "--spec", str(spec), "--strict", "data=off",
         "--work", str(tmp_path / "work"),
     )  # fmt: skip
     code, out = run("--dry-run", "--ci", "fake-ci", "--ci-job", "build", *arguments)

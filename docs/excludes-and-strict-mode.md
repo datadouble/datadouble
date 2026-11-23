@@ -54,34 +54,105 @@ compared against the lock.
 
 ### Levels
 
-One setting with three levels; each includes the one before it.
+`strict` is a mapping with a level for each kind of thing in the catalog.
+Kinds left out take their defaults:
 
 ```yaml
-strict: columns   # default: fail on new tables or new columns
-# strict: tables  # fail on new tables only
-# strict: off     # warn only
+strict:
+  data: columns       # tables, columns, requirements: off | tables | columns
+  functions: warn     # functions and procedures: off | warn | fail
+  views: warn
+  triggers: warn
+  types: warn
+  sequences: warn
+  events: warn
 ```
 
-CLI: `--strict=columns` (default), `--strict=tables`, `--strict=off`, and
-`--no-strict` as shorthand for `off`. JSON: `{"strict": "columns"}`.
+CLI: `--strict KIND=LEVEL`, repeatable, such as `--strict data=tables
+--strict functions=fail`; each sets one kind over the spec's levels. JSON:
+`{"strict": {"data": "tables"}}`, with the same meaning. A bare level
+(`strict: tables`) is refused: say which kind it is for.
+
+`data` has three levels, each stricter than the one before:
 
 | Difference from the lock | `off` | `tables` | `columns` (default) |
 |---|---|---|---|
-| Known table or column removed or changed | **Fail** | **Fail** | **Fail** |
+| Known table or column removed | **Fail** | **Fail** | **Fail** |
+| Known table's primary key or foreign keys changed | **Fail** | **Fail** | **Fail** |
+| Known column's type, kind or nullability changed | Warn | Warn | **Fail** |
 | New table matching an exclude pattern | Ignored | Ignored | Ignored |
 | New table, not excluded | Warn, include | **Fail** | **Fail** |
 | New column in a known table | Warn | Warn | **Fail** |
 | Requirement removed, or at another version | **Fail** | **Fail** | **Fail** |
 | New requirement | Warn | **Fail** | **Fail** |
 
-Removed or changed objects always fail: the plan cannot run correctly against
-them, whatever the strictness.
+Removed tables and columns always fail: the plan cannot run against them,
+whatever the level. Changed keys fail too, since the subset model follows
+them.
+
+### Differences that break something
+
+A difference that breaks something fails the plan at every level, even
+`off`, and the failure says what it breaks. Planning reads the live catalog,
+so most changes to a known column break nothing: a widened `varchar` is
+copied as it now is. A change does break the column's anonymization rule
+when the rule no longer fits it, such as a `faker: email` column that became
+an integer, or a `null` rule on a column that can no longer be null. Such a
+change fails whatever `data` says; any other change to a known column fails
+at `data: columns` and warns at `tables` and `off`.
+
+After reviewing a warned change, re-lock with `datadouble lock` so the next
+plan compares against what you checked.
 
 A source that reads several databases (MySQL's and PostgreSQL's
 `connection.databases`) has every database's tables in one lock, each named
 with its database. A new database that a pattern such as `["*"]` picks up is
 new tables, and strict mode treats them like any other; a renamed database is
 its tables removed and new ones added.
+### Objects
+
+The catalog lists each source's functions and procedures (and Oracle's
+packages), views and materialized views, triggers, types, sequences and
+events, each with a fingerprint of its definition and the tables and objects
+it depends on (see [architecture](architecture.md#source-objects)). The lock
+records them, and each kind has its own level:
+
+| Level | New, changed or removed object |
+|---|---|
+| `off` | Ignored |
+| `warn` (default) | Warn, naming it |
+| `fail` | **Fail** |
+
+A changed definition means a different fingerprint. The definition counts
+as written: only line endings and spaces at the ends of lines are ignored,
+since whitespace inside a string or an indented PL/Python body is a real
+edit. Object changes warn by default because most are routine, and a person
+should still look: a rewritten trigger or function can change what a copy
+holds.
+
+Whatever the level, even `off`, a difference that breaks something fails
+the plan, naming what it breaks. Today that is a removed object that a
+remaining object still depends on, such as a function a packaged trigger
+calls: the failure names both. An object that depends on an excluded table
+is left out of copies, so it needs nothing, and one whose tables are all
+excluded is ignored, as they are. Planning will also fail an object
+that a packaged table or a declared root still needs, and a new object that
+needs something an image cannot have, once it resolves what each image
+needs.
+
+Some edges are **inferred**: parsed from a routine's or trigger's body
+rather than read from the engine's own records. The plan marks them. Only
+exact edges can fail the plan: a removal that only inferred edges point at
+warns, at every level, naming what may still need it. An inferred edge knows
+a name, not a signature, so a routine whose arguments changed still
+satisfies it. Each adapter's README says which of its edges are exact.
+
+After reviewing an object change, re-lock with `datadouble lock`. Locks
+written before objects were listed have none, so every object of a
+PostgreSQL, MySQL, SQL Server or Oracle source warns as new until you
+re-lock. The catalog is read again inside the extract's snapshot and must
+match the plan's, so an object changed between planning and extracting
+stops the extract, as a changed table does; plan again.
 
 Requirements are the add-ons a source uses beyond the server itself, such as
 PostgreSQL extensions (see [architecture](architecture.md#source-requirements)).
@@ -98,8 +169,9 @@ behavior is the default and relaxing it is explicit.
 
 ### Failure output
 
-A strict-mode failure returns JSON listing each new object and the ways to
-resolve it:
+A strict-mode failure returns JSON listing each difference, the `strict`
+kind it falls under, what it breaks if anything, and the ways to resolve a
+new table or column:
 
 1. Exclude it.
 2. Add it to the subset model and re-lock.
@@ -109,8 +181,10 @@ resolve it:
 
 `datadouble lock` reads the source, so it runs only inside the production
 boundary (decision 98). Its response lists what changed from the lock it
-replaces (`changes`): tables, columns, primary and foreign keys and
-requirements added, removed or changed, each with its type, key or version.
+replaces (`changes`): tables, columns, primary and foreign keys,
+requirements and objects (functions, views, triggers and the like) added,
+removed or changed, each with its type, key or version, or for an object
+whether its definition or what it depends on changed.
 Column changes cover the type, its kind and nullability, and a table's
 column order. The CLI prints the same list. A first lock has nothing to
 compare with (`changes` is `null`), so every table and column in it needs

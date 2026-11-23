@@ -28,7 +28,7 @@ from datadouble.subset import (
 )
 from datadouble_mysql import MysqlEngine, parse_url
 from datadouble_mysql.errors import database_error, redact, tool_error
-from datadouble_mysql.introspect import kind_of
+from datadouble_mysql.introspect import kind_of, require_view_usage
 from datadouble_mysql.render import Renderer, native, quote
 from datadouble_mysql.server import MysqlServer, Tools, create_user, default_image
 from datadouble_mysql.source import field
@@ -220,3 +220,10 @@ def test_engine(tmp_path: Path) -> None:
         "999:999",
     )
     assert engine.server(tmp_path, "mirror/mysql:8").image == "mirror/mysql:8"
+
+
+def test_servers_older_than_8_0_13_are_refused() -> None:
+    require_view_usage(("8.4.13", 1))
+    for row in (("5.7.44", 0), None):
+        with pytest.raises(EngineError, match=r"needs MySQL 8\.0\.13 or later"):
+            require_view_usage(row)

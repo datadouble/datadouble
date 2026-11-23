@@ -25,7 +25,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from pydantic import BaseModel, ConfigDict
 
-from datadouble.catalog import Catalog, Requirement, Table
+from datadouble.catalog import Catalog, Requirement, SourceObject, Table
 from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
@@ -306,16 +306,27 @@ class PostgresSession:
         return version.split(" ", maxsplit=1)[0]
 
     def introspect(self) -> tuple[Catalog, Physical]:
-        """Every database's catalog, merged; requirements are listed once each."""
+        """Every database's catalog, merged; requirements are listed once each.
+
+        Each database's objects are read under its own connection, so under
+        its own snapshot, and have edges only within it.
+        """
         tables: list[Table] = []
+        objects: list[SourceObject] = []
         requirements: dict[Requirement, None] = {}
         physical = Physical(frozenset(), {}, {})
         for database, connection in self.connections.items():
             catalog, found = introspect(connection, database)
             tables.extend(catalog.tables)
+            objects.extend(catalog.objects)
             requirements.update(dict.fromkeys(catalog.requirements))
             physical = physical.merged(found)
-        merged = Catalog(engine=ENGINE, tables=tuple(tables), requirements=tuple(requirements))
+        merged = Catalog(
+            engine=ENGINE,
+            tables=tuple(tables),
+            requirements=tuple(requirements),
+            objects=tuple(objects),
+        )
         return merged, physical
 
     def catalog(self) -> Catalog:

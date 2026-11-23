@@ -18,7 +18,7 @@ A whole spec.
 | `exclude` | list of string |  | Tables left out of every image, as globs matched from the right: `audit.*` is every table in a namespace `audit`, `shop.*.*` every table in PostgreSQL's database `shop`. |
 | `structure_only` | list of string |  | Tables copied without their rows, as globs. |
 | `case_sensitive` | boolean | `false` | Whether table and column names match case-sensitively. |
-| `strict` | [StrictLevel](#strictlevel) | `"columns"` | How new objects in the catalog fail the plan: `off`, `tables` or `columns`. |
+| `strict` | [Strict](#strict) | see type | How differences from the catalog lock warn or fail, per kind: `data` (`off`, `tables` or `columns`), and `functions`, `views`, `triggers`, `types`, `sequences` and `events` (`off`, `warn` or `fail`). |
 | `subset` | [Subset](#subset) | see type | Which rows to copy: seeds, followed references and conditions. |
 | `anonymize` | map of map of [Rule](#rule) |  | Rules per table and column: `faker`, `hash`, `null`, `format_preserving` or `expression`. |
 | `hooks` | [Hooks](#hooks) | see type | Commands run before load and after transform. |
@@ -288,6 +288,12 @@ Set to null.
 |---|---|---|---|
 | `null` (required) | [NullOptions](#nulloptions) |  |  |
 
+### ObjectLevel
+
+How strict mode treats one kind of object that differs from the catalog lock.
+
+One of `off` or `warn` or `fail`.
+
 ### OnMissing
 
 What to do with a reference whose parent row is not followed.
@@ -329,7 +335,7 @@ Where `promote` copies verified images, and what it requires of them.
 |---|---|---|---|
 | `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
 | `channel` | string | `"latest"` |  |
-| `strict` | [StrictLevel](#strictlevel) | `"columns"` | The least strict strict-mode level an image may have been built with. |
+| `strict` | [Strict](#strict) | see type | The least strict level, per kind, an image may have been built with. |
 
 ### Replicate
 
@@ -396,9 +402,23 @@ How the subset is computed (see the subsetting design).
 
 One of `auto` or `nested` or `keys`.
 
+### Strict
+
+Strict mode's level for each kind of thing in the catalog; kinds left out take defaults. Whatever the levels, a difference that breaks something fails the plan, and a removed table or column always fails.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `data` | [StrictLevel](#strictlevel) | `"columns"` | Tables, columns and requirements: `off`, `tables` or `columns`. |
+| `functions` | [ObjectLevel](#objectlevel) | `"warn"` | Functions and procedures: `off`, `warn` or `fail`. |
+| `views` | [ObjectLevel](#objectlevel) | `"warn"` | Views and materialized views. |
+| `triggers` | [ObjectLevel](#objectlevel) | `"warn"` | Triggers. |
+| `types` | [ObjectLevel](#objectlevel) | `"warn"` | User-defined types and domains. |
+| `sequences` | [ObjectLevel](#objectlevel) | `"warn"` | Sequences. |
+| `events` | [ObjectLevel](#objectlevel) | `"warn"` | Scheduled events, such as MySQL's. |
+
 ### StrictLevel
 
-How strict mode treats tables and columns missing from the catalog lock.
+How strict mode treats tables and columns that differ from the catalog lock.
 
 One of `off` or `tables` or `columns`.
 

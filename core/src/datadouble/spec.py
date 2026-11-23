@@ -45,11 +45,144 @@ class _Model(BaseModel):
 
 
 class StrictLevel(StrEnum):
-    """How strict mode treats tables and columns missing from the catalog lock."""
+    """How strict mode treats tables and columns that differ from the catalog lock."""
 
     OFF = "off"
+    """Warn about new tables and columns and changed columns."""
     TABLES = "tables"
+    """Fail on new tables; warn about new and changed columns."""
     COLUMNS = "columns"
+    """Fail on new tables, new columns and changed columns."""
+
+
+class ObjectLevel(StrEnum):
+    """How strict mode treats one kind of object that differs from the catalog lock."""
+
+    OFF = "off"
+    """Compare nothing, unless a difference breaks something."""
+    WARN = "warn"
+    """Name each new, changed or removed object."""
+    FAIL = "fail"
+    """Fail the plan on any difference."""
+
+
+class StrictKind(StrEnum):
+    """The kinds of thing strict mode has a setting for."""
+
+    DATA = "data"
+    FUNCTIONS = "functions"
+    VIEWS = "views"
+    TRIGGERS = "triggers"
+    TYPES = "types"
+    SEQUENCES = "sequences"
+    EVENTS = "events"
+
+
+_STRICT_ORDER: dict[StrictLevel | ObjectLevel, int] = {
+    StrictLevel.OFF: 0,
+    StrictLevel.TABLES: 1,
+    StrictLevel.COLUMNS: 2,
+    ObjectLevel.OFF: 0,
+    ObjectLevel.WARN: 1,
+    ObjectLevel.FAIL: 2,
+}
+
+
+def _yaml_off(value: object) -> object:
+    # YAML 1.1 reads `off` as false.
+    return "off" if value is False else value
+
+
+class Strict(_Model):
+    """Strict mode's level for each kind of thing in the catalog; kinds left out take defaults.
+
+    Whatever the levels, a difference that breaks something fails the plan,
+    and a removed table or column always fails.
+    """
+
+    data: StrictLevel = StrictLevel.COLUMNS
+    """Tables, columns and requirements: ``off``, ``tables`` or ``columns``."""
+    functions: ObjectLevel = ObjectLevel.WARN
+    """Functions and procedures: ``off``, ``warn`` or ``fail``."""
+    views: ObjectLevel = ObjectLevel.WARN
+    """Views and materialized views."""
+    triggers: ObjectLevel = ObjectLevel.WARN
+    """Triggers."""
+    types: ObjectLevel = ObjectLevel.WARN
+    """User-defined types and domains."""
+    sequences: ObjectLevel = ObjectLevel.WARN
+    """Sequences."""
+    events: ObjectLevel = ObjectLevel.WARN
+    """Scheduled events, such as MySQL's."""
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _off(cls, value: object) -> object:
+        return _yaml_off(value)
+
+    def level(self, kind: StrictKind) -> StrictLevel | ObjectLevel:
+        """The level set for ``kind``."""
+        level: StrictLevel | ObjectLevel = getattr(self, kind.value)
+        return level
+
+    def weaker(self, required: "Strict") -> tuple[StrictKind, ...]:
+        """The kinds whose level here is less strict than ``required``'s."""
+        return tuple(
+            kind
+            for kind in StrictKind
+            if _STRICT_ORDER[self.level(kind)] < _STRICT_ORDER[required.level(kind)]
+        )
+
+    def failing(self) -> bool:
+        """Whether any kind of object is set to ``fail``."""
+        return any(self.level(kind) is ObjectLevel.FAIL for kind in StrictKind)
+
+    @classmethod
+    def lowest(cls) -> "Strict":
+        """Every kind at ``off``: what a build without a catalog lock compared."""
+        off = ObjectLevel.OFF
+        return cls(
+            data=StrictLevel.OFF,
+            functions=off,
+            views=off,
+            triggers=off,
+            types=off,
+            sequences=off,
+            events=off,
+        )
+
+
+class StrictOverrides(_Model):
+    """Levels a request sets over the spec's ``strict``, for the kinds it names."""
+
+    data: StrictLevel | None = None
+    functions: ObjectLevel | None = None
+    views: ObjectLevel | None = None
+    triggers: ObjectLevel | None = None
+    types: ObjectLevel | None = None
+    sequences: ObjectLevel | None = None
+    events: ObjectLevel | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _off(cls, value: object) -> object:
+        return _yaml_off(value)
+
+    def over(self, strict: Strict) -> Strict:
+        """``strict`` with these levels in place of its own."""
+        return strict.model_copy(update=self.model_dump(exclude_none=True))
+
+
+def _strict_mapping(value: object) -> object:
+    match value:
+        case str() | False:
+            message = (
+                "`strict` is a mapping of levels per kind, such as `strict: {data: tables}`; "
+                "kinds left out take their defaults"
+            )
+            raise ValueError(message)
+        case _:
+            return value
 
 
 class Strategy(StrEnum):
@@ -424,8 +557,13 @@ class Promote(_Model):
     Each also gets an index of its images per group (``<spec>/<group>/index.json``), which
     stores that cannot list keys, like ``http``, are read through."""
     channel: str = "latest"
-    strict: StrictLevel = StrictLevel.COLUMNS
-    """The least strict strict-mode level an image may have been built with."""
+    strict: Strict = Strict()
+    """The least strict level, per kind, an image may have been built with."""
+
+    @field_validator("strict", mode="before")
+    @classmethod
+    def _strict(cls, value: object) -> object:
+        return _strict_mapping(value)
 
     @field_validator("to")
     @classmethod
@@ -633,8 +771,10 @@ class Spec(_Model):
     """Tables copied without their rows, as globs."""
     case_sensitive: bool = False
     """Whether table and column names match case-sensitively."""
-    strict: StrictLevel = StrictLevel.COLUMNS
-    """How new objects in the catalog fail the plan: ``off``, ``tables`` or ``columns``."""
+    strict: Strict = Strict()
+    """How differences from the catalog lock warn or fail, per kind: ``data`` (``off``,
+    ``tables`` or ``columns``), and ``functions``, ``views``, ``triggers``, ``types``,
+    ``sequences`` and ``events`` (``off``, ``warn`` or ``fail``)."""
     subset: Subset = Subset()
     """Which rows to copy: seeds, followed references and conditions."""
     anonymize: dict[str, dict[str, Rule]] = Field(default_factory=dict[str, dict[str, Rule]])
@@ -688,7 +828,7 @@ class Spec(_Model):
             exclude=files.exclude,
             case_sensitive=self.case_sensitive,
             # Every top-level directory must be selected or excluded instead.
-            strict=StrictLevel.OFF,
+            strict=Strict(data=StrictLevel.OFF),
             subset=Subset(as_of=self.subset.as_of, seeds=files.select),
             hooks=Hooks(after_transform=tuple(TransformHook(sql=line) for line in files.cleanup)),
             images=self.images,
@@ -712,9 +852,8 @@ class Spec(_Model):
 
     @field_validator("strict", mode="before")
     @classmethod
-    def _yaml_off(cls, value: object) -> object:
-        # YAML 1.1 reads `strict: off` as false.
-        return StrictLevel.OFF.value if value is False else value
+    def _strict(cls, value: object) -> object:
+        return _strict_mapping(value)
 
     @field_validator("name")
     @classmethod

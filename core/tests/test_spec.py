@@ -16,8 +16,11 @@ from datadouble.spec import (
     HashRule,
     ImageFormat,
     NullRule,
+    ObjectLevel,
     OnMissing,
     SpecError,
+    Strict,
+    StrictKind,
     StrictLevel,
     load_spec,
     parse_spec,
@@ -29,7 +32,9 @@ MINIMAL = "name: shop\nsource: {engine: postgres}\n"
 
 def test_minimal_spec_defaults() -> None:
     spec = parse_spec(MINIMAL)
-    assert spec.strict is StrictLevel.COLUMNS
+    assert spec.strict == Strict()
+    assert spec.strict.data is StrictLevel.COLUMNS
+    assert spec.strict.functions is ObjectLevel.WARN
     assert list(spec.images) == ["all"]
     assert spec.images[GroupName("all")].include == ("*",)
     assert spec.package.formats is None
@@ -47,7 +52,9 @@ source:
       env: SHOP_DSN
 exclude: ["dba_maint_*"]
 structure_only: [event_log]
-strict: tables
+strict:
+  data: tables
+  triggers: fail
 subset:
   as_of: 2026-11-09T00:00:00Z
   strategy: keys
@@ -107,7 +114,9 @@ secrets:
     file: /run/secrets/key
 """
     )
-    assert spec.strict is StrictLevel.TABLES
+    assert spec.strict.data is StrictLevel.TABLES
+    assert spec.strict.triggers is ObjectLevel.FAIL
+    assert spec.strict.views is ObjectLevel.WARN
     assert spec.subset.as_of is not None
     assert spec.subset.as_of.tzinfo is not None
     edges = spec.subset.edges
@@ -127,7 +136,16 @@ secrets:
 
 
 def test_yaml_off_is_the_off_level() -> None:
-    assert parse_spec(MINIMAL + "strict: off").strict is StrictLevel.OFF
+    strict = parse_spec(MINIMAL + "strict: {data: off, events: off}").strict
+    assert (strict.data, strict.events) == (StrictLevel.OFF, ObjectLevel.OFF)
+
+
+def test_strict_levels_compare_per_kind() -> None:
+    built = Strict(data=StrictLevel.TABLES, views=ObjectLevel.FAIL, events=ObjectLevel.OFF)
+    assert built.weaker(Strict()) == (StrictKind.DATA, StrictKind.EVENTS)
+    assert Strict.lowest().weaker(Strict.lowest()) == ()
+    assert not Strict().failing()
+    assert built.failing()
 
 
 def test_json_is_accepted() -> None:
@@ -147,7 +165,12 @@ def test_json_is_accepted() -> None:
     ("text", "location", "problem"),
     [
         ("name: Shop\nsource: {engine: postgres}", "name", "lowercase"),
-        (MINIMAL + "strict: sometimes", "strict", "Input should be"),
+        (MINIMAL + "strict: sometimes", "strict", "a mapping of levels per kind"),
+        (MINIMAL + "strict: off", "strict", "a mapping of levels per kind"),
+        (MINIMAL + "strict: {data: warn}", "strict.data", "Input should be"),
+        (MINIMAL + "strict: {functions: tables}", "strict.functions", "Input should be"),
+        (MINIMAL + "strict: {rules: off}", "strict.rules", "Extra inputs"),
+        (MINIMAL + "promote: {to: [{s3: {}}], strict: tables}", "promote.strict", "a mapping"),
         (MINIMAL + "surprise: 1", "surprise", "Extra inputs"),
         (MINIMAL + "images: {}", "images", "at least one image group"),
         (MINIMAL + "images: {Bad: {include: ['*']}}", "images", "lowercase"),

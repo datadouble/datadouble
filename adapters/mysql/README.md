@@ -9,6 +9,10 @@ and packages golden images as a data directory (`physical`) or a `mysqldump`
 script (`logical`). Servers, restores and `mysqldump` run in the official MySQL
 image of exactly the source's version, through the spec's container runtime.
 
+The adapter needs MySQL 8.0.13 or later, the first release that lists the
+tables a view reads; reading an older server's catalog fails, naming its
+version.
+
 ```yaml
 source:
   engine: mysql
@@ -101,3 +105,22 @@ installs each plugin in the working server, and the data directory keeps it,
 so later servers and copies of a physical image load it too. A plugin from
 another distribution, such as Percona's MyRocks, needs that distribution's
 image in `source.image`.
+
+## Objects
+
+The catalog lists the views, stored functions and procedures, triggers and
+events of every database read, named `database.object`, all under the one
+snapshot. A view's tables, views and functions come from
+`information_schema.VIEW_TABLE_USAGE` and `VIEW_ROUTINE_USAGE`, and a
+trigger's table from `information_schema.TRIGGERS`: those edges are exact,
+and may cross databases. MySQL counts the tables that a view's stored
+functions read as the view's own, so a view calling a function that reads
+`rental` has an exact edge to `rental` though its text never names it, and
+removing `rental` fails the plan naming the view. A view that reads a
+database not read, directly, through other views or through the functions
+it calls, is left out of the catalog as it is left out of the copies. MySQL records nothing else, so what routine, trigger and event
+bodies use is parsed from their text, matching names in any database read
+(an unqualified name means the object's own database first), and those
+edges are marked inferred. Reading a routine's body needs the `SHOW_ROUTINE` privilege, or
+owning the routine; without it the body reads as empty, so the routine's
+fingerprint cannot change and its edges are missing.

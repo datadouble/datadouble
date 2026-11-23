@@ -10,12 +10,17 @@ from datadouble.catalog import (
     CatalogError,
     CatalogLock,
     Change,
+    ChangeKind,
     ColumnKind,
+    Dependency,
     LockChange,
     ObjectKind,
+    ObjectRef,
     Requirement,
     RequirementKind,
+    SourceObject,
     changes,
+    definition_fingerprint,
     describe_changes,
     normalize,
     read_lock,
@@ -160,6 +165,68 @@ def test_a_lock_without_requirements_is_written_as_before(tmp_path: Path) -> Non
     assert read_lock(path) == lock
 
 
+AUDIT = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="audit", signature="()")
+USERS = TableName.of("public", "users")
+
+
+def test_objects_change_the_fingerprint_but_not_their_order() -> None:
+    plain = catalog(table("users", ["id"]))
+    trigger = SourceObject(
+        ref=ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="users_audit"),
+        fingerprint=definition_fingerprint("CREATE TRIGGER users_audit ..."),
+        depends_on=(Dependency(object=AUDIT, inferred=True), Dependency(table=USERS)),
+    )
+    function = SourceObject(ref=AUDIT, fingerprint=definition_fingerprint("BEGIN  END"))
+    with_two = plain.model_copy(update={"objects": (trigger, function)})
+    reordered = plain.model_copy(
+        update={
+            "objects": (
+                function,
+                trigger.model_copy(update={"depends_on": tuple(reversed(trigger.depends_on))}),
+            )
+        }
+    )
+    assert with_two.fingerprint() != plain.fingerprint()
+    assert with_two.fingerprint() == reordered.fingerprint()
+    assert with_two.object(AUDIT) == function
+    assert plain.object(AUDIT) is None
+    assert definition_fingerprint("BEGIN  END  \r\n") == function.fingerprint
+    assert definition_fingerprint("BEGIN END") != function.fingerprint
+    assert str(AUDIT) == "function public.audit()"
+    assert str(ObjectRef(kind=ObjectKind.TYPE, namespace=(), name="mood")) == "type mood"
+    assert [str(edge) for edge in normalize(with_two).objects[1].depends_on] == [
+        "function public.audit() (inferred)",
+        "table public.users",
+    ]
+    assert trigger.needs_table(frozenset({USERS}))
+    # Exact and inferred edges to one target sort the same whichever comes first.
+    tie = (Dependency(table=USERS), Dependency(table=USERS, inferred=True))
+    tied = [
+        normalize(
+            plain.model_copy(
+                update={"objects": (function.model_copy(update={"depends_on": edges}),)}
+            )
+        )
+        for edges in (tie, tuple(reversed(tie)))
+    ]
+    assert tied[0] == tied[1]
+    assert [edge.inferred for edge in tied[0].objects[0].depends_on] == [False, True]
+    with pytest.raises(ValueError, match="either a table or an object"):
+        Dependency()
+
+
+def test_a_lock_without_objects_is_written_as_before(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.lock"
+    write_lock(CatalogLock.of(catalog(table("users", ["id"]))), path)
+    assert "objects" not in json.loads(path.read_text(encoding="utf-8"))["catalog"]
+    function = SourceObject(ref=AUDIT, fingerprint=definition_fingerprint("x"))
+    lock = CatalogLock.of(
+        catalog(table("users", ["id"])).model_copy(update={"objects": (function,)})
+    )
+    write_lock(lock, path)
+    assert read_lock(path) == lock
+
+
 def test_unmet_requirements() -> None:
     available = (
         VECTOR.model_copy(update={"version": "0.8.7"}),
@@ -263,7 +330,7 @@ def test_changes_between_locks() -> None:
     ]
     assert changes(new, new) == ()
     assert changes(old, old.model_copy(update={"requirements": ()}))[-1] == LockChange(
-        change=Change.REMOVED, kind=ObjectKind.REQUIREMENT, object="extension vector"
+        change=Change.REMOVED, kind=ChangeKind.REQUIREMENT, object="extension vector"
     )
     versioned = Requirement(kind=RequirementKind.EXTENSION, name="v", version="1")
     unversioned = Requirement(kind=RequirementKind.EXTENSION, name="v")
@@ -272,6 +339,37 @@ def test_changes_between_locks() -> None:
         old.model_copy(update={"requirements": (versioned,)}),
     )
     assert changed.detail == "1, was no version"
+
+
+def test_changes_to_objects() -> None:
+    users = catalog(table("users", ["id"]))
+    function = SourceObject(ref=AUDIT, fingerprint=definition_fingerprint("BEGIN END"))
+    trigger = SourceObject(
+        ref=ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="users_audit"),
+        fingerprint=definition_fingerprint("CREATE TRIGGER users_audit ..."),
+        depends_on=(Dependency(table=USERS),),
+    )
+    before = users.model_copy(update={"objects": (function, trigger)})
+    rewritten = function.model_copy(update={"fingerprint": definition_fingerprint("BEGIN; END")})
+    rewired = trigger.model_copy(
+        update={"depends_on": (*trigger.depends_on, Dependency(object=AUDIT))}
+    )
+    view = SourceObject(
+        ref=ObjectRef(kind=ObjectKind.VIEW, namespace=("public",), name="recent"),
+        fingerprint=definition_fingerprint("SELECT 1"),
+    )
+    after = users.model_copy(update={"objects": (rewritten, rewired, view)})
+    assert [str(change) for change in changes(before, after)] == [
+        "changed function public.audit(): its definition",
+        "changed trigger public.users_audit: what it depends on",
+        "added view public.recent",
+    ]
+    assert [str(change) for change in changes(after, users)] == [
+        "removed function public.audit()",
+        "removed trigger public.users_audit",
+        "removed view public.recent",
+    ]
+    assert changes(before, before) == ()
 
 
 def test_changes_to_the_catalog_as_a_whole() -> None:
@@ -285,7 +383,7 @@ def test_changes_to_the_catalog_as_a_whole() -> None:
     twice = users.model_copy(update={"requirements": (vector, vector)})
     once = users.model_copy(update={"requirements": (vector,)})
     (whole,) = changes(twice, once)
-    assert whole.kind is ObjectKind.CATALOG
+    assert whole.kind is ChangeKind.CATALOG
     assert whole.object == "fingerprint"
 
 
@@ -299,7 +397,7 @@ def test_describing_changes() -> None:
         "no earlier lock to compare with: check every table and column in it for personal data",
     )
     assert describe_changes(()) == ("no changes from the earlier lock",)
-    added = LockChange(change=Change.ADDED, kind=ObjectKind.TABLE, object="public.tags")
+    added = LockChange(change=Change.ADDED, kind=ChangeKind.TABLE, object="public.tags")
     assert describe_changes((added,)) == (
         "1 change(s) from the earlier lock; check new and changed columns for personal data:",
         "  added table public.tags",

@@ -53,8 +53,8 @@ fails, read its temporary files, then remove them with `make clean-work`.
 - **JSON in / JSON out is the primary interface.** The CLI only builds JSON
   requests; never add behavior that exists in one interface but not the other.
 - **Fail loudly.** No silent configuration merges, and no warn-and-continue for
-  anything that could put real personal data into a copy. `strict: columns` is
-  the default.
+  anything that could put real personal data into a copy. `strict: {data:
+  columns}` is the default.
 - **Real personal data stays in production.** Only a verified golden image
   crosses out, through `promote`. CI/CD adapters and agent skills contain no
   pipeline logic; they only drive `datadouble` commands.

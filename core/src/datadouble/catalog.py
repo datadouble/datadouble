@@ -4,17 +4,20 @@
 """Catalogs and catalog locks.
 
 An engine adapter introspects a source into a :class:`Catalog`: its tables,
-columns, primary keys and foreign keys, and the add-ons the source depends on
-(its :class:`Requirement` list). ``datadouble lock`` writes the catalog
-to ``catalog.lock`` next to the spec, listing what changed since the lock it
-replaces (:func:`changes`), and strict mode compares the live catalog against
-it at plan time.
+columns, primary keys and foreign keys, the add-ons the source depends on
+(its :class:`Requirement` list), and its other objects (functions, views,
+triggers and the like, as :class:`SourceObject`), each with a fingerprint of
+its definition and the tables and objects it depends on. ``datadouble lock``
+writes the catalog to ``catalog.lock`` next to the spec, listing what changed
+since the lock it replaces (:func:`changes`), and strict mode compares the
+live catalog against it at plan time.
 
-A lock holds names, engine type names, keys and requirement versions, never
-data values, so it may be published where data may not (decision 123). An
-engine's type name can carry schema literals, such as a MySQL ``enum`` or
-``set`` column's labels; they are part of the schema, already in the
-committed lock, so publishing the lock exposes nothing more.
+A lock holds names, engine type names, keys, requirement versions and
+fingerprints of object definitions, never data values, so it may be published
+where data may not (decision 123). An engine's type name can carry schema
+literals, such as a MySQL ``enum`` or ``set`` column's labels; they are part
+of the schema, already in the committed lock, so publishing the lock exposes
+nothing more.
 """
 
 import hashlib
@@ -23,7 +26,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from datadouble.names import ColumnName, EngineName, TableName
 
@@ -115,6 +118,102 @@ class Requirement(_Model):
         return " ".join(part for part in (self.kind.value, self.name, self.version) if part)
 
 
+class ObjectKind(StrEnum):
+    """The engine-neutral kinds of object besides tables."""
+
+    FUNCTION = "function"
+    PROCEDURE = "procedure"
+    PACKAGE = "package"
+    """A package of routines, such as Oracle's; its specification and body together."""
+    VIEW = "view"
+    MATERIALIZED_VIEW = "materialized-view"
+    TRIGGER = "trigger"
+    TYPE = "type"
+    SEQUENCE = "sequence"
+    EVENT = "event"
+
+
+class ObjectRef(_Model):
+    """Which object: its kind, namespaces and name, and a routine's argument types.
+
+    ``namespace`` is the path of namespaces holding it, outermost first, as a
+    table's is (:class:`~datadouble.names.TableName`): ``(database, schema)``
+    for PostgreSQL. ``signature`` tells overloaded routines apart, as
+    ``(integer, text)``.
+    """
+
+    kind: ObjectKind
+    namespace: tuple[str, ...]
+    name: str
+    signature: str | None = None
+
+    def __str__(self) -> str:
+        """``function shop.public.total(integer)``."""
+        return f"{self.kind} {'.'.join((*self.namespace, self.name))}{self.signature or ''}"
+
+
+class Dependency(_Model):
+    """A table or object another object needs.
+
+    ``inferred`` marks an edge found by parsing a definition's text rather
+    than read from the engine's own dependency records, so a person knows to
+    check it.
+    """
+
+    table: TableName | None = None
+    object: ObjectRef | None = None
+    inferred: bool = False
+
+    @model_validator(mode="after")
+    def _one_target(self) -> "Dependency":
+        if (self.table is None) == (self.object is None):
+            message = "a dependency names either a table or an object"
+            raise ValueError(message)
+        return self
+
+    def __str__(self) -> str:
+        """``table public.users``, or the object, with ``(inferred)`` when it is."""
+        target = f"table {self.table}" if self.object is None else str(self.object)
+        return f"{target} (inferred)" if self.inferred else target
+
+
+class SourceObject(_Model):
+    """An object besides a table: a routine, view, trigger, type, sequence or event."""
+
+    ref: ObjectRef
+    fingerprint: str
+    """A SHA-256 over the definition, as :func:`definition_fingerprint` computes it."""
+    depends_on: tuple[Dependency, ...] = ()
+    """The tables and objects it needs, such as a trigger's table and function."""
+
+    def needs_table(self, names: frozenset[TableName]) -> bool:
+        """Whether an exact edge says it depends on any of the tables in ``names``."""
+        return any(edge.table in names for edge in self.depends_on if not edge.inferred)
+
+    def needs_only(self, names: frozenset[TableName]) -> bool:
+        """Whether its exact edges name tables, all of them in ``names``."""
+        tables = {edge.table for edge in self.depends_on if edge.table and not edge.inferred}
+        return bool(tables) and tables <= names
+
+
+def definition_fingerprint(definition: str) -> str:
+    """A SHA-256 over an object's definition as written.
+
+    Only line endings and whitespace at the ends of lines are normalized:
+    elsewhere whitespace can matter, inside a string literal or in an
+    indentation-sensitive body such as PL/Python's.
+    """
+    lines = definition.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    text = "\n".join(line.rstrip() for line in lines).strip("\n")
+    return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
+def _edge_key(edge: Dependency) -> tuple[str, str, bool]:
+    if edge.object is None:
+        return ("table", str(edge.table), edge.inferred)
+    return ("object", str(edge.object), edge.inferred)
+
+
 class Catalog(_Model):
     """Everything strict mode and the planner need to know about a source."""
 
@@ -122,6 +221,12 @@ class Catalog(_Model):
     tables: tuple[Table, ...]
     requirements: tuple[Requirement, ...] = ()
     """What the source needs beyond the server: extensions, plugins, modules."""
+    objects: tuple[SourceObject, ...] = ()
+    """Routines, views, triggers, types, sequences and events, for engines that have them."""
+
+    def object(self, ref: ObjectRef) -> SourceObject | None:
+        """The object ``ref`` names, if there is one."""
+        return next((found for found in self.objects if found.ref == ref), None)
 
     def requirement(self, name: str) -> Requirement | None:
         """The requirement called ``name``, if there is one."""
@@ -147,7 +252,7 @@ class Catalog(_Model):
 
 
 def normalize(catalog: Catalog) -> Catalog:
-    """Sort tables, foreign keys and requirements, so equal catalogs compare equal.
+    """Sort tables, foreign keys, requirements and objects, so equal catalogs compare equal.
 
     Column order is kept: it is part of a table's definition.
     """
@@ -161,6 +266,12 @@ def normalize(catalog: Catalog) -> Catalog:
             for table in tables
         ),
         requirements=tuple(sorted(catalog.requirements, key=lambda r: (r.kind, r.name))),
+        objects=tuple(
+            item.model_copy(
+                update={"depends_on": tuple(sorted(set(item.depends_on), key=_edge_key))}
+            )
+            for item in sorted(catalog.objects, key=lambda item: str(item.ref))
+        ),
     )
 
 
@@ -170,6 +281,9 @@ def _canonical(catalog: Catalog) -> str:
     # locks written then stay valid.
     if not catalog.requirements:
         del form["requirements"]
+    # Likewise objects, for engines that report none.
+    if not catalog.objects:
+        del form["objects"]
     return json.dumps(form, sort_keys=True, separators=(",", ":"))
 
 
@@ -192,6 +306,8 @@ def write_lock(lock: CatalogLock, path: Path) -> None:
     form = lock.model_dump(mode="json")
     if not lock.catalog.requirements:
         del form["catalog"]["requirements"]
+    if not lock.catalog.objects:
+        del form["catalog"]["objects"]
     text = json.dumps(form, indent=2, sort_keys=True)
     try:
         path.write_text(text + "\n", encoding="utf-8")
@@ -224,8 +340,8 @@ class Change(StrEnum):
     CHANGED = "changed"
 
 
-class ObjectKind(StrEnum):
-    """The kinds of object a lock records."""
+class ChangeKind(StrEnum):
+    """What a lock change is about, besides the objects of :class:`ObjectKind`."""
 
     TABLE = "table"
     COLUMN = "column"
@@ -240,7 +356,7 @@ class LockChange(_Model):
     """One difference between an earlier lock and a new one: names and types, never values."""
 
     change: Change
-    kind: ObjectKind
+    kind: ChangeKind | ObjectKind
     object: str
     """``public.customer``, ``public.customer.email``, ``public.orders fk_customer``..."""
     detail: str = ""
@@ -270,11 +386,11 @@ def _was(old: str, new: str) -> str:
 
 def _added_table(table: Table) -> list[LockChange]:
     """A new table, each of its columns and its keys: every new column is someone's to check."""
-    found = [LockChange(change=Change.ADDED, kind=ObjectKind.TABLE, object=str(table.name))]
+    found = [LockChange(change=Change.ADDED, kind=ChangeKind.TABLE, object=str(table.name))]
     found.extend(
         LockChange(
             change=Change.ADDED,
-            kind=ObjectKind.COLUMN,
+            kind=ChangeKind.COLUMN,
             object=f"{table.name}.{column.name}",
             detail=_column(column),
         )
@@ -284,7 +400,7 @@ def _added_table(table: Table) -> list[LockChange]:
         found.append(
             LockChange(
                 change=Change.ADDED,
-                kind=ObjectKind.PRIMARY_KEY,
+                kind=ChangeKind.PRIMARY_KEY,
                 object=str(table.name),
                 detail=_key(table.primary_key),
             )
@@ -292,7 +408,7 @@ def _added_table(table: Table) -> list[LockChange]:
     found.extend(
         LockChange(
             change=Change.ADDED,
-            kind=ObjectKind.FOREIGN_KEY,
+            kind=ChangeKind.FOREIGN_KEY,
             object=f"{table.name} {key.name}",
             detail=_reference(key),
         )
@@ -311,7 +427,7 @@ def _order(old: Table, new: Table) -> list[LockChange]:
     return [
         LockChange(
             change=Change.CHANGED,
-            kind=ObjectKind.TABLE,
+            kind=ChangeKind.TABLE,
             object=str(new.name),
             detail=f"column order {_was(_key(before), _key(after))}",
         )
@@ -326,18 +442,18 @@ def _columns(old: Table, new: Table) -> list[LockChange]:
         name = f"{new.name}.{column.name}"
         current = after.get(column.name)
         if current is None:
-            found.append(LockChange(change=Change.REMOVED, kind=ObjectKind.COLUMN, object=name))
+            found.append(LockChange(change=Change.REMOVED, kind=ChangeKind.COLUMN, object=name))
         elif current != column:
             detail = _was(_column(column), _column(current))
             found.append(
                 LockChange(
-                    change=Change.CHANGED, kind=ObjectKind.COLUMN, object=name, detail=detail
+                    change=Change.CHANGED, kind=ChangeKind.COLUMN, object=name, detail=detail
                 )
             )
     found.extend(
         LockChange(
             change=Change.ADDED,
-            kind=ObjectKind.COLUMN,
+            kind=ChangeKind.COLUMN,
             object=f"{new.name}.{column.name}",
             detail=_column(column),
         )
@@ -353,7 +469,7 @@ def _keys(old: Table, new: Table) -> list[LockChange]:
         found.append(
             LockChange(
                 change=Change.CHANGED,
-                kind=ObjectKind.PRIMARY_KEY,
+                kind=ChangeKind.PRIMARY_KEY,
                 object=str(new.name),
                 detail=_was(_key(old.primary_key), _key(new.primary_key)),
             )
@@ -365,13 +481,13 @@ def _keys(old: Table, new: Table) -> list[LockChange]:
         what = f"{new.name} {name}"
         if new_key is None:
             found.append(
-                LockChange(change=Change.REMOVED, kind=ObjectKind.FOREIGN_KEY, object=what)
+                LockChange(change=Change.REMOVED, kind=ChangeKind.FOREIGN_KEY, object=what)
             )
         elif old_key is None:
             found.append(
                 LockChange(
                     change=Change.ADDED,
-                    kind=ObjectKind.FOREIGN_KEY,
+                    kind=ChangeKind.FOREIGN_KEY,
                     object=what,
                     detail=_reference(new_key),
                 )
@@ -380,7 +496,7 @@ def _keys(old: Table, new: Table) -> list[LockChange]:
             found.append(
                 LockChange(
                     change=Change.CHANGED,
-                    kind=ObjectKind.FOREIGN_KEY,
+                    kind=ChangeKind.FOREIGN_KEY,
                     object=what,
                     detail=_was(_reference(old_key), _reference(new_key)),
                 )
@@ -397,13 +513,13 @@ def _requirements(old: Catalog, new: Catalog) -> list[LockChange]:
         what = f"{key[0]} {key[1]}"
         if current is None:
             found.append(
-                LockChange(change=Change.REMOVED, kind=ObjectKind.REQUIREMENT, object=what)
+                LockChange(change=Change.REMOVED, kind=ChangeKind.REQUIREMENT, object=what)
             )
         elif earlier is None:
             found.append(
                 LockChange(
                     change=Change.ADDED,
-                    kind=ObjectKind.REQUIREMENT,
+                    kind=ChangeKind.REQUIREMENT,
                     object=what,
                     detail=current.version or "",
                 )
@@ -412,9 +528,39 @@ def _requirements(old: Catalog, new: Catalog) -> list[LockChange]:
             found.append(
                 LockChange(
                     change=Change.CHANGED,
-                    kind=ObjectKind.REQUIREMENT,
+                    kind=ChangeKind.REQUIREMENT,
                     object=what,
                     detail=_was(earlier.version or "no version", current.version or "no version"),
+                )
+            )
+    return found
+
+
+def _objects(old: Catalog, new: Catalog) -> list[LockChange]:
+    """Objects added, removed, or changed in definition or in what they depend on."""
+    found: list[LockChange] = []
+    before = {str(o.ref): o for o in old.objects}
+    after = {str(o.ref): o for o in new.objects}
+    refs = {str(o.ref): o.ref for o in (*old.objects, *new.objects)}
+    for key in sorted(refs):
+        earlier, current, ref = before.get(key), after.get(key), refs[key]
+        what = f"{'.'.join((*ref.namespace, ref.name))}{ref.signature or ''}"
+        if current is None:
+            found.append(LockChange(change=Change.REMOVED, kind=ref.kind, object=what))
+        elif earlier is None:
+            found.append(LockChange(change=Change.ADDED, kind=ref.kind, object=what))
+        elif earlier.fingerprint != current.fingerprint:
+            found.append(
+                LockChange(
+                    change=Change.CHANGED, kind=ref.kind, object=what, detail="its definition"
+                )
+            )
+        elif sorted(map(_edge_key, earlier.depends_on)) != sorted(
+            map(_edge_key, current.depends_on)
+        ):
+            found.append(
+                LockChange(
+                    change=Change.CHANGED, kind=ref.kind, object=what, detail="what it depends on"
                 )
             )
     return found
@@ -428,7 +574,7 @@ def changes(old: Catalog, new: Catalog) -> tuple[LockChange, ...]:
     for name in sorted(old_tables.keys() | new_tables.keys()):
         before, after = old_tables.get(name), new_tables.get(name)
         if after is None:
-            found.append(LockChange(change=Change.REMOVED, kind=ObjectKind.TABLE, object=str(name)))
+            found.append(LockChange(change=Change.REMOVED, kind=ChangeKind.TABLE, object=str(name)))
         elif before is None:
             found.extend(_added_table(after))
         else:
@@ -436,11 +582,12 @@ def changes(old: Catalog, new: Catalog) -> tuple[LockChange, ...]:
             found.extend(_order(before, after))
             found.extend(_keys(before, after))
     found.extend(_requirements(old, new))
+    found.extend(_objects(old, new))
     if old.engine != new.engine:
         found.append(
             LockChange(
                 change=Change.CHANGED,
-                kind=ObjectKind.CATALOG,
+                kind=ChangeKind.CATALOG,
                 object="engine",
                 detail=_was(old.engine, new.engine),
             )
@@ -449,10 +596,10 @@ def changes(old: Catalog, new: Catalog) -> tuple[LockChange, ...]:
         found.append(
             LockChange(
                 change=Change.CHANGED,
-                kind=ObjectKind.CATALOG,
+                kind=ChangeKind.CATALOG,
                 object="fingerprint",
                 detail=(
-                    "the locks differ, though in no table, column, key or requirement;"
+                    "the locks differ, though in no table, column, key, requirement or object;"
                     " compare the two files"
                 ),
             )

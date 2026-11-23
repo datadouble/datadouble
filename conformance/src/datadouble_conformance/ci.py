@@ -66,7 +66,8 @@ source:
     dsn:
       env: DDCI_SOURCE_DSN
 runtime: {runtime}
-strict: {strict}
+strict:
+  data: {strict}
 subset:
   seeds:
     customer: "id <= 5"
@@ -286,7 +287,7 @@ class World:
         return self.repository / "datadouble" / f"{mode}.yml"
 
     def write_spec(self, mode: str, *, limit: int = 1000, strict: str = "columns") -> Path:
-        """Write a spec; ``limit`` below 5 fails verification."""
+        """Write a spec; ``limit`` below 5 fails verification, and ``strict`` is ``strict.data``."""
         path = self.spec(mode)
         size = 1 if mode == "on-demand" else 2
         text = _SPEC.format(

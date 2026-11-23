@@ -28,7 +28,7 @@ from datadouble.engine import ServerPlan
 from datadouble.images import ImageIdentity, ImageSummary, Verification
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.replicate import ClaimState, Copy, CopyKind, CopyState, ReplicateError
-from datadouble.spec import ReplicateMode, StrictLevel
+from datadouble.spec import ReplicateMode, Strict
 from datadouble_conformance.engine import runtime_for_tests
 from datadouble_docker import DockerReplicator, DockerSettings, docker_binary
 from datadouble_postgres import PostgresEngine
@@ -262,7 +262,7 @@ def summary() -> ImageSummary:
         archives=(),
         manifest_sha256="0" * 64,
         verification=Verification(passed=True, checks=1, failed=0),
-        strict=StrictLevel.COLUMNS,
+        strict=Strict(),
     )
 
 

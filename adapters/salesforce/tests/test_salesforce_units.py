@@ -28,6 +28,7 @@ from datadouble.spec import (
     NullOptions,
     NullRule,
     StrictLevel,
+    StrictOverrides,
     TransformHook,
     parse_spec,
 )
@@ -706,7 +707,7 @@ def _plan() -> Plan:
         "name: crm\nsource: {engine: salesforce, connection: {fake: x}}\n"
         "subset: {seeds: {Account: 'Id != null'}}\nstore: [{filesystem: {path: /tmp/store}}]\n"
     )
-    options = PlanOptions(strict=StrictLevel.OFF)
+    options = PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF))
     return plan(spec, catalog, None, SalesforceEngine().capabilities(), options)
 
 
@@ -820,7 +821,13 @@ def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPat
         "store: [{filesystem: {path: /tmp/store}}]\n"
     )
     capabilities = SalesforceEngine().capabilities()
-    planned = plan(spec, source.catalog(), None, capabilities, PlanOptions(strict=StrictLevel.OFF))
+    planned = plan(
+        spec,
+        source.catalog(),
+        None,
+        capabilities,
+        PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF)),
+    )
     ids = frozenset((f"001{n:012d}AAA",) for n in range(1, 31))
     retail = Predicate("Industry = 'Retail'")
     overlapping = AnyOf((ValuesIn((ColumnName("Id"),), ids), retail))

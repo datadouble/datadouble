@@ -17,8 +17,10 @@ boundary, after `build`.
   Point `promote.to` at the directory or bucket itself, never at `http`.
   `promote` lists each export store to rebuild the index, so S3 export
   stores need `s3:ListBucket` for `promote`'s credentials.
-- `promote.strict`: the strict-mode level an image must have been built with
-  (`columns` by default). Never lower it to let an image through (rule 4).
+- `promote.strict`: the least strict level, per kind, an image may have been
+  built with, as a mapping like the spec's `strict` (`data: columns` and
+  `warn` for each kind of object by default). Never lower it to let an image
+  through (rule 4).
 - `trust`: how promote checks the image's signature (a public key, or the
   identity and issuer for keyless signing).
 

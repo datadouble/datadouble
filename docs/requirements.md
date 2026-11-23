@@ -26,8 +26,10 @@
    native format. Conversion fails on schema mismatch. See [Jailer](jailer.md).
 5. **Excludes** by schema and table name with wildcard support, e.g.
    `exclude: ["dba_maint_*", "test_*"]`.
-6. **Strict mode**, on by default at its strictest level, failing when the planned
-   extract contains tables (and optionally columns) unknown to the subset model.
+6. **Strict mode**, on by default: tables and columns at their strictest level
+   (`data: columns`), failing when the planned extract contains tables or
+   columns unknown to the subset model, while changes to functions, views,
+   triggers and other objects warn unless they break something.
    See [excludes and strict mode](excludes-and-strict-mode.md).
 7. **Resumable, chainable stages.** Several stages run in one command; a failed
    run resumes from the last completed stage.
