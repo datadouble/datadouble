@@ -1,0 +1,91 @@
+Dockerfile
+  s_ad63f2bf16b775::t_7740ff47a0da6f 35,80
+sonar-project.properties
+  s_ad63f2bf16b775::t_039e009e05b087 8-9
+adapters/http/pyproject.toml
+  s_ad63f2bf16b775::t_27630f37b91f03 1-38
+skills/datadouble-fetch/SKILL.md
+  s_ad63f2bf16b775::t_de7c7566c49add 16-33
+tests/scripts/test_integration_groups.py
+  s_ad63f2bf16b775::t_189f59c57423ee 84
+docs/decisions.md
+  s_ad63f2bf16b775::t_6a97acdf7e5f50 126
+core/src/datadouble/storage.py
+  s_ad63f2bf16b775::t_69598e58ccc271 10-13,33-36,72-75
+pyproject.toml
+  s_ad63f2bf16b775::t_6a965c8065bc4e 38,60,89,162,225-226,242,279-280,317,362
+compose.yaml
+  s_ad63f2bf16b775::t_80474d66342a05 43-49,56-57,194-212,342-343
+adapters/http/LICENSE
+  s_ad63f2bf16b775::t_5abd797e400710 1-21
+core/tests/test_operations.py
+  s_ad63f2bf16b775::t_9875f2630280ab 6,11-12,34,36,42,69-72,74,347-444
+docs/external-services.md
+  s_ad63f2bf16b775::t_74a2907ed3425b 127
+uv.lock
+  s_ad63f2bf16b775::t_dc32c1c9728359 20,561-575,765,805
+adapters/http/src/datadouble_http/__init__.py
+  s_ad63f2bf16b775::t_632e1175adc8fc 93-100
+  s_ad63f2bf16b775::t_c49ca8df12fd5b 1-92,101-245
+  s_ad63f2bf16b775::t_55a7fbdad20635 246-252
+docs/architecture.md
+  s_ad63f2bf16b775::t_988cb770be69ca 117
+core/src/datadouble/promote.py
+  s_ad63f2bf16b775::t_6487152a433e21 8-10,27-34,157
+dev/https/Dockerfile
+  s_ad63f2bf16b775::t_c0acc9e42a4cb0 1-14
+dev/https/start.sh
+  s_ad63f2bf16b775::t_1680e7a3f082ea 1-21
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_d3398dd2898006 400-402,430-432
+adapters/http/tests/test_http.py
+  s_ad63f2bf16b775::t_d7e91c91c711e6 1-180,194,197
+  s_ad63f2bf16b775::t_73919e410798fd 181-182
+  s_ad63f2bf16b775::t_738d9cae58298f 183-193,195-196,198-212
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_218d3ea753e092 46-69,120-127
+skills/datadouble-prune/SKILL.md
+  s_ad63f2bf16b775::t_4aa107621b8135 15-20
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_cc7e89e8267ff4 119,279
+CHANGELOG.md
+  s_ad63f2bf16b775::t_508ba5b2fba347 12-27
+core/tests/test_storage_images.py
+  s_ad63f2bf16b775::t_2c5795d0e5d853 10-22,24-30,120-144
+adapters/http/README.md
+  s_ad63f2bf16b775::t_92fbe1e5177726 1-84
+  s_ad63f2bf16b775::t_f49de4b9ca179a 85-86
+dev/https/Caddyfile
+  s_ad63f2bf16b775::t_2e567b9ebf621e 1-19
+TESTING.md
+  s_ad63f2bf16b775::t_b3e3a42caf79f4 104
+skills/datadouble-promote/SKILL.md
+  s_ad63f2bf16b775::t_09dd847d12f6a6 14-17
+  s_ad63f2bf16b775::t_b7746444fec94c 18-19
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_ae3d6ff372d250 21-23
+core/src/datadouble/prune.py
+  s_ad63f2bf16b775::t_bbf9638bafdfd9 11-13,26,146-154,241-247
+core/src/datadouble/images.py
+  s_ad63f2bf16b775::t_cdd40b0a78e91e 16-19,29,33,160-200,204-215,225-237
+tests/integration-groups.txt
+  s_ad63f2bf16b775::t_20950a750df33d 13
+core/tests/fakes.py
+  s_ad63f2bf16b775::t_cf9e2c7b1332bf 4,16-17,20-21,229-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d141531ef7509f874b2be5f39c4870d4964f8cdf",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
