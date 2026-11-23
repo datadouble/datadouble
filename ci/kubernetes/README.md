@@ -35,6 +35,11 @@ suspended when it has none. Start one by hand with `kubectl create job
 --from=cronjob/...`. A job that follows another runs as a later step of that
 job's pod, so `promote` runs after a successful `build`, and a pool's
 `provision` after `fetch`; each also has its own CronJob for running alone.
+A Job runs a failed pod once more (`backoffLimit: 1`), which resumes a
+failed build's generation, but a failed follower fails the Job at once
+(`podFailurePolicy`): running the pod again would run its leader again, so
+a build whose `promote` was refused would build, and notify, twice. Run the
+follower's own CronJob once its problem is fixed.
 `activate` reads its generation, and `prune` its dry run, from the values
 (`generation`, `dryRun`).
 
@@ -95,9 +100,9 @@ The spec's `notify` section says who hears about a job that fails or warns.
 Each step names its job (`--ci-job`), so Datadouble posts the spec's webhooks
 itself after each step's command; a Job has no web page, so `run_url` is
 null. A Job runs a failed pod once more (`backoffLimit: 1`), and each attempt
-posts, so a failure usually notifies twice. Put the webhook's variable in
-the side's Secret like the others. A
-webhook that cannot be reached is a warning line in the log; the Job's
+posts, so a failure usually notifies twice; a failed follower is not run
+again (see [Jobs](#jobs)), so it, and the leader before it, notify once. Put
+the webhook's variable in the side's Secret like the others. A webhook that cannot be reached is a warning line in the log; the Job's
 result is unchanged.
 
 Kubernetes Jobs have no mail mechanism, so `ci init` fails for `notify`'s

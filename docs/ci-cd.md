@@ -442,6 +442,9 @@ job's log), and `run_url` is the system's page for the run (null on Argo CD, whe
 a Job has none). Each attempt at a job posts, so a system that runs a failed
 job again (a Kubernetes Job's `backoffLimit`) notifies once per attempt, and
 a follower in the same run (promote after build) notifies as its own job.
+Argo CD never runs a pod again for its follower's failure (a
+`podFailurePolicy` fails the Job), since that would run the leader again:
+a build that warned would build, and notify, a second time.
 The body carries names, codes and outcomes, never data
 values or secrets (decisions 18 and 54). A webhook that cannot be posted to
 (a timeout of ten seconds, a refused connection, a redirect or other status

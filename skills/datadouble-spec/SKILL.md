@@ -163,5 +163,10 @@ notify:
 - A failed notification never changes a job's outcome, and a job that fails
   before Datadouble starts (an image that cannot be pulled) posts no
   webhook: the CI system's own failure notifications cover that.
+- Each attempt posts, so a job the system runs again after a failure (a
+  Kubernetes Job's `backoffLimit`) usually notifies twice. On Argo CD a
+  failed follower (`promote` after `build`) fails the Job without running
+  the pod again, so its leader is not built, or heard from, twice; tell the
+  person to run the follower's own CronJob once its problem is fixed.
 - After changing `notify`, run `ci init` again for both sides, so every job
   gets the webhook's variable, and tell the person to define it.

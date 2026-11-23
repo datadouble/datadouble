@@ -295,6 +295,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Argo CD: a failed follower (`promote` after `build`, a pool's `provision`
+  after `fetch`) made the Job run its pod again, so the leader ran a second
+  time; a build whose promote was refused built, and notified, twice. A
+  follower's failure now fails the Job at once (`podFailurePolicy`), and
+  its own CronJob runs it again
+  ([#69](https://github.com/datadouble/datadouble/issues/69)).
 - **BREAKING: a kept table that no seed or followed reference selects now
   fails the plan** ([#65](https://github.com/datadouble/datadouble/issues/65)).
   Until now such a table was copied without rows and nothing said so: a spec

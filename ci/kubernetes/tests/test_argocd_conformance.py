@@ -604,6 +604,32 @@ def _at(value: JsonValue, *path: str) -> JsonValue:
 GOLDEN = Path(__file__).parent / "golden"
 
 
+def _retried_without(job: dict[str, JsonValue]) -> bool:
+    """Whether a Job fails at once when a follower's step fails, rather than running again.
+
+    Running the pod again would run its leader again: a build whose promote
+    was refused would build, and notify, twice.
+    """
+    spec = _at(job, "spec", "jobTemplate", "spec") if job["kind"] == "CronJob" else job["spec"]
+    pod = _at(spec, "template", "spec")
+    containers = [*(_list(_at(pod, "initContainers"))), *(_list(_at(pod, "containers")))]
+    steps: list[tuple[str, str]] = []
+    for container in containers:
+        arguments = _list(_at(container, "args"))
+        steps.append((str(_at(container, "name")), str(arguments[arguments.index("--ci-job") + 1])))
+    followers = [name for name, step in steps if step != steps[0][1]]
+    rules = _list(_at(spec, "podFailurePolicy", "rules"))
+    failing = [_at(rule, "onExitCodes", "containerName") for rule in rules]
+    return failing == followers and all(_at(rule, "action") == "FailJob" for rule in rules)
+
+
+def _list(value: JsonValue) -> list[JsonValue]:
+    if value is None:
+        return []
+    assert isinstance(value, list)
+    return value
+
+
 def test_golden_files_render_and_validate(tmp_path: Path) -> None:
     files = sorted(GOLDEN.glob("*/*.golden"))
     assert files
@@ -629,6 +655,8 @@ def test_golden_files_render_and_validate(tmp_path: Path) -> None:
                 assert hooks <= {"PreSync", "PostDelete"}, golden.name
             else:
                 assert all(d["kind"] == "CronJob" for d in jobs), golden.name
+            for job in jobs:
+                assert _retried_without(_OBJECT.validate_python(job)), golden.name
             checked = run_program(
                 "kubeconform", ["-strict", "-summary", str(tmp_path / "rendered.yaml")]
             )
