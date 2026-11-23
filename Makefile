@@ -96,16 +96,18 @@ clean-work:
 		find $(HOST_WORK) -mindepth 1 -delete
 
 # Opt-in groups that need privileged containers: k3s, and a loop-mounted btrfs.
+# EXTRA_COMPOSE adds Compose files here too, such as CI's registry mirror for
+# k3s (compose.mirror.yaml).
 test-k8s:
-	docker compose --profile k8s up --build --abort-on-container-exit --exit-code-from test-k8s k3s test-k8s; \
+	$(COMPOSE) --profile k8s up --build --abort-on-container-exit --exit-code-from test-k8s k3s test-k8s; \
 	status=$$?; \
-	docker compose --profile k8s down --volumes; \
+	$(COMPOSE) --profile k8s down --volumes; \
 	exit $$status
 
 test-btrfs:
-	docker compose --profile btrfs up --build --abort-on-container-exit --exit-code-from test-btrfs test-btrfs; \
+	$(COMPOSE) --profile btrfs up --build --abort-on-container-exit --exit-code-from test-btrfs test-btrfs; \
 	status=$$?; \
-	docker compose --profile btrfs down --volumes; \
+	$(COMPOSE) --profile btrfs down --volumes; \
 	exit $$status
 
 # The CI/CD conformance suite for one system, such as `make test-ci

@@ -1,0 +1,23 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# CI only: k3s pulls its own images (its pause, CoreDNS and storage images,
+# and the images the tests' pods run) with its own containerd, which doesn't
+# use the runner's Docker daemon or its registry mirror. This gives k3s the
+# same mirror for Docker Hub (decision 138): `make test-k8s
+# EXTRA_COMPOSE=compose.mirror.yaml`. k3s still pulls from Docker Hub itself
+# when the mirror fails.
+
+services:
+  k3s:
+    configs:
+      - source: k3s-registries
+        target: /etc/rancher/k3s/registries.yaml
+
+configs:
+  k3s-registries:
+    content: |
+      mirrors:
+        docker.io:
+          endpoint:
+            - https://mirror.gcr.io
