@@ -25,9 +25,13 @@ boundary, with read-only credentials for the export store alone.
       index is missing: the export store was not filled by `promote`, so
       promote again rather than writing an index by hand.
     - `HTTP 403` usually means the web server cannot read the files
-      `promote` wrote (the filesystem store makes them readable only by
-      `promote`'s user); `HTTP 401`, wrong credentials; "certificate
-      verification failed", a `ca_bundle` that does not trust the server.
+      `promote` wrote. The filesystem store's `mode` (`"0640"` by default)
+      lets only `promote`'s user and group read them, and directories it
+      creates get the mode plus search (`0750`); directories that already
+      existed keep theirs. Put the server in that group, or set
+      `mode: "0644"` on `promote.to`'s filesystem store. `HTTP 401` means
+      wrong credentials; "certificate verification failed", a `ca_bundle`
+      that does not trust the server.
     - `auth` is `basic: {username: ..., password: ...}` or `bearer: ...`,
       each a secret reference like `{env: EXPORT_TOKEN}`, never a value.
       `ca_bundle` is a file path for an internal CA.

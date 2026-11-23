@@ -56,6 +56,25 @@ basic auth or a bearer token given as secret references, and optionally its
 own CA bundle. Any write through it fails, naming the store. See the
 [adapter's README](https://github.com/datadouble/datadouble/tree/main/adapters/http).
 
+The filesystem store takes `path`, the directory, and `mode`, an octal string
+such as `"0640"`, the default. Every file it writes gets that mode whatever
+the umask, set before the file is renamed into place, and every directory it
+creates gets the mode plus the search bit wherever the mode has the read bit
+(`0640` gives `0750`, `0644` gives `0755`), so whoever can read the files can
+reach them. Directories that already exist keep their mode. A web server
+serving an export store reads `promote`'s files when it runs in the group of
+`promote`'s user with the default mode, or as anyone with `"0644"`. Modes
+that let anyone but the owner write, or that leave the owner unable to read
+and write, are refused when the store's settings are read, naming `mode`.
+
+```yaml
+promote:
+  to:
+    - filesystem:
+        path: /srv/exports/datadouble
+        mode: "0644"
+```
+
 Web servers have no standard listing, and `fetch` lists the store to find
 each group's engine versions. So `promote` writes an **index** under each
 `<spec>/<group>/` (`index.json`) on every export store, naming the group's

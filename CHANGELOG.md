@@ -430,6 +430,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The filesystem store writes files `0640` instead of `0600`, set by a
+  new `mode` setting**
+  ([#102](https://github.com/datadouble/datadouble/issues/102), decision 134).
+  `mode` is an octal string such as `"0644"`; every file the store writes
+  gets it whatever the umask, and every directory it creates gets it plus
+  the search bit wherever it has the read bit (`0640` gives `0750`).
+  Directories that already exist keep their mode. A web server in front of
+  an export store (the `http` store) can now read what `promote` wrote when
+  it runs in the group of `promote`'s user, or as anyone with `"0644"`.
+  Modes that let anyone but the owner write, or leave the owner unable to
+  read and write, are refused, naming `mode`. The channel files `fetch`
+  writes into staging stay `0600`; the rest of staging follows the umask,
+  as before.
 - **BREAKING: the `kubernetes` runtime's `namespace` is optional, and no
   longer defaults to `default`** (decision 133). Left out, engine pods start
   where `kubectl` would put them: in a cluster, the namespace of

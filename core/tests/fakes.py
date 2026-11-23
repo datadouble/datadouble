@@ -239,7 +239,8 @@ class Unlisted(FilesystemStore):
 
 def unlisted_store(settings: Mapping[str, JsonValue]) -> Store:
     """A store factory for :class:`Unlisted`, taking the filesystem store's settings."""
-    return Unlisted(parse_settings(FilesystemSettings, settings, "unlisted store").path)
+    parsed = parse_settings(FilesystemSettings, settings, "unlisted store")
+    return Unlisted(parsed.path, parsed.permissions)
 
 
 def one(

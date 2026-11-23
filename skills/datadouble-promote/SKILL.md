@@ -17,6 +17,13 @@ boundary, after `build`.
   Point `promote.to` at the directory or bucket itself, never at `http`.
   `promote` lists each export store to rebuild the index, so S3 export
   stores need `s3:ListBucket` for `promote`'s credentials.
+- A filesystem export store's `mode` is an octal string, `"0640"` by
+  default: every file it writes gets it whatever the umask, and every
+  directory it creates gets it plus the search bit wherever it has the read
+  bit (`0750`). Directories that already exist keep their mode. A web server
+  in front of the store must be in `promote`'s user's group, or use
+  `"0644"`. Modes that let anyone but the owner write (`"0664"`) are
+  refused; never suggest one.
 - `promote.strict`: the least strict level, per kind, an image may have been
   built with, as a mapping like the spec's `strict` (`data: columns` and
   `warn` for each kind of object by default). Never lower it to let an image

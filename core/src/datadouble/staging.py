@@ -74,7 +74,8 @@ class Staging:
         """Use the staging directory in ``settings``."""
         self.settings = settings
         self.root = settings.staging
-        self.store = FilesystemStore(self.root)
+        self.store = FilesystemStore(self.root, mode=0o600)
+        """Writes the staging channels with ``0600``; the rest of staging follows the umask."""
 
     def line(self, prefix: str) -> Path:
         """The directory of one image line."""

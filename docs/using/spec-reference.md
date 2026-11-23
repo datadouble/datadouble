@@ -28,7 +28,7 @@ A whole spec.
 | `package` | [Package](#package) | see type | The image formats to produce. |
 | `verify` | [Verify](#verify) | see type | Checks every image must pass: PII scan, row counts, assertions. |
 | `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference. |
-| `store` | list of map of map of JSON |  | Where images are stored after the build, one adapter each: `{filesystem: ...}`, `{s3: ...}`. |
+| `store` | list of map of map of JSON |  | Where images are stored after the build, one adapter each: `{filesystem: ...}`, `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string (`"0640"` by default) every file it writes gets whatever the umask; directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or the owner not read and write, are refused. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |
 | `promote` | [Promote](#promote) |  | The export stores `promote` copies verified images to. |
@@ -347,7 +347,7 @@ Where `promote` copies verified images, and what it requires of them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
+| `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`; a filesystem store's `mode` (`"0640"` by default) decides who can read the files, such as a web server serving them. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
 | `channel` | string | `"latest"` |  |
 | `strict` | [Strict](#strict) | see type | The least strict level, per kind, an image may have been built with. |
 
