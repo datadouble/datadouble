@@ -610,6 +610,7 @@ Datadouble image built from the checkout (`make test-ci SYSTEM=<name>`):
 | GitHub Actions | `act`, running jobs on the host as a self-hosted runner does |
 | GitLab CI | GitLab CE and a GitLab Runner with the shell executor, in containers |
 | Jenkins | `jenkins/jenkins` with pinned plugins, configured with Configuration as Code, its built-in node running jobs with the host's Docker daemon |
+| Jenkins, Kubernetes agents (`jenkins-kubernetes`) | The same Jenkins on the host, its Kubernetes plugin's cloud starting every job as a pod on a kind cluster that reaches it over WebSocket, with job repositories served by `git daemon`; its own CI job |
 | Argo CD | kind cluster with Argo CD's core install and a Helm repository serving the checkout's chart |
 
 The container-based systems' profiles live under `dev/ci/`; they are heavy and
@@ -662,6 +663,11 @@ source, stores and repository, with jobs `ci init` wrote for both sides:
 - A failing job posts its outcome to the spec's webhook, a warning does too,
   a succeeding one does not, and a webhook that cannot be reached leaves
   the job's outcome alone.
+- Where jobs run as pods (Jenkins with Kubernetes agents), each job runs in a
+  pod holding everything its Jenkinsfile declares, under the RBAC
+  `instructions` list, and a namespace without the `datadouble-boundary`
+  ConfigMap is refused `build`, `promote` and `lock` even when Jenkins'
+  environment sets the mark.
 
 The core's own tests cover what needs a clock or a race rather than a CI
 system: `release --expired` collecting a copy past its expiry, pool recycling

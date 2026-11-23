@@ -268,15 +268,16 @@ jobs:
   ci-conformance:
     # The CI/CD conformance suite for each system: the jobs `ci init` writes,
     # run in the system's local runtime (act, running jobs on this machine as
-    # a self-hosted runner does; GitLab CE with a shell-executor runner) with
-    # the Datadouble image built here.
+    # a self-hosted runner does; GitLab CE with a shell-executor runner; Jenkins
+    # with Docker, and with Kubernetes agents on kind as its own job) with the
+    # Datadouble image built here.
     name: CI/CD conformance (${{ matrix.system }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        system: [github-actions, gitlab, jenkins, kubernetes]
+        system: [github-actions, gitlab, jenkins, jenkins-kubernetes, kubernetes]
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0

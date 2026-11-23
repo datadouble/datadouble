@@ -112,6 +112,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   namespace's `datadouble-boundary` ConfigMap, read from a mounted file.
   `instructions` list the plugin, the claim and the RBAC. Agents with Docker
   stay the default; other systems refuse `--agent kubernetes` for now.
+- **Jenkins Kubernetes agents are tested end to end**
+  ([#84](https://github.com/datadouble/datadouble/issues/84)). A CI/CD
+  conformance job, `make test-ci SYSTEM=jenkins-kubernetes`, runs every
+  generated job of both sides as agent pods on a kind cluster, with the pods
+  as written, the service accounts and Roles `instructions` describe, and
+  engine pods sharing the claim. A namespace without the
+  `datadouble-boundary` ConfigMap is refused `build`, `promote` and `lock`
+  though Jenkins' own environment sets the mark. One spec serves both
+  sides, each in its own namespace, and each side's engine pods start in
+  its namespace.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

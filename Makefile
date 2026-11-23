@@ -48,7 +48,7 @@ DAEMON := $(if $(filter host,$(DOCKER)),,docker)
 
 # The whole suite also runs each CI/CD system's conformance suite (test-ci),
 # whose coverage joins the groups' before the combined report and its gate.
-CI_SYSTEMS := github-actions gitlab jenkins kubernetes
+CI_SYSTEMS := github-actions gitlab jenkins jenkins-kubernetes kubernetes
 
 test-integration:
 	rm -f .reports/.coverage.*
@@ -111,18 +111,21 @@ test-btrfs:
 # The CI/CD conformance suite for one system, such as `make test-ci
 # SYSTEM=github-actions`: real generated jobs, run in the system's local
 # runtime (act for GitHub Actions, GitLab CE and a runner for GitLab, Jenkins
-# for Jenkins, kind with Argo CD for kubernetes) with the Datadouble image
-# built from this checkout. Worlds live under CI_WORK, which the Docker
-# daemon must see.
+# for Jenkins, Jenkins with Kubernetes agents on kind for jenkins-kubernetes,
+# kind with Argo CD for kubernetes) with the Datadouble image built from this
+# checkout. Worlds live under CI_WORK, which the Docker daemon must see. A
+# system's tests are ci/SYSTEM/tests, unless CI_TESTS_SYSTEM names others.
 CI_IMAGE ?= datadouble:ci-test
 CI_WORK ?= /var/tmp
+CI_TESTS_jenkins := ci/jenkins/tests --ignore=ci/jenkins/tests/test_jenkins_kubernetes_conformance.py
+CI_TESTS_jenkins-kubernetes := ci/jenkins/tests/test_jenkins_kubernetes_conformance.py
 
 test-ci:
 	@test -n "$(SYSTEM)" || { echo "name a system: make test-ci SYSTEM=github-actions"; exit 2; }
 	docker build --target runtime --tag $(CI_IMAGE) .
 	DATADOUBLE_TEST_CI_IMAGE=$(CI_IMAGE) DATADOUBLE_TEST_CI_WORK=$(CI_WORK) \
 		$(if $(COVERAGE_FILE),COVERAGE_FILE=$(COVERAGE_FILE)) \
-		uv run pytest -p no:cacheprovider -m ci_conformance ci/$(SYSTEM)/tests $(PYTEST_ARGS)
+		uv run pytest -p no:cacheprovider -m ci_conformance $(or $(CI_TESTS_$(SYSTEM)),ci/$(SYSTEM)/tests) $(PYTEST_ARGS)
 
 # The Claude Code plugin: its manifests and skills, and the skill scenarios
 # (evals/), run by `claude plugin eval` against a copy of only the plugin's

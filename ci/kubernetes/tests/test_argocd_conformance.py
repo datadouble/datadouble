@@ -19,10 +19,7 @@ says so in its containers' termination messages, which the suite reads.
 
 import json
 import os
-import tempfile
-import time
-import uuid
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Generator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -37,7 +34,6 @@ from datadouble_argocd import NAME
 from datadouble_conformance.ci import (
     IMAGE_VARIABLE,
     POSTGRES,
-    WORK_VARIABLE,
     CiConformance,
     CiHarness,
     Event,
@@ -46,76 +42,14 @@ from datadouble_conformance.ci import (
     State,
     docker,
 )
+from datadouble_conformance.kind import Cluster, kind_cluster, wait
 
 pytestmark = pytest.mark.ci_conformance
 
-NODE = "kindest/node@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
 ARGOCD = "https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.6/manifests/core-install.yaml"
 CHART = Path(__file__).resolve().parents[1] / "chart"
 CHARTS_URL = "http://charts.argocd.svc.cluster.local:8080"
 _OBJECT: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
-
-
-def _wait(check: Callable[[], bool], what: str, seconds: int) -> None:
-    deadline = time.monotonic() + seconds
-    while not check():
-        if time.monotonic() > deadline:
-            message = f"timed out waiting for {what}"
-            raise TimeoutError(message)
-        time.sleep(3)
-
-
-@dataclass
-class Cluster:
-    """A kind cluster and its kubeconfig."""
-
-    name: str
-    kubeconfig: Path
-
-    def kubectl(self, *arguments: str, stdin: str | None = None, check: bool = True) -> str:
-        """Run kubectl against the cluster."""
-        done = run_program(
-            "kubectl", ["--kubeconfig", str(self.kubeconfig), *arguments], stdin=stdin
-        )
-        if check and done.status != 0:
-            message = f"kubectl {' '.join(arguments[:3])} failed: {done.stderr.strip()}"
-            raise RuntimeError(message)
-        return done.stdout
-
-    def json(self, *arguments: str) -> dict[str, JsonValue]:
-        """A resource, as JSON."""
-        return _OBJECT.validate_json(self.kubectl(*arguments, "--output", "json"))
-
-    def apply(self, manifest: Mapping[str, JsonValue]) -> None:
-        """Apply one manifest."""
-        self.kubectl("apply", "--filename", "-", stdin=json.dumps(manifest))
-
-
-def _kind(*arguments: str) -> None:
-    done = run_program("kind", arguments)
-    if done.status != 0:
-        message = f"kind {arguments[0]} failed: {done.stderr.strip()}"
-        raise RuntimeError(message)
-
-
-def _load(name: str, image: str, scratch: Path) -> None:
-    """Import an image into the node; `kind load` fails on multi-platform images."""
-    archive = scratch / "image.tar"
-    if not docker("image", "ls", "--quiet", image).strip():
-        docker("pull", "--quiet", image)
-    docker("save", "--output", str(archive), image)
-    done = run_program(
-        "sh",
-        [
-            "-c",
-            (
-                f"docker exec --interactive {name}-control-plane ctr --namespace=k8s.io images"
-                f" import --snapshotter=overlayfs - < {archive}"
-            ),
-        ],
-    )
-    archive.unlink()
-    assert done.status == 0, done.stderr
 
 
 def _charts(cluster: Cluster, scratch: Path) -> None:
@@ -170,29 +104,8 @@ def _charts(cluster: Cluster, scratch: Path) -> None:
 @pytest.fixture(scope="session")
 def cluster(tmp_path_factory: pytest.TempPathFactory) -> Generator[Cluster]:
     """A kind cluster with Argo CD and the chart, removed afterwards."""
-    name = f"ddci-{uuid.uuid4().hex[:8]}"
     scratch = tmp_path_factory.mktemp("cluster")
-    work = Path(os.environ.get(WORK_VARIABLE, tempfile.gettempdir()))
-    config = {
-        "kind": "Cluster",
-        "apiVersion": "kind.x-k8s.io/v1alpha4",
-        "nodes": [
-            {
-                "role": "control-plane",
-                "extraMounts": [{"hostPath": str(work), "containerPath": str(work)}],
-            }
-        ],
-    }
-    (scratch / "kind.yaml").write_text(json.dumps(config), encoding="utf-8")
-    kubeconfig = scratch / "kubeconfig"
-    _kind(
-        "create", "cluster", "--name", name, "--image", NODE, "--wait", "300s",
-        "--config", str(scratch / "kind.yaml"), "--kubeconfig", str(kubeconfig),
-    )  # fmt: skip
-    try:
-        built = Cluster(name, kubeconfig)
-        for image in (os.environ[IMAGE_VARIABLE], POSTGRES):
-            _load(name, image, scratch)
+    with kind_cluster(scratch, [os.environ[IMAGE_VARIABLE], POSTGRES]) as built:
         built.kubectl("create", "namespace", "argocd")
         built.kubectl("--namespace", "argocd", "apply", "--server-side", "--filename", ARGOCD)
         for workload in (
@@ -217,8 +130,6 @@ def cluster(tmp_path_factory: pytest.TempPathFactory) -> Generator[Cluster]:
         )
         _charts(built, scratch)
         yield built
-    finally:
-        _kind("delete", "cluster", "--name", name)
 
 
 @dataclass
@@ -309,37 +220,15 @@ class ArgoCdOnKind:
         # Clusters are never a vendor's, but Datadouble asks every installed adapter.
         return {"RUNNER_ENVIRONMENT": "github-hosted"}
 
+    @property
+    def init_fields(self) -> Mapping[str, str]:
+        return {}
+
     def runtime(self, network: str, base: Path) -> Mapping[str, JsonValue]:
         namespace = base.name
-        docker("network", "connect", network, f"{self.cluster.name}-control-plane")
+        docker("network", "connect", network, self.cluster.node)
         self.cluster.kubectl("create", "namespace", namespace)
-        self.cluster.apply(
-            {
-                "apiVersion": "v1",
-                "kind": "PersistentVolume",
-                "metadata": {"name": namespace},
-                "spec": {
-                    "capacity": {"storage": "10Gi"},
-                    "accessModes": ["ReadWriteOnce"],
-                    "storageClassName": "",
-                    "hostPath": {"path": str(base)},
-                    "claimRef": {"namespace": namespace, "name": CLAIM},
-                },
-            }
-        )
-        self.cluster.apply(
-            {
-                "apiVersion": "v1",
-                "kind": "PersistentVolumeClaim",
-                "metadata": {"name": CLAIM, "namespace": namespace},
-                "spec": {
-                    "accessModes": ["ReadWriteOnce"],
-                    "storageClassName": "",
-                    "volumeName": namespace,
-                    "resources": {"requests": {"storage": "10Gi"}},
-                },
-            }
-        )
+        self.cluster.claim(namespace, base)
         self.worlds[base] = _World(namespace, network)
         return {"kubernetes": {"namespace": namespace, "claim": CLAIM, "mount": str(base)}}
 
@@ -388,7 +277,7 @@ class ArgoCdOnKind:
             status = found.get("status")
             return isinstance(status, dict) and _at(status, "sync", "status") == "Synced"
 
-        _wait(synced, f"Argo CD to sync {name}", 600)
+        wait(synced, f"Argo CD to sync {name}", 600)
 
     def run(self, repository: Path, job: str, event: Event, context: RunContext) -> JobRun:
         world = self._world(repository)
@@ -475,7 +364,7 @@ class ArgoCdOnKind:
             cronjobs = self.cluster.json("--namespace", namespace, "get", "cronjobs")
             return _mounts_lock(cronjobs, f"{name}-") == locked
 
-        _wait(current, f"{name} to carry the current spec", 300)
+        wait(current, f"{name} to carry the current spec", 300)
 
     def _applied(self, namespace: str, release: str, generation: str) -> None:
         """Wait for the CronJobs to carry a generation the Application's values now name."""
@@ -485,7 +374,7 @@ class ArgoCdOnKind:
             found = self.cluster.json("--namespace", namespace, "get", cronjob)
             return generation in json.dumps(found)
 
-        _wait(applied, f"{cronjob} to carry {generation}", 300)
+        wait(applied, f"{cronjob} to carry {generation}", 300)
 
     def _open(self, repository: Path, release: str, request: int) -> str:
         """A request's Application, as an ApplicationSet would make it."""
@@ -537,7 +426,7 @@ class ArgoCdOnKind:
                     conditions.append("failed")
             return bool(conditions)
 
-        _wait(finished, f"the job {name}", 1800)
+        wait(finished, f"the job {name}", 1800)
         log = self.cluster.kubectl(
             "--namespace", namespace, "logs", f"job/{name}", "--all-containers", check=False
         )
