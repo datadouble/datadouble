@@ -188,6 +188,8 @@ Write CI/CD configuration for a spec's jobs.
 | `--output` `OUTPUT` | the repository root to write into (default: .) |
 | `--image` `IMAGE` | the Datadouble image jobs run (default: this version's) |
 | `--env` `NAME` | another environment variable every job passes on (repeatable) |
+| `--docker` `COMMAND` | the Docker command steps run the image with (default: the runner's DATADOUBLE_DOCKER, or docker) |
+| `--docker-socket` `PATH` | the Docker daemon's socket on the runner, an absolute path (default: the runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock) |
 
 ## `datadouble api`
 

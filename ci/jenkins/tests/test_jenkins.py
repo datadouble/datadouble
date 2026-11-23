@@ -212,3 +212,11 @@ def test_reports(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "jenkins"
+
+
+def test_another_docker_command_and_socket() -> None:
+    changed = replace(SCENARIOS["production"], docker="podman", docker_socket="/run/d.sock")
+    build = render(changed, changed.jobs[0])
+    assert "    docker: 'podman',\n" in build
+    assert "    dockerSocket: '/run/d.sock',\n" in build
+    assert "docker:" not in jenkinsfile("production", JobKind.BUILD)

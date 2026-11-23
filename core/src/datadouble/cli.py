@@ -70,6 +70,8 @@ class _Arguments(argparse.Namespace):
     side: str | None
     image: str | None
     environment: list[str] | None
+    docker: str | None
+    docker_socket: str | None
 
 
 def _stages(text: str) -> list[str]:
@@ -227,6 +229,18 @@ def _ci_parsers(add: _Add) -> None:
         action="append",
         metavar="NAME",
         help="another environment variable every job passes on (repeatable)",
+    )
+    init.add_argument(
+        "--docker",
+        metavar="COMMAND",
+        help="the Docker command steps run the image with (default: the runner's"
+        " DATADOUBLE_DOCKER, or docker)",
+    )
+    init.add_argument(
+        "--docker-socket",
+        metavar="PATH",
+        help="the Docker daemon's socket on the runner, an absolute path (default: the"
+        " runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock)",
     )
 
 
@@ -395,7 +409,8 @@ def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
         "jobs": list(dict.fromkeys(name for names in arguments.jobs for name in names)),
         "spec": arguments.spec,
     }
-    return _set(fields, arguments, "runner", "work", "side", "output", "image", "environment")
+    names = ("runner", "work", "side", "output", "image", "environment", "docker", "docker_socket")
+    return _set(fields, arguments, *names)
 
 
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {

@@ -244,3 +244,10 @@ def values_of(planned_jobs: Pipeline) -> JsonValue:
     (generated,) = ArgoCd().generate(planned_jobs)
     application = _YAML.validate_python(yaml.safe_load(generated.content))
     return at(application, "spec", "source", "helm", "valuesObject")
+
+
+def test_pods_run_without_docker() -> None:
+    production = SCENARIOS["production"]
+    for changed in (replace(production, docker="podman"), replace(production, docker_socket="/s")):
+        with pytest.raises(CiError, match="without Docker"):
+            ArgoCd().generate(changed)

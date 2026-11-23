@@ -160,8 +160,13 @@ def _step(pipeline: Pipeline, job: Job, invocation: Invocation) -> dict[str, Jso
         events = sorted({_EVENTS[trigger] for trigger in invocation.when})
         step["if"] = " || ".join(f"github.event_name == '{event}'" for event in events)
     step["uses"] = f"{ACTION}@v{pipeline.version}"
-    if job.environment:
-        step["env"] = {name: f"${{{{ secrets.{name} }}}}" for name in job.environment}
+    env: dict[str, JsonValue] = {name: f"${{{{ secrets.{name} }}}}" for name in job.environment}
+    if pipeline.docker is not None:
+        env["DATADOUBLE_DOCKER"] = pipeline.docker
+    if pipeline.docker_socket is not None:
+        env["DATADOUBLE_DOCKER_SOCKET"] = pipeline.docker_socket
+    if env:
+        step["env"] = env
     inputs: dict[str, JsonValue] = {
         "job": str(job.kind),
         "image": pipeline.image,

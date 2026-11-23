@@ -273,3 +273,14 @@ def test_jobs_without_host_paths() -> None:
     bare = replace(planned, jobs=(replace(planned.jobs[0], mounts=()),))
     (generated,) = GitLab().generate(bare)
     assert "DATADOUBLE_MOUNTS" not in generated.content
+
+
+def test_another_docker_command_and_socket() -> None:
+    changed = replace(SCENARIOS["production"], docker="podman", docker_socket="/run/d.sock")
+    (generated,) = GitLab().generate(changed)
+    config = _YAML.validate_python(yaml.safe_load(generated.content))
+    variables = at(config, "datadouble-shop-build", "variables")
+    assert isinstance(variables, dict)
+    assert variables["DATADOUBLE_DOCKER"] == "podman"
+    assert variables["DATADOUBLE_DOCKER_SOCKET"] == "/run/d.sock"
+    assert "DATADOUBLE_DOCKER" not in str(jobs("production"))

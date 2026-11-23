@@ -267,3 +267,17 @@ def test_run_urls() -> None:
     assert ci.run_url(environ) == "https://github.com/example/shop/actions/runs/42"
     assert ci.run_url({**environ, "GITHUB_RUN_ID": ""}) is None
     assert ci.run_url({}) is None
+
+
+def test_another_docker_command_and_socket() -> None:
+    ci, _ = github()
+    production = SCENARIOS["production"]
+    changed = replace(production, docker="/opt/docker/bin/docker", docker_socket="/run/d.sock")
+    files = {file.path.name: yaml.safe_load(file.content) for file in ci.generate(changed)}
+    for workflow in files.values():
+        (job,) = workflow["jobs"].values()
+        env = job["steps"][1]["env"]
+        assert env["DATADOUBLE_DOCKER"] == "/opt/docker/bin/docker"
+        assert env["DATADOUBLE_DOCKER_SOCKET"] == "/run/d.sock"
+    promote = files["datadouble-shop-promote.yml"]["jobs"]["promote"]["steps"][1]["env"]
+    assert set(promote) == {"ALERTS_WEBHOOK", "DATADOUBLE_DOCKER", "DATADOUBLE_DOCKER_SOCKET"}

@@ -39,6 +39,13 @@ spec, such as `AWS_ACCESS_KEY_ID` for an S3 store.
 - What the runner's machine needs: Docker, and every path the spec names,
   existing and owned by the engine's user (`999:999` for PostgreSQL); on
   Kubernetes, one PersistentVolumeClaim holding them.
+- Where Docker is not `docker` with its socket at `/var/run/docker.sock`
+  (installed outside `PATH`, or another Docker-compatible daemon on another
+  socket): the operator sets `DATADOUBLE_DOCKER` and
+  `DATADOUBLE_DOCKER_SOCKET` in the runner's environment, or you generate
+  again with `--docker <command>` and `--docker-socket <absolute path>`.
+  Never edit the generated files for it. Rootless Docker is not supported.
+  Argo CD's jobs run without Docker and take neither.
 - That the operator marks the runner inside the boundary
   (`DATADOUBLE_BOUNDARY=inside` in its environment, or the
   `datadouble-boundary` ConfigMap on Kubernetes). Until then every run is

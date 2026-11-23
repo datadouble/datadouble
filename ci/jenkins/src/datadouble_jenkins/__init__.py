@@ -143,6 +143,12 @@ def _stage(pipeline: Pipeline, job: Job, index: int) -> list[str]:
         f"    job: {_quote(str(job.kind))},",
         f"    image: {_quote(pipeline.image)},",
         f"    user: {_quote(pipeline.user)},",
+        *([f"    docker: {_quote(pipeline.docker)},"] if pipeline.docker is not None else []),
+        *(
+            [f"    dockerSocket: {_quote(pipeline.docker_socket)},"]
+            if pipeline.docker_socket is not None
+            else []
+        ),
         f"    mounts: {_list(job.mounts)},",
         f"    environment: {_list(job.environment)},",
         f"    arguments: [{arguments}],",

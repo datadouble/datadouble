@@ -65,14 +65,40 @@ never values (decision 123).
 ## What a job needs on its agent
 
 - The labels given to `--runner`.
-- Docker, with its socket at `/var/run/docker.sock`, usable by the agent's
-  user. The step runs the Datadouble image as the engine's user on the host's
-  network, with the workspace and every absolute path the spec names mounted
-  at the same path.
+- Docker, with its socket at `/var/run/docker.sock` unless the agent says
+  otherwise (below), usable by the agent's user. The step runs the
+  Datadouble image as the engine's user on the host's network, with the
+  workspace and every absolute path the spec names mounted at the same path.
 - Those paths, existing and owned by the engine's user (`999:999` for
   PostgreSQL).
 - On agents inside the production boundary, `DATADOUBLE_BOUNDARY=inside` in
   the agent's environment (decision 98).
+
+### Another Docker command or socket
+
+The step runs the image with `docker` and the daemon at
+`/var/run/docker.sock`. Where Docker is installed outside `PATH`, or the
+daemon is another Docker-compatible one listening on another socket, set
+`DATADOUBLE_DOCKER` (one program, a name or an absolute path) and
+`DATADOUBLE_DOCKER_SOCKET` (an absolute path) in the agent's environment,
+once for every job on the agent. Or pass `--docker` and `--docker-socket` to
+`ci init`, which writes them into the Jenkinsfiles as the step's `docker`
+and `dockerSocket`, where they take precedence over the agent's own
+(decision 126).
+
+Without `DATADOUBLE_DOCKER_SOCKET`, a `DOCKER_HOST` of the form
+`unix://PATH` in the agent's environment names the socket. A socket named
+either way is also the daemon the image is started on (`DOCKER_HOST`, and
+`CONTAINER_HOST` for podman), so the image and the engines' containers share
+one daemon. The socket is mounted at `/var/run/docker.sock` inside the
+Datadouble container, and `DOCKER_HOST` there always points at it, even when
+a job passes its own `DOCKER_HOST` on.
+
+Rootless Docker is not supported: its user namespace maps the engine's user
+to another one on the host, so neither the socket's group nor the files
+shared at the same paths (decision 73) line up. The step reads the socket's
+group with GNU `stat`, so the agent needs GNU coreutils, as Linux
+distributions have.
 
 ## Outcomes
 

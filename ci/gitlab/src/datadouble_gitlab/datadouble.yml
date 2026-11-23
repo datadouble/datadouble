@@ -9,15 +9,18 @@
 # (decision 86), on the host's network, with the runner's Docker daemon for
 # the engines' containers and the project directory and the spec's host paths
 # at the same paths, since engine containers mount them by those paths. Jobs
-# therefore need a runner whose shell executor has Docker. The command writes
-# its outputs (outcome, generation, error code: never data) into
-# datadouble.env, a dotenv report that later jobs read and a file people can
-# download; a warning exits with 3, which `allow_failure: exit_codes` shows as
-# a warning. A job that publishes files for review (the lock job's new lock
-# and its changes) names their directory in DATADOUBLE_ARTIFACTS, which is
-# emptied and made writable by the engine's user, and adds it to its
-# artifacts' paths. DATADOUBLE_CI_JOB names the generated job, so the command
-# posts the spec's notify webhooks itself, linking the job's page (CI_JOB_URL).
+# therefore need a runner whose shell executor has Docker. DATADOUBLE_DOCKER
+# and DATADOUBLE_DOCKER_SOCKET name another Docker command and the daemon's
+# socket (decision 126); the socket is mounted at /var/run/docker.sock
+# inside. The command writes its outputs (outcome, generation, error code:
+# never data) into datadouble.env, a dotenv report that later jobs read and a
+# file people can download; a warning exits with 3, which `allow_failure:
+# exit_codes` shows as a warning. A job that publishes files for review (the
+# lock job's new lock and its changes) names their directory in
+# DATADOUBLE_ARTIFACTS, which is emptied and made writable by the engine's
+# user, and adds it to its artifacts' paths. DATADOUBLE_CI_JOB names the
+# generated job, so the command posts the spec's notify webhooks itself,
+# linking the job's page (CI_JOB_URL).
 
 .datadouble:
   allow_failure:
@@ -35,11 +38,24 @@
       trap 'rm -rf "$bridge"' EXIT
       chmod 0777 "$bridge"
       : > datadouble.env
-      socket=/var/run/docker.sock
+      docker=${DATADOUBLE_DOCKER:-docker}
+      # The daemon's socket: DATADOUBLE_DOCKER_SOCKET, else a unix:// DOCKER_HOST, else
+      # Docker's default. A socket other than the default is also the daemon the
+      # image is started on (DOCKER_HOST, and podman's CONTAINER_HOST), so the image
+      # and the engines' containers share one daemon and one set of paths.
+      socket=${DATADOUBLE_DOCKER_SOCKET:-}
+      if [ -z "$socket" ] && [[ "${DOCKER_HOST:-}" == unix://* ]]; then socket=${DOCKER_HOST#unix://}; fi
+      if [ -n "$socket" ]; then export DOCKER_HOST="unix://$socket" CONTAINER_HOST="unix://$socket"; fi
+      socket=${socket:-/var/run/docker.sock}
+      if [ ! -S "$socket" ]; then
+          echo "error: no Docker socket at $socket; set DATADOUBLE_DOCKER_SOCKET to the daemon's socket"
+          exit 1
+      fi
       options=(
           --rm --network host
-          --user "$DATADOUBLE_USER" --group-add "$(stat -c %g "$socket")"
-          --volume "$socket:$socket"
+          --user "$DATADOUBLE_USER" --group-add "$(stat -L -c %g "$socket")"
+          --volume "$socket:/var/run/docker.sock"
+          --env DOCKER_HOST=unix:///var/run/docker.sock --env CONTAINER_HOST=unix:///var/run/docker.sock
           --volume "$CI_PROJECT_DIR:$CI_PROJECT_DIR" --workdir "$CI_PROJECT_DIR"
           --env HOME=/tmp
           --env DATADOUBLE_BOUNDARY --env CI_RUNNER_TAGS --env CI_JOB_URL
@@ -57,7 +73,9 @@
           options+=(--volume "$path:$path")
       done <<< "${DATADOUBLE_MOUNTS:-}"
       while IFS= read -r name; do
-          if [ -n "$name" ]; then options+=(--env "$name"); fi
+          # Inside, the daemon is always the socket mounted at /var/run/docker.sock.
+          case "$name" in ""|DOCKER_HOST|CONTAINER_HOST) continue ;; esac
+          options+=(--env "$name")
       done <<< "${DATADOUBLE_ENVIRONMENT:-}"
       if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
           rm -rf "${CI_PROJECT_DIR:?}/$DATADOUBLE_ARTIFACTS"
@@ -65,6 +83,6 @@
           chmod 0777 "$CI_PROJECT_DIR/$DATADOUBLE_ARTIFACTS"
       fi
       status=0
-      docker run "${options[@]}" "$DATADOUBLE_IMAGE" "${bridged[@]}" "${arguments[@]}" || status=$?
+      "$docker" run "${options[@]}" "$DATADOUBLE_IMAGE" "${bridged[@]}" "${arguments[@]}" || status=$?
       if [ -f "$bridge/outputs" ]; then cat "$bridge/outputs" > datadouble.env; fi
       exit "$status"

@@ -70,6 +70,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spec so running `ci init` again keeps it; run `ci init` again after adding
   it, so every job gets the webhook's variable. Generated jobs now name
   their job to the native step (`--ci-job`).
+- **CI steps can use another Docker command and socket**
+  ([#71](https://github.com/datadouble/datadouble/issues/71)). The GitHub
+  action, the GitLab job template and the Jenkins step read
+  `DATADOUBLE_DOCKER` (the command that runs the image, `docker` by default)
+  and `DATADOUBLE_DOCKER_SOCKET` (the daemon's socket,
+  `/var/run/docker.sock` by default), so runners with Docker installed
+  outside `PATH` or another Docker-compatible daemon on another socket work
+  without editing generated files. Set them once in a runner's environment,
+  or pass `ci init --docker` and `--docker-socket` to write them into the
+  generated configuration. Without either, a `unix://` `DOCKER_HOST` names
+  the socket. The image is started on that daemon and sees its socket at
+  `/var/run/docker.sock`. Rootless Docker is not supported, and Argo CD's
+  jobs, which run without Docker, refuse both options.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and
