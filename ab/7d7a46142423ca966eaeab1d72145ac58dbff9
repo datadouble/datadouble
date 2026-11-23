@@ -1,0 +1,55 @@
+ci/jenkins/tests/test_jenkins_kubernetes_conformance.py
+  s_ad63f2bf16b775::t_353723de18ce52 1-15,24-73,76-255,260-268,270-271,276,283-286,305-321,322-323,329-339,346-418,440-484
+  s_ad63f2bf16b775::t_67323b06e41f79 485-506
+conformance/src/datadouble_conformance/kind.py
+  s_ad63f2bf16b775::t_66d7a4aaaf9d80 1-164
+conformance/tests/test_kind.py
+  s_ad63f2bf16b775::t_f6c3bc70ead02a 1-92
+  s_ad63f2bf16b775::t_60be0ba0be1187 93-103
+.github/workflows/ci.yml
+  s_ad63f2bf16b775::t_50ccb220962ff9 271-273,280
+CHANGELOG.md
+  s_ad63f2bf16b775::t_1289e7d8f7eaed 27-33,37
+Makefile
+  s_ad63f2bf16b775::t_cfaf13b8989961 50,113-116,119-120,127
+TESTING.md
+  s_ad63f2bf16b775::t_f811efffdfdc80 28
+ci/github-actions/tests/test_github_actions_conformance.py
+  s_ad63f2bf16b775::t_31138c6fc772fb 80-83
+ci/gitlab/tests/test_gitlab_conformance.py
+  s_ad63f2bf16b775::t_09fed100ce141c 297-300
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_3236b26b4cf916 148-153,166-168,175-181
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_4783aef6a5013f 72-106,121-133,435-436,444,450
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_25ba648e85f289 283-286,294-298,304-306
+ci/jenkins/tests/test_jenkins_conformance.py
+  s_ad63f2bf16b775::t_24ec3b42183628 27,82-87,106-107,155-167,171,179-185,187-190,192,195,200-204,218-224,245,263,296-303,319,384,404-406,410
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_2569e2846d461c 22,45,108,220-223,226,228,277,364,374,419
+conformance/src/datadouble_conformance/ci.py
+  s_ad63f2bf16b775::t_607170d3d5e356 173-177,311,370,378,380,386-388,479,518
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_9cecf6060a867b 418,465-469
+pyproject.toml
+  s_ad63f2bf16b775::t_527c264103d8ed 181,237,289
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_92f1345e618888 52-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "ab7d7a46142423ca966eaeab1d72145ac58dbff9",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
