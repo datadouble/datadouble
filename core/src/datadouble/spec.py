@@ -26,6 +26,7 @@ from pydantic import (
     model_validator,
 )
 
+from datadouble.catalog import ObjectKind
 from datadouble.names import DEFAULT_GROUP, EngineName, GroupName, SpecName, check_name
 
 
@@ -432,11 +433,35 @@ class Hooks(_Model):
     after_transform: tuple[TransformHook, ...] = ()
 
 
+type ObjectRoot = Annotated[
+    dict[ObjectKind, str],
+    Field(
+        min_length=1,
+        max_length=1,
+        description=(
+            "An object code outside Datadouble expects, as its kind and its name matched "
+            "from the right like a table's: `{function: public.uuid_generate_v4}`, with "
+            "argument types as the catalog spells them where routines are overloaded "
+            '(`{function: "public.total(integer)"}`), or `{trigger: orders.audit}` '
+            "(a PostgreSQL trigger's name is `table.trigger`)."
+        ),
+    ),
+]
+
+
 class ImageGroup(_Model):
     """One image's share of the extract."""
 
     include: tuple[str, ...] = Field(min_length=1)
+    """The tables in the image, as globs matched from the right."""
     requires: tuple[GroupName, ...] = ()
+    """Groups whose images a copy of this one is provisioned with, for references into them."""
+    standalone: bool = False
+    """Whether the image must work on its own: what its tables and objects
+    need from outside the group is pulled into it (package planning)."""
+    objects: tuple[ObjectRoot, ...] = ()
+    """Objects code outside Datadouble expects in this image, such as
+    ``{function: public.uuid_generate_v4}``; they join the image's closure."""
 
 
 class AccountPrivileges(StrEnum):
@@ -788,6 +813,9 @@ class Spec(_Model):
         default_factory=lambda: {DEFAULT_GROUP: ImageGroup(include=("*",))}
     )
     """Named images built from one extract; one image of every table by default."""
+    objects: tuple[ObjectRoot, ...] = ()
+    """Objects code outside Datadouble expects in every image, such as
+    ``{view: reporting.daily}``; they join each image's closure."""
     package: Package = Package()
     """The image formats to produce."""
     verify: Verify = Verify()
@@ -831,7 +859,11 @@ class Spec(_Model):
             strict=Strict(data=StrictLevel.OFF),
             subset=Subset(as_of=self.subset.as_of, seeds=files.select),
             hooks=Hooks(after_transform=tuple(TransformHook(sql=line) for line in files.cleanup)),
-            images=self.images,
+            # File trees have no objects for a group to declare.
+            images={
+                name: group.model_copy(update={"objects": ()})
+                for name, group in self.images.items()
+            },
             # Accounts belong to the source's physical images, not the files'.
             package=self.package.model_copy(update={"accounts": ()}),
             runtime=self.runtime,

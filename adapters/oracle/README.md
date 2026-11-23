@@ -38,6 +38,13 @@ its settings, not its next number. Dependencies come from `ALL_DEPENDENCIES`,
 which Oracle keeps for PL/SQL too, so every edge is exact. Scheduler jobs are
 not listed.
 
+Tables list what they need too: their columns' object types and the
+functions their virtual columns call come from `ALL_DEPENDENCIES` and are
+exact. Oracle records nothing for a column default that draws from a
+sequence (`DEFAULT orders_seq.NEXTVAL`), so defaults are parsed for the
+objects they name, and those edges are marked inferred. Package planning
+follows these edges to work out what an image needs.
+
 The `ALL_*` views show only what the connecting user owns or has been
 granted. Connecting as each schema's owner, as by default, sees everything.
 Another user needs privileges on the objects (or `SELECT ANY DICTIONARY`):

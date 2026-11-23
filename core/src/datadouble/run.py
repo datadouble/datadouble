@@ -799,6 +799,7 @@ class Run:
             if files is not None:
                 self._exits.enter_context(files.exits)
             planned = self.plan()
+            _buildable(planned, loading=self._needs(Stage.LOAD))
             files_planned = files.plan() if files is not None else None
             outputs = _Outputs()
             if self._needs(Stage.EXTRACT):
@@ -902,6 +903,23 @@ class _Outputs:
     reports: list[VerificationReport] = field(default_factory=list[VerificationReport])
     summaries: list[ImageSummary] = field(default_factory=list[ImageSummary])
     stored: list[str] = field(default_factory=list[str])
+
+
+def _buildable(planned: Plan, *, loading: bool) -> None:
+    """Fail before reading the source if a group's image cannot be built yet.
+
+    Package planning reports a standalone group's closure, but loading what it
+    pulls in is not built yet, so such a group can be planned and not loaded.
+    """
+    standalone = [group.name for group in planned.groups if group.standalone]
+    if loading and standalone:
+        names = ", ".join(repr(name) for name in standalone)
+        message = (
+            f"standalone image groups ({names}) can be planned, and `datadouble plan` shows "
+            "what each pulls in, but this version cannot load them yet; leave out "
+            "`standalone` to build"
+        )
+        raise RunError(message)
 
 
 def _counts(counts: tuple[TableCount, ...]) -> list[JsonValue]:

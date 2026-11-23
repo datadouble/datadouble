@@ -305,6 +305,15 @@ def test_the_catalog_lists_pagilas_objects_and_their_dependencies() -> None:
         "materialized-view datadouble.public.rental_by_category"
     )
     assert edges("type datadouble.public.rating_note") == {"type datadouble.public.mpaa_rating"}
+
+    def needs(name: str) -> set[str]:
+        table = catalog.table(TableName.of("datadouble", "public", name))
+        assert table is not None
+        return {str(edge) for edge in table.depends_on}
+
+    # Tables need their defaults' sequences and their columns' types, exactly.
+    assert "sequence datadouble.public.actor_actor_id_seq" in needs("actor")
+    assert {"type datadouble.public.mpaa_rating", "type datadouble.public.year"} <= needs("film")
     # PL/pgSQL bodies are parsed: their edges are inferred.
     balance = (
         "function datadouble.public.get_customer_balance"

@@ -159,6 +159,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as new. An object that changes between planning and extracting stops the
   extract, as a changed table does. The MySQL adapter now needs MySQL
   8.0.13 or later and says so.
+- **Package planning: each image group's closure, and `standalone` groups**
+  ([#79](https://github.com/datadouble/datadouble/issues/79)). After the
+  subset plan, the plan works out per group what its image needs: from its
+  tables, the objects that come with them (triggers, views over them alone)
+  and the objects the spec or the group declares in the new `objects:` list
+  (`{function: public.uuid_generate_v4}`), it follows followed references,
+  what tables need and every object's dependencies, across schemas and
+  databases. A group with `standalone: true` pulls what it reaches into its
+  image, objects and tables with the rows its rows reference, and needs no
+  `requires:` for followed references. The plan lists each group's declared
+  objects, the objects its image needs in dependency order, and what a
+  standalone group pulls in with the path that reached it. An object that
+  needs an excluded table, or one the catalog does not list, fails the plan
+  naming the path, or warns when an inferred edge is on it. Strict mode now
+  also fails on a removed object that a packaged table or a declared object
+  still needs, and on a new or changed object on a path to an excluded
+  table. Building standalone images is not available yet: a run with a
+  standalone group plans and stops before extracting.
+- **Tables list the objects they need.** The catalog records the sequences
+  and functions tables' column defaults, generated or computed columns and
+  check constraints use, and their columns' user-defined types: exactly from
+  `pg_depend` and SQL Server's dependency views, from `ALL_DEPENDENCIES` on
+  Oracle (whose sequence defaults are parsed, so inferred), and none on
+  MySQL, which has no such objects. A table that needs nothing hashes as
+  before, so locks stay valid until a table that needs an object is locked.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

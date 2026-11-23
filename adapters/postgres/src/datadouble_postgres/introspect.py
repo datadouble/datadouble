@@ -21,7 +21,9 @@ definitions come from ``pg_get_functiondef``, ``pg_get_viewdef`` and
 dependencies come from ``pg_depend``, which is exact for views, triggers,
 types, sequences and routines with SQL-standard bodies; other routine bodies
 (PL/pgSQL and the like) are parsed for names, and those edges are marked
-inferred. Objects are named ``database.schema.object`` like tables, and a
+inferred. A table needs the types of its columns, and the sequences and
+functions its defaults and check constraints use, from ``pg_depend`` too.
+Objects are named ``database.schema.object`` like tables, and a
 trigger ``database.schema.table.trigger``'s last part is ``table.trigger``,
 since trigger names are only unique per table. Each database is read on its
 own, so no edge crosses databases.
@@ -235,6 +237,28 @@ WHERE d.deptype IN ('n', 'a')
 """
 """Every normal and automatic dependency, a view's rule standing for the view."""
 
+_TABLE_DEPENDS = """
+SELECT DISTINCT n.relid, d.refclassid::oid, d.refobjid
+FROM pg_catalog.pg_depend d
+CROSS JOIN LATERAL (
+  SELECT CASE d.classid
+    WHEN 'pg_catalog.pg_class'::regclass THEN CASE WHEN d.objsubid > 0 THEN d.objid END
+    WHEN 'pg_catalog.pg_attrdef'::regclass THEN (
+      SELECT a.adrelid FROM pg_catalog.pg_attrdef a WHERE a.oid = d.objid)
+    WHEN 'pg_catalog.pg_constraint'::regclass THEN (
+      SELECT k.conrelid FROM pg_catalog.pg_constraint k
+      WHERE k.oid = d.objid AND k.contype = 'c')
+  END AS relid
+) n
+WHERE d.deptype = 'n' AND n.relid IS NOT NULL
+  AND d.classid IN ('pg_catalog.pg_class'::regclass, 'pg_catalog.pg_attrdef'::regclass,
+                    'pg_catalog.pg_constraint'::regclass)
+  AND d.refclassid IN ('pg_catalog.pg_proc'::regclass, 'pg_catalog.pg_class'::regclass,
+                       'pg_catalog.pg_type'::regclass)
+"""
+"""What tables need: a column's type, the sequences and functions its default
+uses, and the functions a check constraint calls."""
+
 _OBJECT_KINDS = {
     "f": ObjectKind.FUNCTION,
     "p": ObjectKind.PROCEDURE,
@@ -371,9 +395,13 @@ def introspect(
             )
             for oid, (name, _) in tables.items()
         ]
-        objects = _objects(
+        objects, needs = _objects(
             cursor, database, {oid: name for oid, (name, _) in tables.items()}, table_list
         )
+        table_list = [
+            table.model_copy(update={"depends_on": tuple(dict.fromkeys(needs[table.name]))})
+            for table in table_list
+        ]
         cursor.execute(_EXTENSIONS)
         extensions = tuple(
             Extension(name=str(name), version=str(version), schema_=str(schema))
@@ -407,8 +435,8 @@ def _objects(
     database: str,
     tables: dict[int, TableName],
     table_list: list[Table],
-) -> tuple[SourceObject, ...]:
-    """The source's objects, with their exact and inferred dependencies."""
+) -> tuple[tuple[SourceObject, ...], defaultdict[TableName, list[Dependency]]]:
+    """The source's objects, with their exact and inferred dependencies, and what tables need."""
     found = cursor.execute(_CATALOG_OIDS).fetchone() or (0, 0)
     pg_class, pg_type = int(str(found[0])), int(str(found[1]))
     nodes: dict[_Key, _Node] = {(pg_class, oid): name for oid, name in tables.items()}
@@ -441,9 +469,16 @@ def _objects(
                 else Dependency(object=target)
             )
             exact[owner].append(edge)
+    needs: defaultdict[TableName, list[Dependency]] = defaultdict(list)
+    cursor.execute(_TABLE_DEPENDS)
+    for relid, refclassid, refobjid in cursor.fetchall():
+        owner = nodes.get((pg_class, int(str(relid))))
+        target = nodes.get((int(str(refclassid)), int(str(refobjid))))
+        if isinstance(owner, TableName) and isinstance(target, ObjectRef):
+            needs[owner].append(Dependency(object=target))
     plain = [SourceObject(ref=ref, fingerprint="") for ref in definitions]
     candidates = Candidates.of(table_list, plain)
-    return tuple(
+    objects = tuple(
         SourceObject(
             ref=ref,
             fingerprint=definition_fingerprint(definition),
@@ -459,6 +494,7 @@ def _objects(
         )
         for ref, (definition, body, language) in definitions.items()
     )
+    return objects, needs
 
 
 def _aliases(

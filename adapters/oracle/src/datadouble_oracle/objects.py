@@ -11,6 +11,11 @@ or type's specification and body are one object. Definitions are
 ``ALL_SEQUENCES``' settings for sequences (not the next number, which moves).
 Dependencies come from ``ALL_DEPENDENCIES``, which Oracle keeps exactly for
 every object, PL/SQL included, so none are inferred.
+
+Tables need objects too: ``ALL_DEPENDENCIES`` records a table's object types
+and the functions its virtual columns call. A column default that draws from
+a sequence (``DEFAULT orders_seq.NEXTVAL``) is recorded nowhere, so defaults
+are parsed for names, and those edges are inferred.
 """
 
 from collections import defaultdict
@@ -23,6 +28,7 @@ from datadouble.catalog import (
     definition_fingerprint,
 )
 from datadouble.names import TableName
+from datadouble.objects import Candidates, Dialect, infer_table_needs, merge
 from datadouble_oracle.driver import Cursor, Value
 
 _OBJECTS = """
@@ -64,6 +70,16 @@ FROM all_dependencies d
 WHERE d.owner IN ({0}) AND d.referenced_owner IN ({0})
 """
 
+_DEFAULTS = """
+SELECT c.owner, c.table_name, c.data_default
+FROM all_tab_cols c
+WHERE c.owner IN ({0}) AND c.default_length > 0 AND c.identity_column = 'NO'
+  AND c.hidden_column = 'NO'
+"""
+"""Column defaults, a ``LONG`` the ``WHERE`` clause cannot test, so tested by length."""
+
+_DIALECT = Dialect(quotes='"')
+
 _KINDS = {
     "VIEW": ObjectKind.VIEW,
     "MATERIALIZED VIEW": ObjectKind.MATERIALIZED_VIEW,
@@ -84,8 +100,11 @@ type _Refs = dict[tuple[str, str, ObjectKind], ObjectRef]
 
 def read_objects(
     cursor: Cursor, schemas: tuple[str, ...], tables: frozenset[TableName], binds: str
-) -> tuple[SourceObject, ...]:
-    """The objects of ``schemas``; ``binds`` names the schemas' bind variables."""
+) -> tuple[tuple[SourceObject, ...], dict[TableName, tuple[Dependency, ...]]]:
+    """The objects of ``schemas``, and what each table needs.
+
+    ``binds`` names the schemas' bind variables.
+    """
     params: dict[str, Value] = {f"s{i}": schema for i, schema in enumerate(schemas)}
     cursor.execute(_OBJECTS.format(binds), params)
     refs: _Refs = {}
@@ -93,8 +112,8 @@ def read_objects(
         ref = ObjectRef(kind=_KINDS[str(kind)], namespace=(str(owner),), name=str(name))
         refs[(str(owner), ref.name, ref.kind)] = ref
     text = _definitions(cursor, refs, binds, params)
-    edges = _dependencies(cursor, refs, tables, binds, params)
-    return tuple(
+    edges, exact = _dependencies(cursor, refs, tables, binds, params)
+    objects = tuple(
         SourceObject(
             ref=ref,
             fingerprint=definition_fingerprint("".join(text[ref])),
@@ -102,6 +121,31 @@ def read_objects(
         )
         for ref in refs.values()
     )
+    inferred = _defaults(cursor, objects, tables, binds, params)
+    needs = {
+        table: merge(exact[table], inferred[table])
+        for table in sorted(tables, key=str)
+        if exact[table] or inferred[table]
+    }
+    return objects, needs
+
+
+def _defaults(
+    cursor: Cursor,
+    objects: tuple[SourceObject, ...],
+    tables: frozenset[TableName],
+    binds: str,
+    params: dict[str, Value],
+) -> defaultdict[TableName, list[Dependency]]:
+    """The objects each table's column defaults name, as inferred edges."""
+    candidates = Candidates.of((), objects)
+    found: defaultdict[TableName, list[Dependency]] = defaultdict(list)
+    cursor.execute(_DEFAULTS.format(binds), params)
+    for owner, name, default in cursor.fetchall():
+        table = TableName.of(str(owner), str(name))
+        if table in tables and default is not None:
+            found[table].extend(infer_table_needs(str(default), table, candidates, _DIALECT))
+    return found
 
 
 def _definitions(
@@ -129,21 +173,33 @@ def _dependencies(
     tables: frozenset[TableName],
     binds: str,
     params: dict[str, Value],
-) -> defaultdict[ObjectRef | None, list[Dependency | None]]:
-    """Each object's edges to the schemas' tables and objects; None stands for anything else."""
+) -> tuple[
+    defaultdict[ObjectRef | None, list[Dependency | None]],
+    defaultdict[TableName, list[Dependency]],
+]:
+    """Each object's edges to the schemas' tables and objects, and each table's to objects.
+
+    None stands for anything else.
+    """
     edges: defaultdict[ObjectRef | None, list[Dependency | None]] = defaultdict(list)
+    needs: defaultdict[TableName, list[Dependency]] = defaultdict(list)
     cursor.execute(_DEPENDENCIES.format(binds), params)
     for owner, name, kind, target_owner, target_name, target_kind in cursor.fetchall():
         ref = _ref(refs, owner, name, kind)
         table = TableName.of(str(target_owner), str(target_name))
         target = _ref(refs, target_owner, target_name, target_kind)
+        if str(kind) == "TABLE":
+            own = TableName.of(str(owner), str(name))
+            if own in tables and target is not None:
+                needs[own].append(Dependency(object=target))
+            continue
         is_table = str(target_kind) == "TABLE" and table in tables
         edges[ref].append(
             Dependency(table=table)
             if is_table
             else (None if target is None or target == ref else Dependency(object=target))
         )
-    return edges
+    return edges, needs
 
 
 def _ref(refs: _Refs, owner: object, name: object, kind: object) -> ObjectRef | None:

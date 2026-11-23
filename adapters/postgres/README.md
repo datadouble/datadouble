@@ -164,3 +164,9 @@ routines with SQL-standard bodies (`BEGIN ATOMIC`). Other routine bodies,
 such as PL/pgSQL, are parsed for the tables and objects they name, and those
 edges are marked inferred: a statement built with `EXECUTE` at run time is
 not seen.
+
+Tables list what they need too, exactly from `pg_depend`: the sequences and
+functions their column defaults and generated columns use, the functions
+their check constraints call, and their columns' enum, domain, composite and
+range types. Package planning follows these edges to work out what an
+image needs.

@@ -167,6 +167,64 @@ With no `images:` section there is one group containing everything.
 5. **Independent life cycles.** Each image has its own manifest, identity and
    channels, so it can be promoted, fetched, rolled back and pruned on its own.
 
+### Images that work on their own
+
+Subset planning decides which rows the extract reads. **Package planning**
+runs after it, once per group, and works out what the group's image needs
+to work: its **closure**. It starts from the group's tables, the objects the
+spec and the group declare in `objects:` (code outside Datadouble expects
+them), and the objects that come with the group's tables (triggers on them,
+views over them alone), and follows, transitively and across schemas and
+databases:
+
+- references from a table up to its parents where the reference is
+  followed, and down to its children where the spec follows them
+  (`follow.down`); a fallback such as `on_missing: null` means the parent
+  may be missing, so it is not followed;
+- what a table's definition uses: the sequence or function in a column's
+  default, a column's user-defined type, a function a check constraint
+  calls (see [source objects](#source-objects));
+- every object's dependency edges, exact and inferred.
+
+```yaml
+objects:                         # every image: what applications expect
+  - function: public.uuid_generate_v4
+images:
+  billing:
+    include: ["billing.*"]
+    standalone: true             # pull in what billing needs from elsewhere
+    objects:
+      - view: reporting.daily
+```
+
+A **standalone** group pulls into its image everything its closure reaches
+that the group does not include: objects with their definitions, and tables
+with the rows the group's rows reference. It needs no `requires:` for the
+references it follows. Other groups pull nothing in: their references into
+other groups stay with `requires:` and fallbacks, and their closure follows
+only what their tables and declared objects need of objects.
+
+The plan lists, per group, its declared objects, every object its image
+needs in dependency order, and for a standalone group each table and object
+pulled in with the path that reached it. Anything an image cannot have fails
+the plan naming the object and that path: an object that needs an excluded
+table (copies leave such an object out), or an object the catalog does not
+list, such as one in a database the spec does not read. When an inferred
+edge is on the path it warns instead, since inferred edges never fail a plan
+on their own; a pulled-in routine whose edges were inferred warns too, so a
+person checks it. Engines without objects (MongoDB, Redis, Elasticsearch,
+OpenSearch, Salesforce, file trees) get the table closure only.
+
+Strict mode asks package planning what a difference from the lock breaks
+(decision 130): a removed object that a packaged table or a declared object
+still needs, and a new or changed object on a path to something an image
+cannot have, fail the plan at every level.
+
+Building standalone images is not available yet: a run with a standalone
+group plans, and `datadouble plan` shows each closure, but stops before
+extracting. Loading a closure creates its objects from their definitions
+and its tables in dependency order, in the engine's adapter.
+
 Groups match on whatever namespace an engine has, like every name in a spec
 ([table names](subsetting.md#table-names)): databases and schemas for
 relational engines and MongoDB, database numbers or key prefixes for Redis,
@@ -301,6 +359,10 @@ change what a copy holds or how it behaves, so the catalog lists them too
   (`shop.public.total` in PostgreSQL), with the argument types of a routine
   that can be overloaded, a fingerprint of its definition, and
   dependency edges to the tables and objects it needs.
+- **Tables list what they need** among the objects: the sequences and
+  functions their column defaults and check constraints use, and their
+  columns' user-defined types, as far as each engine records them (each
+  adapter's README says which). Package planning follows these edges.
 - **Edges are exact where the engine records them** (PostgreSQL's
   `pg_depend`, SQL Server's `sys.sql_expression_dependencies`, Oracle's
   `ALL_DEPENDENCIES`, MySQL's view usage tables). Where it does not, the

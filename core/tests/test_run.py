@@ -762,3 +762,17 @@ def test_working_databases_must_be_able_to_add_accounts(
     spec = SPEC.replace("store:", "package: {accounts: [{user: app, password: x}]}\nstore:")
     with pytest.raises(EngineError, match="cannot give images accounts"):
         run(tmp_path, registry, spec=spec)
+
+
+def test_standalone_groups_are_planned_but_not_loaded(tmp_path: Path, registry: Registry) -> None:
+    alone = SPEC + "images:\n  shop: {include: ['*'], standalone: true}\n"
+    planned = run(tmp_path, registry, spec=alone, stages=(Stage.PLAN,))
+    assert not planned.failed()
+    with pytest.raises(RunError, match=r"standalone image groups \('shop'\) can be planned"):
+        run(
+            tmp_path,
+            registry,
+            spec=alone,
+            stages=(Stage.EXTRACT, Stage.LOAD),
+            resume=planned.generation,
+        )

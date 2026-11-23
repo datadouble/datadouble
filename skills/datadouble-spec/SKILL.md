@@ -1,6 +1,6 @@
 ---
 name: datadouble-spec
-description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks and verification - and check it with datadouble plan. Use for a new spec, a strict-mode failure, re-locking the catalog after a schema change, a Jailer model to import, putting a connection's password, key or other credential into a spec (never pass the secret itself, not even to this skill), or questions about what a spec does.
+description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks, verification and image groups - and check it with datadouble plan. Use for a new spec, a strict-mode failure, re-locking the catalog after a schema change, a Jailer model to import, putting a connection's password, key or other credential into a spec (never pass the secret itself, not even to this skill), or questions about what a spec does.
 ---
 
 # The Datadouble spec
@@ -112,7 +112,10 @@ function can change what the copies hold. Tell them which objects changed;
 once they have checked, `datadouble lock` records the new definitions.
 
 A removed object that another one still needs fails at every level, naming
-both, such as a function a trigger calls. Edges marked `inferred` were
+both, such as a function a trigger calls. So does a removed object a
+packaged table needs (its default's sequence, a column's type) or `objects:`
+declares, and a new or changed object that leads to an excluded table from
+an image (a new trigger calling a function that reads one). Edges marked `inferred` were
 parsed from a body rather than recorded by the engine; a removal only they
 point at warns instead, saying what may still need it. In MySQL a view's
 exact edges include the tables its stored functions read, so a failure can
@@ -126,6 +129,35 @@ connecting user lost privileges, not that the source changed: SQL Server
 needs `VIEW DEFINITION`, and Oracle shows bodies and objects only to their
 owner or to users granted them (see the adapters' READMEs). Say so rather
 than re-locking.
+
+## Images that must work alone
+
+`datadouble plan` works out, per image group, what the image needs to work:
+its closure. It follows followed references up to parents (and down where
+`follow.down` says), what tables need (a default's sequence, a column's
+type), the triggers on the group's tables and views over them, and every
+object's dependencies, across schemas and databases.
+
+- **`standalone: true`** on a group pulls what its closure reaches into its
+  image: objects, and tables with the rows the group's rows reference. Such a
+  group needs no `requires:` for followed references. Suggest it when a
+  person wants one schema or database of a larger source as an image of its
+  own. Building standalone images is not available yet: the plan shows each
+  closure (the group's `pulled` list, each with the path that reached it),
+  and a build stops before extracting. Say so.
+- **`objects:`**, at the top of the spec or in a group, declares what code
+  outside Datadouble expects in the images, by kind and name:
+  `{function: public.uuid_generate_v4}`, `{view: reporting.daily}`. Ask the
+  person what their applications call that the tables do not show; add only
+  what they name. A name that does not resolve, or fits several objects,
+  fails naming them; add argument types (`"public.total(integer)"`) or
+  qualify it.
+- **A failure names the path**, such as `table billing.invoices -> trigger
+  ... -> function audit.write -> table audit.log, which is excluded`. The
+  fix is the person's: stop excluding what the image needs, change the
+  source, or leave the group out of what needs it. Never add excludes or
+  drop objects to make it pass (rule 4). A path through an `inferred` edge
+  only warns: tell the person to check it.
 
 ## When tables have no rows selected
 

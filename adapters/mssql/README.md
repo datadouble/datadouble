@@ -29,6 +29,11 @@ to a table or object of that schema and name, and that edge is marked
 inferred; an exact edge to the same target wins. Three-part names in the
 source's own database count.
 
+Tables list what they need too: the functions and sequences their default
+and check constraints and computed columns use, from the same view, and the
+alias and table types of their columns. Package planning follows these
+edges to work out what an image needs.
+
 Reading the catalog needs SQL Server 2017 or later, and the `VIEW
 DEFINITION` permission on the database (or on each schema): SQL Server's
 metadata visibility shows a user only the objects it has some permission

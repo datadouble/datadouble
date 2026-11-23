@@ -3,7 +3,13 @@
 
 from datadouble.catalog import Dependency, ObjectKind, ObjectRef, SourceObject
 from datadouble.names import TableName
-from datadouble.objects import Candidates, Dialect, infer_dependencies, merge
+from datadouble.objects import (
+    Candidates,
+    Dialect,
+    infer_dependencies,
+    infer_table_needs,
+    merge,
+)
 from fakes import table
 
 
@@ -126,3 +132,16 @@ def test_names_prefer_the_objects_own_database() -> None:
     assert found("SELECT 1 FROM public.users") == {"table shop.public.users (inferred)"}
     assert found("SELECT 1 FROM billing.public.users") == {"table billing.public.users (inferred)"}
     assert found("SELECT 1 FROM sales.orders") == {"table billing.sales.orders (inferred)"}
+
+
+def test_table_defaults_name_objects() -> None:
+    needs = infer_table_needs(
+        'nextval("public"."total") + users.id + stamp',
+        TableName.of("public", "orders"),
+        CANDIDATES,
+        Dialect(quotes='"'),
+    )
+    assert [str(edge) for edge in needs] == [
+        "function public.total (inferred)",
+        "procedure public.stamp (inferred)",
+    ]
