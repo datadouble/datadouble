@@ -1,0 +1,65 @@
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_7035dd2cdcdd2b 260-272
+docs/architecture.md
+  s_ad63f2bf16b775::t_42ecbbf8b22185 312-313,323-328
+docs/decisions.md
+  s_ad63f2bf16b775::t_39c81bebf8b628 130
+CHANGELOG.md
+  s_ad63f2bf16b775::t_d661307f7d4295 86-89
+  s_ad63f2bf16b775::t_cedf409cdaaee8 90-100
+ci/gitlab/README.md
+  s_ad63f2bf16b775::t_e85ea0dee4ebe3 29-30
+  s_ad63f2bf16b775::t_a52c9157d2af31 31-32
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_e3e0a70f7651d9 19-21
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_47ea77c6373f45 49-51
+  s_ad63f2bf16b775::t_56155c1e0a4f8d 52-54
+adapters/kubernetes/tests/test_kubernetes.py
+  s_ad63f2bf16b775::t_9ea928f7af53c2 9,11,18,23,25,27,36,43,47-62,233-351,356,363,366-380,395-398,400-401,406,411,415-474
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_c48514f5259dac 654-655
+skills/datadouble-provision/SKILL.md
+  s_ad63f2bf16b775::t_b2d1fe3f4d2e2b 26-36
+adapters/kubernetes/src/datadouble_kubernetes/__init__.py
+  s_ad63f2bf16b775::t_110da189e1252b 15-21,25-26,28-30,32-43,48,50,52-55,80-153,155-210,239-240,244-257,280,314,351,366,383,397,409,430,442
+adapters/kubernetes/src/datadouble_kubernetes/runtime.py
+  s_ad63f2bf16b775::t_064f56487a534f 16-17,25-29,42,53,77,127,131-141,210,214,217,254,288,329-331,341,369,371
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_8d89c58a6ad2ed 29
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_52a1e500c7dcd1 11-12,38-112
+  s_ad63f2bf16b775::t_c45a77400cd060 113
+adapters/kubernetes/tests/test_kubernetes_runtime.py
+  s_ad63f2bf16b775::t_a170cea4b796e8 13,15,22-23,57-64,327-362,379,405,407-411,413-420
+adapters/kubernetes/pyproject.toml
+  s_ad63f2bf16b775::t_9eda753109a5a2 15
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_c2ff2f36627f07 33-35
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_f38b5b3e53167e 19,21,23-24,636-650,658
+core/src/datadouble/secrets.py
+  s_ad63f2bf16b775::t_1a4f75500ac65b 13,24-34,36-37
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_8deffe07d98d94 331-334
+core/tests/test_cli.py
+  s_ad63f2bf16b775::t_af8adc8e297c92 6,8-10,76-102
+uv.lock
+  s_ad63f2bf16b775::t_125447cd2a9808 2,597,601-604
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "81ac65bea3498b706543d4032b6c3feebee940c7",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
