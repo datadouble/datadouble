@@ -57,7 +57,7 @@ from datadouble.runtime import (
     absolute,
 )
 from datadouble.settings import parse_settings
-from datadouble_kubernetes import ClusterSettings, Kubectl, KubectlError
+from datadouble_kubernetes import ClusterSettings, KubectlError, current_namespace
 
 _OWNER = "datadouble.dev/owner"
 _RUNTIME_LABEL = "datadouble.dev/runtime"
@@ -93,28 +93,6 @@ class KubernetesRuntimeSettings(ClusterSettings):
     image_pull_secrets: tuple[str, ...] = ()
     ready_seconds: int = Field(default=300, ge=1)
     stop_seconds: int = Field(default=300, ge=1)
-
-
-SERVICE_ACCOUNT_NAMESPACE = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-"""The namespace of the pod a process runs in, as Kubernetes mounts it for its service account."""
-
-
-def current_namespace(kubectl: Kubectl) -> str:
-    """The namespace ``kubectl`` uses when told none.
-
-    Inside a cluster, with no kubeconfig (neither the settings' nor
-    ``KUBECONFIG``), that is the namespace of the pod Datadouble runs in;
-    otherwise the namespace of the kubeconfig's context (the settings'
-    ``context``, or its current one), or ``default`` when it names none.
-    """
-    in_cluster = kubectl.kubeconfig is None and "KUBECONFIG" not in os.environ
-    if in_cluster and SERVICE_ACCOUNT_NAMESPACE.is_file():
-        return SERVICE_ACCOUNT_NAMESPACE.read_text(encoding="utf-8").strip()
-    try:
-        done = kubectl.run(["config", "view", "--minify", "--output=jsonpath={..namespace}"])
-    except KubectlError as error:
-        raise ContainerError(str(error)) from None
-    return (done.stdout.strip() if done.status == 0 else "") or "default"
 
 
 class KubernetesServer:
@@ -161,7 +139,10 @@ class KubernetesRuntime:
     def namespace(self) -> str:
         """The namespace pods start in: the settings', or :func:`current_namespace`."""
         if self._namespace is None:
-            self._namespace = current_namespace(self.kubectl)
+            try:
+                self._namespace = current_namespace(self.kubectl)
+            except KubectlError as error:
+                raise ContainerError(str(error)) from None
         return self._namespace
 
     def invoke(self, arguments: Sequence[str]) -> Completed:

@@ -18,10 +18,10 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+import datadouble_kubernetes as kubernetes_module
 from datadouble.runtime import Container, ContainerError
 from datadouble.secrets import SecretError
 from datadouble_kubernetes import Kubectl
-from datadouble_kubernetes import runtime as runtime_module
 from datadouble_kubernetes.runtime import (
     KubernetesRuntime,
     KubernetesRuntimeSettings,
@@ -212,13 +212,16 @@ def test_the_namespace_is_kubectl_s_when_left_out(
     container = Container(image="postgres:18", command=("true",), owner=tmp_path)
     account = tmp_path / "namespace"
     account.write_text("shop-staging\n", encoding="utf-8")
-    monkeypatch.setattr(runtime_module, "SERVICE_ACCOUNT_NAMESPACE", account)
+    monkeypatch.setattr(kubernetes_module, "SERVICE_ACCOUNT_NAMESPACE", account)
     monkeypatch.delenv("KUBECONFIG", raising=False)
     inside = runtime(tmp_path)
     metadata = inside.manifest("p", container, ["run"])["metadata"]
     assert isinstance(metadata, dict)
     assert metadata["namespace"] == "shop-staging"
     assert inside.namespace == "shop-staging"
+    # kubectl treats an empty KUBECONFIG as unset.
+    monkeypatch.setenv("KUBECONFIG", "")
+    assert runtime(tmp_path).namespace == "shop-staging"
     monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
     monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "team")
     assert runtime(tmp_path).namespace == "team"
@@ -226,7 +229,8 @@ def test_the_namespace_is_kubectl_s_when_left_out(
     assert runtime(tmp_path).namespace == "default"
     cluster.mkdir(exist_ok=True)
     (cluster / "fail").write_text("", encoding="utf-8")
-    assert runtime(tmp_path).namespace == "default"
+    with pytest.raises(ContainerError, match="current context of the kubeconfig KUBECONFIG names"):
+        _ = runtime(tmp_path).namespace
     assert runtime(tmp_path, namespace="dd").namespace == "dd"
     (cluster / "fail").unlink()
     # A kubeconfig in the settings drives another cluster: its context names the

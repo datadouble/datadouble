@@ -107,6 +107,12 @@ class Copy(_Model):
     expires_at: AwareDatetime | None = None
     location: dict[str, JsonValue] = {}
     secrets: dict[str, str] = {}
+    announced: dict[str, tuple[str, ...]] = {}
+    """The targets ``announce`` reported for the copy, by the ``announce`` entry that wrote
+    them (its adapter's name, ``name#2`` for a second entry of the same adapter), so
+    ``release`` withdraws from where it went even if the environment now resolves
+    elsewhere. One announcement may cover several copies, so each records all of the
+    entry's targets."""
 
     def public(self) -> "Copy":
         """The copy without its credentials."""
@@ -400,6 +406,39 @@ def copies_of(
         for prefix in staging.lines(spec.name, group)
         for c in Line(staging, prefix).load()
     )
+
+
+def _merged(
+    recorded: Mapping[str, tuple[str, ...]], targets: Mapping[str, tuple[str, ...]]
+) -> dict[str, tuple[str, ...]]:
+    merged = dict(recorded)
+    for key, written in targets.items():
+        merged[key] = tuple(dict.fromkeys((*merged.get(key, ()), *written)))
+    return merged
+
+
+def record_announced(
+    spec: Spec, copies: tuple[Copy, ...], targets: Mapping[str, tuple[str, ...]]
+) -> None:
+    """Add each entry's ``targets`` to what ``copies`` record as announced, under the lock."""
+    if spec.fetch is None:
+        message = "the spec needs a `fetch` section"
+        raise StagingError(message)
+    staging = Staging(spec.fetch)
+    ids: dict[str, set[str]] = {}
+    for copy in copies:
+        ids.setdefault(copy.prefix, set()).add(copy.id)
+    for prefix, chosen in ids.items():
+        with staging.locked(prefix):
+            line = Line(staging, prefix)
+            line.save(
+                [
+                    c.model_copy(update={"announced": _merged(c.announced, targets)})
+                    if c.id in chosen
+                    else c
+                    for c in line.load()
+                ]
+            )
 
 
 # The filesystem replicate adapter

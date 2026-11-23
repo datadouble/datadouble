@@ -23,8 +23,7 @@ replicate:
       #   path: /exports/clones
       storage_class: datadouble
 announce:
-  - k8s-secret:
-      namespace: dev
+  - k8s-secret: {}                 # Secrets in Datadouble's own namespace
 ```
 
 Each volume carries `datadouble.dev/` labels: `spec`, `group`, `engine`,
@@ -41,7 +40,7 @@ line, or look up an available volume's `server-version` before rendering.
 
 All three drive `kubectl` (`DATADOUBLE_KUBECTL` names another binary).
 
-## The runtime's namespace
+## Namespaces
 
 ```yaml
 runtime:
@@ -60,6 +59,42 @@ namespace of the kubeconfig's context (the settings' `context`, or its current
 one), or `default` when it names none. So one spec serves CI/CD jobs that run
 as pods in each side's own namespace, which `ci init` requires a set
 namespace to match (decision 133).
+
+An empty `KUBECONFIG` counts as unset, as it does for `kubectl`. A context
+`kubectl` cannot read (a bad kubeconfig, an unknown context) fails, naming
+the kubeconfig and context, rather than falling back to `default`.
+
+`k8s-secret` follows the same rule, with its own `kubeconfig` and `context`
+(decision 135): left out, its `namespace` is the one `kubectl` would use, so
+copies' Secrets go to the namespace Datadouble's pod runs in, where the Helm
+chart's Role and the Jenkins `instructions` let it write them. `announce`
+reports where each went (`k8s-secret:shop-dev/datadouble-<copy id>`), and
+the copy registry records it, so `release` deletes each Secret from the
+namespace it was written to, even when the releasing process would resolve
+another: a copy claimed from a laptop, whose context names `alice`, gets its
+Secret in `alice`, and the scheduled sweep running in `shop-dev` deletes it
+there. Two things must hold for that:
+
+- **One cluster.** Every process that announces or releases with the spec
+  reaches the same cluster through the `k8s-secret` entry. The registry
+  records namespaces, not clusters.
+- **Delete rights.** The identity that releases (the sweep's service
+  account) may `delete` Secrets in every namespace a copy was announced
+  into, `alice` here.
+
+Release tries every Secret, then fails once, naming each one it could not
+delete (`k8s-secret:alice/datadouble-<copy id>`). The copy is already gone
+from the registry, so delete those by hand. Consumers look for a Secret
+where it went, so run `claim` from where consumers expect it, or set
+`namespace`. Set `namespace` to write Secrets anywhere else, such as the
+namespace consumers run in, and grant Datadouble's service account `get`,
+`create`, `patch` and `delete` on Secrets there.
+
+Before decision 135 `k8s-secret` always wrote to `default`, and the
+registry did not record it. Releases now look for those Secrets in the newly
+resolved namespace, so keep `namespace: default` in the spec until copies
+announced before the change are released, or delete their
+`datadouble-<copy id>` Secrets in `default` by hand.
 
 ## Reaching the cluster
 
