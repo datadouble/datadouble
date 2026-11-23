@@ -182,6 +182,7 @@ known-first-party = [
     "test_redis_conformance",
     "test_elasticsearch_conformance",
     "test_opensearch_conformance",
+    "test_jenkins_conformance",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -239,7 +240,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/salesforce/src:adapters/salesforce/tests:adapters/s3/src:adapters/http/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:ci/jenkins/src:ci/kubernetes/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/salesforce/src:adapters/salesforce/tests:adapters/s3/src:adapters/http/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:ci/jenkins/src:ci/jenkins/tests:ci/kubernetes/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -293,7 +294,7 @@ include = [
     "scripts",
     "tests",
 ]
-extraPaths = ["scripts", "core/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests", "adapters/elasticsearch/tests", "adapters/opensearch/tests", "adapters/files/tests", "adapters/salesforce/tests"]
+extraPaths = ["scripts", "core/tests", "ci/jenkins/tests", "adapters/mongodb/tests", "adapters/mssql/tests", "adapters/mysql/tests", "adapters/oracle/tests", "adapters/postgres/tests", "adapters/redis/tests", "adapters/elasticsearch/tests", "adapters/opensearch/tests", "adapters/files/tests", "adapters/salesforce/tests"]
 reportMissingTypeStubs = true
 reportUnnecessaryTypeIgnoreComment = "error"
 

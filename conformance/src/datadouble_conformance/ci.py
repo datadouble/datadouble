@@ -232,6 +232,11 @@ class CiHarness(Protocol):
         """Who a request's on-demand copies are for (``pr-7``, ``mr-1``)."""
         ...
 
+    @property
+    def init_fields(self) -> Mapping[str, str]:
+        """More ``ci init`` fields for the system's jobs, such as ``agent`` and ``cloud``."""
+        ...
+
 
 def docker(*arguments: str, stdin: str | None = None, env: Mapping[str, str] | None = None) -> str:
     """Run a ``docker`` command and return its output; fail with its error."""
@@ -395,7 +400,7 @@ def world(harness: CiHarness, repository: Path) -> Generator[World]:
                 built.hook,
             ).strip()  # fmt: skip
             built.secrets["DDCI_WEBHOOK"] = f"http://{hook}:8080/hook/{name}"
-            _generate(built, harness.system)
+            _generate(built, harness)
             yield built
         finally:
             built.as_root(f"rm -rf {base}")
@@ -475,7 +480,7 @@ def ci_init(built: World, system: str, spec: Path, *jobs: JobKind, **fields: str
     return api.handle_json(json.dumps(request))
 
 
-def _generate(built: World, system: str) -> None:
+def _generate(built: World, harness: CiHarness) -> None:
     built.repository.mkdir(parents=True, exist_ok=True)
     on_demand = built.write_spec("on-demand")
     built.write_spec("pool")
@@ -483,14 +488,18 @@ def _generate(built: World, system: str) -> None:
         locked = api.handle_json(json.dumps({"command": "lock", "spec": str(on_demand)}))
     assert isinstance(locked, api.LockResponse), locked
     production = ci_init(
-        built, system, on_demand, JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK,
+        built, harness.system, on_demand,
+        JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK,
         runner=built.runners[Side.PRODUCTION], work=str(built.base / "work"),
+        **harness.init_fields,
     )  # fmt: skip
     assert isinstance(production, api.CiInitResponse), production
     assert set(production.environment) == set(built.secrets)
     others = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
     runner = built.runners[Side.NON_PRODUCTION]
-    non_production = ci_init(built, system, on_demand, *others, runner=runner)
+    non_production = ci_init(
+        built, harness.system, on_demand, *others, runner=runner, **harness.init_fields
+    )
     assert isinstance(non_production, api.CiInitResponse), non_production
     assert "DDCI_SOURCE_DSN" not in non_production.environment
     assert "DDCI_WEBHOOK" in non_production.environment
@@ -582,6 +591,7 @@ class CiConformance:
         made = ci_init(
             shop, ci_harness.system, pool, JobKind.FETCH, JobKind.PROVISION,
             runner=shop.runners[Side.NON_PRODUCTION], output=str(pool_repository),
+            **ci_harness.init_fields,
         )  # fmt: skip
         assert isinstance(made, api.CiInitResponse), made
         ci_harness.prepare(pool_repository)
@@ -665,6 +675,7 @@ class CiConformance:
                 refused = ci_init(
                     shop, ci_harness.system, shop.spec("on-demand"), kind,
                     runner=ci_harness.hosted_runner, work=str(shop.base / "work"),
+                    **ci_harness.init_fields,
                 )  # fmt: skip
                 assert isinstance(refused, api.ErrorResponse)
                 assert refused.error is api.ErrorCode.CI_FAILED

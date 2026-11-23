@@ -24,6 +24,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -78,6 +79,12 @@ def _encoded(values: Mapping[str, str]) -> str:
     return base64.b64encode(json.dumps(dict(values)).encode()).decode()
 
 
+def parse_outputs(text: str) -> dict[str, str]:
+    """The step's outputs file: one ``name=value`` per line."""
+    pairs = (line.partition("=") for line in text.splitlines())
+    return {key: value for key, _, value in pairs}
+
+
 def _wait(check: Callable[[], bool], what: str, seconds: int) -> None:
     deadline = time.monotonic() + seconds
     while not check():
@@ -96,6 +103,8 @@ class Server:
     jar: Path
     work: Path
     """Where workspaces and the suite's git repositories live, at the same path in Jenkins."""
+    container: str
+    """Jenkins' container."""
     crumb: str = ""
 
     def request(self, *options: str) -> tuple[int, str]:
@@ -143,13 +152,23 @@ def _ready(server: Server) -> bool:
     return code == 200
 
 
-@pytest.fixture(scope="session")
-def jenkins(tmp_path_factory: pytest.TempPathFactory) -> Generator[Server]:
-    """Jenkins for the suite, removed afterwards."""
+@contextmanager
+def start_jenkins(
+    tmp_path_factory: pytest.TempPathFactory,
+    *,
+    address: str = "127.0.0.1",
+    docker_socket: bool = True,
+    java_options: tuple[str, ...] = (),
+) -> Generator[Server]:
+    """Jenkins on the host's network, listening on ``address``; removed afterwards.
+
+    With ``docker_socket`` its built-in node runs jobs with the host's Docker
+    daemon, as a self-hosted agent with Docker would.
+    """
     name = f"ddci-jenkins-{uuid.uuid4().hex[:8]}"
     work = Path(os.environ.get(WORK_VARIABLE, tempfile.gettempdir())) / name
     with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
+        probe.bind((address, 0))
         port = int(probe.getsockname()[1])
     password = secrets.token_hex(12)
     docker("build", "--quiet", "--tag", IMAGE, str(CONTEXT))
@@ -157,23 +176,32 @@ def jenkins(tmp_path_factory: pytest.TempPathFactory) -> Generator[Server]:
         "run", "--rm", "--volume", f"{work.parent}:{work.parent}", "--entrypoint", "install",
         "--user", "0:0", IMAGE, "-d", "-m", "0777", str(work), str(work / "workspace"),
     )  # fmt: skip
-    group = str(Path("/var/run/docker.sock").stat().st_gid)
-    options = (
-        "-Djenkins.install.runSetupWizard=false"
-        " -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"
-        f" -Djenkins.model.Jenkins.workspacesDir={work}/workspace/${{ITEM_FULL_NAME}}"
+    options = " ".join(
+        (
+            "-Djenkins.install.runSetupWizard=false",
+            "-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true",
+            f"-Djenkins.model.Jenkins.workspacesDir={work}/workspace/${{ITEM_FULL_NAME}}",
+            *java_options,
+        )
     )
+    daemon: tuple[str, ...] = ()
+    if docker_socket:
+        group = str(Path("/var/run/docker.sock").stat().st_gid)
+        daemon = ("--group-add", group, "--volume", "/var/run/docker.sock:/var/run/docker.sock")
     docker(
-        "run", "--detach", "--name", name, "--network", "host", "--group-add", group,
-        "--volume", "/var/run/docker.sock:/var/run/docker.sock",
+        "run", "--detach", "--name", name, "--network", "host", *daemon,
         "--volume", f"{work.parent}:{work.parent}",
         "--env", "DDCI_JENKINS_PASSWORD",
-        "--env", f"JENKINS_OPTS=--httpPort={port} --httpListenAddress=127.0.0.1",
+        "--env", f"JENKINS_OPTS=--httpPort={port} --httpListenAddress={address}",
         "--env", f"JAVA_OPTS={options}", IMAGE,
         env={"DDCI_JENKINS_PASSWORD": password},
     )  # fmt: skip
     server = Server(
-        f"http://127.0.0.1:{port}", password, tmp_path_factory.mktemp("jenkins") / "jar", work
+        f"http://{address}:{port}",
+        password,
+        tmp_path_factory.mktemp("jenkins") / "jar",
+        work,
+        name,
     )
     try:
         _wait(lambda: _ready(server), "Jenkins to start", 600)
@@ -185,6 +213,13 @@ def jenkins(tmp_path_factory: pytest.TempPathFactory) -> Generator[Server]:
             ["run", "--rm", "--volume", f"{work.parent}:{work.parent}", "--entrypoint", "rm",
              "--user", "0:0", IMAGE, "-rf", str(work)],
         )  # fmt: skip
+
+
+@pytest.fixture(scope="session")
+def jenkins(tmp_path_factory: pytest.TempPathFactory) -> Generator[Server]:
+    """Jenkins for the suite, its built-in node running jobs with Docker."""
+    with start_jenkins(tmp_path_factory) as server:
+        yield server
 
 
 def _library(server: Server) -> Path:
@@ -207,7 +242,7 @@ class _Job:
     """Run ID → the BUILD_TAG of a failed build, which a later run with the ID resumes."""
 
 
-def _config(remote: Path, script: str, parameters: list[tuple[str, str]]) -> str:
+def _config(remote: str, script: str, parameters: list[tuple[str, str]]) -> str:
     definitions = "".join(
         f"<hudson.model.{'Boolean' if kind == 'booleanParam' else 'String'}ParameterDefinition>"
         f"<name>{name}</name></hudson.model.{'Boolean' if kind == 'booleanParam' else 'String'}"
@@ -225,7 +260,7 @@ def _config(remote: Path, script: str, parameters: list[tuple[str, str]]) -> str
         f"<properties>{properties}</properties>"
         "<definition class='org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition'>"
         "<scm class='hudson.plugins.git.GitSCM'><configVersion>2</configVersion>"
-        f"<userRemoteConfigs><hudson.plugins.git.UserRemoteConfig><url>file://{escape(str(remote))}</url>"
+        f"<userRemoteConfigs><hudson.plugins.git.UserRemoteConfig><url>{escape(remote)}</url>"
         "</hudson.plugins.git.UserRemoteConfig></userRemoteConfigs>"
         "<branches><hudson.plugins.git.BranchSpec><name>*/main</name>"
         "</hudson.plugins.git.BranchSpec></branches></scm>"
@@ -258,6 +293,14 @@ class JenkinsContainer:
         # adapter, so a GitHub-hosted machine is refused even under Jenkins.
         return {"RUNNER_ENVIRONMENT": "github-hosted"}
 
+    @property
+    def init_fields(self) -> Mapping[str, str]:
+        return {}
+
+    def remote(self, repository: Path) -> str:
+        """The URL jobs check ``repository``, a bare copy, out from."""
+        return f"file://{repository}"
+
     def prepare(self, repository: Path) -> None:
         library = _library(self.server)
         for path in (repository / "jenkins").glob("*.Jenkinsfile"):
@@ -273,7 +316,7 @@ class JenkinsContainer:
             stem = path.name.removesuffix(".Jenkinsfile")
             name = f"{stem}-{remote.name}"
             parameters = _PARAMETER.findall(path.read_text("utf-8"))
-            config = _config(remote, f"jenkins/{path.name}", parameters)
+            config = _config(self.remote(remote), f"jenkins/{path.name}", parameters)
             self.server.post(
                 f"/createItem?name={name}", "--header", "Content-Type: application/xml",
                 "--data-binary", config,
@@ -338,7 +381,7 @@ class JenkinsContainer:
         _wait(lambda: self.server.get(f"{build}/api/json")["building"] is False, build, 1800)
         details = self.server.get(f"{build}/api/json")
         log = self.server.text(f"{build}/consoleText")
-        outputs = self._outputs(known.name)
+        outputs = self.outputs(known.name, number)
         state = _RESULTS.get(str(details["result"]), State.FAILURE)
         if state is State.FAILURE:
             known.failed[context.run_id] = f"jenkins-{known.name}-{number}"
@@ -358,12 +401,13 @@ class JenkinsContainer:
         _wait(started, "the build to start", 600)
         return found[0]
 
-    def _outputs(self, name: str) -> dict[str, str]:
+    def outputs(self, name: str, number: int) -> dict[str, str]:
+        """A build's outputs, which the step left in its workspace."""
+        del number  # the built-in node keeps one workspace per job
         path = self.server.work / "workspace" / name / ".datadouble-outputs"
         if not path.exists():
             return {}
-        pairs = (line.partition("=") for line in path.read_text("utf-8").splitlines())
-        return {key: value for key, _, value in pairs}
+        return parse_outputs(path.read_text("utf-8"))
 
     def owner(self, repository: Path, request: int) -> str:
         del repository

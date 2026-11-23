@@ -205,9 +205,22 @@ The response's `instructions` list what to set up:
 - On the production side, the `datadouble-boundary` ConfigMap, inside the
   production boundary only.
 
-Kubernetes agents are not yet exercised end to end: the conformance suite
-checks their Jenkinsfiles with the declarative validator but runs jobs only
-on Docker agents.
+The conformance suite runs Kubernetes agents end to end in their own CI job
+(`make test-ci SYSTEM=jenkins-kubernetes`): Jenkins with the plugin, whose
+cloud has exactly `CLOUD_RULES`, runs every job of both sides as a pod on a
+kind cluster, each side in its own namespace from one spec whose runtime
+names none, and each build's pod must hold everything its Jenkinsfile
+declares; each side's engine pods must start in that side's namespace. A
+namespace without the ConfigMap is refused `build`, `promote` and `lock`
+while Jenkins' global environment sets `DATADOUBLE_BOUNDARY=inside`.
+
+- **The plugin's agent image** must be one the pods can pull; the suite
+  loads `jenkins/inbound-agent` into the cluster and names it to the plugin
+  (`PodTemplateStepExecution.defaultImage`).
+- **A finished pod's workspace goes with it,** and the step's outputs are
+  in the workspace. The step returns them to the Jenkinsfile; to read them
+  from outside, as the suite does, keep finished pods (the cloud's pod
+  retention) and read `.datadouble-outputs` from the Datadouble container.
 
 ## Outcomes
 

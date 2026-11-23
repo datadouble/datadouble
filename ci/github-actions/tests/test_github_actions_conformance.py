@@ -82,6 +82,10 @@ class Act:
     def hosted_environment(self) -> Mapping[str, str]:
         return {"RUNNER_ENVIRONMENT": "github-hosted"}
 
+    @property
+    def init_fields(self) -> Mapping[str, str]:
+        return {}
+
     def prepare(self, repository: Path) -> None:
         local = repository / ".github" / "actions" / "datadouble"
         local.mkdir(parents=True, exist_ok=True)

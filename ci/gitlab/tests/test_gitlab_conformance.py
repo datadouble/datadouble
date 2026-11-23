@@ -295,6 +295,10 @@ class GitLabCe:
     def hosted_environment(self) -> Mapping[str, str]:
         return {"CI_RUNNER_TAGS": '["saas-linux-small-amd64"]'}
 
+    @property
+    def init_fields(self) -> Mapping[str, str]:
+        return {}
+
     def prepare(self, repository: Path) -> None:
         generated = sorted((repository / ".gitlab").glob("datadouble-*.yml"))
         (repository / ".gitlab" / TEMPLATE).write_bytes(template())
