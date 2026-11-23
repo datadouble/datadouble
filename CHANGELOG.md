@@ -430,6 +430,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Zensical, which builds the documentation site, is required as `>=0.1.1`
+  instead of an exact version; `uv.lock` holds the exact one (decision 136).
+
 - **BREAKING: the `kubernetes` runtime's `namespace` is optional, and no
   longer defaults to `default`** (decision 133). Left out, engine pods start
   where `kubectl` would put them: in a cluster, the namespace of
