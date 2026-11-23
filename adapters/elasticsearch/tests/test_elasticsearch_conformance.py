@@ -39,7 +39,8 @@ name: rentals
 source:
   engine: elasticsearch
   connection:
-    url: {{env: {URL}}}
+    url:
+      env: {URL}
     indices: ["*", "-items", "-added"]
   image: {IMAGE}
 subset:
@@ -56,7 +57,8 @@ subset:
       - rentals -> payments.rental_id
       - customers -> reviews.subject_id
   edges:
-    rentals.customer_id -> customers: {{on_missing: null}}
+    rentals.customer_id -> customers:
+      on_missing: null
   virtual_fks:
     rentals.customer_id -> customers: {{}}
     rentals.film_id -> films: {{}}
@@ -66,31 +68,52 @@ subset:
     staff.store_id -> stores: {{}}
     staff.manager_id -> staff.staff_id: {{}}
     stores.manager_staff_id -> staff.staff_id: {{}}
-    reviews.subject_id -> customers: {{when: '{{"term": {{"subject_type": "customer"}}}}'}}
-    reviews.subject_id -> films: {{when: '{{"term": {{"subject_type": "film"}}}}'}}
+    reviews.subject_id -> customers:
+      when: '{{"term": {{"subject_type": "customer"}}}}'
+    reviews.subject_id -> films:
+      when: '{{"term": {{"subject_type": "film"}}}}'
 anonymize:
   customers:
-    first_name: {{faker: first_name}}
-    last_name: {{faker: last_name}}
-    email: {{faker: email, unique: true}}
-    address.address: {{faker: street_address}}
-    address.phone: {{faker: phone_number}}
+    first_name:
+      faker: first_name
+    last_name:
+      faker: last_name
+    email:
+      faker: email
+      unique: true
+    address.address:
+      faker: street_address
+    address.phone:
+      faker: phone_number
   staff:
-    first_name: {{faker: first_name}}
-    last_name: {{faker: last_name}}
-    email: {{faker: email, unique: true}}
-    username: {{hash: {{length: 12}}}}
+    first_name:
+      faker: first_name
+    last_name:
+      faker: last_name
+    email:
+      faker: email
+      unique: true
+    username:
+      hash:
+        length: 12
   stores:
-    address.address: {{faker: street_address}}
-    address.phone: {{faker: phone_number}}
+    address.address:
+      faker: street_address
+    address.phone:
+      faker: phone_number
   reviews:
-    reviewer.name: {{faker: name}}
-    reviewer.email: {{faker: email}}
-    body: {{expression: "ctx._source.body = 'review removed'"}}
+    reviewer.name:
+      faker: name
+    reviewer.email:
+      faker: email
+    body:
+      expression: "ctx._source.body = 'review removed'"
   events:
-    client.ip: {{faker: ipv4}}
+    client.ip:
+      faker: ipv4
 store:
-  - filesystem: {{path: STORE}}
+  - filesystem:
+      path: STORE
 """
 
 

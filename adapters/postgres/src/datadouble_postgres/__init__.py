@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: postgres
       connection:
-        dsn: {env: SHOP_DSN}      # a libpq connection string or URI, by reference
+        dsn:                      # a libpq connection string or URI, by reference
+          env: SHOP_DSN
 
 Working databases, restores and ``pg_dump`` run in the official PostgreSQL
 image of the source's exact version (``postgres:<version>-trixie``), or in

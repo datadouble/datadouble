@@ -19,7 +19,8 @@ Copies keep no expiry.
 source:
   engine: redis
   connection:
-    url: {env: SESSIONS_URL}   # a redis:// or rediss:// URL, by reference
+    url:                       # a redis:// or rediss:// URL, by reference
+      env: SESSIONS_URL
     databases: [0]
     patterns: ["session:{}"]   # keys inference would group wrongly
 subset:

@@ -27,7 +27,6 @@ Job has no page, so their ``run_url`` is null. Kubernetes has no mail, so
 ``notify`` email fails ``ci init``, by name.
 """
 
-import posixpath
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -38,6 +37,8 @@ import yaml
 from pydantic import JsonValue
 
 from datadouble.ci import (
+    CLAIM,
+    Agent,
     CiError,
     GeneratedFile,
     Invocation,
@@ -48,14 +49,14 @@ from datadouble.ci import (
     Report,
     Side,
     Trigger,
+    claim_mount,
+    runtime_namespace,
 )
 from datadouble.outcome import ExitCode, Outcome
 
 NAME = "argocd"
 REPOSITORY = "https://github.com/datadouble/datadouble.git"
 CHART = "ci/kubernetes/chart"
-CLAIM = "datadouble"
-"""The PersistentVolumeClaim every path the spec names lives on."""
 TERMINATION_LOG = Path("/dev/termination-log")
 _PLACEHOLDERS = {
     Placeholder.RUN: "$(DATADOUBLE_RUN)",
@@ -80,25 +81,19 @@ def _path(pipeline: Pipeline) -> PurePosixPath:
 
 
 def _namespace(pipeline: Pipeline) -> str:
+    if pipeline.cloud:
+        message = "Argo CD installs into its own cluster; a cloud is for Jenkins' Kubernetes agents"
+        raise CiError(message)
     if not pipeline.runner:
         message = "name the Kubernetes namespace the jobs run in (--runner)"
         raise CiError(message)
+    runtime_namespace(pipeline, pipeline.runner)
     return pipeline.runner
 
 
 def _mount(pipeline: Pipeline) -> str:
     """The directory every path the spec names is under: the claim's mount."""
-    paths = sorted({path for job in pipeline.jobs for path in job.mounts})
-    if not paths:
-        return "/srv/datadouble"
-    common = posixpath.commonpath(paths)
-    if common == "/":
-        message = (
-            "on Kubernetes every path the spec names lives on one PersistentVolumeClaim,"
-            f" so they must share a directory; these do not: {', '.join(paths)}"
-        )
-        raise CiError(message)
-    return common
+    return claim_mount(pipeline)
 
 
 def _step(job: Job, invocation: Invocation) -> dict[str, JsonValue]:
@@ -245,6 +240,11 @@ class ArgoCd:
     def name(self) -> str:
         """``argocd``."""
         return NAME
+
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        """Pods of the Datadouble image."""
+        return (Agent.KUBERNETES,)
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
         """One Application per side of the boundary; refuses notify's email and Docker."""

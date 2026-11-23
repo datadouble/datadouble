@@ -42,27 +42,42 @@ pytestmark = pytest.mark.integration
 
 SPEC = """
 name: scratch
-source: {engine: mongodb, connection: CONNECTION}
+source:
+  engine: mongodb
+  connection: CONNECTION
 exclude: ["gone"]
 subset:
   unselected: none
-  seeds: {child: '{"_id": {"$lte": 2}}', other: '{"_id": 1}'}
+  seeds:
+    child: '{"_id": {"$lte": 2}}'
+    other: '{"_id": 1}'
   edges:
-    child.parent_id -> parent: {on_missing: stub}
-    child.lost_id -> gone: {on_missing: null}
+    child.parent_id -> parent:
+      on_missing: stub
+    child.lost_id -> gone:
+      on_missing: null
   virtual_fks:
     child.parent_id -> parent: {}
     child.lost_id -> gone: {}
-    other.code -> parent: {when: '{"kind": "x"}'}
+    other.code -> parent:
+      when: '{"kind": "x"}'
 anonymize:
-  parent: {code: {hash: {}}}
-  child: {label: {expression: '"hidden"', where: '{"_id": 1}'}, missing: {null: {}}}
+  parent:
+    code:
+      hash: {}
+  child:
+    label:
+      expression: '"hidden"'
+      where: '{"_id": 1}'
+    missing:
+      null: {}
 verify:
   assertions:
     - name: no children over 2
       sql: '{"collection": "child", "pipeline": [{"$match": {"_id": {"$gt": 2}}}]}'
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

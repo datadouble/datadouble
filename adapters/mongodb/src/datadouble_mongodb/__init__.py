@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: mongodb
       connection:
-        uri: {env: CINEMA_URI}   # mongodb:// or mongodb+srv://, by reference
+        uri:                     # mongodb:// or mongodb+srv://, by reference
+          env: CINEMA_URI
         database: cinema
         sample: 1000             # documents sampled per collection for its fields
 

@@ -31,7 +31,8 @@ SAMPLE_SPEC = """
 name: crm
 source:
   engine: salesforce
-  connection: {fake: ORG}
+  connection:
+    fake: ORG
 exclude: [Lead]
 subset:
   unselected: none
@@ -45,24 +46,34 @@ subset:
       - Account -> dd_ratings__Rating__c
       - Contact -> Task.WhoId
   edges:
-    Case.ContactId -> Contact: {on_missing: null}
+    Case.ContactId -> Contact:
+      on_missing: null
   virtual_fks:
     Task.WhoId -> Contact: {}
 anonymize:
   Contact:
-    FirstName: {faker: first_name}
-    LastName: {faker: last_name}
-    Email: {faker: email, unique: true}
-    Phone: {faker: phone_number}
-    Birthdate: {null: {}}
+    FirstName:
+      faker: first_name
+    LastName:
+      faker: last_name
+    Email:
+      faker: email
+      unique: true
+    Phone:
+      faker: phone_number
+    Birthdate:
+      null: {}
   Account:
-    Name: {hash: {length: 12}}
+    Name:
+      hash:
+        length: 12
 verify:
   assertions:
     - name: no real email addresses
       sql: "SELECT Id FROM Contact WHERE NOT (Email LIKE '%@example.%') AND Email != null"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

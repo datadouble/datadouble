@@ -4,8 +4,10 @@ The Jenkins CI/CD adapter for
 [Datadouble](https://datadouble.tightlinesoftware.com/). It has two parts:
 
 - **The shared library in this directory** (`vars/datadouble.groovy` and
-  `resources/datadouble/run.sh`), whose `datadouble` step runs one
-  `datadouble` command in the Datadouble image.
+  the scripts in `resources/datadouble/`), whose `datadouble` step runs one
+  `datadouble` command in the Datadouble image: with `docker run` on an agent
+  with Docker (`run.sh`), or in the Datadouble container of a Kubernetes
+  agent's pod (`pod.sh`).
 - **The Python package,** which writes Jenkinsfiles for `datadouble ci init
   --system jenkins` and, at run time, reports a response's outputs and
   outcome to the step.
@@ -101,6 +103,111 @@ to another one on the host, so neither the socket's group nor the files
 shared at the same paths (decision 73) line up. The step reads the socket's
 group with GNU `stat`, so the agent needs GNU coreutils, as Linux
 distributions have.
+
+## Kubernetes agents
+
+Jenkins installations whose agents are pods of the Kubernetes plugin often
+have no Docker, and the spec's `kubernetes` runtime needs Datadouble itself
+in a pod that shares the engine pods' work claim. With `--agent kubernetes`
+each Jenkinsfile declares its own pod instead of a label. As for Argo CD
+(decision 103), `--runner` names the side's namespace; `--cloud` names the
+plugin's cloud, and without it the pods start in the plugin's default cloud.
+Agents with Docker stay the default (`--agent docker`).
+
+```
+datadouble ci init --system jenkins --agent kubernetes --job build,promote,prune \
+    --spec datadouble/shop.yml --runner shop-production --cloud prod-k8s \
+    --work /srv/datadouble/work
+```
+
+```groovy
+agent {
+    kubernetes {
+        cloud 'prod-k8s'
+        namespace 'shop-production'
+        yaml '''
+            apiVersion: v1
+            kind: Pod
+            spec:
+              serviceAccountName: datadouble-shop-production
+              containers:
+              - name: jnlp
+                ...
+              - name: datadouble
+                image: ghcr.io/datadouble/datadouble:v...
+                securityContext: {runAsUser: 999, runAsGroup: 999, ...}
+              ...
+            '''
+    }
+}
+```
+
+- **Each side has its own namespace,** and the two sides must not share one;
+  separate clusters are better still. A namespace's `datadouble` claim holds
+  its side's files, and production's holds data extracted from the source.
+  Generate each side with its own `--runner`.
+- **The pod mounts its namespace's `datadouble` claim** where the side's paths
+  are. Jobs that start engine software (`build`, `provision`, `release`) need
+  the spec's `kubernetes` runtime on the claim `datadouble`, with every path
+  the spec names (stores, staging, the work directory) under its `mount`,
+  which is where the pod mounts the claim, the same path the engine pods
+  use. Other jobs mount the claim at their paths' common directory, as Argo
+  CD does. `ci init` refuses anything else. The pod keeps to the runtime's
+  `node` when one is set, and uses its `image_pull_secrets`.
+- **Leave the runtime's `namespace` out.** The engine pods then start in the
+  namespace of the job's own pod, read from its service account, so one
+  spec serves both sides, each in its own namespace. A runtime that names a
+  namespace must name this side's `--runner`, so `ci init` refuses a spec
+  naming production's namespace for the non-production jobs.
+- **Only the Datadouble container runs as the engine's user** (decision 86).
+  The plugin's agent container (`jnlp`) keeps its image's user, whose account
+  and home an SCM checkout over SSH needs. The two share the workspace, so
+  the agent container starts with umask `0000`, which leaves the directories
+  it creates, including each `sh` step's control directory, writable by the
+  Datadouble container. That workspace is the pod's own and goes with it.
+  The override runs `/usr/local/bin/jenkins-agent`, as in the
+  `jenkins/inbound-agent` image the plugin uses by default; a cloud with
+  another agent image needs that path.
+- **The step runs `datadouble` in the Datadouble container** with
+  `container`, with secrets bound by `withCredentials` as in Docker mode.
+- **The boundary mark is only the namespace's** `datadouble-boundary`
+  ConfigMap, which the operator creates in production namespaces, as for the
+  Helm chart. The pod mounts it as an optional volume and the step reads the
+  file. It ignores every environment variable for the mark, since Jenkins
+  lays its own environment (global variables, `withEnv`) over the
+  container's, so a pod in an unmarked namespace is refused `build` and
+  `promote` whatever Jenkins sets.
+- **Engine pods see only the claim.** Anything an engine pod reads must be on
+  it, not in the workspace.
+- **There is no Docker,** so `--docker` and `--docker-socket` are refused.
+  The rest is as on Docker agents: each step names its job for `notify`'s
+  webhooks, `post` sends its email, and the `lock` job's new lock and changes
+  are archived as the build's artifacts.
+
+The response's `instructions` list what to set up:
+
+- Separate namespaces for the two sides.
+- The Kubernetes plugin and its cloud, whose credentials need a Role in the
+  namespace with the rights the plugin's own documentation lists: `create`,
+  `delete`, `get`, `list`, `patch`, `update` and `watch` on pods, `create`
+  and `get` on `pods/exec` (the `container` step), `get`, `list` and `watch`
+  on `pods/log`, and `watch` on events. `CLOUD_RULES` in the package holds
+  them, and `ACCOUNT_RULES` the service account's below.
+- The `datadouble` claim: `ReadWriteMany`, or `ReadWriteOnce` with the
+  runtime's `node` set so every pod runs on that node, owned by the engine's
+  user.
+- The service account `datadouble-<spec>-<side>` the pods run as, with a Role
+  allowing `get`, `list`, `watch`, `create`, `delete` and `patch` on pods,
+  `pods/log`, `pods/exec`, `pods/portforward` and Secrets, and `get` and
+  `list` on PersistentVolumeClaims; on the non-production side, a
+  ClusterRole for PersistentVolumes as well, which the `k8s-pv` replicate
+  adapter makes.
+- On the production side, the `datadouble-boundary` ConfigMap, inside the
+  production boundary only.
+
+Kubernetes agents are not yet exercised end to end: the conformance suite
+checks their Jenkinsfiles with the declarative validator but runs jobs only
+on Docker agents.
 
 ## Outcomes
 

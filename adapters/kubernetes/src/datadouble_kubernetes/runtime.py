@@ -7,13 +7,14 @@ Spec settings::
 
     runtime:
       kubernetes:
-        namespace: datadouble
+        namespace: datadouble         # optional: see below
         claim: datadouble-work        # the PersistentVolumeClaim holding the work directory
         mount: /work                  # where that claim is mounted in Datadouble's own pod
         node: worker-3                # optional: run pods on this node (ReadWriteOnce claims)
         access: pod-ip                # or port-forward, when Datadouble runs outside the cluster
         image_pull_secrets: [registry]
-        kubeconfig: {env: SHOP_KUBECONFIG}   # optional: another cluster's kubeconfig
+        kubeconfig:                          # optional: another cluster's kubeconfig
+          env: SHOP_KUBECONFIG
         context: build                       # optional: the kubeconfig's context to use
 
 Datadouble runs with the work directory on ``claim``, mounted at ``mount``;
@@ -27,6 +28,12 @@ settings give, written to a private temporary directory outside ``mount`` for
 each call, or else in-cluster or ambient configuration. A kubeconfig that
 cannot be resolved fails ``run``, ``serve`` and ``release`` with
 :class:`~datadouble.secrets.SecretError` before any pod starts.
+
+Without ``namespace``, pods start where ``kubectl`` itself would put them:
+inside a cluster (no kubeconfig in the settings or ``KUBECONFIG``, and a
+service account's namespace file), the namespace of Datadouble's own pod, so
+one spec serves pods in each side's namespace; otherwise the kubeconfig
+context's namespace, or ``default``.
 """
 
 import json
@@ -50,7 +57,7 @@ from datadouble.runtime import (
     absolute,
 )
 from datadouble.settings import parse_settings
-from datadouble_kubernetes import ClusterSettings, KubectlError
+from datadouble_kubernetes import ClusterSettings, Kubectl, KubectlError
 
 _OWNER = "datadouble.dev/owner"
 _RUNTIME_LABEL = "datadouble.dev/runtime"
@@ -77,7 +84,8 @@ class Access(StrEnum):
 class KubernetesRuntimeSettings(ClusterSettings):
     """Settings for the ``kubernetes`` container runtime."""
 
-    namespace: str = "default"
+    namespace: str | None = None
+    """Where pods start; Datadouble's own namespace (or kubectl's) when left out."""
     claim: str
     mount: Path
     node: str | None = None
@@ -85,6 +93,28 @@ class KubernetesRuntimeSettings(ClusterSettings):
     image_pull_secrets: tuple[str, ...] = ()
     ready_seconds: int = Field(default=300, ge=1)
     stop_seconds: int = Field(default=300, ge=1)
+
+
+SERVICE_ACCOUNT_NAMESPACE = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+"""The namespace of the pod a process runs in, as Kubernetes mounts it for its service account."""
+
+
+def current_namespace(kubectl: Kubectl) -> str:
+    """The namespace ``kubectl`` uses when told none.
+
+    Inside a cluster, with no kubeconfig (neither the settings' nor
+    ``KUBECONFIG``), that is the namespace of the pod Datadouble runs in;
+    otherwise the namespace of the kubeconfig's context (the settings'
+    ``context``, or its current one), or ``default`` when it names none.
+    """
+    in_cluster = kubectl.kubeconfig is None and "KUBECONFIG" not in os.environ
+    if in_cluster and SERVICE_ACCOUNT_NAMESPACE.is_file():
+        return SERVICE_ACCOUNT_NAMESPACE.read_text(encoding="utf-8").strip()
+    try:
+        done = kubectl.run(["config", "view", "--minify", "--output=jsonpath={..namespace}"])
+    except KubectlError as error:
+        raise ContainerError(str(error)) from None
+    return (done.stdout.strip() if done.status == 0 else "") or "default"
 
 
 class KubernetesServer:
@@ -108,7 +138,7 @@ class KubernetesServer:
         return self.runtime.invoke(
             [
                 "exec",
-                f"--namespace={self.runtime.settings.namespace}",
+                f"--namespace={self.runtime.namespace}",
                 self.name,
                 f"--container={_MAIN}",
                 "--",
@@ -125,6 +155,14 @@ class KubernetesRuntime:
         """Use ``settings`` for every pod."""
         self.settings = settings
         self.kubectl = settings.kubectl(avoid=settings.mount)
+        self._namespace = settings.namespace
+
+    @property
+    def namespace(self) -> str:
+        """The namespace pods start in: the settings', or :func:`current_namespace`."""
+        if self._namespace is None:
+            self._namespace = current_namespace(self.kubectl)
+        return self._namespace
 
     def invoke(self, arguments: Sequence[str]) -> Completed:
         """Run ``kubectl`` and return what it did, whether or not it succeeded."""
@@ -186,7 +224,7 @@ class KubernetesRuntime:
             "kind": "Pod",
             "metadata": {
                 "name": name,
-                "namespace": self.settings.namespace,
+                "namespace": self.namespace,
                 "labels": {_RUNTIME_LABEL: "true"},
                 "annotations": {_OWNER: str(absolute([container.owner])[0])},
             },
@@ -195,14 +233,14 @@ class KubernetesRuntime:
 
     def create(self, name: str, container: Container, command: Sequence[str]) -> None:
         """Create the pod, and its Secret when it has secrets."""
-        namespace = f"--namespace={self.settings.namespace}"
+        namespace = f"--namespace={self.namespace}"
         if container.secrets:
             secret = {
                 "apiVersion": "v1",
                 "kind": "Secret",
                 "metadata": {
                     "name": name,
-                    "namespace": self.settings.namespace,
+                    "namespace": self.namespace,
                     "labels": {_RUNTIME_LABEL: "true"},
                 },
                 "stringData": dict(container.secrets),
@@ -215,7 +253,7 @@ class KubernetesRuntime:
 
     def _status(self, name: str) -> dict[str, JsonValue]:
         output = self._kubectl(
-            ["get", f"--namespace={self.settings.namespace}", "pod", name, "--output=json"],
+            ["get", f"--namespace={self.namespace}", "pod", name, "--output=json"],
             "reading the pod",
         )
         return _mapping(_OBJECT.validate_json(output).get("status"))
@@ -238,12 +276,12 @@ class KubernetesRuntime:
 
     def delete(self, name: str) -> None:
         """Delete a pod and its Secret, if they exist."""
-        namespace = f"--namespace={self.settings.namespace}"
+        namespace = f"--namespace={self.namespace}"
         for kind in ("pod", "secret"):
             self.invoke(["delete", namespace, kind, name, "--ignore-not-found", "--wait=false"])
 
     def _logs(self, name: str) -> str:
-        result = self.invoke(["logs", f"--namespace={self.settings.namespace}", name, "--tail=5"])
+        result = self.invoke(["logs", f"--namespace={self.namespace}", name, "--tail=5"])
         lines = (result.stdout + result.stderr).strip().splitlines()
         return lines[-1] if lines else "no output"
 
@@ -326,7 +364,7 @@ class KubernetesRuntime:
         if self.settings.access is Access.POD_IP:
             yield Endpoint(host=str(status.get("podIP")), port=port)
             return
-        arguments = ["port-forward", f"--namespace={self.settings.namespace}", f"pod/{name}"]
+        arguments = ["port-forward", f"--namespace={self.namespace}", f"pod/{name}"]
         # serve() has run kubectl already, so it is installed and the kubeconfig resolved.
         with self.kubectl.started([*arguments, f":{port}"]) as forward:
             line = forward.stdout.readline() if forward.stdout else ""
@@ -341,7 +379,7 @@ class KubernetesRuntime:
         self._kubectl(
             [
                 "exec",
-                f"--namespace={self.settings.namespace}",
+                f"--namespace={self.namespace}",
                 name,
                 f"--container={_MAIN}",
                 "--",
@@ -371,7 +409,7 @@ class KubernetesRuntime:
         listed = self._kubectl(
             [
                 "get",
-                f"--namespace={self.settings.namespace}",
+                f"--namespace={self.namespace}",
                 "pods",
                 f"--selector={_RUNTIME_LABEL}=true",
                 "--output=json",

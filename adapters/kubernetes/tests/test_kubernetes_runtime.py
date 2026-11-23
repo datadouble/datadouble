@@ -21,6 +21,7 @@ from pydantic import JsonValue
 from datadouble.runtime import Container, ContainerError
 from datadouble.secrets import SecretError
 from datadouble_kubernetes import Kubectl
+from datadouble_kubernetes import runtime as runtime_module
 from datadouble_kubernetes.runtime import (
     KubernetesRuntime,
     KubernetesRuntimeSettings,
@@ -66,7 +67,9 @@ if (root / "fail").exists():
     sys.stderr.write("error: the server is on fire\\n")
     sys.exit(1)
 verb = args[0]
-if verb == "create":
+if verb == "config":
+    print(os.environ.get("FAKE_KUBECONFIG_NAMESPACE", ""))
+elif verb == "create":
     obj = json.load(sys.stdin)
     name = obj["metadata"]["name"]
     if obj["kind"] == "Secret":
@@ -201,6 +204,44 @@ def test_jobs(tmp_path: Path, cluster: Path) -> None:
     assert (done.status, done.stdout, done.stderr) == (3, "plain s3cret\n", "warn\n")
     assert list(cluster.iterdir()) == []
     assert not (tmp_path / "extract").exists() or not any((tmp_path / "extract").iterdir())
+
+
+def test_the_namespace_is_kubectl_s_when_left_out(
+    tmp_path: Path, cluster: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container = Container(image="postgres:18", command=("true",), owner=tmp_path)
+    account = tmp_path / "namespace"
+    account.write_text("shop-staging\n", encoding="utf-8")
+    monkeypatch.setattr(runtime_module, "SERVICE_ACCOUNT_NAMESPACE", account)
+    monkeypatch.delenv("KUBECONFIG", raising=False)
+    inside = runtime(tmp_path)
+    metadata = inside.manifest("p", container, ["run"])["metadata"]
+    assert isinstance(metadata, dict)
+    assert metadata["namespace"] == "shop-staging"
+    assert inside.namespace == "shop-staging"
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "config"))
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "team")
+    assert runtime(tmp_path).namespace == "team"
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "")
+    assert runtime(tmp_path).namespace == "default"
+    cluster.mkdir(exist_ok=True)
+    (cluster / "fail").write_text("", encoding="utf-8")
+    assert runtime(tmp_path).namespace == "default"
+    assert runtime(tmp_path, namespace="dd").namespace == "dd"
+    (cluster / "fail").unlink()
+    # A kubeconfig in the settings drives another cluster: its context names the
+    # namespace, never the pod's own service account.
+    monkeypatch.delenv("KUBECONFIG")
+    monkeypatch.setenv("FAKE_KUBECONFIG_NAMESPACE", "elsewhere")
+    monkeypatch.setenv("SHOP_KUBECONFIG", "apiVersion: v1\nkind: Config")
+    remote = runtime(tmp_path, kubeconfig={"env": "SHOP_KUBECONFIG"})
+    assert remote.namespace == "elsewhere"
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.delenv("DATADOUBLE_KUBECTL")
+    monkeypatch.setenv("PATH", str(empty))
+    with pytest.raises(ContainerError, match="kubectl was not found"):
+        _ = runtime(tmp_path, kubeconfig={"env": "SHOP_KUBECONFIG"}).namespace
 
 
 def test_manifests(tmp_path: Path) -> None:

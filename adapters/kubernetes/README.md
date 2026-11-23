@@ -16,11 +16,15 @@ replicate:
   using:
     k8s-pv:
       path: /srv/clones              # where copies are written
-      local: {node: worker-1}        # a local volume on that node, or
-      # nfs: {server: nfs.internal, path: /exports/clones}
+      local:                         # a local volume on that node, or
+        node: worker-1
+      # nfs:
+      #   server: nfs.internal
+      #   path: /exports/clones
       storage_class: datadouble
 announce:
-  - k8s-secret: {namespace: dev}
+  - k8s-secret:
+      namespace: dev
 ```
 
 Each volume carries `datadouble.dev/` labels: `spec`, `group`, `engine`,
@@ -36,6 +40,26 @@ binds, so it cannot read the bound volume's labels; choose the image from the
 line, or look up an available volume's `server-version` before rendering.
 
 All three drive `kubectl` (`DATADOUBLE_KUBECTL` names another binary).
+
+## The runtime's namespace
+
+```yaml
+runtime:
+  kubernetes:
+    claim: datadouble          # the PersistentVolumeClaim holding the work directory
+    mount: /srv/datadouble     # where Datadouble's own pod mounts it
+    # namespace: shop-staging  # optional
+```
+
+Leave `namespace` out unless pods must start somewhere else. Then they start
+where `kubectl` would put them unasked: inside a cluster (no `kubeconfig` in
+the settings, no `KUBECONFIG`, and a service account namespace file in
+Datadouble's pod), that pod's own namespace, read from
+`/var/run/secrets/kubernetes.io/serviceaccount/namespace`; otherwise the
+namespace of the kubeconfig's context (the settings' `context`, or its current
+one), or `default` when it names none. So one spec serves CI/CD jobs that run
+as pods in each side's own namespace, which `ci init` requires a set
+namespace to match (decision 133).
 
 ## Reaching the cluster
 
@@ -53,16 +77,22 @@ runtime:
   kubernetes:
     claim: datadouble-work
     mount: /work
-    kubeconfig: {env: BUILD_KUBECONFIG}
+    kubeconfig:
+      env: BUILD_KUBECONFIG
     context: build
 replicate:
   using:
     k8s-pv:
       path: /srv/clones
-      local: {node: worker-1}
-      kubeconfig: {env: DEV_KUBECONFIG}
+      local:
+        node: worker-1
+      kubeconfig:
+        env: DEV_KUBECONFIG
 announce:
-  - k8s-secret: {namespace: dev, kubeconfig: {env: DEV_KUBECONFIG}}
+  - k8s-secret:
+      namespace: dev
+      kubeconfig:
+        env: DEV_KUBECONFIG
 ```
 
 - **A secret reference to the content, not the runner's kubeconfig file.**

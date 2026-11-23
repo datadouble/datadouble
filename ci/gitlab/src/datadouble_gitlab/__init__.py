@@ -33,6 +33,7 @@ import yaml
 from pydantic import JsonValue
 
 from datadouble.ci import (
+    Agent,
     CiError,
     GeneratedFile,
     Invocation,
@@ -274,6 +275,11 @@ class GitLab:
     def name(self) -> str:
         """``gitlab``."""
         return NAME
+
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        """Runners with Docker."""
+        return (Agent.DOCKER,)
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
         """One file of jobs for the side of the boundary."""

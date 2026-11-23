@@ -19,7 +19,7 @@ import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import FileSecret, NotifyOn, Webhook, WebhookTarget, parse_spec
 from datadouble_gitlab import NAME, TEMPLATE_URL, GitLab, adapter, integrity, template
@@ -31,21 +31,47 @@ SPEC = """
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_SOURCE_DSN}}
-secrets: {anonymization_key: {env: SHOP_ANONYMIZATION_KEY}}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
-trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}
-promote: {to: [{s3: {bucket: shop-export, prefix: images}}]}
+  connection:
+    dsn:
+      env: SHOP_SOURCE_DSN
+secrets:
+  anonymization_key:
+    env: SHOP_ANONYMIZATION_KEY
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+signing:
+  cosign:
+    key:
+      env: SHOP_COSIGN_KEY
+trust:
+  cosign:
+    public_key:
+      env: SHOP_COSIGN_PUB
+promote:
+  to:
+    - s3:
+        bucket: shop-export
+        prefix: images
 fetch:
-  from: {s3: {bucket: shop-export, prefix: images}}
+  from:
+    s3:
+      bucket: shop-export
+      prefix: images
   staging: /srv/datadouble/staging
 notify:
   when: [failure, warning]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com, oncall@example.com]}
-replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com, oncall@example.com]
+replicate:
+  using:
+    docker-volume: {}
+  mode: MODE
+  size: 1
 """
 
 
@@ -266,6 +292,7 @@ def test_reports(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "gitlab"
+    assert adapter().agents == (Agent.DOCKER,)
 
 
 def test_jobs_without_host_paths() -> None:

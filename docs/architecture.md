@@ -78,8 +78,12 @@ that case:
 ```yaml
 package:
   accounts:
-    - {user: app, password: app-password}                         # privileges: all
-    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+    - user: app                                                   # privileges: all
+      password: app-password
+    - user: reporting
+      password:
+        env: REPORTING_PW
+      privileges: read
 ```
 
 - **Physical images carry them, and so every copy of one.** Volume copies
@@ -134,9 +138,13 @@ A spec can split its output into named groups, each becoming its own image:
 
 ```yaml
 images:
-  all:     { include: ["*"] }                  # a combined image
-  billing: { include: ["billing", "billing_audit"] }
-  content: { include: ["cms.*"], requires: [billing] }
+  all:                                         # a combined image
+    include: ["*"]
+  billing:
+    include: ["billing", "billing_audit"]
+  content:
+    include: ["cms.*"]
+    requires: [billing]
 ```
 
 With no `images:` section there is one group containing everything.
@@ -306,12 +314,19 @@ runtime:
 ```yaml
 runtime:
   kubernetes:                    # pods, through kubectl
-    namespace: datadouble
     claim: datadouble-work       # the PersistentVolumeClaim holding the work directory
     mount: /work                 # where that claim is mounted in Datadouble's own pod
-    kubeconfig: {env: BUILD_KUBECONFIG}  # optional: another cluster, by secret reference
+    kubeconfig:                          # optional: another cluster, by secret reference
+      env: BUILD_KUBECONFIG
     context: build               # optional: the kubeconfig's context
+    namespace: datadouble        # optional
 ```
+
+Without `namespace`, pods start where `kubectl` would put them unasked:
+inside a cluster (no `kubeconfig` in the settings, no `KUBECONFIG`, and the
+pod's service account namespace file), the namespace of Datadouble's own pod;
+otherwise the kubeconfig context's namespace, or `default`. So one spec
+serves jobs that run as pods in each side's own namespace (decision 133).
 
 - **Shared paths.** Every container sees the paths it works on at the same
   absolute path as Datadouble. With Docker they are bind-mounted, so the work

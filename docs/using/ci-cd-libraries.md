@@ -44,7 +44,9 @@ Each system's details are in its adapter's README:
   a file of jobs per side, with a job template pinned by SHA-256, pipeline
   schedules and merge request environments.
 - [Jenkins](https://github.com/datadouble/datadouble/tree/main/ci/jenkins):
-  a Jenkinsfile per job, with the shared library loaded at the release's tag.
+  a Jenkinsfile per job, with the shared library loaded at the release's tag,
+  on agents with Docker or, with `--agent kubernetes`, as pods of the
+  Kubernetes plugin.
 - [Argo CD](https://github.com/datadouble/datadouble/tree/main/ci/kubernetes):
   an Application per side, installing the Helm chart, with hooks for
   requests' copies.
@@ -58,8 +60,11 @@ a job that fails or warns, so generating the jobs again keeps it:
 notify:
   when: [failure, warning]          # default: [failure]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com]}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com]
 ```
 
 - **Webhooks** work on every system: Datadouble posts a JSON body with the
@@ -93,7 +98,23 @@ notify:
   environment, or pass `ci init --docker` and `--docker-socket` to write them
   into the generated configuration (decision 126). The socket is always
   mounted at `/var/run/docker.sock` inside the Datadouble container. Rootless
-  Docker is not supported. Argo CD's jobs are pods and need neither.
+  Docker is not supported. Argo CD's jobs and Jenkins' Kubernetes agents
+  are pods without Docker and refuse both.
+- **Kubernetes agents** (`--agent kubernetes`, Jenkins only for now) run each
+  job as a pod of the pinned image, as the engine's user, beside the engine
+  pods. As for Argo CD, `--runner` names the side's namespace, and the pod
+  mounts that namespace's `datadouble` claim; `--cloud` names the Jenkins
+  Kubernetes plugin's cloud (its default otherwise). Each side needs its own
+  namespace, ideally its own cluster. Jobs that start engines need the spec's
+  `kubernetes` runtime on that claim, with every path the spec names under
+  its `mount`. Leave the runtime's `namespace` out: engine pods then start in
+  the namespace of the job's own pod, so one spec serves both sides. If it
+  is set, it must be the side's `--runner`, or `ci init` refuses. The
+  plugin's cloud needs the Role the plugin documents (pods, `pods/exec`,
+  `pods/log`, events), and the pods' service account RBAC for
+  engine pods (pods, their logs, exec and port forwarding, Secrets, and
+  PersistentVolumes for `k8s-pv`), and the boundary mark is only the
+  namespace's `datadouble-boundary` ConfigMap. `ci init` lists each step.
 - **Outcomes** map to the system's own: a warning is a GitHub warning
   annotation, a GitLab allowed failure, an unstable Jenkins build, or a
   succeeding Kubernetes Job that says so in its log.

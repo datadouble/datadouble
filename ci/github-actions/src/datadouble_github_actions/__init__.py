@@ -27,6 +27,7 @@ import yaml
 from pydantic import JsonValue
 
 from datadouble.ci import (
+    Agent,
     CiError,
     GeneratedFile,
     Invocation,
@@ -269,6 +270,11 @@ class GitHubActions:
     def name(self) -> str:
         """``github-actions``."""
         return NAME
+
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        """Runners with Docker."""
+        return (Agent.DOCKER,)
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
         """A workflow per job under ``.github/workflows``."""

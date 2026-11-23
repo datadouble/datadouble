@@ -30,9 +30,13 @@ NOTIFY = """
 notify:
   when: [failure, warning]
   to:
-    - webhook: {url: {env: ALERTS_WEBHOOK}}
-    - email: {to: [data-team@example.com, oncall@example.com]}
-    - email: {to: [data-team@example.com]}
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - email:
+        to: [data-team@example.com, oncall@example.com]
+    - email:
+        to: [data-team@example.com]
 """
 BASE = "name: shop\nsource: {engine: fake}\n"
 PROXY_VARIABLES = (

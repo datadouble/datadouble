@@ -13,7 +13,8 @@ version, through the spec's container runtime.
 source:
   engine: mssql
   connection:
-    url: {env: SHOP_MSSQL_URL}   # mssql://user:password@host:1433/database, by reference
+    url:                         # mssql://user:password@host:1433/database, by reference
+      env: SHOP_MSSQL_URL
     accept_eula: true            # you accept the SQL Server licence for working databases
 ```
 

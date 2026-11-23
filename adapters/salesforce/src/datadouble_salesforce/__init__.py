@@ -8,14 +8,17 @@ Spec settings::
     source:
       engine: salesforce
       connection:
-        instance_url: {env: SHOP_SF_INSTANCE_URL}   # by reference
-        access_token: {env: SHOP_SF_ACCESS_TOKEN}
+        instance_url:                               # by reference
+          env: SHOP_SF_INSTANCE_URL
+        access_token:
+          env: SHOP_SF_ACCESS_TOKEN
         api_version: "62.0"                         # the default
         objects: [Account, Contact, "Acme__*"]      # optional: only these objects
 
 or, for the fake org (:mod:`datadouble_salesforce.fake`)::
 
-      connection: {fake: /path/to/org.sqlite}
+      connection:
+        fake: /path/to/org.sqlite
 
 The adapter reads the org through its REST, Tooling and Bulk 2.0 APIs, and
 builds its working copies, anonymization and images locally in SQLite: the

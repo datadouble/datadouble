@@ -18,7 +18,7 @@ import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import parse_spec
 from datadouble_argocd import NAME, ArgoCd, adapter
@@ -29,23 +29,52 @@ SPEC = """
 name: shop
 source:
   engine: postgres
-  connection: {dsn: {env: SHOP_SOURCE_DSN}}
-runtime: {kubernetes: {namespace: shop, claim: datadouble, mount: /srv/datadouble}}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-signing: {cosign: {key: {env: SHOP_COSIGN_KEY}}}
-trust: {cosign: {public_key: {env: SHOP_COSIGN_PUB}}}
-promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
+  connection:
+    dsn:
+      env: SHOP_SOURCE_DSN
+runtime:
+  kubernetes:
+    claim: datadouble
+    mount: /srv/datadouble
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+signing:
+  cosign:
+    key:
+      env: SHOP_COSIGN_KEY
+trust:
+  cosign:
+    public_key:
+      env: SHOP_COSIGN_PUB
+promote:
+  to:
+    - filesystem:
+        path: /srv/datadouble/export
 fetch:
-  from: {filesystem: {path: /srv/datadouble/export}}
+  from:
+    filesystem:
+      path: /srv/datadouble/export
   staging: /srv/datadouble/staging
 notify:
   when: [failure, warning]
-  to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
-replicate: {using: {k8s-pv: {path: /srv/datadouble/copies}}, mode: MODE, size: 1}
+  to:
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/datadouble/copies
+  mode: MODE
+  size: 1
 """
 NOTIFY = """notify:
   when: [failure, warning]
-  to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
+  to:
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
 """
 WITHOUT_NOTIFY = SPEC.replace(NOTIFY, "")
 _YAML: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
@@ -157,6 +186,16 @@ def test_paths_share_one_claim() -> None:
         ArgoCd().generate(planned(JobKind.PROMOTE, spec=scattered))
     with pytest.raises(CiError, match="name the Kubernetes namespace"):
         ArgoCd().generate(planned(JobKind.FETCH, runner=None))
+    named = SPEC.replace(
+        "    claim: datadouble\n", "    namespace: shop-staging\n    claim: datadouble\n"
+    )
+    with pytest.raises(CiError, match=r"namespace is shop-staging, but the production side's"):
+        ArgoCd().generate(planned(JobKind.BUILD, spec=named))
+    assert ArgoCd().generate(planned(JobKind.BUILD, spec=named, runner="shop-staging"))
+    assert ArgoCd().generate(planned(JobKind.PROMOTE, spec=named))
+    clouded = replace(planned(JobKind.FETCH), cloud="prod-k8s")
+    with pytest.raises(CiError, match="a cloud is for Jenkins"):
+        ArgoCd().generate(clouded)
 
 
 def test_instructions() -> None:
@@ -177,8 +216,8 @@ def test_instructions() -> None:
 
 def test_email_is_refused() -> None:
     mailed = SPEC.replace(
-        "to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]",
-        "to: [{email: {to: [data-team@example.com]}}]",
+        "    - webhook:\n        url:\n          env: ALERTS_WEBHOOK\n",
+        "    - email:\n        to: [data-team@example.com]\n",
     )
     with pytest.raises(CiError, match="argocd cannot send notify's email"):
         ArgoCd().generate(planned(JobKind.FETCH, spec=mailed))
@@ -232,6 +271,7 @@ def test_published_files_go_to_the_log(tmp_path: Path) -> None:
 
 def test_the_entry_point() -> None:
     assert adapter().name == NAME == "argocd"
+    assert adapter().agents == (Agent.KUBERNETES,)
 
 
 def test_jobs_without_host_paths() -> None:

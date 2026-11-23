@@ -80,17 +80,38 @@ def make_spec(tmp_path: Path, extra: str = "", *, mode: str = "pool", size: int 
     return parse_spec(
         f"""
 name: shop
-source: {{engine: fake}}
-store: [{{filesystem: {{path: {tmp_path / "build"}}}}}]
-signing: {{cosign: {{key: {{env: COSIGN_KEY}}}}}}
-trust: {{cosign: {{public_key: {{env: COSIGN_PUB}}}}}}
-promote: {{to: [{{filesystem: {{path: {tmp_path / "export"}}}}}]}}
+source:
+  engine: fake
+store:
+  - filesystem:
+      path: {tmp_path / "build"}
+signing:
+  cosign:
+    key:
+      env: COSIGN_KEY
+trust:
+  cosign:
+    public_key:
+      env: COSIGN_PUB
+promote:
+  to:
+    - filesystem:
+        path: {tmp_path / "export"}
 fetch:
-  from: {{filesystem: {{path: {tmp_path / "export"}}}}}
+  from:
+    filesystem:
+      path: {tmp_path / "export"}
   staging: {tmp_path / "staging"}
   keep: 2
-replicate: {{using: {{filesystem: {{path: {tmp_path / "copies"}}}}}, mode: {mode}, size: {size}}}
-announce: [{{dotenv: {{path: {tmp_path / "clone.env"}}}}}]
+replicate:
+  using:
+    filesystem:
+      path: {tmp_path / "copies"}
+  mode: {mode}
+  size: {size}
+announce:
+  - dotenv:
+      path: {tmp_path / "clone.env"}
 {extra}"""
     )
 
@@ -411,15 +432,29 @@ def test_fetch_over_https_with_basic_auth(
         return parse_spec(
             f"""
 name: shop
-source: {{engine: fake}}
-store: [{{filesystem: {{path: {tmp_path / "build"}}}}}]
-trust: {{cosign: {{public_key: {{env: COSIGN_PUB}}}}}}
-promote: {{to: [{{filesystem: {{path: {served}}}}}]}}
+source:
+  engine: fake
+store:
+  - filesystem:
+      path: {tmp_path / "build"}
+trust:
+  cosign:
+    public_key:
+      env: COSIGN_PUB
+promote:
+  to:
+    - filesystem:
+        path: {served}
 fetch:
   from:
     http:
       url: {url}
-      auth: {{basic: {{username: {{env: {user}}}, password: {{env: {variable}}}}}}}
+      auth:
+        basic:
+          username:
+            env: {user}
+          password:
+            env: {variable}
       ca_bundle: {ca_bundle}
   staging: {tmp_path / "staging"}
 """

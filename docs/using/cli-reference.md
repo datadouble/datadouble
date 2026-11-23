@@ -187,6 +187,8 @@ Write CI/CD configuration for a spec's jobs.
 | `--side` `SIDE` | the side prune alone runs on (one of production, non-production) |
 | `--output` `OUTPUT` | the repository root to write into (default: .) |
 | `--image` `IMAGE` | the Datadouble image jobs run (default: this version's) |
+| `--agent` `AGENT` | where jobs run Datadouble: a runner with Docker, or a Kubernetes pod (default: the system's own) (one of docker, kubernetes) |
+| `--cloud` `CLOUD` | the Kubernetes cloud Kubernetes agents start in (default: the system's) |
 | `--env` `NAME` | another environment variable every job passes on (repeatable) |
 | `--docker` `COMMAND` | the Docker command steps run the image with (default: the runner's DATADOUBLE_DOCKER, or docker) |
 | `--docker-socket` `PATH` | the Docker daemon's socket on the runner, an absolute path (default: the runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock) |

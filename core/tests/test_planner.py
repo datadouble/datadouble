@@ -69,16 +69,28 @@ def test_a_typical_plan() -> None:
         CYCLE_FREE
         + """
 subset:
-  seeds: {users: "created >= 5"}
-  follow: {down: ["users -> posts", "posts -> comments"]}
+  seeds:
+    users: "created >= 5"
+  follow:
+    down: ["users -> posts", "posts -> comments"]
   edges:
-    comments.author_id -> users: { on_missing: null }
-    comments.editor_id -> users: { on_missing: null }
-    posts.category_id -> categories: { follow: all }
+    comments.author_id -> users:
+      on_missing: null
+    comments.editor_id -> users:
+      on_missing: null
+    posts.category_id -> categories:
+      follow: all
   virtual_fks:
-    events.subject_id -> posts: { when: "subject_type = 'Post'" }
+    events.subject_id -> posts:
+      when: "subject_type = 'Post'"
 anonymize:
-  users: {email: {faker: email}, note: {null: {}}, name: {expression: "'x'"}}
+  users:
+    email:
+      faker: email
+    note:
+      null: {}
+    name:
+      expression: "'x'"
 """
     )
     assert result.strategy is Strategy.NESTED
@@ -185,9 +197,12 @@ def test_excluded_parents_need_fallbacks() -> None:
 exclude: ["users"]
 subset:
   edges:
-    posts.user_id -> users: {on_missing: drop}
-    comments.author_id -> users: {on_missing: null}
-    comments.editor_id -> users: {on_missing: null}
+    posts.user_id -> users:
+      on_missing: drop
+    comments.author_id -> users:
+      on_missing: null
+    comments.editor_id -> users:
+      on_missing: null
 """
     )
     (group,) = result.groups
@@ -215,9 +230,12 @@ def test_fallback_checks() -> None:
         """
 subset:
   edges:
-    posts.user_id -> users: {on_missing: null}
-    staff.store_id -> store: {on_missing: stub}
-    comments.post_id -> posts: {on_missing: stub}
+    posts.user_id -> users:
+      on_missing: null
+    staff.store_id -> store:
+      on_missing: stub
+    comments.post_id -> posts:
+      on_missing: stub
 """
     )
     assert (
@@ -243,10 +261,14 @@ def test_reference_names() -> None:
         """
 subset:
   edges:
-    comments -> users: {on_missing: null}
-    users -> posts: {on_missing: null}
-    nope -> users: {on_missing: null}
-  follow: {down: ["users -> nope", "posts -> users"]}
+    comments -> users:
+      on_missing: null
+    users -> posts:
+      on_missing: null
+    nope -> users:
+      on_missing: null
+  follow:
+    down: ["users -> nope", "posts -> users"]
 """
     )
     assert any("several references to public.users" in p for p in reasons)
@@ -264,7 +286,8 @@ subset:
     events.subject_id -> posts: {}
     events.(id, subject_id) -> film_actor: {}
     events.id -> users.created: {}
-  follow: {down: ["posts -> events"]}
+  follow:
+    down: ["posts -> events"]
 """
     )
     virtual = [e for e in result.edges if e.virtual]
@@ -291,8 +314,12 @@ def test_drop_needs_an_unconditional_reference() -> None:
     reasons = problems(
         """
 subset:
-  virtual_fks: {events.subject_id -> posts: {when: "subject_type = 'Post'"}}
-  edges: {events.subject_id -> posts: {on_missing: drop}}
+  virtual_fks:
+    events.subject_id -> posts:
+      when: "subject_type = 'Post'"
+  edges:
+    events.subject_id -> posts:
+      on_missing: drop
 """
     )
     assert any("on_missing drop is not supported on a reference with `when`" in p for p in reasons)
@@ -304,7 +331,10 @@ def test_seeds() -> None:
 exclude: ["dba_*"]
 structure_only: ["events"]
 subset:
-  seeds: {dba_maint_runs: "id = 1", events: "id = 1", nope: "id = 1"}
+  seeds:
+    dba_maint_runs: "id = 1"
+    events: "id = 1"
+    nope: "id = 1"
 """
     )
     assert "seed 'dba_maint_runs' names public.dba_maint_runs, which is excluded" in reasons
@@ -317,11 +347,15 @@ def test_groups() -> None:
         CYCLE_FREE
         + """
 images:
-  people: {include: ["users"]}
-  content: {include: ["posts", "comments", "categories"], requires: [people]}
+  people:
+    include: ["users"]
+  content:
+    include: ["posts", "comments", "categories"]
+    requires: [people]
 subset:
   edges:
-    comments.editor_id -> users: {on_missing: null}
+    comments.editor_id -> users:
+      on_missing: null
 """
     )
     groups = {g.name: g for g in result.groups}
@@ -343,14 +377,23 @@ def test_groups_without_requires_fail() -> None:
         CYCLE_FREE
         + """
 images:
-  base: {include: ["users"]}
-  people: {include: ["users"], requires: [base]}
-  other: {include: ["events"], requires: [base]}
-  content: {include: ["posts", "categories", "comments"], requires: [people, other]}
-  orphans: {include: ["comments"]}
+  base:
+    include: ["users"]
+  people:
+    include: ["users"]
+    requires: [base]
+  other:
+    include: ["events"]
+    requires: [base]
+  content:
+    include: ["posts", "categories", "comments"]
+    requires: [people, other]
+  orphans:
+    include: ["comments"]
 subset:
   edges:
-    comments.editor_id -> users: {on_missing: drop}
+    comments.editor_id -> users:
+      on_missing: drop
 """
     )
     assert any("group 'orphans': public.comments references public.posts" in p for p in reasons)
@@ -367,17 +410,28 @@ def test_anonymization_rules() -> None:
         """
 exclude: ["dba_*"]
 anonymize:
-  dba_maint_runs: {id: {null: {}}}
-  nope: {x: {null: {}}}
+  dba_maint_runs:
+    id:
+      null: {}
+  nope:
+    x:
+      null: {}
   users:
-    id: {hash: {}}
-    email: {expression: "'x'"}
-    name: {null: {}}
-    created: {faker: first_name}
-    nope: {null: {}}
+    id:
+      hash: {}
+    email:
+      expression: "'x'"
+    name:
+      null: {}
+    created:
+      faker: first_name
+    nope:
+      null: {}
   posts:
-    user_id: {format_preserving: {}}
-    title: {faker: date_of_birth}
+    user_id:
+      format_preserving: {}
+    title:
+      faker: date_of_birth
 """,
         capabilities=caps,
     )
@@ -407,7 +461,8 @@ def test_hook_rewrites() -> None:
         """
 hooks:
   after_transform:
-    - {sql: "UPDATE users SET note = NULL", rewrites: [users.note]}
+    - sql: "UPDATE users SET note = NULL"
+      rewrites: [users.note]
 """
     )
     assert [str(c) for c in result.rewrites] == ["public.users.note"]
@@ -420,8 +475,12 @@ def test_verify_settings() -> None:
     result = planned(
         """
 verify:
-  pii_scan: {allow: {users.email: ["%@company.com"]}}
-  assertions: [{name: none, sql: "SELECT 1 WHERE false"}]
+  pii_scan:
+    allow:
+      users.email: ["%@company.com"]
+  assertions:
+    - name: none
+      sql: "SELECT 1 WHERE false"
 exclude: ["dba_*"]
 """
     )

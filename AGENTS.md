@@ -80,4 +80,10 @@ fails, read its temporary files, then remove them with `make clean-work`.
   # Copyright (c) 2026- Tight Line LLC
   # SPDX-License-Identifier: MIT
   ```
+- YAML mappings are written in block style, one key per line, never as flow
+  mappings such as `{env: NAME}` (decision 137): in YAML files, Markdown
+  examples, Python test fixtures and generated YAML alike. A mapping in a
+  sequence is `- key: value`. `{}`, `[]` and short flow sequences of plain
+  scalars stay. `uv run python scripts/format_yaml.py` rewrites the
+  repository and `make lint` checks it.
 - Commit messages: a short imperative subject line, then a body explaining why.

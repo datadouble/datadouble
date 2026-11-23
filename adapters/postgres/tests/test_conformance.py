@@ -68,7 +68,9 @@ SAMPLE_SPEC = """
 name: pagila
 source:
   engine: postgres
-  connection: {dsn: {env: DATADOUBLE_TEST_POSTGRES_DSN}}
+  connection:
+    dsn:
+      env: DATADOUBLE_TEST_POSTGRES_DSN
   image: PGVECTOR
 exclude: ["dba.*"]
 subset:
@@ -82,40 +84,63 @@ subset:
       - customer -> customer_referral
       - customer -> customer_note
   edges:
-    payment.customer_id -> customer: {on_missing: drop}
-    customer_referral.referred_by -> customer_referral: {on_missing: null}
+    payment.customer_id -> customer:
+      on_missing: drop
+    customer_referral.referred_by -> customer_referral:
+      on_missing: null
   virtual_fks:
     payment.rental_id -> rental: {}
     payment.customer_id -> customer: {}
     payment.staff_id -> staff: {}
-    customer_note.subject_id -> customer: {when: "subject_type = 'customer'"}
+    customer_note.subject_id -> customer:
+      when: "subject_type = 'customer'"
 anonymize:
   customer:
-    first_name: {faker: first_name}
-    last_name: {faker: last_name}
-    email: {faker: email, unique: true}
+    first_name:
+      faker: first_name
+    last_name:
+      faker: last_name
+    email:
+      faker: email
+      unique: true
   staff:
-    first_name: {faker: first_name}
-    last_name: {faker: last_name}
-    email: {faker: email}
-    username: {hash: {length: 12}}
-    password: {hash: {length: 40}}
-    picture: {null: {}}
+    first_name:
+      faker: first_name
+    last_name:
+      faker: last_name
+    email:
+      faker: email
+    username:
+      hash:
+        length: 12
+    password:
+      hash:
+        length: 40
+    picture:
+      null: {}
   address:
-    address: {faker: street_address}
-    address2: {null: {}}
-    phone: {faker: phone_number}
-    postal_code: {faker: postcode}
+    address:
+      faker: street_address
+    address2:
+      null: {}
+    phone:
+      faker: phone_number
+    postal_code:
+      faker: postcode
   customer_note:
-    body: {expression: "'note removed'", where: "subject_type = 'customer'"}
+    body:
+      expression: "'note removed'"
+      where: "subject_type = 'customer'"
   customer_referral:
-    note: {null: {}}
+    note:
+      null: {}
 verify:
   assertions:
     - name: active is a flag
       sql: "SELECT 1 FROM customer WHERE active NOT IN (0, 1)"
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

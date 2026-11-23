@@ -148,10 +148,7 @@ def test_run_warnings_and_failures(spec_file: Path, tmp_path: Path) -> None:
 
 def test_verification_failure_summary(spec_file: Path, tmp_path: Path) -> None:
     text = spec_file.read_text()
-    text = text.replace("  users: {email: {faker: email, unique: true}, name: {faker: name}}\n", "")
-    text = text.replace("  comments: {body: {expression: \"'redacted'\"}}\n", "").replace(
-        "anonymize:\n", ""
-    )
+    text = text.replace(text[text.index("anonymize:\n") : text.index("store:\n")], "")
     spec_file.write_text(text, encoding="utf-8")
     write_lock(CatalogLock.of(shop()), tmp_path / "catalog.lock")
     code, out = cli_run(
@@ -304,7 +301,7 @@ def test_run_errors(
 def test_settings_errors(spec_file: Path, tmp_path: Path) -> None:
     write_lock(CatalogLock.of(shop()), tmp_path / "catalog.lock")
     spec_file.write_text(
-        spec_file.read_text().replace("filesystem: {path:", "filesystem: {route:"), encoding="utf-8"
+        spec_file.read_text().replace("      path: ", "      route: "), encoding="utf-8"
     )
     response = api.handle_json(
         json.dumps(

@@ -27,7 +27,7 @@ stops and tells the person why.
    operator's decision (`DATADOUBLE_BOUNDARY=inside`, decision 98).
 6. **Never handle secrets or production data.** Do not ask for, read, print
    or store passwords, keys or tokens, and do not connect to a production
-   system. Specs name secrets by reference (`{env: NAME}`); `ci init` lists
+   system. Specs name secrets by reference (`env: NAME`); `ci init` lists
    the variables to define, and you tell the person where to define them.
    If someone gives you a secret anyway, never repeat it, not even inside an
    example or a placeholder; call it "the password you gave" instead.
@@ -35,3 +35,17 @@ stops and tells the person why.
    may be plain text in a spec, because it exists only in anonymized copies,
    if the person chooses that. Every other secret, including any source,
    store or signing credential, stays a reference.
+7. **Write YAML in block style.** Every mapping you write into a spec, or
+   show in an example, takes one key per line, never a flow mapping such as
+   `{path: /srv, local: {node: a}}` (decision 137). A mapping in a sequence
+   is `- key: value`:
+
+    ```yaml
+    store:
+      - filesystem:
+          path: /srv/datadouble/store
+    ```
+
+   Empty `{}` and `[]`, and short lists of plain values such as
+   `include: [billing.*]`, stay as they are. Keep the person's comments and
+   key order when you edit their spec.

@@ -27,10 +27,13 @@ subset:
     down: [users -> posts, posts -> comments]   # pull in children: opt-in, per edge
   # up: parents of anything included are always pulled in (required for integrity)
   edges:
-    comments.author_id -> users: { on_missing: null }   # don't drag in every commenter
-    posts.category_id -> categories: { follow: all }    # small lookup table: take everything
+    comments.author_id -> users:                        # don't drag in every commenter
+      on_missing: null
+    posts.category_id -> categories:                    # small lookup table: take everything
+      follow: all
   virtual_fks:
-    events.subject_id -> posts: { when: "subject_type = 'Post'" }  # polymorphic, no real FK
+    events.subject_id -> posts:                                    # polymorphic, no real FK
+      when: "subject_type = 'Post'"
 ```
 
 - **Pulling in parents is required.** Every included row needs its parent rows,

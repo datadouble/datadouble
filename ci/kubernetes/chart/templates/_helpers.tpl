@@ -95,6 +95,9 @@ spec:
   restartPolicy: Never
   securityContext:
     fsGroup: {{ $root.Values.user.gid }}
+    # Only when the claim's root does not already have the group: a recursive
+    # change on every start would walk a terabyte-scale work directory.
+    fsGroupChangePolicy: OnRootMismatch
   {{- if gt $count 1 }}
   initContainers:
     {{- range $index, $step := $job.steps }}

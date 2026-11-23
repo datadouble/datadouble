@@ -22,13 +22,22 @@ the generator retries until a unique value is found or fails the run.
 ```yaml
 anonymize:
   customer:
-    email: {faker: email, unique: true}
-    last_name: {faker: last_name}
-    password: {hash: {length: 40}}          # hex, or a 32-bit integer in integer columns
-    card_number: {format_preserving: {luhn: true}}
-    notes: {null: {}}
+    email:
+      faker: email
+      unique: true
+    last_name:
+      faker: last_name
+    password:                               # hex, or a 32-bit integer in integer columns
+      hash:
+        length: 40
+    card_number:
+      format_preserving:
+        luhn: true
+    notes:
+      null: {}
 secrets:
-  anonymization_key: {env: ANONYMIZATION_KEY}   # optional; a random key per generation otherwise
+  anonymization_key:                            # optional; a random key per generation otherwise
+    env: ANONYMIZATION_KEY
 ```
 
 The faker kinds are `first_name`, `last_name`, `name`, `email`, `user_name`,

@@ -17,6 +17,8 @@ from datadouble import __version__, api, cli
 from datadouble.api import ErrorCode
 from datadouble.boundary import BoundaryError, require_inside
 from datadouble.ci import (
+    DEFAULT_MOUNT,
+    Agent,
     CiError,
     GeneratedFile,
     JobKind,
@@ -26,11 +28,14 @@ from datadouble.ci import (
     Report,
     Side,
     Trigger,
+    claim_mount,
     host_paths,
     mask,
     masking,
     pipeline,
+    runtime_namespace,
     secret_names,
+    sections,
     side_of,
 )
 from datadouble.outcome import ExitCode, Outcome
@@ -59,6 +64,10 @@ class FakeCi:
     @property
     def name(self) -> str:
         return "fake-ci"
+
+    @property
+    def agents(self) -> tuple[Agent, ...]:
+        return (Agent.DOCKER,)
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
         self.pipelines.append(pipeline)
@@ -214,9 +223,9 @@ def test_sides(kinds: tuple[JobKind, ...], side: Side | None, problem: str) -> N
 def test_the_lock_job(tmp_path: Path) -> None:
     spec = parse_spec(
         SPEC.replace("STORE", str(tmp_path / "store")).replace(
-            "connection: {where: here}", "connection: {dsn: {env: SHOP_SOURCE_DSN}}"
+            "    where: here\n", "    dsn:\n      env: SHOP_SOURCE_DSN\n"
         )
-        + "secrets: {anonymization_key: {env: SHOP_KEY}}\n"
+        + "secrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
     planned = pipeline(spec, options(JobKind.BUILD, JobKind.LOCK))
     assert planned.side is Side.PRODUCTION
@@ -273,6 +282,9 @@ def test_the_docker_command_and_socket(tmp_path: Path) -> None:
     for socket in ("run/d.sock", "/run/a:b.sock"):
         with pytest.raises(CiError, match="socket must be an absolute path"):
             pipeline(spec, replace(chosen, docker_socket=Path(socket)))
+    for changed in (replace(chosen, docker_socket=None), replace(chosen, docker=None)):
+        with pytest.raises(CiError, match="kubernetes agents are pods"):
+            pipeline(spec, replace(changed, agent=Agent.KUBERNETES))
 
 
 def test_host_paths_and_secret_names() -> None:
@@ -283,13 +295,19 @@ source:
   engine: fake
   connection:
     host: /var/run/postgresql
-    password: {env: PGPASSWORD}
+    password:
+      env: PGPASSWORD
     url: "s3://x/y"
     note: "/* not a path */"
-store: [{filesystem: {path: /srv/store/}}]
+store:
+  - filesystem:
+      path: /srv/store/
 files:
-  connection: {root: /srv/store/uploads, accept_inconsistent: true}
-  select: {avatars: -mtime -30}
+  connection:
+    root: /srv/store/uploads
+    accept_inconsistent: true
+  select:
+    avatars: -mtime -30
 """
     )
     assert host_paths(spec, JobKind.BUILD, Side.PRODUCTION, [Path("/srv/work")]) == (
@@ -305,13 +323,21 @@ def test_build_jobs_get_account_passwords() -> None:
     spec = parse_spec(
         """
 name: shop
-source: {engine: fake}
+source:
+  engine: fake
 package:
   accounts:
-    - {user: app, password: {env: APP_PASSWORD}}
-    - {user: reports, password: {file: /run/secrets/reports}, privileges: read}
-    - {user: plain, password: written-in-the-spec}
-    - {user: /srv/pathlike, password: /Tr0ub4dor}
+    - user: app
+      password:
+        env: APP_PASSWORD
+    - user: reports
+      password:
+        file: /run/secrets/reports
+      privileges: read
+    - user: plain
+      password: written-in-the-spec
+    - user: /srv/pathlike
+      password: /Tr0ub4dor
 """
     )
     assert secret_names(spec, JobKind.BUILD, Side.PRODUCTION) == ("APP_PASSWORD",)
@@ -397,6 +423,10 @@ def test_ci_init(tmp_path: Path, ci: FakeCi) -> None:
     assert planned.user == identity()
     assert planned.image == f"ghcr.io/datadouble/datadouble:v{__version__}"
     assert planned.version == __version__
+    assert planned.agent is Agent.DOCKER
+    assert planned.cloud is None
+    assert "runtime" in sections(JobKind.BUILD, Side.PRODUCTION)
+    assert planned.runtime is None
     assert all("AWS_ACCESS_KEY_ID" in job.environment for job in planned.jobs)
     assert planned.docker == "/opt/bin/docker"
     assert planned.docker_socket == "/run/user/1000/docker.sock"
@@ -438,7 +468,8 @@ def test_ci_init_problems(tmp_path: Path) -> None:
     assert "install datadouble-jenkins" in json.loads(out)["message"]
     code, out = run(
         "--dry-run", "ci", "init", "--system", "x", "--job", "prune", "--spec", "s.yml",
-        "--side", "production", "--image", "my/image:1",
+        "--side", "production", "--image", "my/image:1", "--agent", "kubernetes",
+        "--cloud", "prod-k8s",
     )  # fmt: skip
     assert json.loads(out) == {
         "command": "ci.init",
@@ -447,7 +478,48 @@ def test_ci_init_problems(tmp_path: Path) -> None:
         "spec": "s.yml",
         "side": "production",
         "image": "my/image:1",
+        "agent": "kubernetes",
+        "cloud": "prod-k8s",
     }
+    request = {**request, "system": "fake-ci", "agent": "kubernetes"}
+    code, out = run("api", stdin=json.dumps(request))
+    response = json.loads(out)
+    assert response["error"] == ErrorCode.CI_FAILED
+    assert response["message"] == "fake-ci jobs cannot run on kubernetes agents; they run on docker"
+    request = {**request, "agent": "docker", "cloud": "prod-k8s"}
+    code, out = run("api", stdin=json.dumps(request))
+    assert json.loads(out)["message"] == "a cloud applies only to kubernetes agents"
+
+
+def test_claim_mount(tmp_path: Path) -> None:
+    runtime = {"kubernetes": {"claim": "work", "mount": str(tmp_path)}}
+    spec = make_spec(tmp_path).model_copy(update={"runtime": runtime})
+    planned = pipeline(spec, options(JobKind.FETCH, runner=None))
+    assert planned.runtime == runtime
+    assert len(planned.jobs[0].mounts) == 2
+    assert claim_mount(planned) == str(tmp_path)
+    assert claim_mount(planned, str(tmp_path)) == str(tmp_path)
+    with pytest.raises(CiError, match="mounted at /elsewhere; these are not under it"):
+        claim_mount(planned, "/elsewhere")
+    nothing = replace(planned, jobs=(replace(planned.jobs[0], mounts=()),))
+    assert claim_mount(nothing) == DEFAULT_MOUNT
+    apart = replace(planned, jobs=(replace(planned.jobs[0], mounts=("/a", "/b")),))
+    with pytest.raises(CiError, match="must share a directory; these do not: /a, /b"):
+        claim_mount(apart)
+
+
+def test_runtime_namespace(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
+    named = {"kubernetes": {"namespace": "other", "claim": "work", "mount": str(tmp_path)}}
+    spec = spec.model_copy(update={"runtime": named})
+    with pytest.raises(CiError, match="namespace is other, but the non-production side's pods"):
+        runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "other")
+    runtime_namespace(pipeline(spec, options(JobKind.FETCH, runner=None)), "shop")
+    unnamed = {"kubernetes": {"claim": "work", "mount": str(tmp_path)}}
+    spec = spec.model_copy(update={"runtime": unnamed})
+    runtime_namespace(pipeline(spec, options(JobKind.PROVISION, runner=None)), "shop")
 
 
 def test_jobs_must_be_known() -> None:
@@ -458,7 +530,7 @@ def test_jobs_must_be_known() -> None:
 def spec_with_secret(tmp_path: Path) -> Path:
     path = tmp_path / "shop.yml"
     text = SPEC.replace("STORE", str(tmp_path / "store")).replace(
-        "name: shop\n", "name: shop\nsecrets: {anonymization_key: {env: SHOP_KEY}}\n"
+        "name: shop\n", "name: shop\nsecrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
     path.write_text(text, encoding="utf-8")
     return path

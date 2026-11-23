@@ -22,6 +22,13 @@ items are settled unless a pull request makes the case for reopening one.
 5. In Markdown, indent nested list items four spaces past their parent's
    marker. GitHub accepts two, but the documentation site's Markdown parser
    flattens them into the parent list. Run `make docs` to check.
+6. Write YAML mappings in block style, one key per line, never as flow
+   mappings like `{path: /srv, local: {node: a}}` (decision 137). This holds
+   for YAML files, `yaml` fences in Markdown, YAML in Python strings and any
+   YAML code generates. Empty `{}` and `[]`, and short flow sequences of
+   plain scalars such as `include: [billing.*]`, are fine. Run
+   `uv run python scripts/format_yaml.py` to rewrite flow mappings in place;
+   `make lint` runs it with `--check`.
 
 ## Changelog
 

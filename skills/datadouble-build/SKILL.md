@@ -32,20 +32,39 @@ committing them (see `datadouble-spec`). Add `--env
 NAME` for credentials an adapter reads from the environment rather than the
 spec, such as `AWS_ACCESS_KEY_ID` for an S3 store.
 
+If the team's Jenkins agents are pods of the Kubernetes plugin, often with no
+Docker, add `--agent kubernetes`. Then `--runner` names the production
+namespace, as for Argo CD, and `--cloud` the plugin's cloud (its default
+otherwise). The namespace must be production's alone, never shared with the
+non-production side. `build` needs the spec's `runtime: kubernetes` on the
+claim `datadouble`, with no `namespace` (engine pods then start in the job's
+own namespace, so the same spec serves the non-production side) or this one,
+and every path the spec names
+(stores, the work directory) under the runtime's `mount`, since the job's pod
+mounts that claim there as the engine pods do; `ci init` refuses otherwise.
+Change the spec with `datadouble-spec` first if it uses Docker. Without
+`--agent`, Jenkins jobs use agents with Docker.
+
 ## Tell the person
 
 - The variables to define as secrets on the production side, from the
   response's `environment`, and its `instructions`.
 - What the runner's machine needs: Docker, and every path the spec names,
   existing and owned by the engine's user (`999:999` for PostgreSQL); on
-  Kubernetes, one PersistentVolumeClaim holding them.
+  Kubernetes, one PersistentVolumeClaim holding them. With Kubernetes agents,
+  the `instructions` also list separate namespaces per side, the Kubernetes
+  plugin's cloud with the Role its credentials need (pods, `pods/exec`,
+  `pods/log`, events), the `datadouble` claim (`ReadWriteMany`, or
+  `ReadWriteOnce` with the runtime's `node`) and the RBAC its service
+  account needs to run engine pods.
 - Where Docker is not `docker` with its socket at `/var/run/docker.sock`
   (installed outside `PATH`, or another Docker-compatible daemon on another
   socket): the operator sets `DATADOUBLE_DOCKER` and
   `DATADOUBLE_DOCKER_SOCKET` in the runner's environment, or you generate
   again with `--docker <command>` and `--docker-socket <absolute path>`.
   Never edit the generated files for it. Rootless Docker is not supported.
-  Argo CD's jobs run without Docker and take neither.
+  Argo CD's jobs and Jenkins' Kubernetes agents run without Docker and
+  take neither.
 - With the `kubernetes` runtime driving a cluster the job does not run in,
   the runtime's `kubeconfig` is a secret reference (`{env: NAME}`) to the
   kubeconfig's content, never the runner's own kubeconfig file; `ci init`
@@ -54,7 +73,8 @@ spec, such as `AWS_ACCESS_KEY_ID` for an S3 store.
   AKS logins). Jobs running in that cluster need none.
 - That the operator marks the runner inside the boundary
   (`DATADOUBLE_BOUNDARY=inside` in its environment, or the
-  `datadouble-boundary` ConfigMap on Kubernetes). Until then every run is
+  `datadouble-boundary` ConfigMap on Kubernetes, which is also the only mark
+  a Jenkins Kubernetes agent's pod reads). Until then every run is
   refused with `outside_boundary`; never set it yourself.
 - Keyless signing (`signing: {cosign: {keyless: true}}`) uses the CI system's
   identity token; GitHub workflows get `id-token: write` for it.

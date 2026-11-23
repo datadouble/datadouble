@@ -62,34 +62,61 @@ _SPEC = """
 name: shop
 source:
   engine: postgres
-  connection: {{dsn: {{env: DDCI_SOURCE_DSN}}}}
+  connection:
+    dsn:
+      env: DDCI_SOURCE_DSN
 runtime: {runtime}
 strict: {strict}
 subset:
-  seeds: {{customer: "id <= 5"}}
-  follow: {{down: [customer -> orders]}}
+  seeds:
+    customer: "id <= 5"
+  follow:
+    down: [customer -> orders]
 anonymize:
   customer:
-    name: {{faker: name}}
-    email: {{faker: email, unique: true}}
+    name:
+      faker: name
+    email:
+      faker: email
+      unique: true
 verify:
   assertions:
     - name: no big customer numbers
       sql: "SELECT 1 FROM customer WHERE id > {limit}"
-store: [{{filesystem: {{path: {base}/store}}}}]
-signing: {{cosign: {{key: {{env: DDCI_COSIGN_KEY}}, transparency_log: false}}}}
-trust: {{cosign: {{public_key: {{env: DDCI_COSIGN_PUB}}, transparency_log: false}}}}
-promote: {{to: [{{filesystem: {{path: {base}/export}}}}]}}
+store:
+  - filesystem:
+      path: {base}/store
+signing:
+  cosign:
+    key:
+      env: DDCI_COSIGN_KEY
+    transparency_log: false
+trust:
+  cosign:
+    public_key:
+      env: DDCI_COSIGN_PUB
+    transparency_log: false
+promote:
+  to:
+    - filesystem:
+        path: {base}/export
 fetch:
-  from: {{filesystem: {{path: {base}/export}}}}
+  from:
+    filesystem:
+      path: {base}/export
   staging: {base}/{mode}/staging
 replicate:
-  using: {{filesystem: {{path: {base}/{mode}/copies}}}}
+  using:
+    filesystem:
+      path: {base}/{mode}/copies
   mode: {mode}
   size: {size}
 notify:
   when: [failure, warning]
-  to: [{{webhook: {{url: {{env: DDCI_WEBHOOK}}}}}}]
+  to:
+    - webhook:
+        url:
+          env: DDCI_WEBHOOK
 """
 _HOOK = """
 import http.server

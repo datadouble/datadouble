@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: redis
       connection:
-        url: {env: SESSIONS_URL}   # redis:// or rediss://, by reference
+        url:                       # redis:// or rediss://, by reference
+          env: SESSIONS_URL
         databases: [0]             # the database numbers to copy
         separator: ":"             # between a key's segments
         patterns: ["session:{}"]   # key patterns inference would get wrong

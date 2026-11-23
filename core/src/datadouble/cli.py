@@ -27,7 +27,7 @@ from pydantic import JsonValue
 
 from datadouble import api
 from datadouble.catalog import describe_changes
-from datadouble.ci import JobKind, Side, masking
+from datadouble.ci import Agent, JobKind, Side, masking
 from datadouble.outcome import ExitCode
 from datadouble.prune import PruneTarget
 from datadouble.registry import RegistryError, installed
@@ -75,6 +75,8 @@ class _Arguments(argparse.Namespace):
     environment: list[str] | None
     docker: str | None
     docker_socket: str | None
+    agent: str | None
+    cloud: str | None
 
 
 def _stages(text: str) -> list[str]:
@@ -226,6 +228,15 @@ def _ci_parsers(add: _Add) -> None:
     )
     init.add_argument("--output", help="the repository root to write into (default: .)")
     init.add_argument("--image", help="the Datadouble image jobs run (default: this version's)")
+    init.add_argument(
+        "--agent",
+        choices=[agent.value for agent in Agent],
+        help="where jobs run Datadouble: a runner with Docker, or a Kubernetes pod"
+        " (default: the system's own)",
+    )
+    init.add_argument(
+        "--cloud", help="the Kubernetes cloud Kubernetes agents start in (default: the system's)"
+    )
     init.add_argument(
         "--env",
         dest="environment",
@@ -412,8 +423,20 @@ def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
         "jobs": list(dict.fromkeys(name for names in arguments.jobs for name in names)),
         "spec": arguments.spec,
     }
-    names = ("runner", "work", "side", "output", "image", "environment", "docker", "docker_socket")
-    return _set(fields, arguments, *names)
+    return _set(
+        fields,
+        arguments,
+        "runner",
+        "work",
+        "side",
+        "output",
+        "image",
+        "environment",
+        "agent",
+        "cloud",
+        "docker",
+        "docker_socket",
+    )
 
 
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {

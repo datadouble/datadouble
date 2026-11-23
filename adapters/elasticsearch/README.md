@@ -15,8 +15,10 @@ settings and documents as NDJSON (`logical`).
 source:
   engine: elasticsearch
   connection:
-    url: {env: SEARCH_URL}       # http[s]://[user:password@]host[:port], by reference
-    api_key: {env: SEARCH_KEY}   # optional; sent instead of the URL's credentials
+    url:                         # http[s]://[user:password@]host[:port], by reference
+      env: SEARCH_URL
+    api_key:                     # optional; sent instead of the URL's credentials
+      env: SEARCH_KEY
     indices: ["*", "-logs-*"]    # index patterns; the default is every open index
 subset:
   seeds:

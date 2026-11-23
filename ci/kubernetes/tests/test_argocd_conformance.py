@@ -31,9 +31,9 @@ import yaml
 from pydantic import JsonValue, TypeAdapter
 
 from datadouble import __version__
-from datadouble.ci import Side
+from datadouble.ci import CLAIM, Side
 from datadouble.programs import run_program
-from datadouble_argocd import CLAIM, NAME
+from datadouble_argocd import NAME
 from datadouble_conformance.ci import (
     IMAGE_VARIABLE,
     POSTGRES,

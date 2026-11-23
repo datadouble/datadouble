@@ -37,19 +37,28 @@ URL = (
 
 SPEC = """
 name: uploads
-source: {engine: postgres, connection: CONNECTION}
+source:
+  engine: postgres
+  connection: CONNECTION
 subset:
-  seeds: {customer: "id <= 3"}
-  follow: {down: ["customer -> customer_document"]}
+  seeds:
+    customer: "id <= 3"
+  follow:
+    down: ["customer -> customer_document"]
   unselected: none
 files:
-  connection: {root: ROOT, accept_inconsistent: true}
-  select: {avatars: "-name '1.jpg'", documents: -false}
+  connection:
+    root: ROOT
+    accept_inconsistent: true
+  select:
+    avatars: "-name '1.jpg'"
+    documents: -false
   exclude: [EXCLUDED]
   paths_from: PATHS_FROM
   cleanup: CLEANUP
 store:
-  - filesystem: {path: STORE}
+  - filesystem:
+      path: STORE
 """
 
 

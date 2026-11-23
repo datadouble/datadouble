@@ -54,6 +54,7 @@ def test_writing_and_checking(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_a_spec_ci_init_refuses(tmp_path: Path) -> None:
     shutil.copytree(ROOT / "tests" / "nightly", tmp_path / "tests" / "nightly")
     spec = tmp_path / "tests" / "nightly" / "nightly.yml"
-    spec.write_text(spec.read_text("utf-8").replace("promote: {", "#"), encoding="utf-8")
+    text = spec.read_text("utf-8")
+    spec.write_text(text.replace(text[text.index("promote:") : text.index("fetch:")], ""), "utf-8")
     with pytest.raises(RuntimeError, match="ci init failed"):
         nightly.generate(tmp_path)

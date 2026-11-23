@@ -10,12 +10,19 @@ name: ""
 # The Datadouble image, pinned to a release.
 image: ghcr.io/datadouble/datadouble:v0.0.0
 # The uid and gid Datadouble runs as: the engine's owner (decision 86).
-user: {uid: 999, gid: 999}
+user:
+  uid: 999
+  gid: 999
 # The spec and its catalog lock, mounted where the jobs' arguments find them.
-spec: {path: datadouble/spec.yml, content: "", lock: ""}
+spec:
+  path: datadouble/spec.yml
+  content: ""
+  lock: ""
 # The PersistentVolumeClaim every path the spec names lives on, mounted at
 # the same path in every pod (the `kubernetes` runtime's claim and mount).
-claim: {name: datadouble, mount: /srv/datadouble}
+claim:
+  name: datadouble
+  mount: /srv/datadouble
 # A Secret holding the environment variables the jobs read secrets from.
 secret: ""
 # Who on-demand copies are for; an ApplicationSet sets it per request. An

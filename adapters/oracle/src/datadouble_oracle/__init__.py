@@ -8,7 +8,8 @@ Spec settings::
     source:
       engine: oracle
       connection:
-        url: {env: SHOP_ORACLE_URL}   # oracle://user:password@host:1521/service, by reference
+        url:                          # oracle://user:password@host:1521/service, by reference
+          env: SHOP_ORACLE_URL
         schemas: [SHOP]               # the connecting user's own schema by default
 
 The catalog is the named schemas, read through the service (a pluggable
