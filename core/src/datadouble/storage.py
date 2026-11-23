@@ -8,6 +8,11 @@ Storage adapters register under the ``datadouble.stores`` entry point group;
 each entry point names a callable that takes the store's settings from the
 spec and returns a :class:`Store`. The filesystem store lives here.
 
+The filesystem store gives every file it writes its ``mode`` setting (``0640`` by
+default) and every directory it creates that mode plus the search bit wherever
+the mode has the read bit, whatever the umask, so another program, such as a
+web server in front of an export store, can read what ``promote`` wrote.
+
 A store that cannot list its keys, such as a web server, raises
 :class:`ListingUnsupportedError` from ``list``; readers then use the index
 ``promote`` writes under each ``<spec>/<group>/`` (see :mod:`datadouble.images`).
@@ -16,12 +21,13 @@ A store that cannot list its keys, such as a web server, raises
 import os
 import re
 import shutil
+import stat
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, field_validator
 
 from datadouble.settings import parse_settings
 
@@ -80,20 +86,53 @@ class Store(Protocol):
         ...
 
 
+DEFAULT_MODE = 0o640
+"""The mode of the files the filesystem store writes unless its ``mode`` says otherwise."""
+
+_MODE = re.compile(r"0?[0-7]{3}")
+_OWNER_READ_WRITE = stat.S_IRUSR | stat.S_IWUSR
+_OTHERS_WRITE = stat.S_IWGRP | stat.S_IWOTH
+
+
+def directory_mode(mode: int) -> int:
+    """``mode`` plus the search bit wherever it has the read bit (``0640`` gives ``0750``)."""
+    return mode | (mode & 0o444) >> 2
+
+
 class FilesystemSettings(BaseModel):
     """Settings for the filesystem store."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     path: Path
+    mode: str = f"{DEFAULT_MODE:04o}"
+    """The mode of every file the store writes, as an octal string such as ``"0640"``."""
+
+    @field_validator("mode")
+    @classmethod
+    def _check_mode(cls, mode: str) -> str:
+        if not _MODE.fullmatch(mode):
+            message = "must be three octal digits with an optional leading 0, such as 0640"
+            raise ValueError(message)
+        bits = int(mode, 8)
+        if bits & _OWNER_READ_WRITE != _OWNER_READ_WRITE or bits & _OTHERS_WRITE:
+            message = "must let the owner read and write and nobody else write, such as 0640"
+            raise ValueError(message)
+        return mode
+
+    @property
+    def permissions(self) -> int:
+        """``mode`` as a number."""
+        return int(self.mode, 8)
 
 
 class FilesystemStore:
     """A directory, local or a network share. Writes go to a temporary file first."""
 
-    def __init__(self, root: Path) -> None:
-        """Store under ``root``, which is created if needed."""
+    def __init__(self, root: Path, mode: int = DEFAULT_MODE) -> None:
+        """Store under ``root``, which is created if needed, writing files with ``mode``."""
         self.root = root
+        self.mode = mode
 
     def _path(self, key: str) -> Path:
         return self.root / check_key(key)
@@ -102,10 +141,23 @@ class FilesystemStore:
         """The directory."""
         return f"filesystem:{self.root}"
 
+    def _directories(self, directory: Path) -> None:
+        """Create ``directory`` and missing parents, each with the directory mode."""
+        missing: list[Path] = []
+        while not directory.is_dir():
+            missing.append(directory)
+            directory = directory.parent
+        for path in reversed(missing):
+            try:
+                path.mkdir(mode=directory_mode(self.mode))
+            except FileExistsError:
+                continue
+            path.chmod(directory_mode(self.mode))
+
     def _write(self, key: str, write: "_Writer") -> None:
         target = self._path(key)
         try:
-            target.parent.mkdir(parents=True, exist_ok=True)
+            self._directories(target.parent)
             handle, temporary = tempfile.mkstemp(dir=target.parent, prefix=".partial-")
         except OSError as error:
             message = f"cannot write {key} to {self.describe()}: {error.strerror}"
@@ -113,6 +165,11 @@ class FilesystemStore:
         os.close(handle)
         try:
             write(Path(temporary))
+            try:
+                Path(temporary).chmod(self.mode)
+            except OSError as error:
+                message = f"cannot set the mode of {key} in {self.describe()}: {error.strerror}"
+                raise StoreError(message) from None
             Path(temporary).replace(target)
         except BaseException:
             Path(temporary).unlink(missing_ok=True)
@@ -160,5 +217,6 @@ class _Writer(Protocol):
 
 
 def filesystem_store(settings: Mapping[str, JsonValue]) -> Store:
-    """Build a filesystem store from its spec settings (``path``)."""
-    return FilesystemStore(parse_settings(FilesystemSettings, settings, "filesystem store").path)
+    """Build a filesystem store from its spec settings (``path``, ``mode``)."""
+    parsed = parse_settings(FilesystemSettings, settings, "filesystem store")
+    return FilesystemStore(parsed.path, parsed.permissions)

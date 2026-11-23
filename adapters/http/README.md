@@ -53,10 +53,12 @@ fetch:
 ```
 
 The web server must be able to read the files `promote` writes. The
-filesystem store creates each file readable only by the user `promote` runs
-as, so run the server as that user, or have it read the directory some other
-way your platform allows. A file the server cannot read usually fails
-`fetch` with `HTTP 403`.
+filesystem store gives each file its `mode` setting, `"0640"` by default,
+whatever the umask, and each directory it creates the same mode plus the
+search bit wherever the mode has the read bit (`0750`). So run the server in
+the group of the user `promote` runs as, or set `mode: "0644"` to let anyone
+read them. Directories that already existed keep their own mode. A file the
+server cannot read usually fails `fetch` with `HTTP 403`.
 
 `prune --target export` runs against the store `promote` writes to, not
 this one.
