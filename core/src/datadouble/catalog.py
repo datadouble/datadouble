@@ -7,8 +7,8 @@ An engine adapter introspects a source into a :class:`Catalog`: its tables,
 columns, primary keys and foreign keys, the add-ons the source depends on
 (its :class:`Requirement` list), and its other objects (functions, views,
 triggers and the like, as :class:`SourceObject`), each with a fingerprint of
-its definition and the tables and objects it depends on. A table lists the
-objects it needs too, such as the sequence a column's default draws from.
+its definition and the tables and objects it depends on. A table lists what
+it needs too, such as the sequence a column's default draws from.
 ``datadouble lock`` writes the catalog to ``catalog.lock`` next to the spec,
 listing what changed since the lock it replaces (:func:`changes`), and strict
 mode compares the live catalog against it at plan time.
@@ -179,15 +179,9 @@ class Table(_Model):
     primary_key: tuple[ColumnName, ...] = ()
     foreign_keys: tuple[ForeignKey, ...] = ()
     depends_on: tuple[Dependency, ...] = ()
-    """The objects its definition uses: a sequence or function in a column's
-    default, a column's user-defined type, a function in a check constraint."""
-
-    @model_validator(mode="after")
-    def _objects_only(self) -> "Table":
-        if any(edge.object is None for edge in self.depends_on):
-            message = "a table depends on objects; references to tables are foreign keys"
-            raise ValueError(message)
-        return self
+    """What its definition uses besides its foreign keys: a sequence or function
+    in a column's default, a column's user-defined type, a function in a check
+    constraint, or a table a row-level security policy reads."""
 
     def column(self, name: ColumnName) -> Column | None:
         """The column called ``name``, if there is one."""

@@ -495,7 +495,7 @@ class Run:
         planned: Plan,
         graph: Graph,
         snapshot: Snapshot,
-        selections: Mapping[TableName, Condition],
+        selections: dict[TableName, Condition],
         directory: Path,
     ) -> None:
         """Read, in the same snapshot, the rows standalone groups pull in.
@@ -514,8 +514,12 @@ class Run:
                 # the nested strategy this reads every table's keys once more,
                 # the cost that strategy otherwise avoids, and only when a
                 # standalone group pulls something in.
+                # A second source's followed rows (``_followed``) join them,
+                # as they joined the shared selections.
                 keyed = (
-                    key_conditions(graph, snapshot) if planned.strategy == "nested" else selections
+                    self._followed(planned, key_conditions(graph, snapshot))
+                    if planned.strategy == "nested"
+                    else selections
                 )
             conditions = pulled_rows(
                 planned.edges, frozenset(group.tables), group.rows(), keyed, snapshot

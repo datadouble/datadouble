@@ -36,9 +36,9 @@ from datadouble.catalog import (
     Column,
     ColumnKind,
     ObjectKind,
+    ObjectRef,
     Requirement,
     RequirementKind,
-    SourceObject,
 )
 from datadouble.closure import ordered
 from datadouble.engine import (
@@ -322,20 +322,20 @@ def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup, datab
             if edge.table is not None and not edge.inferred
         )
     ]
-    objects = {item.ref: item for item in plan.catalog.objects}
     for ref in reversed(ordered(found, plan.catalog.objects)):
-        statement = _drop(connection, objects[ref])
         try:
-            connection.execute(statement)
+            statement = _drop(connection, ref)
+            if statement is not None:
+                connection.execute(statement)
         except psycopg.errors.DependentObjectsStillExist as error:
-            # The catalog does not list aggregates, operators, casts and the
-            # like, so what blocks a drop can only be named here.
-            blocking = redact(error.diag.message_detail or "")
+            # Aggregates, operators, casts and the like are not in the catalog,
+            # so PostgreSQL's detail is what names the dependent.
+            blocking = redact(error.diag.message_detail or "no detail given")
             message = (
                 f"dropping {ref}, which the closure of group {group.name!r} lacks, failed: "
-                f"something the catalog does not list depends on it ({blocking}); declare "
-                f"{ref.kind} {'.'.join((ref.namespace[-1], ref.name))} in the group's "
-                "`objects` to keep it"
+                f"something outside the closure, perhaps not in the catalog, depends on it "
+                f"({blocking}); declare {ref.kind} "
+                f"{'.'.join((ref.namespace[-1], ref.name))} in the group's `objects` to keep it"
             )
             raise EngineError(message) from None
         except psycopg.Error as error:
@@ -351,17 +351,29 @@ _DROPPED: dict[ObjectKind, sql.SQL] = {
 }
 
 
-def _drop(connection: Connection, item: SourceObject) -> sql.Composed:
-    """The statement that drops an object if it is there, refusing if anything depends on it."""
-    ref = item.ref
+_TRIGGER_RELATION = """
+SELECT c.relname, t.tgname
+FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE NOT t.tgisinternal AND n.nspname = %s AND c.relname || '.' || t.tgname = %s
+"""
+"""The table or view a trigger is on, found by the name the catalog gives it."""
+
+
+def _drop(connection: Connection, ref: ObjectRef) -> sql.Composed | None:
+    """The statement that drops ``ref``, refusing if anything depends on it; None if gone."""
     schema = ref.namespace[-1]
     name = sql.Identifier(schema, ref.name)
     if ref.kind is ObjectKind.TRIGGER:
-        # A trigger's name is its table's and its own; its exact edge names the table.
-        table = next(e.table for e in item.depends_on if e.table is not None and not e.inferred)
-        trigger = ref.name.removeprefix(f"{table.name}.")
-        return sql.SQL("DROP TRIGGER IF EXISTS {} ON {}").format(
-            sql.Identifier(trigger), _qualified(table)
+        # A trigger's catalog name is its table's or view's and its own, joined
+        # with a dot; either may hold dots, so the database says which is which.
+        found = connection.execute(_TRIGGER_RELATION, [schema, ref.name]).fetchone()
+        if found is None:
+            return None  # It went with its table or view.
+        relation, trigger = (str(part) for part in found)
+        return sql.SQL("DROP TRIGGER {} ON {}").format(
+            sql.Identifier(trigger), sql.Identifier(schema, relation)
         )
     if ref.kind is ObjectKind.TYPE:
         found = connection.execute(

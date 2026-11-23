@@ -16,7 +16,7 @@ from datadouble.closure import Pulled, ordered, pulled_rows
 from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import PlanError, PlannedGroup
 from datadouble.spec import PulledRows
-from datadouble.subset import AllRows, Edge, EdgeMode, ValuesIn
+from datadouble.subset import AllRows, Edge, EdgeMode, NoRows, ValuesIn
 from fakes import FakeSource, shop
 
 T = TableName.of
@@ -584,8 +584,131 @@ def test_declared_objects_need_their_tables_in_the_image() -> None:
         (
             "group 'core': view public.daily needs table public.posts, which group 'core' does "
             "not hold; include it, or add `requires:` for a group holding it; reached by "
-            "view public.daily"
+            "view public.daily -> table public.posts"
         ),
+    )
+    # Through an inferred edge it only warns.
+    hinted = objects(extra=(item(DAILY, on(POSTS, inferred=True)),))
+    warned = planned(body + "objects: [{view: daily}]\n", live=hinted)
+    assert any(
+        w.startswith("group 'core': view public.daily needs table public.posts")
+        and w.endswith("(an inferred dependency: check it)")
+        for w in warned.warnings
     )
     held = body.replace("[public.users]}", "[public.users], requires: [rest]}", 1)
     assert DAILY in group("core", held + "objects: [{view: daily}]\n", live).objects
+
+
+def test_tables_kept_without_rows_never_gain_any() -> None:
+    orders, secrets, carts, notes = (T("app", n) for n in ("orders", "secrets", "carts", "notes"))
+    source = FakeSource(
+        rows={
+            orders: [{"id": 1, "secret_id": None}, {"id": 2, "secret_id": 9}],
+            secrets: [{"id": 9}],
+            carts: [{"id": 5, "order_id": 2}, {"id": 6, "order_id": 1}],
+            notes: [{"id": 70, "order_id": 1}],
+        }
+    )
+    secret = Edge(
+        "orders_secret", orders, _column("secret_id"), secrets, _column("id"), mode=EdgeMode.DROP
+    )
+    cart = Edge("carts_order", carts, _column("order_id"), orders, _column("id"))
+    note = Edge("notes_order", notes, _column("order_id"), orders, _column("id"), down=True)
+    found = pulled_rows(
+        (secret, cart, note),
+        frozenset({orders, secrets, notes}),
+        {carts: PulledRows.ALL},
+        {
+            orders: ValuesIn(_column("id"), frozenset({(1,)})),
+            secrets: NoRows(),
+            notes: NoRows(),
+        },
+        source,
+    )
+    # Order 2 refers to a secret through a drop reference, and secrets keep no
+    # rows: it is dropped, as the shared extract drops it, and no secret leaks.
+    assert secrets not in found
+    assert notes not in found
+    assert [str(r["id"]) for r in source.select(orders, found)] == ["1"]
+    # Every cart, except the one whose order is dropped above.
+    assert [str(r["id"]) for r in source.select(carts, found)] == ["6"]
+
+
+def test_declared_objects_count_however_they_were_reached_first() -> None:
+    middle = ObjectRef(kind=ObjectKind.VIEW, namespace=("public",), name="middle")
+    reader = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="reader")
+    trigger = ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="users.reads")
+    live = shop().model_copy(
+        update={
+            "objects": (
+                item(reader, on(POSTS)),
+                item(trigger, on(USERS), calls(reader)),
+                item(middle, calls(reader)),
+            )
+        }
+    )
+    body = (
+        KEEP_AUDIT
+        + "objects: [{view: middle}]\n"
+        + "images:\n  core: {include: [public.users]}\n"
+        + "  rest: {include: [public.posts, public.categories, public.users]}\n"
+    )
+    with pytest.raises(PlanError) as caught:
+        planned(body, live=live)
+    assert caught.value.problems == (
+        (
+            "group 'core': function public.reader needs table public.posts, which group 'core' "
+            "does not hold; include it, or add `requires:` for a group holding it; reached by "
+            "view public.middle -> function public.reader -> table public.posts"
+        ),
+    )
+
+
+def test_tables_reading_other_tables_bring_them() -> None:
+    log = shop().table(LOG)
+    assert log is not None
+    reading = shop().model_copy(
+        update={
+            "tables": tuple(
+                t.model_copy(update={"depends_on": (on(LOG),)}) if t.name == USERS else t
+                for t in shop().tables
+            )
+        }
+    )
+    body = KEEP_AUDIT + "images: {people: {include: [users], standalone: true}}\n"
+    result = planned(body, live=reading)
+    assert pulled(result.groups[0])["audit.log"].rows is PulledRows.NONE
+    # A table copies leave out only warns: the policy may go with it.
+    excluding = CYCLE_FREE + "images: {people: {include: [users], standalone: true}}\n"
+    warned = planned(excluding, live=reading)
+    assert (
+        "group 'people': table public.users has a policy or check that reads table "
+        "audit.log, which is excluded or not in the catalog, so the image may lack it"
+    ) in warned.warnings
+
+
+def test_triggers_on_views_come_with_them() -> None:
+    view = ObjectRef(kind=ObjectKind.VIEW, namespace=("public",), name="recent")
+    instead = ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="recent.write")
+    writer = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="write")
+    live = shop().model_copy(
+        update={
+            "objects": (
+                item(view, on(USERS)),
+                item(writer),
+                item(instead, calls(view), calls(writer)),
+            )
+        }
+    )
+    own = group(
+        "people", KEEP_AUDIT + "images: {people: {include: [users], standalone: true}}\n", live
+    )
+    assert {str(view), str(instead), str(writer)} <= {str(ref) for ref in own.objects}
+    assert set(pulled(own)) == {"function public.write"}
+    # When the view is pulled in, so is its trigger.
+    other = group(
+        "content",
+        KEEP_AUDIT + "images: {content: {include: [posts], standalone: true}}\n",
+        live,
+    )
+    assert {"view public.recent", "trigger public.recent.write"} <= set(pulled(other))

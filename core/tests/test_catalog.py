@@ -251,12 +251,13 @@ def test_what_tables_need_is_written_only_when_they_need_something(tmp_path: Pat
     write_lock(lock, path)
     assert read_lock(path) == lock
     assert Dependency(object=sequence).target == sequence
-    with pytest.raises(ValueError, match="references to tables are foreign keys"):
-        Table(
-            name=TableName.of("public", "users"),
-            columns=(),
-            depends_on=(Dependency(table=TableName.of("public", "orders")),),
-        )
+    # A policy can read another table; that is a need too, not a foreign key.
+    reader = Table(
+        name=TableName.of("public", "users"),
+        columns=(),
+        depends_on=(Dependency(table=TableName.of("public", "orders")),),
+    )
+    assert reader.depends_on[0].target == TableName.of("public", "orders")
 
 
 def test_unmet_requirements() -> None:

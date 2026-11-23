@@ -687,6 +687,19 @@ CREATE FUNCTION shop.visible(customer integer) RETURNS boolean LANGUAGE sql STAB
     RETURN customer > 0;
 ALTER TABLE billing.invoices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY invoices_visible ON billing.invoices USING (shop.visible(customer_id));
+-- A policy reading another table brings that table, without rows; a view's
+-- INSTEAD OF trigger comes with the view.
+CREATE TABLE shop.blocked (customer_id integer PRIMARY KEY);
+CREATE POLICY invoices_unblocked ON billing.invoices USING (
+    NOT EXISTS (SELECT 1 FROM shop.blocked b WHERE b.customer_id = invoices.customer_id));
+CREATE VIEW shop.recent AS SELECT id, email FROM shop.customers;
+CREATE FUNCTION shop.recent_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO shop.customers (id, email) VALUES (NEW.id, NEW.email);
+    RETURN NEW;
+END $$;
+CREATE TRIGGER recent_write INSTEAD OF INSERT ON shop.recent
+    FOR EACH ROW EXECUTE FUNCTION shop.recent_insert();
 INSERT INTO billing.teams VALUES (1), (2);
 INSERT INTO billing.clerks VALUES (1, 1), (2, 2);
 INSERT INTO shop.customers VALUES
@@ -727,9 +740,11 @@ SLICE_CHECKS = {
     "SELECT 1 FROM pg_catalog.pg_proc"
     " WHERE pronamespace::regnamespace::text IN ('public', 'audit')": 2,
     "SELECT 1 FROM pg_catalog.pg_proc WHERE proname = 'unused'": 0,
-    "SELECT 1 FROM pg_catalog.pg_proc WHERE pronamespace::regnamespace::text = 'shop'": 2,
+    "SELECT 1 FROM pg_catalog.pg_proc WHERE pronamespace::regnamespace::text = 'shop'": 3,
     "SELECT 1 FROM pg_catalog.pg_indexes WHERE indexname = 'invoices_cents'": 1,
-    "SELECT 1 FROM pg_catalog.pg_policies WHERE policyname = 'invoices_visible'": 1,
+    "SELECT 1 FROM pg_catalog.pg_policies WHERE tablename = 'invoices'": 2,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'recent_write'": 1,
+    "SELECT 1 FROM shop.blocked": 0,
     "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'invoices_audit'": 1,
     "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'emails'": 1,
     "SELECT 1 WHERE public.greet('x') <> 'hello x'": 0,
@@ -748,7 +763,10 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
         made.execute(trusted(SLICE_SCHEMA))
         spec = SLICE_SPEC.replace("ROWS", rows)
         planned = build(made, tmp_path, spec=spec, stages=(Stage.PLAN,))
-        assert any("audit.entries is reached only through objects" in w for w in planned.warnings)
+        assert any(
+            "audit.entries is reached only through objects or policies" in w
+            for w in planned.warnings
+        )
         result = build(made, tmp_path, spec=spec, resume=planned.generation)
         assert not result.failed(), result.verification
         billing = next(s for s in result.images if s.identity.group == "billing")
@@ -782,7 +800,7 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
                         "SELECT 1 FROM pg_catalog.pg_tables"
                         " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
                     )
-                    == 5
+                    == 6
                 )
 
 
@@ -801,8 +819,8 @@ def test_a_dependency_the_catalog_lacks_stops_a_standalone_load(tmp_path: Path) 
             build(made, tmp_path, spec=SLICE_SPEC.replace("ROWS", ""))
         assert str(caught.value).startswith(
             f"dropping function {made.database}.public.add_up(a integer, b integer), which "
-            "the closure of group 'billing' lacks, failed: something the catalog does not "
-            "list depends on it ("
+            "the closure of group 'billing' lacks, failed: something outside the closure, "
+            "perhaps not in the catalog, depends on it ("
         )
         assert str(caught.value).endswith(
             "); declare function public.add_up in the group's `objects` to keep it"

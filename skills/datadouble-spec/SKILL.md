@@ -162,8 +162,10 @@ object's dependencies, across schemas and databases.
 - **A standalone PostgreSQL build that fails dropping a function** names
   what uses it, such as an aggregate or operator, which the catalog does not
   list. Suggest declaring the function in the group's `objects`.
-- **`objects:`**, at the top of the spec or in a group, declares what code
-  outside Datadouble expects in the images, by kind and name:
+- **`objects:`**, at the top of the spec (every group) or in a group,
+  declares what code outside Datadouble expects in the images, by kind and
+  name. A top-level object needs its tables in every group that is not
+  standalone, so put one over a single group's tables in that group:
   `{function: public.uuid_generate_v4}`, `{view: reporting.daily}`. Ask the
   person what their applications call that the tables do not show; add only
   what they name. A name that does not resolve, or fits several objects,

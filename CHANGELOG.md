@@ -194,7 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tables list the objects they need.** The catalog records the sequences
   and functions tables' column defaults, generated or computed columns,
   check constraints (and on PostgreSQL index expressions and row-level
-  security policies) use, and their columns' user-defined types: exactly from
+  security policies, with the tables those policies read) use, and their columns' user-defined types: exactly from
   `pg_depend` and SQL Server's dependency views, from `ALL_DEPENDENCIES` on
   Oracle (whose sequence defaults are parsed, so inferred), and none on
   MySQL, which has no such objects. A table that needs nothing hashes as

@@ -47,6 +47,7 @@ from datadouble.names import GroupName, TableName
 from datadouble.spec import PulledRows
 from datadouble.subset import (
     AllRows,
+    AnyNull,
     Condition,
     Edge,
     EdgeMode,
@@ -167,6 +168,7 @@ def label(node: Node) -> str:
 
 _ROUTINES = frozenset({ObjectKind.FUNCTION, ObjectKind.PROCEDURE, ObjectKind.PACKAGE})
 _PULLS_PARENTS = frozenset({EdgeMode.FOLLOW, EdgeMode.ALL})
+_VIEWS = frozenset({ObjectKind.VIEW, ObjectKind.MATERIALIZED_VIEW})
 
 
 class _Walk:
@@ -192,9 +194,15 @@ class _Walk:
         self.queue: deque[Node] = deque()
         self.closure = Closure()
         self.attaching: dict[TableName, list[SourceObject]] = {}
+        self.on_views: dict[ObjectRef, list[SourceObject]] = {}
+        """Triggers on each view, which come with it."""
         for item in packaging.catalog.objects:
             for table in _exact_tables(item):
                 self.attaching.setdefault(table, []).append(item)
+            if item.ref.kind is ObjectKind.TRIGGER:
+                for need in item.depends_on:
+                    if need.object is not None and need.object.kind in _VIEWS and not need.inferred:
+                        self.on_views.setdefault(need.object, []).append(item)
         self.related: dict[TableName, list[tuple[TableName, Edge]]] = {}
         for edge in packaging.edges:
             # A reference to a table that is excluded, or not in the catalog,
@@ -203,6 +211,9 @@ class _Walk:
                 self.related.setdefault(edge.child, []).append((edge.parent, edge))
             if edge.down and edge.child in self.tables:
                 self.related.setdefault(edge.parent, []).append((edge.child, edge))
+        self.outside: list[tuple[ObjectRef, TableName, bool]] = []
+        """Tables outside a group that is not standalone, the objects needing them,
+        and whether by inferred edges."""
         self.reaching: dict[TableName, list[Edge]] = {}
         """The followed references that reach each table from the image."""
 
@@ -228,6 +239,7 @@ class _Walk:
         self.closure.pulled = self.pulled()
         if not self.standalone:
             self.placed(found)
+            self.unheld()
         return self.closure
 
     def placed(self, found: list[ObjectRef]) -> None:
@@ -264,11 +276,20 @@ class _Walk:
 
     def visit_table(self, name: TableName) -> None:
         if self.standalone:
-            for target, reference in self.related.get(name, []):
-                self.reaching.setdefault(target, []).append(reference)
-                self.reach(target, self.through(name, target, inferred=False))
+            for related, reference in self.related.get(name, []):
+                self.reaching.setdefault(related, []).append(reference)
+                self.reach(related, self.through(name, related, inferred=False))
         for edge in self.tables[name].depends_on:
-            self.reach(edge.target, self.through(name, edge.target, inferred=edge.inferred))
+            target = edge.target
+            if isinstance(target, TableName) and target not in self.tables:
+                # A policy or check reading a table copies leave out.
+                self.closure.warnings.append(
+                    f"group {self.name!r}: {label(name)} has a policy or check that reads "
+                    f"{label(target)}, which is excluded or not in the catalog, so the image "
+                    "may lack it"
+                )
+                continue
+            self.reach(target, self.through(name, target, inferred=edge.inferred))
         for item in self.attaching.get(name, []):
             if set(_exact_tables(item)) <= self.present:
                 self.reach(item.ref, self.through(name, item.ref, inferred=False))
@@ -284,6 +305,8 @@ class _Walk:
                 self.needs_table(ref, target, inferred=edge.inferred)
             else:
                 self.reach(target, self.through(ref, target, inferred=edge.inferred))
+        for trigger in self.on_views.get(ref, []):
+            self.reach(trigger.ref, self.through(ref, trigger.ref, inferred=False))
         if self.standalone and self.is_pulled(ref) and _inferred(item):
             self.closure.warnings.append(
                 f"group {self.name!r}: {ref}'s dependencies are inferred from its body; "
@@ -299,28 +322,51 @@ class _Walk:
             self.unresolved(
                 ref, ref, f"needs {label(table)}, which is not in the catalog", inferred=inferred
             )
-        elif self.unheld(ref, table):
-            reason = (
-                f"needs {label(table)}, which group {self.name!r} does not hold; include it, "
-                "or add `requires:` for a group holding it"
-            )
-            self.unresolved(ref, ref, reason, inferred=inferred)
         else:
+            if not self.standalone and table not in self.own and table not in self.group.elsewhere:
+                self.outside.append((ref, table, inferred))
             self.reach(table, self.through(ref, table, inferred=inferred))
 
-    def unheld(self, ref: ObjectRef, table: TableName) -> bool:
-        """Whether a declared object, or one it needs, needs a table no image of the group has.
+    def unheld(self) -> None:
+        """Fail declared objects, and objects they need, that need a table no image has.
 
-        A group that is not standalone pulls nothing in, so its declared
-        objects would be missing from its image.
+        A group that is not standalone pulls nothing in, so such an object
+        would be missing from its image. An object counts as declared when
+        any declared object reaches it, whatever reached it first.
         """
-        declared = isinstance(self.reached[ref].path[0], ObjectRef)
-        return (
-            declared
-            and not self.standalone
-            and table not in self.own
-            and table not in self.group.elsewhere
+        rooted = self.rooted()
+        for ref, table, inferred in self.outside:
+            if ref not in rooted:
+                continue
+            nodes: tuple[Node, ...] = (*rooted[ref], table)
+            path = " -> ".join(label(node) for node in nodes)
+            text = (
+                f"group {self.name!r}: {label(ref)} needs {label(table)}, which group "
+                f"{self.name!r} does not hold; include it, or add `requires:` for a group "
+                f"holding it; reached by {path}"
+            )
+            if inferred:
+                self.closure.warnings.append(f"{text} (an inferred dependency: check it)")
+            else:
+                self.closure.problems.append(text)
+                self.closure.broken.setdefault(ref, text)
+
+    def rooted(self) -> dict[ObjectRef, tuple[ObjectRef, ...]]:
+        """Each object a declared object reaches through objects, with a path from it."""
+        found: dict[ObjectRef, tuple[ObjectRef, ...]] = {}
+        pending: deque[tuple[ObjectRef, tuple[ObjectRef, ...]]] = deque(
+            (root, (root,)) for root in self.group.roots
         )
+        while pending:
+            ref, path = pending.popleft()
+            if ref in found:
+                continue
+            found[ref] = path
+            item = self.objects.get(ref)
+            for edge in item.depends_on if item is not None else ():
+                if edge.object is not None and edge.object not in found:
+                    pending.append((edge.object, (*path, edge.object)))
+        return found
 
     def unresolved(self, ref: ObjectRef, subject: Node, reason: str, *, inferred: bool) -> None:
         step = self.reached[ref]
@@ -340,13 +386,23 @@ class _Walk:
         """Whether an object reached is pulled in.
 
         Roots are not, nor objects that come with the group's own tables (a
-        trigger on one, a view over them alone).
+        trigger on one, a view over them alone, a trigger on such a view).
         """
         if len(self.reached[ref].path) == 1 or ref in self.included:
             return False
-        item = self.objects.get(ref)
-        tables = set(_exact_tables(item)) if item is not None else set[TableName]()
-        return not (tables and tables <= self.own)
+        item = self.objects[ref]
+        tables = set(_exact_tables(item))
+        if tables:
+            return not tables <= self.own
+        views = [
+            e.object
+            for e in item.depends_on
+            if ref.kind is ObjectKind.TRIGGER
+            and e.object is not None
+            and e.object.kind in _VIEWS
+            and e.object in self.reached
+        ]
+        return not views or any(self.is_pulled(view) for view in views)
 
     def pulled(self) -> tuple[Pulled, ...]:
         if not self.standalone:
@@ -399,8 +455,9 @@ class _Walk:
             return PulledRows.NONE
         if not chosen and not reaching:
             self.closure.warnings.append(
-                f"group {self.name!r}: {label(table)} is reached only through objects, so it "
-                "comes without rows; set `rows` for it to copy some"
+                f"group {self.name!r}: {label(table)} is reached only through objects or "
+                "policies, not references, so it comes without rows; set `rows` for it to "
+                "copy some"
             )
         return wanted
 
@@ -472,26 +529,81 @@ class _Rows:
         baseline: Mapping[TableName, Condition],
     ) -> None:
         self.own, self.modes, self.baseline = own, modes, baseline
+        # Own tables the subset keeps without rows (structure-only) never gain any.
+        self.rowless = frozenset(t for t in own if isinstance(baseline[t], NoRows))
         self.up: list[Edge] = []
         self.down: list[Edge] = []
+        self.drops: list[Edge] = []
+        """``drop`` references to parents that gain no rows: the rows a table
+        gains keep them null, as the shared extract keeps its own."""
         for edge in edges:
             if edge.mode in _KEEPS_PARENTS and self.fills(edge.child) and self.takes(edge.parent):
                 self.up.append(edge)
+            elif edge.mode is EdgeMode.DROP and self.fills(edge.child):
+                self.drops.append(edge)
             if edge.down and self.fills(edge.parent) and self.takes(edge.child):
                 self.down.append(edge)
         self.values: dict[tuple[Edge, bool], set[KeyTuple]] = {}
         """Values read along each edge, upward (False) or downward (True)."""
+        self.parents: dict[Edge, set[KeyTuple]] = {}
+        """The parent keys each reference may hold, once rows are dropped."""
 
     def fills(self, table: TableName) -> bool:
         """Whether ``table`` is in the image with rows that can reference others."""
-        return table in self.own or self.modes.get(table) in {
-            PulledRows.REFERENCED,
-            PulledRows.ALL,
-        }
+        if table in self.own:
+            return table not in self.rowless
+        return self.modes.get(table) in {PulledRows.REFERENCED, PulledRows.ALL}
 
     def takes(self, table: TableName) -> bool:
-        """Whether ``table`` gains the rows references bring: own ones and ``referenced`` ones."""
-        return table in self.own or self.modes.get(table) is PulledRows.REFERENCED
+        """Whether ``table`` gains the rows references bring.
+
+        Own tables with rows do, and ``referenced`` pulled-in ones.
+        """
+        if table in self.own:
+            return table not in self.rowless
+        return self.modes.get(table) is PulledRows.REFERENCED
+
+    def kept(self, table: TableName, condition: Condition) -> Condition:
+        """``condition`` without the rows the image cannot keep.
+
+        A ``drop`` reference to a parent without rows drops a row, as the
+        shared extract does; so does a reference to a parent row dropped so.
+        """
+        return all_of(
+            [
+                condition,
+                *(AnyNull(e.columns) for e in self.drops if e.child == table),
+                *(
+                    any_of([AnyNull(e.columns), ValuesIn(e.columns, frozenset(keys))])
+                    for e, keys in self.parents.items()
+                    if e.child == table
+                ),
+            ]
+        )
+
+    def prune(self, reader: KeyReader) -> None:
+        """Drop the rows whose parent rows were dropped, until nothing changes.
+
+        Only a ``drop`` reference to a parent without rows drops a row the
+        image gained, so without one there is nothing to do. Parent rows only
+        leave, so the loop ends.
+        """
+        if not self.drops:
+            return
+        references = list(dict.fromkeys((*self.up, *self.down)))
+        changed = True
+        while changed:
+            changed = False
+            for edge in references:
+                parent = self.condition(edge.parent)
+                keys = {
+                    row
+                    for row in reader.project(edge.parent, parent, edge.parent_columns)
+                    if all(value is not None for value in row)
+                }
+                if self.parents.get(edge) != keys:
+                    self.parents[edge] = keys
+                    changed = True
 
     def brought(self, table: TableName) -> Condition:
         """The rows references bring to ``table``, beyond the shared ones."""
@@ -512,12 +624,16 @@ class _Rows:
 
     def condition(self, table: TableName) -> Condition:
         if table in self.own:
-            return any_of([self.baseline[table], self.brought(table)])
+            return any_of([self.baseline[table], self.gains(table)])
         if self.modes[table] is PulledRows.ALL or any(
             e.parent == table and e.mode is EdgeMode.ALL for e in self.up
         ):
-            return AllRows()
-        return self.brought(table)
+            return self.kept(table, AllRows())
+        return self.gains(table)
+
+    def gains(self, table: TableName) -> Condition:
+        """The rows references bring to ``table`` that it keeps."""
+        return self.kept(table, self.brought(table))
 
     def gained(self, table: TableName) -> bool:
         """Whether references brought ``table`` any rows."""
@@ -528,7 +644,7 @@ class _Rows:
     def step(self, table: TableName, reader: KeyReader) -> set[TableName]:
         """Re-read what ``table``'s rows reference; the tables that gained rows."""
         full = self.condition(table)
-        extra = self.brought(table) if table in self.own else full
+        extra = self.gains(table) if table in self.own else full
         grown: set[TableName] = set()
         outgoing = [(e, False, e.columns, e.when, e.parent) for e in self.up if e.child == table]
         outgoing += [
@@ -586,6 +702,7 @@ def pulled_rows(
             if grown not in queued:
                 queued.add(grown)
                 pending.append(grown)
+    state.prune(reader)
     result = {
         table: state.condition(table)
         for table, mode in modes.items()

@@ -174,7 +174,7 @@ runs after it, once per group, and works out what the group's image needs
 to work: its **closure**. It starts from the group's tables, the objects the
 spec and the group declare in `objects:` (code outside Datadouble expects
 them), the objects that come with the group's tables (triggers on them,
-views over them alone) and, for a standalone group, the objects its
+views over them alone, triggers on those views) and, for a standalone group, the objects its
 `include` patterns match, and follows, transitively and across schemas and
 databases:
 
@@ -184,7 +184,8 @@ databases:
   may be missing, so it is not followed;
 - what a table's definition uses: the sequence or function in a column's
   default, a column's user-defined type, a function a check constraint
-  calls (see [source objects](#source-objects));
+  calls, a table a row-level security policy reads (see
+  [source objects](#source-objects));
 - every object's dependency edges, exact and inferred.
 
 ```yaml
@@ -208,7 +209,11 @@ objects they need that only another group's `include` patterns match
 Objects that come with a group's own tables, such as a trigger on one, and
 the objects it declares are its own whatever the patterns say. Since such a
 group pulls nothing in, a declared object that needs a table neither it nor
-a group it requires holds fails the plan, naming the table.
+a group it requires holds fails the plan, naming the table. Objects declared
+at the top of the spec are declared for every group, so a top-level view
+over one group's tables makes every other group that is not standalone
+include those tables or require that group; declare such an object in the
+group that holds its tables instead.
 
 Which rows a pulled-in table brings is set per group with `rows:`, keyed by
 a table name or glob, or by a reference written `child.column -> parent`,
@@ -232,7 +237,10 @@ images:
 - **`all`**: every row of the source table, and the rows those reference in
   turn. Other groups' images are unaffected. When the group's own tables
   gain rows this way, their own references are followed as well, so every
-  reference in the image keeps its parent.
+  reference in the image keeps its parent. Tables the subset keeps without
+  rows never gain any: a gained row whose `on_missing: drop` reference
+  points at one is left out, as the shared extract leaves it out, and so
+  are rows referencing a row left out so.
 - **`none`**: the table's structure only. References into it are left out
   of the image, as references to another group are. A table reached only
   through objects, such as one a trigger's function writes to, defaults to
