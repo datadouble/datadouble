@@ -230,7 +230,7 @@ class _World:
 
 
 def _result(steps: list["_Step"]) -> tuple[State, dict[str, str]]:
-    """A run's state and outputs: its job's own steps, the leading ones of one command.
+    """A run's state and outputs: its job's own steps, the leading ones of one job.
 
     A leader's pod also runs its follower (build, then promote), whose result is
     the follower's own.
@@ -265,9 +265,11 @@ def _pod_steps(pod: JsonValue) -> list["_Step"]:
             assert isinstance(arguments, list)
             code = _at(status, "state", "terminated", "exitCode")
             message = _at(status, "state", "terminated", "message")
+            # `--ci argocd --ci-job <job> <command> ...`: a step belongs to its job.
+            job = arguments.index("--ci-job") + 1 if "--ci-job" in arguments else 2
             found.append(
                 _Step(
-                    command=str(arguments[2]),
+                    command=str(arguments[job]),
                     status=code if isinstance(code, int) else -1,
                     message=message if isinstance(message, str) else "",
                 )
@@ -280,6 +282,7 @@ class _Step:
     """One container of a job's pod."""
 
     command: str
+    """The job the step belongs to (``--ci-job``)."""
     status: int
     message: str
 
@@ -521,10 +524,17 @@ class ArgoCdOnKind:
             status = _OBJECT.validate_json(found).get("status")
             if not isinstance(status, dict):
                 return False
-            if status.get("succeeded"):
-                conditions.append("succeeded")
-            elif status.get("failed") and not status.get("active"):
-                conditions.append("failed")
+            # The Job's own conditions, not its pod counts: between a failed pod
+            # and its retry (backoffLimit) nothing is active, yet the Job runs on.
+            found_conditions = status.get("conditions") or []
+            assert isinstance(found_conditions, list)
+            for condition in found_conditions:
+                if _at(condition, "status") != "True":
+                    continue
+                if _at(condition, "type") == "Complete":
+                    conditions.append("succeeded")
+                elif _at(condition, "type") == "Failed":
+                    conditions.append("failed")
             return bool(conditions)
 
         _wait(finished, f"the job {name}", 1800)
@@ -594,6 +604,32 @@ def _at(value: JsonValue, *path: str) -> JsonValue:
 GOLDEN = Path(__file__).parent / "golden"
 
 
+def _retried_without(job: dict[str, JsonValue]) -> bool:
+    """Whether a Job fails at once when a follower's step fails, rather than running again.
+
+    Running the pod again would run its leader again: a build whose promote
+    was refused would build, and notify, twice.
+    """
+    spec = _at(job, "spec", "jobTemplate", "spec") if job["kind"] == "CronJob" else job["spec"]
+    pod = _at(spec, "template", "spec")
+    containers = [*(_list(_at(pod, "initContainers"))), *(_list(_at(pod, "containers")))]
+    steps: list[tuple[str, str]] = []
+    for container in containers:
+        arguments = _list(_at(container, "args"))
+        steps.append((str(_at(container, "name")), str(arguments[arguments.index("--ci-job") + 1])))
+    followers = [name for name, step in steps if step != steps[0][1]]
+    rules = _list(_at(spec, "podFailurePolicy", "rules"))
+    failing = [_at(rule, "onExitCodes", "containerName") for rule in rules]
+    return failing == followers and all(_at(rule, "action") == "FailJob" for rule in rules)
+
+
+def _list(value: JsonValue) -> list[JsonValue]:
+    if value is None:
+        return []
+    assert isinstance(value, list)
+    return value
+
+
 def test_golden_files_render_and_validate(tmp_path: Path) -> None:
     files = sorted(GOLDEN.glob("*/*.golden"))
     assert files
@@ -619,6 +655,8 @@ def test_golden_files_render_and_validate(tmp_path: Path) -> None:
                 assert hooks <= {"PreSync", "PostDelete"}, golden.name
             else:
                 assert all(d["kind"] == "CronJob" for d in jobs), golden.name
+            for job in jobs:
+                assert _retried_without(_OBJECT.validate_python(job)), golden.name
             checked = run_program(
                 "kubeconform", ["-strict", "-summary", str(tmp_path / "rendered.yaml")]
             )

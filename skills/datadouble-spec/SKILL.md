@@ -133,3 +133,40 @@ adapter's README before adding one.
   `current_user`, `session_user`, `current_role`), and `postgres` with
   `privileges: read`. An existing user of the same name, such as `root` or
   `postgres`, gets the declared password.
+
+## Notifications
+
+Who hears about a generated CI job that fails or warns is the spec's
+`notify` section, not a `ci init` option: `ci init` is run again whenever
+the spec, the version or the options change, and an option left off a later
+run would silently drop notifications. Never edit generated files to add
+them (rule 2).
+
+```yaml
+notify:
+  when: [failure, warning]          # default: [failure]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com]}
+```
+
+- **A webhook's URL is a secret reference** (rule 6): it usually carries a
+  token. Datadouble posts to it after each job's command, on every system,
+  a JSON body with `spec`, `job`, `outcome`, `generation`, `error` (the
+  error code) and `run_url`. It never holds data values or secrets.
+  Credentials in the URL need https://, and posts use the runner's proxy
+  settings (`HTTPS_PROXY`, `NO_PROXY`).
+- **Email is the CI system's own:** Jenkins mails from the Jenkinsfile;
+  GitLab and GitHub need the manual setup `ci init` lists in
+  `instructions`, and GitHub can only mail whoever started a run; Argo CD
+  refuses email, so suggest a webhook to a service that mails the team.
+- A failed notification never changes a job's outcome, and a job that fails
+  before Datadouble starts (an image that cannot be pulled) posts no
+  webhook: the CI system's own failure notifications cover that.
+- Each attempt posts, so a job the system runs again after a failure (a
+  Kubernetes Job's `backoffLimit`) usually notifies twice. On Argo CD a
+  failed follower (`promote` after `build`) fails the Job without running
+  the pod again, so its leader is not built, or heard from, twice; tell the
+  person to run the follower's own CronJob once its problem is fixed.
+- After changing `notify`, run `ci init` again for both sides, so every job
+  gets the webhook's variable, and tell the person to define it.

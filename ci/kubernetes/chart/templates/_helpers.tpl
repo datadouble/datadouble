@@ -15,6 +15,10 @@
   args:
     - --ci
     - argocd
+    {{- with .step.job }}
+    - --ci-job
+    - {{ . | quote }}
+    {{- end }}
     {{- range .step.arguments }}
     {{- if eq . "$(DATADOUBLE_DRY_RUN)" }}
     {{- if $root.Values.dryRun }}
@@ -58,6 +62,22 @@
     {{- if .artifacts }}
     - {name: artifacts, mountPath: {{ printf "/workspace/%s" .artifacts | quote }}}
     {{- end }}
+{{- end -}}
+
+{{/* The Job's pod failure rules: a failed follower's step (promote after build,
+provision after fetch) fails the Job, rather than running the pod again,
+which would run its leader again: a finished build built, and notified, twice. */}}
+{{- define "datadouble.followers" -}}
+{{- $leader := (first .steps).job -}}
+{{- range $index, $step := .steps }}
+{{- if ne $step.job $leader }}
+- action: FailJob
+  onExitCodes:
+    containerName: {{ printf "step-%d" (add $index 1) }}
+    operator: NotIn
+    values: [0]
+{{- end }}
+{{- end }}
 {{- end -}}
 
 {{/* A job's pod: earlier steps as init containers, the last as the container. */}}

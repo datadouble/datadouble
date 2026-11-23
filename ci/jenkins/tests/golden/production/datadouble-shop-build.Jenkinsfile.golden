@@ -21,14 +21,44 @@ pipeline {
     stages {
         stage('datadouble run') {
             steps {
-                withCredentials([string(credentialsId: 'COSIGN_PASSWORD', variable: 'COSIGN_PASSWORD'), string(credentialsId: 'SHOP_COSIGN_KEY', variable: 'SHOP_COSIGN_KEY'), string(credentialsId: 'SHOP_SOURCE_DSN', variable: 'SHOP_SOURCE_DSN')]) {
+                withCredentials([string(credentialsId: 'ALERTS_WEBHOOK', variable: 'ALERTS_WEBHOOK'), string(credentialsId: 'COSIGN_PASSWORD', variable: 'COSIGN_PASSWORD'), string(credentialsId: 'SHOP_COSIGN_KEY', variable: 'SHOP_COSIGN_KEY'), string(credentialsId: 'SHOP_SOURCE_DSN', variable: 'SHOP_SOURCE_DSN')]) {
                     datadouble(
+                        job: 'build',
                         image: 'ghcr.io/datadouble/datadouble:v1.2.3',
                         user: '999:999',
                         mounts: ['/srv/datadouble/store', '/srv/datadouble/work'],
-                        environment: ['COSIGN_PASSWORD', 'SHOP_COSIGN_KEY', 'SHOP_SOURCE_DSN'],
+                        environment: ['ALERTS_WEBHOOK', 'COSIGN_PASSWORD', 'SHOP_COSIGN_KEY', 'SHOP_SOURCE_DSN'],
                         arguments: ['run', 'plan,extract,load,transform,package,verify,store', '--spec', 'datadouble/shop.yml', '--work', '/srv/datadouble/work', '--retry-key', (params.RETRY_KEY ?: env.BUILD_TAG)],
                     )
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop build: failure', body: 'Datadouble shop build: failure.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        aborted {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop build: aborted', body: 'Datadouble shop build: aborted.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        unstable {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop build: unstable', body: 'Datadouble shop build: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
                 }
             }
         }

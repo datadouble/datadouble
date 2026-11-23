@@ -35,6 +35,11 @@ suspended when it has none. Start one by hand with `kubectl create job
 --from=cronjob/...`. A job that follows another runs as a later step of that
 job's pod, so `promote` runs after a successful `build`, and a pool's
 `provision` after `fetch`; each also has its own CronJob for running alone.
+A Job runs a failed pod once more (`backoffLimit: 1`), which resumes a
+failed build's generation, but a failed follower fails the Job at once
+(`podFailurePolicy`): running the pod again would run its leader again, so
+a build whose `promote` was refused would build, and notify, twice. Run the
+follower's own CronJob once its problem is fixed.
 `activate` reads its generation, and `prune` its dry run, from the values
 (`generation`, `dryRun`).
 
@@ -88,3 +93,21 @@ A Kubernetes Job succeeds or fails; it has no warning state. A warning
 succeeds and says so in the log and in the container's termination message,
 which holds the outputs (`outcome`, `generation`, `error`; `fingerprint` and
 `changes` for `lock`). Nothing is kept anywhere else.
+
+## Notifications
+
+The spec's `notify` section says who hears about a job that fails or warns.
+Each step names its job (`--ci-job`), so Datadouble posts the spec's webhooks
+itself after each step's command; a Job has no web page, so `run_url` is
+null. A Job runs a failed pod once more (`backoffLimit: 1`), and each attempt
+posts, so a failure usually notifies twice; a failed follower is not run
+again (see [Jobs](#jobs)), so it, and the leader before it, notify once. Put
+the webhook's variable in the side's Secret like the others. A webhook that cannot be reached is a warning line in the log; the Job's
+result is unchanged.
+
+Kubernetes Jobs have no mail mechanism, so `ci init` fails for `notify`'s
+email, by name; list a webhook to a service that mails the team instead. A
+Job that fails before Datadouble starts (an image that cannot be pulled, a
+missing claim or Secret, a pod stopped at its deadline) posts nothing, so
+`ci init` asks you to alert on failed Jobs in the namespace with the
+cluster's monitoring, such as kube-state-metrics' `kube_job_status_failed`.

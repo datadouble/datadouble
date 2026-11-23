@@ -514,6 +514,68 @@ class Secrets(_Model):
     """Seeds deterministic anonymization; a random key per run when omitted."""
 
 
+class NotifyOn(StrEnum):
+    """Outcomes of a generated CI job that notify; ``notify.when`` is ``[failure]`` by default."""
+
+    FAILURE = "failure"
+    WARNING = "warning"
+
+
+class Webhook(_Model):
+    """A URL Datadouble posts a JSON summary of the job's outcome to."""
+
+    url: SecretRef
+    """A secret reference, since a webhook's URL usually carries its credential."""
+
+
+class WebhookTarget(_Model):
+    """``{webhook: {url: {env: ALERTS_WEBHOOK}}}``."""
+
+    webhook: Webhook
+
+
+class Email(_Model):
+    """Mail sent by the CI system's own mechanism, where it has one."""
+
+    to: tuple[Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+$")], ...] = Field(min_length=1)
+    """The addresses to mail."""
+
+
+class EmailTarget(_Model):
+    """``{email: {to: [data-team@example.com]}}``."""
+
+    email: Email
+
+
+type NotifyTarget = WebhookTarget | EmailTarget
+
+
+class Notify(_Model):
+    """Who hears about generated CI jobs that fail or warn (decision 125).
+
+    It lives in the spec rather than in ``ci init``'s options, so generating
+    the jobs again keeps it.
+    """
+
+    when: tuple[NotifyOn, ...] = Field(default=(NotifyOn.FAILURE,), min_length=1)
+    """The outcomes that notify: ``failure``, ``warning`` or both; ``[failure]`` by default."""
+    to: tuple[NotifyTarget, ...] = Field(min_length=1)
+    """Where notifications go, one target each: ``{webhook: ...}`` or ``{email: ...}``."""
+
+    def sends(self, outcome: str) -> bool:
+        """Whether a job ending with ``outcome`` notifies."""
+        return outcome in {str(kind) for kind in self.when}
+
+    def webhooks(self) -> tuple[Webhook, ...]:
+        """The webhook targets, in order."""
+        return tuple(t.webhook for t in self.to if isinstance(t, WebhookTarget))
+
+    def emails(self) -> tuple[str, ...]:
+        """Every address the email targets name, in order, without repeats."""
+        found = [a for t in self.to if isinstance(t, EmailTarget) for a in t.email.to]
+        return tuple(dict.fromkeys(found))
+
+
 class PathsFrom(_Model):
     """How the source's chosen rows name files: a template over a table's columns.
 
@@ -609,6 +671,8 @@ class Spec(_Model):
     """How many images and how much time ``prune`` keeps."""
     secrets: Secrets = Secrets()
     """Secrets the build needs, by reference."""
+    notify: Notify | None = None
+    """Who hears when a generated CI job fails or warns: webhooks and email."""
 
     def files_spec(self) -> "Spec | None":
         """The spec of the ``files`` section's build, sharing this one's images and storage."""

@@ -13,6 +13,7 @@ from standard input, so everything here is also available as JSON.
 | `--json` | print the JSON response instead of a summary |
 | `--dry-run` | print the JSON request without running it |
 | `--ci` `SYSTEM` | report to this CI/CD system and mask secrets in its logs |
+| `--ci-job` `JOB` | the generated job this runs for, which notifies as the spec's `notify` says (one of build, promote, fetch, provision, release, prune, activate, lock) |
 | `--ci-directory` `DIR` | where the CI/CD adapter writes outputs for the native step to pick up |
 
 ## `datadouble version`

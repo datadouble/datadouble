@@ -85,3 +85,22 @@ never values (decision 123).
 The step sets the build's description to the generation it built. Only the
 `lock` job archives build artifacts: its lock and changes, which hold no data
 values.
+
+## Notifications
+
+The spec's `notify` section says who hears about a job that fails or warns.
+Each `datadouble` step names its job (`job: 'build'`), so Datadouble posts the
+spec's webhooks itself after the command, with the build's page
+(`BUILD_URL`, set when Jenkins knows its own URL) as `run_url`. Add the
+webhook's variable as a Secret text credential like the others.
+
+`notify`'s email is Jenkins' own `mail` step (the Mailer plugin, with the
+SMTP server set in Manage Jenkins), in the Jenkinsfile's `post` section:
+`failure` and `aborted` (a build stopped at its time limit) for failures,
+`unstable` for warnings. Its subject names the build's result (failure,
+aborted or unstable), and its body adds the build's URL when Jenkins knows
+it. Because
+`post` runs however the build ended, it also reports a build that failed
+before Datadouble started, such as an image that cannot be pulled, which
+posts no webhook. A notification that cannot be sent, by mail or webhook, is
+logged and leaves the build's result alone.

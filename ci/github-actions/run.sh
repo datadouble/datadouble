@@ -8,7 +8,8 @@
 # host paths at the same paths, since engine containers mount them by those
 # paths. The command writes outputs (its own, and the ci-outputs announce
 # adapter's) and a summary into a directory in the workspace, handed on here;
-# annotations and masks arrive on its output.
+# annotations and masks arrive on its output. Naming the job lets the command
+# post the spec's notify webhooks, with the run's page from GitHub's variables.
 set -euo pipefail
 
 mapfile -t arguments < <(printf '%s\n' "$DATADOUBLE_ARGUMENTS" | sed '/^[[:space:]]*$/d')
@@ -26,7 +27,10 @@ options=(
     --env "GITHUB_OUTPUT=$bridge/outputs" --env "GITHUB_STEP_SUMMARY=$bridge/summary.md"
     --env DATADOUBLE_BOUNDARY --env RUNNER_ENVIRONMENT
     --env ACTIONS_ID_TOKEN_REQUEST_URL --env ACTIONS_ID_TOKEN_REQUEST_TOKEN
+    --env GITHUB_SERVER_URL --env GITHUB_REPOSITORY --env GITHUB_RUN_ID
 )
+bridged=(--ci github-actions --ci-directory "$bridge")
+if [ -n "${DATADOUBLE_CI_JOB:-}" ]; then bridged+=(--ci-job "$DATADOUBLE_CI_JOB"); fi
 # Docker would create a missing path as root, which the engine's user cannot
 # write, so a path the runner lacks fails here, saying what to create.
 while IFS= read -r path; do
@@ -49,8 +53,7 @@ if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
 fi
 
 status=0
-docker run "${options[@]}" "$DATADOUBLE_IMAGE" \
-    --ci github-actions --ci-directory "$bridge" "${arguments[@]}" || status=$?
+docker run "${options[@]}" "$DATADOUBLE_IMAGE" "${bridged[@]}" "${arguments[@]}" || status=$?
 if [ -f "$bridge/outputs" ]; then cat "$bridge/outputs" >> "$GITHUB_OUTPUT"; fi
 if [ -f "$bridge/summary.md" ]; then cat "$bridge/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
 exit "$status"

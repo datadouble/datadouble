@@ -23,6 +23,10 @@ Inspect first (rule 3), then ask in one round for what is missing:
   server serving it (the read-only `http` store; see `datadouble-fetch`).
 - Copies: a pool kept ready, or copies made on demand per pull request, and
   where they live.
+- Notifications: who hears when a job fails or warns, through a webhook
+  (the environment variable holding its URL) or email. They go in the
+  spec's `notify` section (see `datadouble-spec`), so later `ci init` runs
+  keep them.
 
 ## Then, in order
 
@@ -44,6 +48,6 @@ Inspect first (rule 3), then ask in one round for what is missing:
   environment secrets, masked CI/CD variables, Jenkins credentials, a
   Kubernetes Secret), from the `environment` each `ci init` returned.
 - The setup steps each `ci init` listed (`instructions`), such as GitLab's
-  pipeline schedules.
+  pipeline schedules and its emails for `notify`.
 - The schedules, in UTC, and what triggers what; `lock` runs only by hand.
 - The operator's own step: marking the production runner inside the boundary.

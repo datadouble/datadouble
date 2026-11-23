@@ -7,13 +7,15 @@
  * build unstable; a failure fails it. Jenkinsfiles written by
  * `datadouble ci init --system jenkins` call it:
  *
- *   datadouble(image: '...', user: '999:999', mounts: ['/srv/...'],
+ *   datadouble(job: 'build', image: '...', user: '999:999', mounts: ['/srv/...'],
  *              environment: ['SHOP_SOURCE_DSN'], arguments: ['run', ...])
  *
- * Empty arguments, such as an unset --dry-run, are left out. `artifacts`
- * names a workspace directory the command writes files into for review,
- * such as the lock job's new lock and its changes: it is emptied first, made
- * writable by the engine's user, and archived as the build's artifacts.
+ * Empty arguments, such as an unset --dry-run, are left out. `job` names the
+ * generated job, so the command posts the spec's notify webhooks itself.
+ * `artifacts` names a workspace directory the command writes files into for
+ * review, such as the lock job's new lock and its changes: it is emptied
+ * first, made writable by the engine's user, and archived as the build's
+ * artifacts.
  */
 def call(Map config) {
     writeFile(file: '.datadouble-run.sh', text: libraryResource('datadouble/run.sh'))
@@ -21,6 +23,7 @@ def call(Map config) {
     int status
     withEnv([
         "DATADOUBLE_ARGUMENTS=${arguments.join('\n')}",
+        "DATADOUBLE_CI_JOB=${config.job ?: ''}",
         "DATADOUBLE_IMAGE=${config.image}",
         "DATADOUBLE_USER=${config.user}",
         "DATADOUBLE_MOUNTS=${(config.mounts ?: []).join('\n')}",

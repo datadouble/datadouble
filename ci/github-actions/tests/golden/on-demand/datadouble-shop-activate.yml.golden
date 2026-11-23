@@ -27,11 +27,16 @@ jobs:
           persist-credentials: false
       - name: datadouble activate
         uses: datadouble/datadouble/ci/github-actions@v1.2.3
+        env:
+          ALERTS_WEBHOOK: ${{ secrets.ALERTS_WEBHOOK }}
         with:
+          job: activate
           image: ghcr.io/datadouble/datadouble:v1.2.3
           user: 999:999
           mounts: |
             /srv/datadouble/staging
+          environment: |
+            ALERTS_WEBHOOK
           arguments: |
             activate
             ${{ inputs.generation }}

@@ -18,13 +18,45 @@ pipeline {
     stages {
         stage('datadouble activate') {
             steps {
-                datadouble(
-                    image: 'ghcr.io/datadouble/datadouble:v1.2.3',
-                    user: '999:999',
-                    mounts: ['/srv/datadouble/staging'],
-                    environment: [],
-                    arguments: ['activate', params.GENERATION, '--spec', 'datadouble/shop.yml'],
-                )
+                withCredentials([string(credentialsId: 'ALERTS_WEBHOOK', variable: 'ALERTS_WEBHOOK')]) {
+                    datadouble(
+                        job: 'activate',
+                        image: 'ghcr.io/datadouble/datadouble:v1.2.3',
+                        user: '999:999',
+                        mounts: ['/srv/datadouble/staging'],
+                        environment: ['ALERTS_WEBHOOK'],
+                        arguments: ['activate', params.GENERATION, '--spec', 'datadouble/shop.yml'],
+                    )
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop activate: failure', body: 'Datadouble shop activate: failure.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        aborted {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop activate: aborted', body: 'Datadouble shop activate: aborted.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        unstable {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop activate: unstable', body: 'Datadouble shop activate: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
             }
         }
     }

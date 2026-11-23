@@ -16,7 +16,8 @@
 # a warning. A job that publishes files for review (the lock job's new lock
 # and its changes) names their directory in DATADOUBLE_ARTIFACTS, which is
 # emptied and made writable by the engine's user, and adds it to its
-# artifacts' paths.
+# artifacts' paths. DATADOUBLE_CI_JOB names the generated job, so the command
+# posts the spec's notify webhooks itself, linking the job's page (CI_JOB_URL).
 
 .datadouble:
   allow_failure:
@@ -41,8 +42,10 @@
           --volume "$socket:$socket"
           --volume "$CI_PROJECT_DIR:$CI_PROJECT_DIR" --workdir "$CI_PROJECT_DIR"
           --env HOME=/tmp
-          --env DATADOUBLE_BOUNDARY --env CI_RUNNER_TAGS
+          --env DATADOUBLE_BOUNDARY --env CI_RUNNER_TAGS --env CI_JOB_URL
       )
+      bridged=(--ci gitlab --ci-directory "$bridge")
+      if [ -n "${DATADOUBLE_CI_JOB:-}" ]; then bridged+=(--ci-job "$DATADOUBLE_CI_JOB"); fi
       # Docker would create a missing path as root, which the engine's user
       # cannot write, so a path the runner lacks fails here.
       while IFS= read -r path; do
@@ -62,7 +65,6 @@
           chmod 0777 "$CI_PROJECT_DIR/$DATADOUBLE_ARTIFACTS"
       fi
       status=0
-      docker run "${options[@]}" "$DATADOUBLE_IMAGE" \
-          --ci gitlab --ci-directory "$bridge" "${arguments[@]}" || status=$?
+      docker run "${options[@]}" "$DATADOUBLE_IMAGE" "${bridged[@]}" "${arguments[@]}" || status=$?
       if [ -f "$bridge/outputs" ]; then cat "$bridge/outputs" > datadouble.env; fi
       exit "$status"

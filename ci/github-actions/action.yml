@@ -16,6 +16,10 @@ inputs:
   arguments:
     description: The datadouble command line after the global options, one argument per line
     required: true
+  job:
+    description: The generated job the command runs for, which notifies as the spec's notify section says
+    required: false
+    default: ""
   image:
     description: The Datadouble image, pinned to a release
     required: true
@@ -60,6 +64,7 @@ runs:
       shell: bash
       env:
         DATADOUBLE_ARGUMENTS: ${{ inputs.arguments }}
+        DATADOUBLE_CI_JOB: ${{ inputs.job }}
         DATADOUBLE_IMAGE: ${{ inputs.image }}
         DATADOUBLE_USER: ${{ inputs.user }}
         DATADOUBLE_MOUNTS: ${{ inputs.mounts }}

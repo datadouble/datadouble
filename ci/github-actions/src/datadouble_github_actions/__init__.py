@@ -38,6 +38,7 @@ from datadouble.ci import (
     Trigger,
 )
 from datadouble.outcome import ExitCode, Outcome
+from datadouble.spec import NotifyOn
 
 NAME = "github-actions"
 ACTION = "datadouble/datadouble/ci/github-actions"
@@ -161,7 +162,11 @@ def _step(pipeline: Pipeline, job: Job, invocation: Invocation) -> dict[str, Jso
     step["uses"] = f"{ACTION}@v{pipeline.version}"
     if job.environment:
         step["env"] = {name: f"${{{{ secrets.{name} }}}}" for name in job.environment}
-    inputs: dict[str, JsonValue] = {"image": pipeline.image, "user": pipeline.user}
+    inputs: dict[str, JsonValue] = {
+        "job": str(job.kind),
+        "image": pipeline.image,
+        "user": pipeline.user,
+    }
     if job.mounts:
         inputs["mounts"] = _lines(job.mounts)
     if job.environment:
@@ -273,15 +278,33 @@ class GitHubActions:
         )
 
     def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
-        """Workflows hold everything, schedules included."""
-        del pipeline
-        return ()
+        """Workflows hold everything but email, which a workflow cannot send itself."""
+        emails = pipeline.notify.emails() if pipeline.notify is not None else ()
+        if pipeline.notify is None or not emails:
+            return ()
+        email = (
+            f"a workflow cannot send notify's email to {', '.join(emails)}: GitHub mails a"
+            " failed run only to whoever started it (for a schedule, whoever last changed"
+            " the workflow), under their own Actions notification settings"
+        )
+        if NotifyOn.WARNING in pipeline.notify.when:
+            email += ", and never mails a warning, which is a passing run"
+        email += "; to reach those addresses, list a webhook whose service mails them"
+        return (email,)
 
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         """GitHub's runners say ``RUNNER_ENVIRONMENT=github-hosted``."""
         if environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
             return "a GitHub-hosted runner"
         return None
+
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        """The workflow run's page."""
+        parts = [environ.get(name) for name in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY")]
+        run = environ.get("GITHUB_RUN_ID")
+        if not all(parts) or not run:
+            return None
+        return f"{parts[0]}/{parts[1]}/actions/runs/{run}"
 
     def mask(self, value: str) -> None:
         """``add-mask`` for each line of the value."""

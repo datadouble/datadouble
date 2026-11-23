@@ -28,6 +28,7 @@ jobs:
         env:
           DATADOUBLE_NIGHTLY_DSN: ${{ secrets.DATADOUBLE_NIGHTLY_DSN }}
         with:
+          job: build
           image: datadouble:nightly
           user: 999:999
           mounts: |

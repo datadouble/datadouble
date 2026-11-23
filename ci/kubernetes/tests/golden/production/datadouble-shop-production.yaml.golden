@@ -39,6 +39,9 @@ spec:
             fetch:
               from: {filesystem: {path: /srv/datadouble/export}}
               staging: /srv/datadouble/staging
+            notify:
+              when: [failure, warning]
+              to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
             replicate: {using: {k8s-pv: {path: /srv/datadouble/copies}}, mode: on-demand, size: 1}
           lock: |
             {}
@@ -52,7 +55,8 @@ spec:
           schedule: 0 2 * * 1
           timeoutMinutes: 780
           steps:
-          - arguments:
+          - job: build
+            arguments:
             - run
             - plan,extract,load,transform,package,verify,store
             - --spec
@@ -62,15 +66,18 @@ spec:
             - --retry-key
             - $(DATADOUBLE_RUN)
             environment:
+            - ALERTS_WEBHOOK
             - COSIGN_PASSWORD
             - SHOP_COSIGN_KEY
             - SHOP_SOURCE_DSN
           - &id001
+            job: promote
             arguments:
             - promote
             - --spec
             - datadouble/shop.yml
             environment:
+            - ALERTS_WEBHOOK
             - SHOP_COSIGN_PUB
         - name: promote
           schedule: ''
@@ -81,34 +88,40 @@ spec:
           schedule: 0 4 * * *
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: prune
+            arguments:
             - prune
             - --spec
             - datadouble/shop.yml
             - --target
             - store
             - $(DATADOUBLE_DRY_RUN)
-            environment: []
-          - arguments:
+            environment:
+            - ALERTS_WEBHOOK
+          - job: prune
+            arguments:
             - prune
             - --spec
             - datadouble/shop.yml
             - --target
             - export
             - $(DATADOUBLE_DRY_RUN)
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: lock
           schedule: ''
           timeoutMinutes: 60
           artifacts: datadouble-lock
           steps:
-          - arguments:
+          - job: lock
+            arguments:
             - lock
             - --spec
             - datadouble/shop.yml
             - --output
             - datadouble-lock
             environment:
+            - ALERTS_WEBHOOK
             - SHOP_SOURCE_DSN
   syncPolicy:
     automated:

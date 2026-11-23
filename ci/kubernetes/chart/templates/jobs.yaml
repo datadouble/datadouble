@@ -4,7 +4,8 @@
 # A CronJob per scheduled or manual job, suspended when it has no schedule.
 # A request's Application (one with an owner) has only Argo CD hook Jobs:
 # PreSync makes the owner's copies, PostDelete releases them when the
-# Application is deleted.
+# Application is deleted. A Job runs a failed pod once more, but not when a
+# follower failed (promote after build): that would run its leader again.
 {{- range $job := .Values.jobs }}
 {{- if and (not $job.hook) (not $.Values.owner) }}
 ---
@@ -22,6 +23,11 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      {{- with include "datadouble.followers" $job }}
+      podFailurePolicy:
+        rules:
+          {{- . | trim | nindent 10 }}
+      {{- end }}
       activeDeadlineSeconds: {{ mul $job.timeoutMinutes 60 }}
       template:
         {{- include "datadouble.pod" (dict "root" $ "job" $job) | nindent 8 }}
@@ -36,6 +42,11 @@ metadata:
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 1
+  {{- with include "datadouble.followers" $job }}
+  podFailurePolicy:
+    rules:
+      {{- . | trim | nindent 6 }}
+  {{- end }}
   activeDeadlineSeconds: {{ mul $job.timeoutMinutes 60 }}
   template:
     {{- include "datadouble.pod" (dict "root" $ "job" $job) | nindent 4 }}

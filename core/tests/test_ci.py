@@ -73,6 +73,9 @@ class FakeCi:
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         return "a fake hosted runner" if self.hosted else None
 
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        return environ.get("FAKE_RUN_URL")
+
     def mask(self, value: str) -> None:
         self.masked.append(value)
 
@@ -537,3 +540,35 @@ def test_retry_keys(tmp_path: Path, registry: Registry) -> None:
     both = api.handle_json(json.dumps({**base, "retry_key": "a", "resume": "x"}), registry)
     assert isinstance(both, api.ErrorResponse)
     assert both.details[0].problem.endswith("give resume or retry_key, not both")
+
+
+@pytest.mark.usefixtures("registry")
+def test_a_failed_notification_changes_nothing(
+    tmp_path: Path, ci: FakeCi, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = spec_with_secret(tmp_path)
+    text = spec.read_text(encoding="utf-8")
+    hook = "notify: {when: [warning], to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]}\n"
+    spec.write_text(text + hook, encoding="utf-8")
+    monkeypatch.setenv("SHOP_KEY", "key-material")
+    monkeypatch.setenv("ALERTS_WEBHOOK", "ftp://hooks.example.com/shop")
+    monkeypatch.setenv("FAKE_RUN_URL", "https://ci.example.com/runs/7")
+    arguments = (
+        "run", "plan,extract", "--spec", str(spec), "--no-strict",
+        "--work", str(tmp_path / "work"),
+    )  # fmt: skip
+    code, out = run("--dry-run", "--ci", "fake-ci", "--ci-job", "build", *arguments)
+    assert json.loads(out)["ci"] == {"system": "fake-ci", "job": "build"}
+    code, out = run("--ci", "fake-ci", "--ci-job", "build", *arguments)
+    assert code == ExitCode.SUCCESS, out
+    ((report, _),) = ci.reports
+    assert report.outcome is Outcome.WARNING
+    warning = capsys.readouterr().err
+    assert warning == (
+        "warning: a notification failed, webhook 1: its URL must start with https:// or"
+        " http:// and name a host\n"
+    )
+    assert "hooks.example.com" not in warning
+    assert "ftp://hooks.example.com/shop" in ci.masked
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["--ci-job", "deploy", "version"])
