@@ -21,7 +21,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.spec import parse_spec
+from datadouble.spec import FileSecret, NotifyOn, Webhook, WebhookTarget, parse_spec
 from datadouble_gitlab import NAME, TEMPLATE_URL, GitLab, adapter, integrity, template
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -40,6 +40,11 @@ promote: {to: [{s3: {bucket: shop-export, prefix: images}}]}
 fetch:
   from: {s3: {bucket: shop-export, prefix: images}}
   staging: /srv/datadouble/staging
+notify:
+  when: [failure, warning]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com, oncall@example.com]}
 replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
 """
 
@@ -136,8 +141,9 @@ def test_production_jobs() -> None:
         }
     ]
     assert at(build, "variables", "DATADOUBLE_ENVIRONMENT") == (
-        "COSIGN_PASSWORD\nSHOP_ANONYMIZATION_KEY\nSHOP_COSIGN_KEY\nSHOP_SOURCE_DSN\n"
+        "ALERTS_WEBHOOK\nCOSIGN_PASSWORD\nSHOP_ANONYMIZATION_KEY\nSHOP_COSIGN_KEY\nSHOP_SOURCE_DSN\n"
     )
+    assert at(build, "variables", "DATADOUBLE_CI_JOB") == "build"
     arguments = at(build, "variables", "DATADOUBLE_ARGUMENTS")
     assert isinstance(arguments, str)
     assert arguments.endswith("--retry-key\n$CI_PIPELINE_ID\n")
@@ -168,6 +174,12 @@ def test_merge_request_copies() -> None:
     assert "on_stop" not in alone[0].content
 
 
+def notify_on_failure(planned_jobs: Pipeline) -> Pipeline:
+    assert planned_jobs.notify is not None
+    on_failure = planned_jobs.notify.model_copy(update={"when": (NotifyOn.FAILURE,)})
+    return replace(planned_jobs, notify=on_failure)
+
+
 def test_instructions() -> None:
     gitlab = GitLab()
     production = gitlab.instructions(SCENARIOS["production"])
@@ -175,13 +187,47 @@ def test_instructions() -> None:
         "include .gitlab/datadouble-shop-production.yml from .gitlab-ci.yml (include: local)"
     )
     assert any("`0 2 * * 1`" in step and "DATADOUBLE_JOB=shop-build" in step for step in production)
-    assert production[-1] == "define each variable above as a masked, protected CI/CD variable"
+    assert production[-2] == "define each variable above as a masked, protected CI/CD variable"
+    assert production[-1].startswith(
+        "for notify's email, turn on the project's Pipeline status emails integration"
+        " (Settings > Integrations) for data-team@example.com, oncall@example.com,"
+    )
     requests = gitlab.instructions(SCENARIOS["on-demand"])
     assert any(step.startswith("run merge request pipelines") for step in requests)
+    assert any(
+        step.startswith("on-demand provision and release run in merge request pipelines")
+        and "make ALERTS_WEBHOOK available there (not protected," in step
+        for step in requests
+    )
+    assert not any("ALERTS_WEBHOOK" in step for step in production)
+    on_demand = SCENARIOS["on-demand"]
+    assert on_demand.notify is not None
+    mounted = on_demand.notify.model_copy(
+        update={"to": (WebhookTarget(webhook=Webhook(url=FileSecret(file=Path("/run/hook")))),)}
+    )
+    from_file = gitlab.instructions(replace(on_demand, notify=mounted))
+    assert not any("merge request pipelines, which see" in step for step in from_file)
     quiet = gitlab.instructions(planned(JobKind.ACTIVATE, runner="staging"))
-    assert quiet == (
+    assert quiet[0] == (
+        "include .gitlab/datadouble-shop-non-production.yml from .gitlab-ci.yml (include: local)"
+    )
+    assert quiet[-1].endswith("list a webhook to hear about warnings")
+    quiet_pipeline = planned(JobKind.ACTIVATE, runner="staging")
+    failures = gitlab.instructions(notify_on_failure(quiet_pipeline))
+    assert failures[-1].endswith("notifying only broken pipelines")
+    silent = replace(
+        quiet_pipeline,
+        notify=None,
+        jobs=tuple(replace(job, environment=()) for job in quiet_pipeline.jobs),
+    )
+    assert gitlab.instructions(silent) == (
         "include .gitlab/datadouble-shop-non-production.yml from .gitlab-ci.yml (include: local)",
     )
+    assert "DATADOUBLE_ENVIRONMENT" not in GitLab().generate(silent)[0].content
+    assert gitlab.run_url({"CI_JOB_URL": "https://gitlab.example.com/shop/-/jobs/7"}) == (
+        "https://gitlab.example.com/shop/-/jobs/7"
+    )
+    assert gitlab.run_url({}) is None
 
 
 def test_runners() -> None:

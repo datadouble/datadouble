@@ -230,7 +230,7 @@ class _World:
 
 
 def _result(steps: list["_Step"]) -> tuple[State, dict[str, str]]:
-    """A run's state and outputs: its job's own steps, the leading ones of one command.
+    """A run's state and outputs: its job's own steps, the leading ones of one job.
 
     A leader's pod also runs its follower (build, then promote), whose result is
     the follower's own.
@@ -265,9 +265,11 @@ def _pod_steps(pod: JsonValue) -> list["_Step"]:
             assert isinstance(arguments, list)
             code = _at(status, "state", "terminated", "exitCode")
             message = _at(status, "state", "terminated", "message")
+            # `--ci argocd --ci-job <job> <command> ...`: a step belongs to its job.
+            job = arguments.index("--ci-job") + 1 if "--ci-job" in arguments else 2
             found.append(
                 _Step(
-                    command=str(arguments[2]),
+                    command=str(arguments[job]),
                     status=code if isinstance(code, int) else -1,
                     message=message if isinstance(message, str) else "",
                 )
@@ -280,6 +282,7 @@ class _Step:
     """One container of a job's pod."""
 
     command: str
+    """The job the step belongs to (``--ci-job``)."""
     status: int
     message: str
 
@@ -521,10 +524,17 @@ class ArgoCdOnKind:
             status = _OBJECT.validate_json(found).get("status")
             if not isinstance(status, dict):
                 return False
-            if status.get("succeeded"):
-                conditions.append("succeeded")
-            elif status.get("failed") and not status.get("active"):
-                conditions.append("failed")
+            # The Job's own conditions, not its pod counts: between a failed pod
+            # and its retry (backoffLimit) nothing is active, yet the Job runs on.
+            found_conditions = status.get("conditions") or []
+            assert isinstance(found_conditions, list)
+            for condition in found_conditions:
+                if _at(condition, "status") != "True":
+                    continue
+                if _at(condition, "type") == "Complete":
+                    conditions.append("succeeded")
+                elif _at(condition, "type") == "Failed":
+                    conditions.append("failed")
             return bool(conditions)
 
         _wait(finished, f"the job {name}", 1800)

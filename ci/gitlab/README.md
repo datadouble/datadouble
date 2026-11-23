@@ -69,3 +69,23 @@ and versions, never values (decision 123).
 The outputs are a dotenv report (`datadouble.env`), which later jobs in the
 pipeline read as variables. GitLab masks only variables defined as masked, so
 Datadouble cannot mask anything else at run time.
+
+## Notifications
+
+The spec's `notify` section says who hears about a job that fails or warns.
+Each job sets `DATADOUBLE_CI_JOB` to its job, so Datadouble posts the spec's
+webhooks itself after the command, with the job's page (`CI_JOB_URL`) as
+`run_url`. Define the webhook's variable as a masked CI/CD variable like the
+others. On-demand provision and release run in merge request pipelines,
+which see no protected variables, so for those jobs the webhook's variable
+must not be protected, or must be scoped to the environments they use;
+`ci init` says so in `instructions`. A webhook that cannot be reached is a warning line in the log; the
+job's result is unchanged.
+
+GitLab CI has no mail step. For `notify`'s email, `ci init` lists the setup
+in `instructions`: the project's Pipeline status emails integration
+(Settings > Integrations), for those addresses, notifying only broken
+pipelines. It mails failed pipelines only, so a warning, a job allowed to
+fail, mails nobody; list a webhook to hear about warnings. Those emails also
+report a job that fails before Datadouble starts, such as an image that
+cannot be pulled, which posts no webhook.

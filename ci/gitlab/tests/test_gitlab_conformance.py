@@ -56,6 +56,7 @@ RUNNER_CONTEXT = Path(__file__).resolve().parents[3] / "dev" / "ci" / "gitlab"
 RUNNER_IMAGE = "datadouble-ci-gitlab-runner:test"
 _INCLUDE = re.compile(r"- remote: \S+\n\s+integrity: \S+\n")
 _FINAL = frozenset({"success", "failed", "canceled", "skipped", "manual"})
+_PIPELINE_FINAL = frozenset({"success", "failed", "canceled", "skipped", "manual", "blocked"})
 _WORKFLOW = """\
 workflow:
   rules:
@@ -388,6 +389,11 @@ class GitLabCe:
             waiting.discard("failed")
         return bool(statuses) and statuses <= _FINAL and not statuses & waiting
 
+    def _idle(self, project: _Project, pipeline: int) -> bool:
+        """Whether nothing in the pipeline is waiting to run or running."""
+        found = self.server.one("GET", f"{project.path}/pipelines/{pipeline}")
+        return str(found["status"]) in _PIPELINE_FINAL
+
     def run(self, repository: Path, job: str, event: Event, context: RunContext) -> JobRun:
         project = self.projects[repository]
         _push(repository)
@@ -408,6 +414,9 @@ class GitLabCe:
         if retried is not None:
             waiting.add("failed")
         _wait(lambda: self._settled(project, pipeline, prefix, waiting), prefix, 1800)
+        # A job's followers run later in its pipeline (promote after build); wait for
+        # them too, so none is still running, with this run's variables, after it.
+        _wait(lambda: self._idle(project, pipeline), f"the rest of pipeline {pipeline}", 1800)
         jobs = _latest(self._jobs(project, pipeline, prefix))
         log = "\n".join(self.server.text(f"{project.path}/jobs/{j['id']}/trace") for j in jobs)
         outputs: dict[str, str] = {}

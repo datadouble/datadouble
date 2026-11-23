@@ -75,8 +75,8 @@ reads the source, so it runs only inside the boundary. Where the only machine
 there is a CI runner, the manual `lock` job (`ci init --job lock`) re-locks:
 
 - It runs on the production side, on the same `--runner` as `build`, with
-  only the secrets the spec's `source` section names. It is refused on a
-  vendor's hosted runner, like `build`.
+  only the secrets the spec's `source` and `notify` sections name. It is
+  refused on a vendor's hosted runner, like `build`.
 - It has no schedule: someone always means to re-lock.
 - It runs `datadouble lock --spec <spec> --output datadouble-lock`, which
   writes the new lock (`catalog.lock`) and its changes against the committed
@@ -338,6 +338,8 @@ so the jobs are the same on every system. Generated configuration:
   failed run resumes the generation it started (decision 100).
 - Publishes the `lock` job's new lock and its changes as the job's artifact
   (see [the lock job](#the-lock-job)); no other job publishes files.
+- Writes the spec's `notify` email in the system's own form, or lists the
+  setup in `instructions` (see [notifications](#notifications)).
 - Makes on-demand copies when a pull or merge request opens, for
   `pr-<number>`, and releases them when it closes. Requests from forks never
   run on the team's runners.
@@ -394,6 +396,81 @@ adapter then:
   jobs for the same spec.
 
 There is no continue-on-error switch. A failed stage stops the job.
+
+### Notifications
+
+A spec's `notify` section says who hears about a generated job that fails
+or ends with a warning (decision 125):
+
+```yaml
+notify:
+  when: [failure, warning]          # default: [failure]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com]}
+```
+
+It lives in the spec, not in `ci init`'s options. `ci init` runs again
+whenever the spec, the Datadouble version or the job options change, and its
+options are recorded only in the files it writes, so an option left off a
+later run would drop notifications without a word. The spec already
+describes an image's whole life (decision 57).
+
+**Webhooks are posted by Datadouble itself,** after the command and before
+the job ends, so they work the same way on every system, Kubernetes
+included. Generated jobs name themselves (`--ci-job`, or `ci.job` in JSON),
+and every job receives the webhook URL's secret, since every job can fail.
+One webhook serves both sides of the boundary, since both read the same
+spec; a `{file: ...}` reference becomes a path mounted in every job. The URL
+is a secret reference, because a webhook's URL usually carries its
+credential; credentials in it (`https://user:token@host/...`) are sent as
+basic authentication, and only over https: a URL with credentials and
+`http://` is refused. Posts go through the environment's proxy settings
+(`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`), verify the server's certificate
+and host name, and never follow a redirect. The body is a JSON POST:
+
+```json
+{"spec": "shop", "job": "build", "outcome": "failure",
+ "generation": null, "error": "store_failed",
+ "run_url": "https://github.com/example/shop/actions/runs/42"}
+```
+
+`generation` is the generation a build made, given with a warning or a
+failed verification and null with an error code, `error` is the error code
+of a failed request (null for a failed verification, whose report is in the
+job's log), and `run_url` is the system's page for the run (null on Argo CD, where
+a Job has none). Each attempt at a job posts, so a system that runs a failed
+job again (a Kubernetes Job's `backoffLimit`) notifies once per attempt, and
+a follower in the same run (promote after build) notifies as its own job.
+The body carries names, codes and outcomes, never data
+values or secrets (decisions 18 and 54). A webhook that cannot be posted to
+(a timeout of ten seconds, a refused connection, a redirect or other status
+than 2xx) is a warning line in the job's log, which names the webhook by its
+position and never quotes its URL; the job's outcome is what it would have
+been. A notification that fails to post never changes the outcome; a missing
+webhook secret is a missing secret, like any other: Jenkins'
+`withCredentials` and Argo CD's `secretKeyRef` fail the job before it
+starts, and where the system passes an empty variable instead (GitHub,
+GitLab) the job logs that the variable is not set.
+
+**Email uses the system's own mechanism,** where it has one:
+
+| System | Email |
+|---|---|
+| GitHub Actions | None a workflow can send. GitHub mails a failed run only to whoever started it, and never a warning, so `ci init` says so in `instructions`; a webhook to a service that sends mail reaches a list |
+| GitLab CI | The project's Pipeline status emails integration, set up by hand and listed in `instructions`. It mails broken pipelines only, so warnings need a webhook. On-demand provision and release run in merge request pipelines, which see no protected variables, so `instructions` asks for the webhook's variable to be available there |
+| Jenkins | The `mail` step in each Jenkinsfile's `post` section: `failure` and `aborted` (a timed-out build) for failures, `unstable` for warnings. A mail that cannot be sent is logged and leaves the build's result alone |
+| Argo CD | None: `ci init` fails, naming email, since Kubernetes Jobs have no mail mechanism |
+
+**A job that fails before Datadouble starts posts no webhook:** an image
+that cannot be pulled, a runner without Docker, a path the runner lacks, a
+spec that does not parse, or a job the system stops at its time limit. The
+system's own notifications cover those where it has them: GitHub's
+failed-run mail to whoever started the run, GitLab's Pipeline status emails,
+and, when the spec lists email, Jenkins' `post` mail, which runs whatever
+failed. Argo CD has none, so `ci init` asks the operator to alert on failed Jobs in the namespace with
+the cluster's monitoring (such as kube-state-metrics'
+`kube_job_status_failed`).
 
 ### No data in CI storage
 
@@ -522,6 +599,9 @@ source, stores and repository, with jobs `ci init` wrote for both sides:
 - `lock` publishes the new lock and its changes (in the job's artifact, or on
   Argo CD its log), leaves the committed lock as it is, and is refused on a
   vendor-hosted runner.
+- A failing job posts its outcome to the spec's webhook, a warning does too,
+  a succeeding one does not, and a webhook that cannot be reached leaves
+  the job's outcome alone.
 
 The core's own tests cover what needs a clock or a race rather than a CI
 system: `release --expired` collecting a copy past its expiry, pool recycling

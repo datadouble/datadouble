@@ -52,6 +52,7 @@ from datadouble.engine import EngineError, RequirementError
 from datadouble.images import ImageError
 from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
+from datadouble.notify import Notification, Post, post, send
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.planner import Plan, PlanError, PlanOptions, plan
 from datadouble.promote import Promoted, PromoteError, promote
@@ -952,3 +953,35 @@ def ci_report(response: Response, summary: str) -> Report:
         warnings=tuple(warnings),
         files=files,
     )
+
+
+def notify(
+    request: Request, report: Report, run_url: str | None, *, poster: Post = post
+) -> tuple[str, ...]:
+    """Post a generated job's outcome to its spec's webhooks (decision 125).
+
+    Only a request that names its job (``ci.job``) notifies, and only for the
+    outcomes the spec's ``notify`` section lists. Returns a problem per
+    notification that failed, for the caller to log: a failed notification
+    never changes a job's outcome.
+    """
+    if request.ci is None or request.ci.job is None:
+        return ()
+    match request:
+        case VersionRequest() | SchemaRequest():
+            return ()
+        case _:
+            path = request.spec
+    try:
+        spec = load_spec(path)
+    except SpecError:
+        return ("the spec cannot be read, so its webhooks were not posted to",)
+    notification = Notification(
+        spec=spec.name,
+        job=request.ci.job,
+        outcome=report.outcome,
+        generation=report.outputs.get("generation"),
+        error=report.outputs.get("error"),
+        run_url=run_url,
+    )
+    return send(spec.notify, notification, poster=poster)

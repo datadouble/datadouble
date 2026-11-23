@@ -39,6 +39,9 @@ spec:
             fetch:
               from: {filesystem: {path: /srv/datadouble/export}}
               staging: /srv/datadouble/staging
+            notify:
+              when: [failure, warning]
+              to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
             replicate: {using: {k8s-pv: {path: /srv/datadouble/copies}}, mode: on-demand, size: 1}
           lock: |
             {}
@@ -52,66 +55,78 @@ spec:
           schedule: '*/15 * * * *'
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: fetch
+            arguments:
             - fetch
             - --spec
             - datadouble/shop.yml
             environment:
+            - ALERTS_WEBHOOK
             - SHOP_COSIGN_PUB
         - name: release
           schedule: 30 3 * * *
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: release
+            arguments:
             - release
             - --spec
             - datadouble/shop.yml
             - --expired
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: prune-non-production
           schedule: 0 4 * * *
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: prune
+            arguments:
             - prune
             - --spec
             - datadouble/shop.yml
             - --target
             - staging
             - $(DATADOUBLE_DRY_RUN)
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: activate
           schedule: ''
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: activate
+            arguments:
             - activate
             - $(DATADOUBLE_GENERATION)
             - --spec
             - datadouble/shop.yml
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: request-copies
           hook: PreSync
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: provision
+            arguments:
             - replicate
             - --spec
             - datadouble/shop.yml
             - --owner
             - $(DATADOUBLE_OWNER)
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: request-release
           hook: PostDelete
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: release
+            arguments:
             - release
             - --spec
             - datadouble/shop.yml
             - --owner
             - $(DATADOUBLE_OWNER)
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
   syncPolicy:
     automated:
       prune: true

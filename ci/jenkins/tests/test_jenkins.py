@@ -17,7 +17,7 @@ import pytest
 
 from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.spec import parse_spec
+from datadouble.spec import NotifyOn, parse_spec
 from datadouble_jenkins import NAME, Jenkins, adapter, render
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -34,6 +34,11 @@ promote: {to: [{s3: {bucket: shop-export, prefix: "it's"}}]}
 fetch:
   from: {s3: {bucket: shop-export, prefix: images}}
   staging: /srv/datadouble/staging
+notify:
+  when: [failure, warning]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com, oncall@example.com]}
 replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
 """
 
@@ -107,7 +112,34 @@ def test_production_jenkinsfiles() -> None:
     prune = jenkinsfile("production", JobKind.PRUNE)
     assert "stage('datadouble prune 1')" in prune
     assert "(params.DRY_RUN ? '--dry-run' : '')" in prune
-    assert "withCredentials" not in prune
+    assert "COSIGN_PASSWORD" not in prune
+    assert "string(credentialsId: 'ALERTS_WEBHOOK', variable: 'ALERTS_WEBHOOK')" in prune
+    assert "job: 'prune'," in prune
+
+
+def test_email_is_mailed_after_the_build() -> None:
+    planned_jobs = SCENARIOS["production"]
+    build = render(planned_jobs, planned_jobs.jobs[0])
+    post = build[build.index("    post {") :]
+    mail = (
+        "mail(to: 'data-team@example.com, oncall@example.com',"
+        " subject: 'Datadouble shop build: {0}', body: 'Datadouble shop build: {0}.'"
+        " + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))"
+    )
+    for condition in ("failure", "aborted", "unstable"):
+        assert f"        {condition} {{\n            script {{\n                try {{\n" in post
+        assert mail.format(condition) in post
+    assert 'echo "notify\'s email could not be sent"' in post
+    assert planned_jobs.notify is not None
+    failures = replace(
+        planned_jobs, notify=planned_jobs.notify.model_copy(update={"when": (NotifyOn.FAILURE,)})
+    )
+    only = render(failures, failures.jobs[0])
+    assert "failure {" in only
+    assert "unstable {" not in only
+    webhooks = planned_jobs.notify.model_copy(update={"to": planned_jobs.notify.to[:1]})
+    assert "post {" not in render(replace(planned_jobs, notify=webhooks), planned_jobs.jobs[0])
+    assert "post {" not in render(replace(planned_jobs, notify=None), planned_jobs.jobs[0])
 
 
 def test_request_jenkinsfiles() -> None:
@@ -140,7 +172,13 @@ def test_instructions() -> None:
         "start datadouble-shop-provision and datadouble-shop-release from each request's own"
     )
     quiet = jenkins.instructions(planned(JobKind.PRUNE, runner="staging", side=Side.NON_PRODUCTION))
-    assert len(quiet) == 1
+    assert len(quiet) == 2
+    silent = planned(JobKind.PRUNE, runner="staging", side=Side.NON_PRODUCTION)
+    silent = replace(
+        silent, notify=None, jobs=tuple(replace(job, environment=()) for job in silent.jobs)
+    )
+    assert len(jenkins.instructions(silent)) == 1
+    assert "withCredentials" not in render(silent, silent.jobs[0])
 
 
 def test_labels_are_required() -> None:
@@ -152,6 +190,10 @@ def test_run_time() -> None:
     jenkins = Jenkins()
     assert jenkins.vendor_hosted({"RUNNER_ENVIRONMENT": "github-hosted"}) is None
     jenkins.mask("nothing happens")
+    assert jenkins.run_url({"BUILD_URL": "https://jenkins.example.com/job/x/7/"}) == (
+        "https://jenkins.example.com/job/x/7/"
+    )
+    assert jenkins.run_url({}) is None
 
 
 def report(outcome: Outcome, **outputs: str) -> Report:

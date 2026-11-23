@@ -36,6 +36,7 @@ A whole spec.
 | `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each. |
 | `prune` | [Retention](#retention) | see type | How many images and how much time `prune` keeps. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
+| `notify` | [Notify](#notify) |  | Who hears when a generated CI job fails or warns: webhooks and email. |
 
 ### AccountPrivileges
 
@@ -93,6 +94,22 @@ What to do with one reference: follow it to all parents, or a fallback.
 |---|---|---|---|
 | `follow` | string |  |  |
 | `on_missing` | [OnMissing](#onmissing) |  |  |
+
+### Email
+
+Mail sent by the CI system's own mechanism, where it has one.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `to` (required) | list of string |  | The addresses to mail. |
+
+### EmailTarget
+
+`{email: {to: [data-team@example.com]}}`.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `email` (required) | [Email](#email) |  |  |
 
 ### EnvSecret
 
@@ -241,6 +258,23 @@ A subset designed in Jailer, read on every run (see :mod:`datadouble.jailer`).
 |---|---|---|---|
 | `model` (required) | string |  | The extraction model, a `.jm` file. |
 | `datamodel` (required) | string |  | The data model folder it was designed against. |
+
+### Notify
+
+Who hears about generated CI jobs that fail or warn (decision 125). It lives in the spec rather than in `ci init`'s options, so generating the jobs again keeps it.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `when` | list of [NotifyOn](#notifyon) | see type | The outcomes that notify: `failure`, `warning` or both; `[failure]` by default. |
+| `to` (required) | list of [NotifyTarget](#notifytarget) |  | Where notifications go, one target each: `{webhook: ...}` or `{email: ...}`. |
+
+### NotifyOn
+
+Outcomes of a generated CI job that notify; `notify.when` is `[failure]` by default.
+
+One of `failure` or `warning`.
+
+### NotifyTarget
 
 ### NullOptions
 
@@ -422,3 +456,19 @@ A reference the schema does not declare, optionally only for some rows.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `when` | string |  |  |
+
+### Webhook
+
+A URL Datadouble posts a JSON summary of the job's outcome to.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `url` (required) | [SecretRef](#secretref) |  | A secret reference, since a webhook's URL usually carries its credential. |
+
+### WebhookTarget
+
+`{webhook: {url: {env: ALERTS_WEBHOOK}}}`.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `webhook` (required) | [Webhook](#webhook) |  |  |

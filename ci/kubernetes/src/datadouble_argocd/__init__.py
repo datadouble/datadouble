@@ -21,6 +21,10 @@ succeeds and says so in the log; the outputs are the container's
 termination message. Kubernetes keeps no job artifacts, so the ``lock``
 job writes its new lock and changes into an ``emptyDir`` and prints both to
 the job's log.
+
+The spec's ``notify`` webhooks Datadouble posts itself, from each step; a
+Job has no page, so their ``run_url`` is null. Kubernetes has no mail, so
+``notify`` email fails ``ci init``, by name.
 """
 
 import posixpath
@@ -101,7 +105,11 @@ def _step(job: Job, invocation: Invocation) -> dict[str, JsonValue]:
     arguments: list[JsonValue] = [
         _PLACEHOLDERS[a] if isinstance(a, Placeholder) else a for a in invocation.arguments
     ]
-    return {"arguments": arguments, "environment": list[JsonValue](job.environment)}
+    return {
+        "job": str(job.kind),
+        "arguments": arguments,
+        "environment": list[JsonValue](job.environment),
+    }
 
 
 def _stem(pipeline: Pipeline, kind: JobKind) -> str:
@@ -239,7 +247,13 @@ class ArgoCd:
         return NAME
 
     def generate(self, pipeline: Pipeline) -> tuple[GeneratedFile, ...]:
-        """One Application per side of the boundary."""
+        """One Application per side of the boundary; refuses notify's email."""
+        if pipeline.notify is not None and pipeline.notify.emails():
+            message = (
+                "argocd cannot send notify's email: Kubernetes Jobs have no mail mechanism;"
+                " list a webhook instead, whose service can mail people"
+            )
+            raise CiError(message)
         return (GeneratedFile(path=_path(pipeline), content=render(pipeline)),)
 
     def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
@@ -273,10 +287,23 @@ class ArgoCd:
                 " request generator whose template is this Application, with a name per"
                 " request and helm.valuesObject.owner set to pr-<number>"
             )
+        if pipeline.notify is not None:
+            steps.append(
+                f"Datadouble posts notify's webhooks itself, so a Job that fails before it"
+                f" starts (an image that cannot be pulled, a missing claim or Secret, a pod"
+                f" stopped at its deadline) posts nothing: alert on failed Jobs in {namespace}"
+                " with your cluster's monitoring, such as kube-state-metrics'"
+                " kube_job_status_failed"
+            )
         return tuple(steps)
 
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         """Clusters are always the team's own."""
+        del environ
+        return None
+
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        """A Job has no web page of its own."""
         del environ
         return None
 

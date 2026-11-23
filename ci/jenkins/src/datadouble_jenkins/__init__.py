@@ -18,6 +18,11 @@ takes a ``RETRY_KEY`` parameter: give the failed build's key (its
 ``BUILD_TAG``, shown in its log) to resume it. Secrets come from credentials
 of the same name, which Jenkins masks in logs. The ``lock`` job's new lock
 and its changes are archived as the build's artifacts.
+
+The spec's ``notify`` email is Jenkins' ``mail`` step in the Jenkinsfile's
+``post`` section, for failed, aborted (timed-out) and, when asked, unstable
+builds; a mail that cannot be sent leaves the build's result alone. Its
+webhooks Datadouble posts itself, linking ``BUILD_URL``.
 """
 
 from collections.abc import Mapping
@@ -36,6 +41,7 @@ from datadouble.ci import (
     Trigger,
 )
 from datadouble.outcome import ExitCode, Outcome
+from datadouble.spec import NotifyOn
 
 NAME = "jenkins"
 REPOSITORY = "https://github.com/datadouble/datadouble.git"
@@ -134,6 +140,7 @@ def _stage(pipeline: Pipeline, job: Job, index: int) -> list[str]:
     arguments = ", ".join(_argument(a) for a in invocation.arguments)
     call = [
         "datadouble(",
+        f"    job: {_quote(str(job.kind))},",
         f"    image: {_quote(pipeline.image)},",
         f"    user: {_quote(pipeline.user)},",
         f"    mounts: {_list(job.mounts)},",
@@ -163,6 +170,38 @@ def _block(name: str, lines: list[str]) -> list[str]:
     return [f"{name} {{", *(f"    {line}" for line in lines), "}"] if lines else []
 
 
+_CONDITIONS = {NotifyOn.FAILURE: ("failure", "aborted"), NotifyOn.WARNING: ("unstable",)}
+"""The build results each outcome is: a timed-out build is aborted, and a warning unstable."""
+
+
+def _post(pipeline: Pipeline, job: Job) -> list[str]:
+    """``mail`` for the spec's email targets, in ``post``; a failed mail changes nothing."""
+    notify = pipeline.notify
+    emails = notify.emails() if notify is not None else ()
+    if notify is None or not emails:
+        return []
+    lines: list[str] = []
+    for outcome in NotifyOn:
+        if outcome not in notify.when:
+            continue
+        for condition in _CONDITIONS[outcome]:
+            subject = f"Datadouble {pipeline.name} {job.kind}: {condition}"
+            mail = (
+                f"mail(to: {_quote(', '.join(emails))}, subject: {_quote(subject)},"
+                f" body: {_quote(subject + '.')}"
+                " + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))"
+            )
+            attempt = [
+                "try {",
+                f"    {mail}",
+                "} catch (err) {",
+                '    echo "notify\'s email could not be sent"',
+                "}",
+            ]
+            lines.extend(_block(condition, _block("script", attempt)))
+    return lines
+
+
 def render(pipeline: Pipeline, job: Job) -> str:
     """One job's Jenkinsfile."""
     library = (
@@ -183,6 +222,7 @@ def render(pipeline: Pipeline, job: Job) -> str:
         *_block("parameters", _parameters(job)),
         *_block("triggers", _triggers(pipeline, job)),
         *_block("stages", stages),
+        *_block("post", _post(pipeline, job)),
     ]
     text = "\n".join([library, "", *_block("pipeline", body)])
     header = _HEADER.format(version=pipeline.version, job=_stem(pipeline, job.kind))
@@ -227,6 +267,10 @@ class Jenkins:
         """Jenkins agents are always the team's own."""
         del environ
         return None
+
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        """The build's page, ``BUILD_URL``, when Jenkins knows its own URL."""
+        return environ.get("BUILD_URL") or None
 
     def mask(self, value: str) -> None:
         """Jenkins masks credentials it binds; nothing to do at run time."""

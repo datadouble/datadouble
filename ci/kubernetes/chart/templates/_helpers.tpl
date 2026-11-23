@@ -15,6 +15,10 @@
   args:
     - --ci
     - argocd
+    {{- with .step.job }}
+    - --ci-job
+    - {{ . | quote }}
+    {{- end }}
     {{- range .step.arguments }}
     {{- if eq . "$(DATADOUBLE_DRY_RUN)" }}
     {{- if $root.Values.dryRun }}

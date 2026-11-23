@@ -38,8 +38,16 @@ promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
 fetch:
   from: {filesystem: {path: /srv/datadouble/export}}
   staging: /srv/datadouble/staging
+notify:
+  when: [failure, warning]
+  to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
 replicate: {using: {k8s-pv: {path: /srv/datadouble/copies}}, mode: MODE, size: 1}
 """
+NOTIFY = """notify:
+  when: [failure, warning]
+  to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
+"""
+WITHOUT_NOTIFY = SPEC.replace(NOTIFY, "")
 _YAML: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 
@@ -159,10 +167,29 @@ def test_instructions() -> None:
         " /srv/datadouble, owned by 999:999"
     )
     assert any(step.startswith("inside the production boundary only") for step in production)
+    assert production[-1].startswith("Datadouble posts notify's webhooks itself")
+    assert "kube_job_status_failed" in production[-1]
     requests = argocd.instructions(SCENARIOS["on-demand"])
-    assert requests[-1].startswith("for on-demand copies, make an ApplicationSet")
-    quiet = planned(JobKind.PRUNE, side=Side.NON_PRODUCTION)
+    assert requests[-2].startswith("for on-demand copies, make an ApplicationSet")
+    quiet = planned(JobKind.PRUNE, side=Side.NON_PRODUCTION, spec=WITHOUT_NOTIFY)
     assert not any("Secret" in step for step in argocd.instructions(quiet))
+
+
+def test_email_is_refused() -> None:
+    mailed = SPEC.replace(
+        "to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]",
+        "to: [{email: {to: [data-team@example.com]}}]",
+    )
+    with pytest.raises(CiError, match="argocd cannot send notify's email"):
+        ArgoCd().generate(planned(JobKind.FETCH, spec=mailed))
+
+
+def test_steps_name_their_job() -> None:
+    application = yaml.safe_load(ArgoCd().generate(SCENARIOS["production"])[0].content)
+    jobs = application["spec"]["source"]["helm"]["valuesObject"]["jobs"]
+    build = next(job for job in jobs if job["name"] == "build")
+    assert [step["job"] for step in build["steps"]] == ["build", "promote"]
+    assert "ALERTS_WEBHOOK" in build["steps"][1]["environment"]
 
 
 def test_run_time(tmp_path: Path) -> None:
@@ -170,6 +197,7 @@ def test_run_time(tmp_path: Path) -> None:
     argocd = ArgoCd(log)
     assert argocd.vendor_hosted({"RUNNER_ENVIRONMENT": "github-hosted"}) is None
     argocd.mask("nothing happens")
+    assert argocd.run_url({"BUILD_URL": "https://example.com"}) is None
     warned = Report(
         command="run", outcome=Outcome.WARNING, outputs={"outcome": "warning"}, summary=""
     )

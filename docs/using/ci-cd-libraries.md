@@ -49,6 +49,33 @@ Each system's details are in its adapter's README:
   an Application per side, installing the Helm chart, with hooks for
   requests' copies.
 
+## Notifications
+
+The spec's `notify` section, not `ci init`'s options, says who hears about
+a job that fails or warns, so generating the jobs again keeps it:
+
+```yaml
+notify:
+  when: [failure, warning]          # default: [failure]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com]}
+```
+
+- **Webhooks** work on every system: Datadouble posts a JSON body with the
+  spec's name, the job, its outcome, the generation, the error code and the
+  run's page, never data values or secrets. The URL is a secret reference,
+  so `ci init` lists its variable with the others.
+- **Email** is the system's own: a `mail` step in Jenkins' `post` section;
+  GitLab's Pipeline status emails and GitHub's own notifications, set up by
+  hand as `instructions` says; refused on Argo CD, which has no mail.
+- **A notification that fails** is a warning in the job's log and never
+  changes the job's outcome.
+- **A job that fails before Datadouble starts** (an image that cannot be
+  pulled, a missing path) posts no webhook; the system's own failure
+  notifications cover it, and on Argo CD the cluster's monitoring of failed
+  Jobs. See [CI/CD integration](../ci-cd.md#notifications).
+
 ## On the runners
 
 - **Inside the production boundary,** the operator marks each runner with

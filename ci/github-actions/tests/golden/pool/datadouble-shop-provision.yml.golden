@@ -27,11 +27,16 @@ jobs:
           persist-credentials: false
       - name: datadouble replicate
         uses: datadouble/datadouble/ci/github-actions@v1.2.3
+        env:
+          ALERTS_WEBHOOK: ${{ secrets.ALERTS_WEBHOOK }}
         with:
+          job: provision
           image: ghcr.io/datadouble/datadouble:v1.2.3
           user: 999:999
           mounts: |
             /srv/datadouble/staging
+          environment: |
+            ALERTS_WEBHOOK
           arguments: |
             replicate
             --spec

@@ -44,6 +44,7 @@ from datadouble.ci import (
     Trigger,
 )
 from datadouble.outcome import ExitCode, Outcome
+from datadouble.spec import EnvSecret, NotifyOn
 
 NAME = "gitlab"
 TEMPLATE = "datadouble.yml"
@@ -177,6 +178,7 @@ def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str
     if Trigger.REQUEST_CLOSED in triggers:
         body["environment"] = {"name": _environment_name(pipeline), "action": "stop"}
     variables: dict[str, JsonValue] = {
+        "DATADOUBLE_CI_JOB": str(job.kind),
         "DATADOUBLE_IMAGE": pipeline.image,
         "DATADOUBLE_USER": pipeline.user,
     }
@@ -191,6 +193,12 @@ def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str
     variables["DATADOUBLE_ARGUMENTS"] = _lines(tuple(_argument(a) for a in invocation.arguments))
     body["variables"] = variables
     return body
+
+
+def _webhook_variables(pipeline: Pipeline) -> tuple[str, ...]:
+    """The environment variables the spec's webhooks read their URLs from."""
+    hooks = pipeline.notify.webhooks() if pipeline.notify is not None else ()
+    return tuple(sorted({h.url.env for h in hooks if isinstance(h.url, EnvSecret)}))
 
 
 def _stop_job(pipeline: Pipeline) -> str | None:
@@ -284,6 +292,26 @@ class GitLab:
             )
         if pipeline.environment():
             steps.append("define each variable above as a masked, protected CI/CD variable")
+        hooks = _webhook_variables(pipeline)
+        if hooks and any(requests & set(job.triggers) for job in pipeline.jobs):
+            steps.append(
+                f"on-demand provision and release run in merge request pipelines, which see no"
+                f" protected variables: make {', '.join(hooks)} available there (not protected,"
+                " or scoped to the environments those jobs use), or their webhook is not posted"
+            )
+        emails = pipeline.notify.emails() if pipeline.notify is not None else ()
+        if pipeline.notify is not None and emails:
+            step = (
+                f"for notify's email, turn on the project's Pipeline status emails integration"
+                f" (Settings > Integrations) for {', '.join(emails)}, notifying only broken"
+                " pipelines"
+            )
+            if NotifyOn.WARNING in pipeline.notify.when:
+                step += (
+                    "; GitLab mails failed pipelines only, so a warning, a job allowed to fail,"
+                    " mails nobody: list a webhook to hear about warnings"
+                )
+            steps.append(step)
         return tuple(steps)
 
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
@@ -291,6 +319,10 @@ class GitLab:
         tags = re.findall(r"[\w.-]+", environ.get("CI_RUNNER_TAGS", ""))
         hosted = [tag for tag in tags if _HOSTED_TAG.fullmatch(tag)]
         return f"a GitLab-hosted runner ({hosted[0]})" if hosted else None
+
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        """The job's page, ``CI_JOB_URL``."""
+        return environ.get("CI_JOB_URL") or None
 
     def mask(self, value: str) -> None:
         """GitLab masks only variables defined as masked; nothing to do at run time."""

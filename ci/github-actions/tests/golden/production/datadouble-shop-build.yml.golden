@@ -25,15 +25,18 @@ jobs:
       - name: datadouble run
         uses: datadouble/datadouble/ci/github-actions@v1.2.3
         env:
+          ALERTS_WEBHOOK: ${{ secrets.ALERTS_WEBHOOK }}
           SHOP_ANONYMIZATION_KEY: ${{ secrets.SHOP_ANONYMIZATION_KEY }}
           SHOP_SOURCE_DSN: ${{ secrets.SHOP_SOURCE_DSN }}
         with:
+          job: build
           image: ghcr.io/datadouble/datadouble:v1.2.3
           user: 999:999
           mounts: |
             /srv/datadouble/store
             /srv/datadouble/work
           environment: |
+            ALERTS_WEBHOOK
             SHOP_ANONYMIZATION_KEY
             SHOP_SOURCE_DSN
           arguments: |

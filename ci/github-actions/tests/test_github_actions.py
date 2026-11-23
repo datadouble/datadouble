@@ -21,7 +21,7 @@ import yaml
 from datadouble import api
 from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.spec import Spec, parse_spec
+from datadouble.spec import NotifyOn, Spec, parse_spec
 from datadouble_github_actions import NAME, GitHubActions, adapter, render
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -40,6 +40,11 @@ promote: {to: [{s3: {bucket: shop-export, prefix: images}}]}
 fetch:
   from: {s3: {bucket: shop-export, prefix: images}}
   staging: /srv/datadouble/staging
+notify:
+  when: [failure, warning]
+  to:
+    - webhook: {url: {env: ALERTS_WEBHOOK}}
+    - email: {to: [data-team@example.com, oncall@example.com]}
 replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
 announce: [{ci-outputs: {}}]
 """
@@ -122,14 +127,18 @@ def test_workflows_say_what_they_do() -> None:
     step = job["steps"][1]
     assert step["uses"] == "datadouble/datadouble/ci/github-actions@v1.2.3"
     assert step["env"] == {
+        "ALERTS_WEBHOOK": "${{ secrets.ALERTS_WEBHOOK }}",
         "SHOP_ANONYMIZATION_KEY": "${{ secrets.SHOP_ANONYMIZATION_KEY }}",
         "SHOP_SOURCE_DSN": "${{ secrets.SHOP_SOURCE_DSN }}",
     }
     assert step["with"]["arguments"].splitlines()[-2:] == ["--retry-key", "${{ github.run_id }}"]
+    assert step["with"]["job"] == "build"
     promote = files["datadouble-shop-promote.yml"]
     assert promote[True]["workflow_run"]["workflows"] == ["Datadouble shop build"]
     prune = files["datadouble-shop-prune-production.yml"]
-    assert "env" not in prune["jobs"]["prune"]["steps"][1]
+    assert prune["jobs"]["prune"]["steps"][1]["env"] == {
+        "ALERTS_WEBHOOK": "${{ secrets.ALERTS_WEBHOOK }}"
+    }
 
 
 def test_hosted_runners_are_refused() -> None:
@@ -210,7 +219,30 @@ def test_jobs_without_host_paths() -> None:
 
 def test_workflows_need_no_other_setup() -> None:
     ci, _ = github()
-    assert ci.instructions(SCENARIOS["production"]) == ()
+    (email,) = ci.instructions(SCENARIOS["production"])
+    assert email.startswith(
+        "a workflow cannot send notify's email to data-team@example.com, oncall@example.com:"
+    )
+    quiet = pipeline(
+        parse_spec(SPEC.replace("MODE", "pool").split("notify:")[0]),
+        PipelineOptions(
+            kinds=(JobKind.FETCH,),
+            spec_path="datadouble/shop.yml",
+            image="datadouble:test",
+            version="1.2.3",
+            owner="999:999",
+        ),
+    )
+    assert ci.instructions(quiet) == ()
+    planned_jobs = SCENARIOS["production"]
+    assert planned_jobs.notify is not None
+    assert email.endswith(
+        "never mails a warning, which is a passing run; to reach those"
+        " addresses, list a webhook whose service mails them"
+    )
+    on_failure = planned_jobs.notify.model_copy(update={"when": (NotifyOn.FAILURE,)})
+    (failures,) = ci.instructions(replace(planned_jobs, notify=on_failure))
+    assert "warning" not in failures
 
 
 def test_the_action_declares_every_output() -> None:
@@ -223,3 +255,15 @@ def test_the_action_declares_every_output() -> None:
     assert set(action["outputs"]) == reported
     for name, output in action["outputs"].items():
         assert output["value"] == f"${{{{ steps.datadouble.outputs.{name} }}}}"
+
+
+def test_run_urls() -> None:
+    ci, _ = github()
+    environ = {
+        "GITHUB_SERVER_URL": "https://github.com",
+        "GITHUB_REPOSITORY": "example/shop",
+        "GITHUB_RUN_ID": "42",
+    }
+    assert ci.run_url(environ) == "https://github.com/example/shop/actions/runs/42"
+    assert ci.run_url({**environ, "GITHUB_RUN_ID": ""}) is None
+    assert ci.run_url({}) is None

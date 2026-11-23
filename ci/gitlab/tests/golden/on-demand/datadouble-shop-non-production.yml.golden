@@ -6,7 +6,7 @@
 #     - local: .gitlab/datadouble-shop-non-production.yml
 include:
 - remote: https://raw.githubusercontent.com/datadouble/datadouble/v1.2.3/ci/gitlab/src/datadouble_gitlab/datadouble.yml
-  integrity: sha256-/Xvpogkc6/qLiF6d8oiXCYS5mAiY1sYwhlkFSRimoJU=
+  integrity: sha256-jWpVraU1uN7RLgI2/UEYBcklIH5315ITpmt4Nt9/AUw=
 variables:
   DATADOUBLE_JOB:
     value: ''
@@ -31,11 +31,13 @@ datadouble-shop-fetch:
   rules:
   - if: $DATADOUBLE_JOB == "shop-fetch" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: fetch
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
     DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
       SHOP_COSIGN_PUB
     DATADOUBLE_ARGUMENTS: |
       fetch
@@ -54,10 +56,13 @@ datadouble-shop-provision:
     name: datadouble/shop/mr-$CI_MERGE_REQUEST_IID
     on_stop: datadouble-shop-release-1
   variables:
+    DATADOUBLE_CI_JOB: provision
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       replicate
       --spec
@@ -79,10 +84,13 @@ datadouble-shop-release-1:
     name: datadouble/shop/mr-$CI_MERGE_REQUEST_IID
     action: stop
   variables:
+    DATADOUBLE_CI_JOB: release
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       release
       --spec
@@ -99,10 +107,13 @@ datadouble-shop-release-2:
   rules:
   - if: $DATADOUBLE_JOB == "shop-release" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: release
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       release
       --spec
@@ -118,10 +129,13 @@ datadouble-shop-prune-non-production:
   rules:
   - if: $DATADOUBLE_JOB == "shop-prune-non-production" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: prune
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       prune
       --spec
@@ -139,10 +153,13 @@ datadouble-shop-activate:
   rules:
   - if: $DATADOUBLE_JOB == "shop-activate" && $CI_PIPELINE_SOURCE =~ /^(api|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: activate
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/staging
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       activate
       $DATADOUBLE_GENERATION

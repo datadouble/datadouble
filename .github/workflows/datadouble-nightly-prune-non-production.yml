@@ -31,6 +31,7 @@ jobs:
       - name: datadouble prune
         uses: ./ci/github-actions # zizmor: ignore[self-repository]
         with:
+          job: prune
           image: datadouble:nightly
           user: 999:999
           mounts: |

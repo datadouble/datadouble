@@ -29,11 +29,16 @@ jobs:
           persist-credentials: false
       - name: datadouble prune
         uses: datadouble/datadouble/ci/github-actions@v1.2.3
+        env:
+          ALERTS_WEBHOOK: ${{ secrets.ALERTS_WEBHOOK }}
         with:
+          job: prune
           image: ghcr.io/datadouble/datadouble:v1.2.3
           user: 999:999
           mounts: |
             /srv/datadouble/store
+          environment: |
+            ALERTS_WEBHOOK
           arguments: |
             prune
             --spec
@@ -43,11 +48,16 @@ jobs:
             ${{ inputs.dry-run && '--dry-run' || '' }}
       - name: datadouble prune
         uses: datadouble/datadouble/ci/github-actions@v1.2.3
+        env:
+          ALERTS_WEBHOOK: ${{ secrets.ALERTS_WEBHOOK }}
         with:
+          job: prune
           image: ghcr.io/datadouble/datadouble:v1.2.3
           user: 999:999
           mounts: |
             /srv/datadouble/store
+          environment: |
+            ALERTS_WEBHOOK
           arguments: |
             prune
             --spec

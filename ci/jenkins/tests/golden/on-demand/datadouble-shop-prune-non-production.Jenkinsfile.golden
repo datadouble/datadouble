@@ -21,13 +21,45 @@ pipeline {
     stages {
         stage('datadouble prune') {
             steps {
-                datadouble(
-                    image: 'ghcr.io/datadouble/datadouble:v1.2.3',
-                    user: '999:999',
-                    mounts: ['/srv/datadouble/staging'],
-                    environment: [],
-                    arguments: ['prune', '--spec', 'datadouble/shop.yml', '--target', 'staging', (params.DRY_RUN ? '--dry-run' : '')],
-                )
+                withCredentials([string(credentialsId: 'ALERTS_WEBHOOK', variable: 'ALERTS_WEBHOOK')]) {
+                    datadouble(
+                        job: 'prune',
+                        image: 'ghcr.io/datadouble/datadouble:v1.2.3',
+                        user: '999:999',
+                        mounts: ['/srv/datadouble/staging'],
+                        environment: ['ALERTS_WEBHOOK'],
+                        arguments: ['prune', '--spec', 'datadouble/shop.yml', '--target', 'staging', (params.DRY_RUN ? '--dry-run' : '')],
+                    )
+                }
+            }
+        }
+    }
+    post {
+        failure {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: failure', body: 'Datadouble shop prune: failure.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        aborted {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: aborted', body: 'Datadouble shop prune: aborted.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        unstable {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: unstable', body: 'Datadouble shop prune: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
             }
         }
     }

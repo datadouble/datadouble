@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.names import SpecName
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.spec import ReplicateMode, Spec
+from datadouble.spec import Notify, ReplicateMode, Spec
 
 
 class CiError(Exception):
@@ -136,6 +136,9 @@ class Pipeline:
     """The spec file's text, for systems whose configuration carries it (Argo CD)."""
     lock_text: str = ""
     """The catalog lock's text, empty when there is none."""
+    notify: Notify | None = None
+    """The spec's ``notify`` section: Datadouble posts its webhooks itself, and the
+    adapter writes its email in the system's own form, or explains the setup."""
 
     def environment(self) -> tuple[str, ...]:
         """Every environment variable a job reads a secret from."""
@@ -159,6 +162,8 @@ class CiBridge(BaseModel):
     system: str
     directory: Path | None = None
     """Where the adapter writes outputs and the summary for the native step to pick up."""
+    job: JobKind | None = None
+    """The generated job the request runs for: its spec's ``notify`` section applies."""
 
 
 class Report(BaseModel):
@@ -197,6 +202,10 @@ class CiAdapter(Protocol):
 
     def vendor_hosted(self, environ: Mapping[str, str]) -> str | None:
         """A description of the runner, if ``environ`` shows the vendor hosts it."""
+        ...
+
+    def run_url(self, environ: Mapping[str, str]) -> str | None:
+        """The web page of the running job, from the system's variables in ``environ``."""
         ...
 
     def mask(self, value: str) -> None:
@@ -250,18 +259,26 @@ _SECTIONS: dict[tuple[JobKind, Side], tuple[str, ...]] = {
         "signing",
         "secrets",
         "runtime",
+        "notify",
     ),
-    (JobKind.PROMOTE, Side.PRODUCTION): ("store", "promote", "trust"),
-    (JobKind.LOCK, Side.PRODUCTION): ("source",),
-    (JobKind.PRUNE, Side.PRODUCTION): ("store", "promote"),
-    (JobKind.FETCH, Side.NON_PRODUCTION): ("fetch", "trust"),
-    (JobKind.PROVISION, Side.NON_PRODUCTION): ("fetch", "replicate", "announce", "runtime"),
-    (JobKind.RELEASE, Side.NON_PRODUCTION): ("fetch", "replicate", "announce", "runtime"),
-    (JobKind.PRUNE, Side.NON_PRODUCTION): ("fetch", "replicate"),
-    (JobKind.ACTIVATE, Side.NON_PRODUCTION): ("fetch",),
+    (JobKind.PROMOTE, Side.PRODUCTION): ("store", "promote", "trust", "notify"),
+    (JobKind.LOCK, Side.PRODUCTION): ("source", "notify"),
+    (JobKind.PRUNE, Side.PRODUCTION): ("store", "promote", "notify"),
+    (JobKind.FETCH, Side.NON_PRODUCTION): ("fetch", "trust", "notify"),
+    (JobKind.PROVISION, Side.NON_PRODUCTION): (
+        "fetch",
+        "replicate",
+        "announce",
+        "runtime",
+        "notify",
+    ),
+    (JobKind.RELEASE, Side.NON_PRODUCTION): ("fetch", "replicate", "announce", "runtime", "notify"),
+    (JobKind.PRUNE, Side.NON_PRODUCTION): ("fetch", "replicate", "notify"),
+    (JobKind.ACTIVATE, Side.NON_PRODUCTION): ("fetch", "notify"),
 }
 """The spec sections each job reads: its secrets and host paths come only from these,
-so a job never receives another's credentials."""
+so a job never receives another's credentials. Every job reads ``notify``, whose
+webhooks it posts to."""
 _PRUNE_TARGETS = {Side.PRODUCTION: ("store", "export"), Side.NON_PRODUCTION: ("staging",)}
 _STAGES = "plan,extract,load,transform,package,verify,store"
 _HOST_PATH = re.compile(r"/[^\s*?\[\]{}:]+")
@@ -553,4 +570,5 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         ),
         spec_text=options.spec_text,
         lock_text=options.lock_text,
+        notify=spec.notify,
     )

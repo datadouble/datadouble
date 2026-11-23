@@ -87,7 +87,37 @@ replicate:
   using: {{filesystem: {{path: {base}/{mode}/copies}}}}
   mode: {mode}
   size: {size}
+notify:
+  when: [failure, warning]
+  to: [{{webhook: {{url: {{env: DDCI_WEBHOOK}}}}}}]
 """
+_HOOK = """
+import http.server
+import sys
+
+class Hook(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        if self.path != sys.argv[1]:
+            self.send_response(404)
+            self.end_headers()
+            return
+        print(body.decode(), flush=True)
+        self.send_response(204)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+http.server.HTTPServer(("0.0.0.0", 8080), Hook).serve_forever()
+"""
+"""A webhook on the world's network that prints each body sent to its path on a line of its own.
+
+The path names the world: a removed world's address can be given to the next
+world's webhook, and a job of the earlier world still running must not reach it.
+"""
+UNREACHABLE = "http://127.0.0.1:9/hook"
+"""A webhook nothing answers: notifying it fails."""
 
 
 class Event(StrEnum):
@@ -200,6 +230,21 @@ class World:
     runners: Mapping[Side, str]
 
     @property
+    def hook(self) -> str:
+        """The container receiving the spec's webhook."""
+        return f"{self.name}-hook"
+
+    def notifications(self, job: str | None = None) -> list[dict[str, JsonValue]]:
+        """The bodies the webhook was sent, oldest first; only ``job``'s, if given.
+
+        A job that follows another in the same run (promote after build, in a
+        GitLab pipeline or an Argo CD pod) notifies too, so tests pick the job.
+        """
+        lines = docker("logs", self.hook).splitlines()
+        sent = [json.loads(line) for line in lines if line.startswith("{")]
+        return [body for body in sent if job is None or body.get("job") == job]
+
+    @property
     def store(self) -> Path:
         """The build's store."""
         return self.base / "store"
@@ -259,11 +304,16 @@ class World:
         request: int | None = None,
         inputs: Mapping[str, str] | None = None,
         environ: Mapping[str, str] | None = None,
+        webhook: str | None = None,
     ) -> RunContext:
-        """A run with the world's secrets, by default on a self-hosted runner marked inside."""
+        """A run with the world's secrets, by default on a self-hosted runner marked inside.
+
+        ``webhook`` replaces the URL the spec's ``notify`` posts to.
+        """
         marked = {"DATADOUBLE_BOUNDARY": "inside", "RUNNER_ENVIRONMENT": "self-hosted"}
+        chosen = self.secrets if webhook is None else {**self.secrets, "DDCI_WEBHOOK": webhook}
         return RunContext(
-            secrets=self.secrets,
+            secrets=chosen,
             environ=marked if environ is None else environ,
             inputs=inputs or {},
             request=request,
@@ -294,6 +344,11 @@ def world(harness: CiHarness, repository: Path) -> Generator[World]:
             f" {base}/on-demand/staging {base}/on-demand/copies {base}/pool/staging"
             f" {base}/pool/copies && install -d -m 0777 {base}/keys",
         )  # fmt: skip
+        docker(
+            "run", "--detach", "--name", f"{name}-hook", "--network", network,
+            "--user", "65534:65534", "--entrypoint", "python", image, "-c", _HOOK,
+            f"/hook/{name}",
+        )  # fmt: skip
         runners = {side: harness.runner(side, base) for side in Side}
         built = World(
             name, base, repository, image, network, {}, harness.runtime(network, base), runners
@@ -308,12 +363,17 @@ def world(harness: CiHarness, repository: Path) -> Generator[World]:
             built.secrets["DDCI_SOURCE_DSN"] = (
                 f"postgresql://postgres:{password}@{address}:5432/postgres"
             )
+            hook = docker(
+                "inspect", "-f", f'{{{{(index .NetworkSettings.Networks "{network}").IPAddress}}}}',
+                built.hook,
+            ).strip()  # fmt: skip
+            built.secrets["DDCI_WEBHOOK"] = f"http://{hook}:8080/hook/{name}"
             _generate(built, harness.system)
             yield built
         finally:
             built.as_root(f"rm -rf {base}")
     finally:
-        docker("rm", "--force", "--volumes", name)
+        docker("rm", "--force", "--volumes", name, f"{name}-hook")
         # A harness may have joined its own containers to the network, such as a
         # cluster's node; they leave it with the world.
         joined = docker(
@@ -406,6 +466,7 @@ def _generate(built: World, system: str) -> None:
     non_production = ci_init(built, system, on_demand, *others, runner=runner)
     assert isinstance(non_production, api.CiInitResponse), non_production
     assert "DDCI_SOURCE_DSN" not in non_production.environment
+    assert "DDCI_WEBHOOK" in non_production.environment
 
 
 class CiConformance:
@@ -511,13 +572,27 @@ class CiConformance:
         assert all(copy.owner is None for copy in copies)
 
     def test_warnings_and_failures(self, ci_harness: CiHarness, shop: World) -> None:
-        """A warning is the native warning state; a failed verification stores nothing."""
+        """A warning is the native warning state; a failed verification stores nothing.
+
+        Both notify the spec's webhook, and a webhook that cannot be reached
+        leaves the job's outcome alone.
+        """
         spec = shop.spec("on-demand")
         (spec.parent / "catalog.lock").unlink()
         shop.write_spec("on-demand", strict="off")
+        unheard = shop.context(run_id="200", webhook=UNREACHABLE)
+        unreached = ci_harness.run(shop.repository, "build", Event.MANUAL, unheard)
+        assert unreached.state is State.WARNING, unreached.log
+        assert "a notification failed, webhook 1: the request failed" in unreached.log
+        assert UNREACHABLE not in unreached.log
+        assert shop.notifications("build") == []
+        shop.as_root(f"rm -rf {shop.store}/shop && install -d -o 999 -g 999 {shop.store}")
         warned = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="201"))
         assert warned.state is State.WARNING, warned.log
         assert warned.outputs["outcome"] == "warning"
+        (warning,) = shop.notifications("build")
+        assert warning["outcome"] == "warning"
+        assert warning["generation"] == warned.outputs["generation"]
         shop.as_root(f"rm -rf {shop.store}/shop && install -d -o 999 -g 999 {shop.store}")
         shop.write_spec("on-demand", strict="off", limit=2)
         failed = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="202"))
@@ -525,6 +600,36 @@ class CiConformance:
         assert shop.generations(shop.store) == []
         refused = ci_harness.run(shop.repository, "promote", Event.MANUAL, shop.context())
         assert refused.state is State.FAILURE
+        # A system may run a failed job again (a Kubernetes Job's backoffLimit).
+        verifications = shop.notifications("build")[1:]
+        assert verifications, shop.notifications()
+        assert all(n["outcome"] == "failure" for n in verifications), verifications
+        assert refused.outputs["error"] in {str(n["error"]) for n in shop.notifications("promote")}
+
+    def test_a_failing_job_notifies(self, ci_harness: CiHarness, shop: World) -> None:
+        """A failing job posts its outcome to the spec's webhook, never values or secrets."""
+        shop.as_root(f"chmod 0555 {shop.store}")
+        failed = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="501"))
+        assert failed.state is State.FAILURE, failed.log
+        # A system may run a failed job again (a Kubernetes Job's backoffLimit);
+        # each attempt is a run of its own and notifies.
+        attempts = shop.notifications("build")
+        assert attempts
+        sent = attempts[0]
+        assert all(attempt == sent for attempt in attempts), attempts
+        assert set(sent) == {"spec", "job", "outcome", "generation", "error", "run_url"}
+        assert sent["spec"] == "shop"
+        assert sent["job"] == "build"
+        assert sent["outcome"] == "failure"
+        assert sent["error"] == "store_failed"
+        assert sent["run_url"] is None or str(sent["run_url"]).startswith("http")
+        body = json.dumps(sent)
+        for value in shop.secrets.values():
+            assert value.splitlines()[0] not in body
+        shop.as_root(f"chmod 0755 {shop.store}")
+        built = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="501"))
+        assert built.state is State.SUCCESS, built.log
+        assert shop.notifications("build") == attempts
 
     def test_hosted_runners_are_refused(self, ci_harness: CiHarness, shop: World) -> None:
         """``build`` and ``lock`` are never generated for, nor run on, a vendor-hosted runner."""

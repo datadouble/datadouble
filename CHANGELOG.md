@@ -48,14 +48,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A manual `lock` CI job, and lock changes**
   ([#67](https://github.com/datadouble/datadouble/issues/67)).
   `ci init --job lock` writes a job on the production side, on the build's
-  runner with only the source's secrets and no schedule, for every Tier 1
-  system. It runs `datadouble lock --output datadouble-lock` and publishes the
+  runner with only the source's and `notify`'s secrets and no schedule, for
+  every Tier 1 system. It runs `datadouble lock --output datadouble-lock` and publishes the
   new lock and its changes as the job's artifact (on Argo CD, in the job's
   log), and never commits: someone checks the changes for personal data and
   commits the lock. `datadouble lock` now lists `changes` against the lock it
   replaces (tables, columns, keys and requirements added, removed or
   changed), in its JSON response and its summary, and `--output DIR` writes
   the new lock and `changes.txt` there instead of replacing the lock.
+- **Generated CI jobs notify on failure and warning**
+  ([#69](https://github.com/datadouble/datadouble/issues/69)). A spec's
+  `notify` section lists the outcomes (`when: [failure, warning]`, failures
+  only by default) and the targets. A `webhook`, whose URL is a secret
+  reference, gets a JSON POST from Datadouble itself on every system: the
+  spec, job, outcome, generation, error code and the run's page, never data
+  values or secrets; posts follow the environment's proxy settings, and
+  credentials in the URL need https. `email` uses the system's own mail: Jenkinsfiles mail
+  from `post`, GitLab and GitHub need the setup `ci init` lists in
+  `instructions`, and Argo CD refuses it. A notification that fails is a
+  warning in the job's log and never changes its outcome. It lives in the
+  spec so running `ci init` again keeps it; run `ci init` again after adding
+  it, so every job gets the webhook's variable. Generated jobs now name
+  their job to the native step (`--ci-job`).
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

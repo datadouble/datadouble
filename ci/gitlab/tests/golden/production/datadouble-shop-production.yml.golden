@@ -6,7 +6,7 @@
 #     - local: .gitlab/datadouble-shop-production.yml
 include:
 - remote: https://raw.githubusercontent.com/datadouble/datadouble/v1.2.3/ci/gitlab/src/datadouble_gitlab/datadouble.yml
-  integrity: sha256-/Xvpogkc6/qLiF6d8oiXCYS5mAiY1sYwhlkFSRimoJU=
+  integrity: sha256-jWpVraU1uN7RLgI2/UEYBcklIH5315ITpmt4Nt9/AUw=
 variables:
   DATADOUBLE_JOB:
     value: ''
@@ -26,12 +26,14 @@ datadouble-shop-build:
   rules:
   - if: $DATADOUBLE_JOB == "shop-build" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: build
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/store
       /srv/datadouble/work
     DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
       COSIGN_PASSWORD
       SHOP_ANONYMIZATION_KEY
       SHOP_COSIGN_KEY
@@ -58,11 +60,13 @@ datadouble-shop-promote:
   - job: datadouble-shop-build
     optional: true
   variables:
+    DATADOUBLE_CI_JOB: promote
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/store
     DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
       SHOP_COSIGN_PUB
     DATADOUBLE_ARGUMENTS: |
       promote
@@ -77,10 +81,13 @@ datadouble-shop-prune-production-1:
   rules:
   - if: $DATADOUBLE_JOB == "shop-prune-production" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: prune
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/store
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       prune
       --spec
@@ -97,10 +104,13 @@ datadouble-shop-prune-production-2:
   rules:
   - if: $DATADOUBLE_JOB == "shop-prune-production" && $CI_PIPELINE_SOURCE =~ /^(api|schedule|trigger|web)$/
   variables:
+    DATADOUBLE_CI_JOB: prune
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_MOUNTS: |
       /srv/datadouble/store
+    DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
     DATADOUBLE_ARGUMENTS: |
       prune
       --spec
@@ -121,9 +131,11 @@ datadouble-shop-lock:
     - datadouble.env
     - datadouble-lock/
   variables:
+    DATADOUBLE_CI_JOB: lock
     DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
     DATADOUBLE_USER: 999:999
     DATADOUBLE_ENVIRONMENT: |
+      ALERTS_WEBHOOK
       SHOP_SOURCE_DSN
     DATADOUBLE_ARTIFACTS: datadouble-lock
     DATADOUBLE_ARGUMENTS: |

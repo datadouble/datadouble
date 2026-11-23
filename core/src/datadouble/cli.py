@@ -15,6 +15,7 @@ the system's own form, with the exit code the system expects.
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable, Sequence
 from typing import TextIO, assert_never
@@ -41,6 +42,7 @@ class _Arguments(argparse.Namespace):
     dry_run: bool
     ci: str | None
     ci_directory: str | None
+    ci_job: str | None
     spec: str | None
     lock: str | None
     strict: str | None
@@ -248,6 +250,12 @@ def build_parser() -> CommandParser:
         "--ci", metavar="SYSTEM", help="report to this CI/CD system and mask secrets in its logs"
     )
     parser.add_argument(
+        "--ci-job",
+        choices=list(JobKind),
+        metavar="JOB",
+        help="the generated job this runs for, which notifies as the spec's `notify` says",
+    )
+    parser.add_argument(
         "--ci-directory",
         metavar="DIR",
         help="where the CI/CD adapter writes outputs for the native step to pick up",
@@ -426,6 +434,8 @@ def build_request(arguments: _Arguments) -> str:
         bridge: dict[str, JsonValue] = {"system": arguments.ci}
         if arguments.ci_directory:
             bridge["directory"] = arguments.ci_directory
+        if arguments.ci_job:
+            bridge["job"] = arguments.ci_job
         fields["ci"] = bridge
     return json.dumps({"command": command, **fields})
 
@@ -598,7 +608,10 @@ def _respond(raw: str) -> tuple[api.Response, ExitCode]:
         return failed, api.exit_code(failed)
     with masking(adapter.mask):
         response = api.handle(request)
-    report = api.ci_report(response, summarize(response))
+        report = api.ci_report(response, summarize(response))
+        problems = api.notify(request, report, adapter.run_url(os.environ))
+    for problem in problems:
+        sys.stderr.write(f"warning: a notification failed, {problem}\n")
     return response, adapter.report(report, request.ci.directory)
 
 

@@ -39,6 +39,9 @@ spec:
             fetch:
               from: {filesystem: {path: /srv/datadouble/export}}
               staging: /srv/datadouble/staging
+            notify:
+              when: [failure, warning]
+              to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]
             replicate: {using: {k8s-pv: {path: /srv/datadouble/copies}}, mode: pool, size: 1}
           lock: |
             {}
@@ -52,18 +55,22 @@ spec:
           schedule: '*/15 * * * *'
           timeoutMinutes: 120
           steps:
-          - arguments:
+          - job: fetch
+            arguments:
             - fetch
             - --spec
             - datadouble/shop.yml
             environment:
+            - ALERTS_WEBHOOK
             - SHOP_COSIGN_PUB
           - &id001
+            job: provision
             arguments:
             - replicate
             - --spec
             - datadouble/shop.yml
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
         - name: provision
           schedule: 0 * * * *
           timeoutMinutes: 60
@@ -73,12 +80,14 @@ spec:
           schedule: 30 3 * * *
           timeoutMinutes: 60
           steps:
-          - arguments:
+          - job: release
+            arguments:
             - release
             - --spec
             - datadouble/shop.yml
             - --expired
-            environment: []
+            environment:
+            - ALERTS_WEBHOOK
   syncPolicy:
     automated:
       prune: true

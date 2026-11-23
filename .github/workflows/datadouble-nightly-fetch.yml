@@ -25,6 +25,7 @@ jobs:
       - name: datadouble fetch
         uses: ./ci/github-actions # zizmor: ignore[self-repository]
         with:
+          job: fetch
           image: datadouble:nightly
           user: 999:999
           mounts: |

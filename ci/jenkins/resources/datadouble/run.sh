@@ -23,8 +23,10 @@ options=(
     --volume "$socket:$socket"
     --volume "$WORKSPACE:$WORKSPACE" --workdir "$WORKSPACE"
     --env HOME=/tmp
-    --env DATADOUBLE_BOUNDARY --env RUNNER_ENVIRONMENT --env CI_RUNNER_TAGS
+    --env DATADOUBLE_BOUNDARY --env RUNNER_ENVIRONMENT --env CI_RUNNER_TAGS --env BUILD_URL
 )
+bridged=(--ci jenkins --ci-directory "$bridge")
+if [ -n "${DATADOUBLE_CI_JOB:-}" ]; then bridged+=(--ci-job "$DATADOUBLE_CI_JOB"); fi
 # Docker would create a missing path as root, which the engine's user cannot
 # write, so a path the agent lacks fails here, saying what to create.
 while IFS= read -r path; do
@@ -47,7 +49,6 @@ if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
 fi
 
 status=0
-docker run "${options[@]}" "$DATADOUBLE_IMAGE" \
-    --ci jenkins --ci-directory "$bridge" "${arguments[@]}" || status=$?
+docker run "${options[@]}" "$DATADOUBLE_IMAGE" "${bridged[@]}" "${arguments[@]}" || status=$?
 if [ -f "$bridge/outputs" ]; then cp "$bridge/outputs" "$WORKSPACE/.datadouble-outputs"; fi
 exit "$status"
