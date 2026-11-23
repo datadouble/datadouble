@@ -25,12 +25,13 @@ Print the spec JSON Schema.
 
 ## `datadouble lock`
 
-Write the catalog lock for a spec.
+Write the catalog lock for a spec, listing what changed.
 
 | Argument | Description |
 |---|---|
 | `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
 | `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
+| `--output` `OUTPUT` | a directory for the new lock (catalog.lock) and its changes (changes.txt), leaving the current lock as it is |
 
 ## `datadouble import-jailer`
 
@@ -178,9 +179,9 @@ Write CI/CD configuration for a spec's jobs.
 | Argument | Description |
 |---|---|
 | `--system` `SYSTEM` | the CI/CD system, such as github-actions (required) |
-| `--job` `JOBS` | jobs, comma-separated or repeated, on one side of the boundary: build,promote,fetch,provision,release,prune,activate (required) |
+| `--job` `JOBS` | jobs, comma-separated or repeated, on one side of the boundary: build,promote,fetch,provision,release,prune,activate,lock (required) |
 | `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--runner` `RUNNER` | the runner jobs run on; required for build and promote |
+| `--runner` `RUNNER` | the runner jobs run on; required for build, promote and lock |
 | `--work` `WORK` | the build's work directory in production scratch space |
 | `--side` `SIDE` | the side prune alone runs on (one of production, non-production) |
 | `--output` `OUTPUT` | the repository root to write into (default: .) |

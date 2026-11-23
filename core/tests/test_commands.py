@@ -14,8 +14,9 @@ from test_run import SPEC, dataset
 
 from datadouble import api, cli
 from datadouble.api import ErrorCode
-from datadouble.catalog import CatalogLock, write_lock
+from datadouble.catalog import CatalogLock, read_lock, write_lock
 from datadouble.engine import EngineError
+from datadouble.names import TableName
 from datadouble.outcome import ExitCode
 from datadouble.registry import Registry, RegistryError, installed
 from datadouble.run import Run, RunError, RunOptions, Stage
@@ -371,3 +372,54 @@ def test_unmarked_machines_cannot_read_the_source(
     response = api.handle_json(json.dumps({"command": "plan", "spec": str(spec_file)}))
     assert isinstance(response, api.ErrorResponse)
     assert response.error is ErrorCode.OUTSIDE_BOUNDARY
+
+
+def test_lock_lists_changes(spec_file: Path, tmp_path: Path, engine: FakeEngine) -> None:
+    code, out = cli_run("lock", "--spec", str(spec_file))
+    assert code == ExitCode.SUCCESS
+    assert out.splitlines()[1].startswith("no earlier lock to compare with")
+    code, out = cli_run("--json", "lock", "--spec", str(spec_file))
+    assert json.loads(out)["changes"] == []
+    assert json.loads(out)["changes_file"] is None
+
+    lock = tmp_path / "catalog.lock"
+    committed = lock.read_bytes()
+    engine.catalog = catalog(*shop().tables, table("tags", ["id"]))
+    review = tmp_path / "review"
+    code, out = cli_run("lock", "--spec", str(spec_file), "--output", str(review))
+    assert code == ExitCode.SUCCESS
+    assert lock.read_bytes() == committed
+    assert out.splitlines()[:5] == [
+        out.splitlines()[0],
+        f"wrote {review / 'changes.txt'}",
+        "3 change(s) from the earlier lock; check new and changed columns for personal data:",
+        "  added table public.tags",
+        "  added column public.tags.id: integer (integer) not null",
+    ]
+    assert out.splitlines()[0].startswith(f"wrote {review / 'catalog.lock'}: 11 tables")
+    assert out.splitlines()[5] == "  added primary-key public.tags: (id)"
+    assert (review / "changes.txt").read_text(encoding="utf-8") == "\n".join(
+        out.splitlines()[2:6]
+    ) + "\n"
+    refused = api.handle_json(
+        json.dumps({"command": "lock", "spec": str(spec_file), "output": str(tmp_path)})
+    )
+    assert isinstance(refused, api.ErrorResponse)
+    assert refused.error is ErrorCode.CATALOG_LOCK
+    assert "holds the current lock" in refused.message
+    assert lock.read_bytes() == committed
+    assert read_lock(review / "catalog.lock").catalog.table(TableName.of("public", "tags"))
+
+    lock.write_text("{}", encoding="utf-8")
+    response = api.handle_json(json.dumps({"command": "lock", "spec": str(spec_file)}))
+    assert isinstance(response, api.LockResponse)
+    assert response.changes is None
+    assert response.unreadable is not None
+    assert response.unreadable.endswith("is not a valid catalog lock: 2 problem(s)")
+    assert "the earlier lock could not be read" in cli.summarize(response)
+    assert read_lock(lock).fingerprint == response.fingerprint
+
+
+def test_lock_output_in_a_dry_run() -> None:
+    _, out = cli_run("--dry-run", "lock", "--spec", "s.yml", "--output", "review")
+    assert json.loads(out) == {"command": "lock", "spec": "s.yml", "output": "review"}

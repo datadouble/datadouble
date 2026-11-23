@@ -6,11 +6,11 @@
 #     - local: .gitlab/datadouble-shop-production.yml
 include:
 - remote: https://raw.githubusercontent.com/datadouble/datadouble/v1.2.3/ci/gitlab/src/datadouble_gitlab/datadouble.yml
-  integrity: sha256-gvFSahh6oPkFhDzL3iAAwYGo3d27vGGRcuNYzDZUBng=
+  integrity: sha256-/Xvpogkc6/qLiF6d8oiXCYS5mAiY1sYwhlkFSRimoJU=
 variables:
   DATADOUBLE_JOB:
     value: ''
-    description: 'The Datadouble job to run: shop-build, shop-promote, shop-prune-production'
+    description: 'The Datadouble job to run: shop-build, shop-promote, shop-prune-production, shop-lock'
   DATADOUBLE_DRY_RUN:
     value: ''
     options:
@@ -108,3 +108,27 @@ datadouble-shop-prune-production-2:
       --target
       export
       $DATADOUBLE_DRY_RUN
+datadouble-shop-lock:
+  extends: .datadouble
+  tags:
+  - prod-db
+  resource_group: datadouble-shop-lock
+  timeout: 60m
+  rules:
+  - if: $DATADOUBLE_JOB == "shop-lock" && $CI_PIPELINE_SOURCE =~ /^(api|trigger|web)$/
+  artifacts:
+    paths:
+    - datadouble.env
+    - datadouble-lock/
+  variables:
+    DATADOUBLE_IMAGE: ghcr.io/datadouble/datadouble:v1.2.3
+    DATADOUBLE_USER: 999:999
+    DATADOUBLE_ENVIRONMENT: |
+      SHOP_SOURCE_DSN
+    DATADOUBLE_ARTIFACTS: datadouble-lock
+    DATADOUBLE_ARGUMENTS: |
+      lock
+      --spec
+      datadouble/shop.yml
+      --output
+      datadouble-lock

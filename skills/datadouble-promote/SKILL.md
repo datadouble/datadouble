@@ -24,8 +24,9 @@ boundary, after `build`.
 
 ## Generate it
 
-With `build`, as `datadouble-build` shows (`--job build,promote,prune`), so
-it follows a successful build. Alone, it is a manual job.
+With `build`, as `datadouble-build` shows (`--job
+build,promote,prune,lock`), so it follows a successful build. Alone, it is a
+manual job.
 
 ## When promote refuses
 

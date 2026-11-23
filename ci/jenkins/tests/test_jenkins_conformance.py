@@ -385,6 +385,10 @@ class JenkinsContainer:
             found.extend(Path(str(a["relativePath"])) for a in artifacts if isinstance(a, dict))
         return found
 
+    @property
+    def artifact_storage(self) -> bool:
+        return True
+
 
 GOLDEN = Path(__file__).parent / "golden"
 

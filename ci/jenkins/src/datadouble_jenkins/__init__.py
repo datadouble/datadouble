@@ -16,7 +16,8 @@ pull requests that every installation shares, so on-demand copies take an
 ``release`` with it. A retried build is a new build in Jenkins, so ``build``
 takes a ``RETRY_KEY`` parameter: give the failed build's key (its
 ``BUILD_TAG``, shown in its log) to resume it. Secrets come from credentials
-of the same name, which Jenkins masks in logs.
+of the same name, which Jenkins masks in logs. The ``lock`` job's new lock
+and its changes are archived as the build's artifacts.
 """
 
 from collections.abc import Mapping
@@ -140,6 +141,8 @@ def _stage(pipeline: Pipeline, job: Job, index: int) -> list[str]:
         f"    arguments: [{arguments}],",
         ")",
     ]
+    if job.artifacts is not None:
+        call.insert(-1, f"    artifacts: {_quote(job.artifacts)},")
     if job.environment:
         bindings = ", ".join(
             f"string(credentialsId: {_quote(name)}, variable: {_quote(name)})"

@@ -97,6 +97,19 @@ spec:
             - export
             - $(DATADOUBLE_DRY_RUN)
             environment: []
+        - name: lock
+          schedule: ''
+          timeoutMinutes: 60
+          artifacts: datadouble-lock
+          steps:
+          - arguments:
+            - lock
+            - --spec
+            - datadouble/shop.yml
+            - --output
+            - datadouble-lock
+            environment:
+            - SHOP_SOURCE_DSN
   syncPolicy:
     automated:
       prune: true

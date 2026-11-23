@@ -16,8 +16,9 @@ another (``promote`` after ``build``) runs in the same pipeline and ``needs``
 it. On-demand copies belong to a merge request's environment, whose
 ``on_stop`` job releases them when the request is merged or closed. A
 warning exits with 3, which ``allow_failure: exit_codes`` shows as a
-warning, and outputs are a dotenv report. GitLab masks only variables
-defined as masked, so there is no masking at run time.
+warning, and outputs are a dotenv report. The ``lock`` job's new lock and
+changes are job artifacts beside it. GitLab masks only variables defined as
+masked, so there is no masking at run time.
 """
 
 import base64
@@ -114,7 +115,7 @@ def _tags(pipeline: Pipeline) -> list[JsonValue]:
     if hosted:
         message = (
             f"{', '.join(hosted)} selects GitLab's hosted runners; Datadouble's jobs need runners"
-            " that keep their files, and build and promote need runners inside the"
+            " that keep their files, and build, promote and lock need runners inside the"
             " production boundary (decision 19)"
         )
         raise CiError(message)
@@ -183,6 +184,10 @@ def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str
         variables["DATADOUBLE_MOUNTS"] = _lines(job.mounts)
     if job.environment:
         variables["DATADOUBLE_ENVIRONMENT"] = _lines(job.environment)
+    if job.artifacts is not None:
+        variables["DATADOUBLE_ARTIFACTS"] = job.artifacts
+        # Paths replace the template's list, so the outputs file stays in it.
+        body["artifacts"] = {"paths": ["datadouble.env", f"{job.artifacts}/"]}
     variables["DATADOUBLE_ARGUMENTS"] = _lines(tuple(_argument(a) for a in invocation.arguments))
     body["variables"] = variables
     return body

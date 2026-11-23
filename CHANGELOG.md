@@ -45,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   naming the store, and its errors name the URL path and HTTP status, never
   response bodies or credentials. Promote again into an existing export store
   to give it an index before reading it over HTTP.
+- **A manual `lock` CI job, and lock changes**
+  ([#67](https://github.com/datadouble/datadouble/issues/67)).
+  `ci init --job lock` writes a job on the production side, on the build's
+  runner with only the source's secrets and no schedule, for every Tier 1
+  system. It runs `datadouble lock --output datadouble-lock` and publishes the
+  new lock and its changes as the job's artifact (on Argo CD, in the job's
+  log), and never commits: someone checks the changes for personal data and
+  commits the lock. `datadouble lock` now lists `changes` against the lock it
+  replaces (tables, columns, keys and requirements added, removed or
+  changed), in its JSON response and its summary, and `--output DIR` writes
+  the new lock and `changes.txt` there instead of replacing the lock.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

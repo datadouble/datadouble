@@ -34,4 +34,7 @@ persistentVolumes: false
 # hand with `kubectl create job --from`), its time limit, the steps it runs
 # in order, and the environment variables each reads secrets from. `hook`
 # jobs run for a request instead: PreSync makes copies, PostDelete releases.
+# `artifacts` names a workspace directory the job writes files into for
+# review (the lock job's new lock and changes), an emptyDir; the job prints
+# them to its log.
 jobs: []

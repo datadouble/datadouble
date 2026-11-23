@@ -18,14 +18,17 @@ Pods run the Datadouble image itself, as the engine's user, with every path
 the spec names on one PersistentVolumeClaim, mounted at the same path, as
 the ``kubernetes`` runtime needs. A Job has no warning state, so a warning
 succeeds and says so in the log; the outputs are the container's
-termination message.
+termination message. Kubernetes keeps no job artifacts, so the ``lock``
+job writes its new lock and changes into an ``emptyDir`` and prints both to
+the job's log.
 """
 
 import posixpath
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import assert_never
+from typing import TextIO, assert_never
 
 import yaml
 from pydantic import JsonValue
@@ -114,6 +117,7 @@ class _Entry:
     steps: list[JsonValue]
     schedule: str = ""
     hook: str | None = None
+    artifacts: str | None = None
 
     def value(self) -> dict[str, JsonValue]:
         entry: dict[str, JsonValue] = {"name": self.name}
@@ -122,6 +126,8 @@ class _Entry:
         else:
             entry["schedule"] = self.schedule
         entry["timeoutMinutes"] = self.minutes
+        if self.artifacts is not None:
+            entry["artifacts"] = self.artifacts
         entry["steps"] = self.steps
         return entry
 
@@ -141,7 +147,13 @@ def _jobs(pipeline: Pipeline) -> list[JsonValue]:
                 hooks.append(_Entry(name, job.timeout_minutes, [_step(job, invocation)], hook=hook))
         if steps:
             stem = _stem(pipeline, job.kind)
-            entries[stem] = _Entry(stem, job.timeout_minutes, steps, schedule=job.schedule or "")
+            entries[stem] = _Entry(
+                stem,
+                job.timeout_minutes,
+                steps,
+                schedule=job.schedule or "",
+                artifacts=job.artifacts,
+            )
     for job in pipeline.jobs:
         leader = entries.get(_stem(pipeline, job.after)) if job.after is not None else None
         follower = entries.get(_stem(pipeline, job.kind))
@@ -211,9 +223,15 @@ def render(pipeline: Pipeline) -> str:
 class ArgoCd:
     """Argo CD: an Application of this repository's chart; Jobs' own state."""
 
-    def __init__(self, termination_log: Path = TERMINATION_LOG) -> None:
-        """Write outputs to ``termination_log`` when there is no directory for them."""
+    def __init__(
+        self, termination_log: Path = TERMINATION_LOG, stream: TextIO | None = None
+    ) -> None:
+        """Write outputs to ``termination_log`` when there is no directory for them.
+
+        Files a job publishes are printed to ``stream``, the job's log (standard output).
+        """
         self.termination_log = termination_log
+        self.stream = stream
 
     @property
     def name(self) -> str:
@@ -267,7 +285,11 @@ class ArgoCd:
         del value
 
     def report(self, report: Report, directory: Path | None) -> ExitCode:
-        """Outputs as the termination message; a warning succeeds, a failure fails."""
+        """Outputs as the termination message, files in the log; a warning succeeds."""
+        stream = sys.stdout if self.stream is None else self.stream
+        for path in report.files:
+            stream.write(f"==> {path} <==\n{path.read_text(encoding='utf-8')}")
+        stream.flush()
         lines = "".join(
             f"{name}={value}\n" for name, value in report.outputs.items() if "\n" not in value
         )

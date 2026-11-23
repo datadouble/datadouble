@@ -1,6 +1,6 @@
 ---
 name: datadouble-spec
-description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks and verification - and check it with datadouble plan. Use for a new spec, a strict-mode failure, a Jailer model to import, putting a connection's password, key or other credential into a spec (never pass the secret itself, not even to this skill), or questions about what a spec does.
+description: Write or change a Datadouble spec, the YAML that says what to copy from a source and how to make it safe - source, subset, excludes, anonymization, hooks and verification - and check it with datadouble plan. Use for a new spec, a strict-mode failure, re-locking the catalog after a schema change, a Jailer model to import, putting a connection's password, key or other credential into a spec (never pass the secret itself, not even to this skill), or questions about what a spec does.
 ---
 
 # The Datadouble spec
@@ -26,7 +26,8 @@ source, so it runs only where the operator marked the machine inside the
 production boundary. Outside it, generate the `build` job (with
 `datadouble-build`) and let its first run plan on the production runner; the
 person can share the plan's output, which names tables and columns but never
-values.
+values. The first lock comes the same way, from the `lock` job (see
+re-locking below).
 
 ## When strict mode fails
 
@@ -35,6 +36,29 @@ each object and the ways to resolve it: anonymize it, exclude it, or accept
 it in the lock once someone has checked it holds no personal data. Show the
 person those options and let them choose (rule 4). `datadouble lock` records
 the current catalog after they have.
+
+## Re-locking
+
+`datadouble lock` reads the source, so it runs only inside the production
+boundary. It lists what changed since the lock it replaces: tables, columns,
+keys and requirements added, removed or changed (`changes` in `--json`;
+`null` for a first lock, where everything is new, and when the earlier lock
+cannot be read, which `unreadable` explains).
+
+- **No shell inside the boundary?** Re-lock through the CI `lock` job.
+  Generate it with the production jobs (`--job lock` in `datadouble-build`'s
+  `ci init`), and have the person start it by hand. It publishes the new
+  `catalog.lock` and `changes.txt` as the job's artifact (on Argo CD, in the
+  job's log) and never commits.
+- **The person reviews the diff, not you.** Each new or changed column in
+  `changes.txt` must be checked for personal data before the lock is
+  committed; one that holds any gets an anonymization rule or an exclude in
+  the spec first. Committing the lock without that check accepts every new
+  column as safe, which is what strict mode exists to prevent (rule 4).
+  Offer to walk through the list with them, then let them commit it beside
+  the spec.
+- A lock holds names, types and versions, never values, so the person may
+  share it or its changes with you.
 
 ## When tables have no rows selected
 

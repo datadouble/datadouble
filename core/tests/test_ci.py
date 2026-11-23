@@ -208,6 +208,33 @@ def test_sides(kinds: tuple[JobKind, ...], side: Side | None, problem: str) -> N
         side_of(kinds, side)
 
 
+def test_the_lock_job(tmp_path: Path) -> None:
+    spec = parse_spec(
+        SPEC.replace("STORE", str(tmp_path / "store")).replace(
+            "connection: {where: here}", "connection: {dsn: {env: SHOP_SOURCE_DSN}}"
+        )
+        + "secrets: {anonymization_key: {env: SHOP_KEY}}\n"
+    )
+    planned = pipeline(spec, options(JobKind.BUILD, JobKind.LOCK))
+    assert planned.side is Side.PRODUCTION
+    build, lock = planned.jobs
+    assert lock.kind is JobKind.LOCK
+    assert lock.triggers == (Trigger.MANUAL,)
+    assert lock.schedule is None
+    assert lock.invocations[0].arguments == (
+        "lock", "--spec", "datadouble/shop.yml", "--output", "datadouble-lock"
+    )  # fmt: skip
+    assert lock.artifacts == "datadouble-lock"
+    assert lock.environment == ("SHOP_SOURCE_DSN",)
+    assert lock.mounts == ()
+    assert "SHOP_KEY" in build.environment
+    assert build.artifacts is None
+    with pytest.raises(CiError, match="build, promote and lock run only inside"):
+        pipeline(spec, options(JobKind.LOCK, runner=None))
+    with pytest.raises(CiError, match="generate each side separately"):
+        side_of((JobKind.LOCK, JobKind.FETCH), None)
+
+
 def test_prune_alone_takes_a_side(tmp_path: Path) -> None:
     planned = pipeline(make_spec(tmp_path), options(JobKind.PRUNE, side=Side.NON_PRODUCTION))
     assert planned.side is Side.NON_PRODUCTION
@@ -455,6 +482,23 @@ def test_bridged_failures(tmp_path: Path, ci: FakeCi) -> None:
     assert ci.reports[-1][0].warnings == ()
     code, out = run("api", stdin='{"command": "nope"}')
     assert code == ExitCode.FAILURE
+
+
+@pytest.mark.usefixtures("registry")
+def test_bridged_lock(tmp_path: Path, ci: FakeCi) -> None:
+    spec = spec_with_secret(tmp_path)
+    code, out = run("--ci", "fake-ci", "lock", "--spec", str(spec))
+    assert code == ExitCode.SUCCESS, out
+    (report, _) = ci.reports[-1]
+    assert set(report.outputs) == {"outcome", "fingerprint"}
+    assert report.files == ()
+    review = tmp_path / "datadouble-lock"
+    code, out = run("--ci", "fake-ci", "lock", "--spec", str(spec), "--output", str(review))
+    assert code == ExitCode.SUCCESS, out
+    (report, _) = ci.reports[-1]
+    assert report.outputs["changes"] == "0"
+    assert report.files == (review / "catalog.lock", review / "changes.txt")
+    assert report.summary == out.rstrip("\n")
 
 
 def test_reports_carry_warnings(tmp_path: Path, registry: Registry) -> None:

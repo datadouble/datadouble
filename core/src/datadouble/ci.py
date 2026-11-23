@@ -44,6 +44,7 @@ class JobKind(StrEnum):
     RELEASE = "release"
     PRUNE = "prune"
     ACTIVATE = "activate"
+    LOCK = "lock"
 
 
 class Side(StrEnum):
@@ -107,6 +108,10 @@ class Job:
     """Host paths the job's container sees at the same path."""
     environment: tuple[str, ...] = ()
     """Environment variables the job reads secrets from, by name."""
+    artifacts: str | None = None
+    """A directory, relative to the workspace, the job writes files into for the CI system
+    to publish as the job's artifact. The adapter makes it writable by the job's user and
+    publishes it; the job never commits anything."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +174,9 @@ class Report(BaseModel):
     message: str | None = None
     """Why a request failed."""
     warnings: tuple[str, ...] = ()
+    files: tuple[Path, ...] = ()
+    """Files the command wrote for the job's artifact (the ``lock`` job's lock and changes),
+    for systems whose generated configuration cannot publish them (Argo CD prints them)."""
 
 
 class CiAdapter(Protocol):
@@ -229,7 +237,7 @@ def mask(value: str) -> None:
 
 IMAGE = "ghcr.io/datadouble/datadouble"
 """Where release images are published; tagged ``v<version>``."""
-PRODUCTION_JOBS = frozenset({JobKind.BUILD, JobKind.PROMOTE})
+PRODUCTION_JOBS = frozenset({JobKind.BUILD, JobKind.PROMOTE, JobKind.LOCK})
 NON_PRODUCTION_JOBS = frozenset(
     {JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.ACTIVATE}
 )
@@ -244,6 +252,7 @@ _SECTIONS: dict[tuple[JobKind, Side], tuple[str, ...]] = {
         "runtime",
     ),
     (JobKind.PROMOTE, Side.PRODUCTION): ("store", "promote", "trust"),
+    (JobKind.LOCK, Side.PRODUCTION): ("source",),
     (JobKind.PRUNE, Side.PRODUCTION): ("store", "promote"),
     (JobKind.FETCH, Side.NON_PRODUCTION): ("fetch", "trust"),
     (JobKind.PROVISION, Side.NON_PRODUCTION): ("fetch", "replicate", "announce", "runtime"),
@@ -257,6 +266,8 @@ _PRUNE_TARGETS = {Side.PRODUCTION: ("store", "export"), Side.NON_PRODUCTION: ("s
 _STAGES = "plan,extract,load,transform,package,verify,store"
 _HOST_PATH = re.compile(r"/[^\s*?\[\]{}:]+")
 _BUILD_MINUTES = 12 * 60
+LOCK_ARTIFACTS = "datadouble-lock"
+"""Where the ``lock`` job writes the new lock and its changes, in the workspace."""
 
 
 def side_of(kinds: Iterable[JobKind], side: Side | None) -> Side:
@@ -432,6 +443,16 @@ def _prune(context: _Context) -> Job:
     )
 
 
+def _lock(context: _Context) -> Job:
+    """Re-lock by hand: the new lock and its changes are published for review, never committed."""
+    return Job(
+        JobKind.LOCK,
+        (Trigger.MANUAL,),
+        (Invocation(("lock", "--spec", context.spec, "--output", LOCK_ARTIFACTS)),),
+        artifacts=LOCK_ARTIFACTS,
+    )
+
+
 def _activate(context: _Context) -> Job:
     return Job(
         JobKind.ACTIVATE,
@@ -449,6 +470,7 @@ _JOBS: dict[JobKind, Callable[[_Context], Job]] = {
     JobKind.RELEASE: _release,
     JobKind.PRUNE: _prune,
     JobKind.ACTIVATE: _activate,
+    JobKind.LOCK: _lock,
 }
 
 
@@ -483,8 +505,8 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     chosen = frozenset(options.kinds)
     if side is Side.PRODUCTION and not options.runner:
         message = (
-            "build and promote run only inside the production boundary; name the runner"
-            " they run on (decision 19)"
+            "build, promote and lock run only inside the production boundary; name the"
+            " runner they run on (decision 19)"
         )
         raise CiError(message)
     extra: list[Path] = []

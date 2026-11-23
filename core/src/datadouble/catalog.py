@@ -6,8 +6,15 @@
 An engine adapter introspects a source into a :class:`Catalog`: its tables,
 columns, primary keys and foreign keys, and the add-ons the source depends on
 (its :class:`Requirement` list). ``datadouble lock`` writes the catalog
-to ``catalog.lock`` next to the spec, and strict mode compares the live catalog
-against it at plan time.
+to ``catalog.lock`` next to the spec, listing what changed since the lock it
+replaces (:func:`changes`), and strict mode compares the live catalog against
+it at plan time.
+
+A lock holds names, engine type names, keys and requirement versions, never
+data values, so it may be published where data may not (decision 123). An
+engine's type name can carry schema literals, such as a MySQL ``enum`` or
+``set`` column's labels; they are part of the schema, already in the
+committed lock, so publishing the lock exposes nothing more.
 """
 
 import hashlib
@@ -207,3 +214,274 @@ def read_lock(path: Path) -> CatalogLock:
         message = f"{path} has been edited by hand: its fingerprint does not match its contents"
         raise CatalogError(message)
     return lock
+
+
+class Change(StrEnum):
+    """How an object differs between two locks."""
+
+    ADDED = "added"
+    REMOVED = "removed"
+    CHANGED = "changed"
+
+
+class ObjectKind(StrEnum):
+    """The kinds of object a lock records."""
+
+    TABLE = "table"
+    COLUMN = "column"
+    PRIMARY_KEY = "primary-key"
+    FOREIGN_KEY = "foreign-key"
+    REQUIREMENT = "requirement"
+    CATALOG = "catalog"
+    """The catalog as a whole: its engine, or a difference nothing else names."""
+
+
+class LockChange(_Model):
+    """One difference between an earlier lock and a new one: names and types, never values."""
+
+    change: Change
+    kind: ObjectKind
+    object: str
+    """``public.customer``, ``public.customer.email``, ``public.orders fk_customer``..."""
+    detail: str = ""
+    """The type, key or version, and what it was for a change."""
+
+    def __str__(self) -> str:
+        """``added column public.customer.phone: text null``."""
+        text = f"{self.change} {self.kind} {self.object}"
+        return f"{text}: {self.detail}" if self.detail else text
+
+
+def _column(column: Column) -> str:
+    return f"{column.type} ({column.kind}) {'null' if column.nullable else 'not null'}"
+
+
+def _key(columns: tuple[ColumnName, ...]) -> str:
+    return f"({', '.join(columns)})"
+
+
+def _reference(key: ForeignKey) -> str:
+    return f"{_key(key.columns)} -> {key.target}{_key(key.target_columns)}"
+
+
+def _was(old: str, new: str) -> str:
+    return f"{new}, was {old}"
+
+
+def _added_table(table: Table) -> list[LockChange]:
+    """A new table, each of its columns and its keys: every new column is someone's to check."""
+    found = [LockChange(change=Change.ADDED, kind=ObjectKind.TABLE, object=str(table.name))]
+    found.extend(
+        LockChange(
+            change=Change.ADDED,
+            kind=ObjectKind.COLUMN,
+            object=f"{table.name}.{column.name}",
+            detail=_column(column),
+        )
+        for column in table.columns
+    )
+    if table.primary_key:
+        found.append(
+            LockChange(
+                change=Change.ADDED,
+                kind=ObjectKind.PRIMARY_KEY,
+                object=str(table.name),
+                detail=_key(table.primary_key),
+            )
+        )
+    found.extend(
+        LockChange(
+            change=Change.ADDED,
+            kind=ObjectKind.FOREIGN_KEY,
+            object=f"{table.name} {key.name}",
+            detail=_reference(key),
+        )
+        for key in sorted(table.foreign_keys, key=lambda key: key.name)
+    )
+    return found
+
+
+def _order(old: Table, new: Table) -> list[LockChange]:
+    """The order of the columns both locks have, which is part of a table's definition."""
+    kept = {column.name for column in old.columns} & {column.name for column in new.columns}
+    before = tuple(column.name for column in old.columns if column.name in kept)
+    after = tuple(column.name for column in new.columns if column.name in kept)
+    if before == after:
+        return []
+    return [
+        LockChange(
+            change=Change.CHANGED,
+            kind=ObjectKind.TABLE,
+            object=str(new.name),
+            detail=f"column order {_was(_key(before), _key(after))}",
+        )
+    ]
+
+
+def _columns(old: Table, new: Table) -> list[LockChange]:
+    found: list[LockChange] = []
+    before = {column.name: column for column in old.columns}
+    after = {column.name: column for column in new.columns}
+    for column in old.columns:
+        name = f"{new.name}.{column.name}"
+        current = after.get(column.name)
+        if current is None:
+            found.append(LockChange(change=Change.REMOVED, kind=ObjectKind.COLUMN, object=name))
+        elif current != column:
+            detail = _was(_column(column), _column(current))
+            found.append(
+                LockChange(
+                    change=Change.CHANGED, kind=ObjectKind.COLUMN, object=name, detail=detail
+                )
+            )
+    found.extend(
+        LockChange(
+            change=Change.ADDED,
+            kind=ObjectKind.COLUMN,
+            object=f"{new.name}.{column.name}",
+            detail=_column(column),
+        )
+        for column in new.columns
+        if column.name not in before
+    )
+    return found
+
+
+def _keys(old: Table, new: Table) -> list[LockChange]:
+    found: list[LockChange] = []
+    if old.primary_key != new.primary_key:
+        found.append(
+            LockChange(
+                change=Change.CHANGED,
+                kind=ObjectKind.PRIMARY_KEY,
+                object=str(new.name),
+                detail=_was(_key(old.primary_key), _key(new.primary_key)),
+            )
+        )
+    before = {key.name: key for key in old.foreign_keys}
+    after = {key.name: key for key in new.foreign_keys}
+    for name in sorted(before.keys() | after.keys()):
+        old_key, new_key = before.get(name), after.get(name)
+        what = f"{new.name} {name}"
+        if new_key is None:
+            found.append(
+                LockChange(change=Change.REMOVED, kind=ObjectKind.FOREIGN_KEY, object=what)
+            )
+        elif old_key is None:
+            found.append(
+                LockChange(
+                    change=Change.ADDED,
+                    kind=ObjectKind.FOREIGN_KEY,
+                    object=what,
+                    detail=_reference(new_key),
+                )
+            )
+        elif old_key != new_key:
+            found.append(
+                LockChange(
+                    change=Change.CHANGED,
+                    kind=ObjectKind.FOREIGN_KEY,
+                    object=what,
+                    detail=_was(_reference(old_key), _reference(new_key)),
+                )
+            )
+    return found
+
+
+def _requirements(old: Catalog, new: Catalog) -> list[LockChange]:
+    found: list[LockChange] = []
+    before = {(r.kind, r.name): r for r in old.requirements}
+    after = {(r.kind, r.name): r for r in new.requirements}
+    for key in sorted(before.keys() | after.keys()):
+        earlier, current = before.get(key), after.get(key)
+        what = f"{key[0]} {key[1]}"
+        if current is None:
+            found.append(
+                LockChange(change=Change.REMOVED, kind=ObjectKind.REQUIREMENT, object=what)
+            )
+        elif earlier is None:
+            found.append(
+                LockChange(
+                    change=Change.ADDED,
+                    kind=ObjectKind.REQUIREMENT,
+                    object=what,
+                    detail=current.version or "",
+                )
+            )
+        elif earlier.version != current.version:
+            found.append(
+                LockChange(
+                    change=Change.CHANGED,
+                    kind=ObjectKind.REQUIREMENT,
+                    object=what,
+                    detail=_was(earlier.version or "no version", current.version or "no version"),
+                )
+            )
+    return found
+
+
+def changes(old: Catalog, new: Catalog) -> tuple[LockChange, ...]:
+    """What ``new`` adds, removes and changes against ``old``, table by table."""
+    found: list[LockChange] = []
+    old_tables = {table.name: table for table in old.tables}
+    new_tables = {table.name: table for table in new.tables}
+    for name in sorted(old_tables.keys() | new_tables.keys()):
+        before, after = old_tables.get(name), new_tables.get(name)
+        if after is None:
+            found.append(LockChange(change=Change.REMOVED, kind=ObjectKind.TABLE, object=str(name)))
+        elif before is None:
+            found.extend(_added_table(after))
+        else:
+            found.extend(_columns(before, after))
+            found.extend(_order(before, after))
+            found.extend(_keys(before, after))
+    found.extend(_requirements(old, new))
+    if old.engine != new.engine:
+        found.append(
+            LockChange(
+                change=Change.CHANGED,
+                kind=ObjectKind.CATALOG,
+                object="engine",
+                detail=_was(old.engine, new.engine),
+            )
+        )
+    if not found and old.fingerprint() != new.fingerprint():
+        found.append(
+            LockChange(
+                change=Change.CHANGED,
+                kind=ObjectKind.CATALOG,
+                object="fingerprint",
+                detail=(
+                    "the locks differ, though in no table, column, key or requirement;"
+                    " compare the two files"
+                ),
+            )
+        )
+    return tuple(found)
+
+
+def describe_changes(
+    changes: tuple[LockChange, ...] | None, unreadable: str | None = None
+) -> tuple[str, ...]:
+    """The changes as lines for people: the CLI summary and the lock job's ``changes.txt``.
+
+    ``unreadable`` is why an earlier lock could not be read, when that is why
+    there are no changes to list.
+    """
+    if unreadable is not None:
+        problem = (
+            f"the earlier lock could not be read ({unreadable}): check every table and column"
+            " in the new one for personal data"
+        )
+        return (problem,)
+    if changes is None:
+        return (
+            "no earlier lock to compare with: check every table and column in it for personal data",
+        )
+    if not changes:
+        return ("no changes from the earlier lock",)
+    heading = (
+        f"{len(changes)} change(s) from the earlier lock; check new and changed columns"
+        " for personal data:"
+    )
+    return (heading, *(f"  {change}" for change in changes))

@@ -10,7 +10,9 @@ the spec names. At run time the adapter writes step outputs and the job
 summary into a directory the action hands on to ``GITHUB_OUTPUT`` and
 ``GITHUB_STEP_SUMMARY``, prints warning and error annotations, and masks
 resolved secrets with ``add-mask``. A warning is a warning annotation on a
-passing step, since GitHub Actions has no unstable state.
+passing step, since GitHub Actions has no unstable state. The ``lock`` job's
+new lock and changes are uploaded as the run's artifact with
+``actions/upload-artifact``.
 """
 
 import os
@@ -42,6 +44,9 @@ ACTION = "datadouble/datadouble/ci/github-actions"
 """The action generated workflows use, at the release tag of the Datadouble that wrote them."""
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 CHECKOUT_VERSION = "v7.0.1"
+UPLOAD = "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+UPLOAD_VERSION = "v4.6.2"
+"""The v4 line, which ``act``'s artifact server (the conformance suite) accepts."""
 _HOSTED_LABEL = re.compile(r"(ubuntu|windows|macos)-[\w.-]+")
 """GitHub's own runner labels, such as ``ubuntu-latest``."""
 _EVENTS = {
@@ -105,7 +110,7 @@ def _runs_on(pipeline: Pipeline) -> JsonValue:
     if hosted:
         message = (
             f"{', '.join(hosted)} is a GitHub-hosted runner; Datadouble's jobs need runners"
-            " that keep their files, and build and promote need runners inside the"
+            " that keep their files, and build, promote and lock need runners inside the"
             " production boundary (decision 19)"
         )
         raise CiError(message)
@@ -161,6 +166,8 @@ def _step(pipeline: Pipeline, job: Job, invocation: Invocation) -> dict[str, Jso
         inputs["mounts"] = _lines(job.mounts)
     if job.environment:
         inputs["environment"] = _lines(job.environment)
+    if job.artifacts is not None:
+        inputs["artifacts"] = job.artifacts
     inputs["arguments"] = _lines(tuple(_argument(a) for a in invocation.arguments))
     step["with"] = inputs
     return step
@@ -185,6 +192,19 @@ def _workflow(pipeline: Pipeline, job: Job) -> dict[str, JsonValue]:
     checkout: dict[str, JsonValue] = {"uses": CHECKOUT, "with": {"persist-credentials": False}}
     steps: list[JsonValue] = [checkout]
     steps.extend(_step(pipeline, job, invocation) for invocation in job.invocations)
+    if job.artifacts is not None:
+        # The files a person reviews (the lock job's new lock and its changes);
+        # never data, and never committed.
+        upload: dict[str, JsonValue] = {
+            "name": f"publish {job.artifacts}",
+            "uses": UPLOAD,
+            "with": {
+                "name": f"datadouble-{pipeline.name}-{_stem(pipeline, job.kind)}",
+                "path": f"{job.artifacts}/",
+                "if-no-files-found": "error",
+            },
+        }
+        steps.append(upload)
     body["steps"] = steps
     return {
         "name": _workflow_name(pipeline, job.kind),
@@ -218,6 +238,7 @@ def render(pipeline: Pipeline, job: Job) -> str:
     # PyYAML quotes `on`, a boolean in YAML 1.1; GitHub reads either form.
     text = text.replace("'on':", "on:", 1).replace("workflow_dispatch: null", "workflow_dispatch:")
     text = text.replace(f"uses: {CHECKOUT}\n", f"uses: {CHECKOUT} # {CHECKOUT_VERSION}\n")
+    text = text.replace(f"uses: {UPLOAD}\n", f"uses: {UPLOAD} # {UPLOAD_VERSION}\n")
     # The job a workflow_run follows is never started by a pull request, and the
     # follower checks out the default branch without credentials.
     text = text.replace(

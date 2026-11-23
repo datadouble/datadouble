@@ -59,7 +59,7 @@ def planned(
 
 ON_DEMAND = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
 SCENARIOS = {
-    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE),
+    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(*ON_DEMAND, runner="staging,linux"),
     "pool": planned(
         JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, mode="pool", runner="staging"

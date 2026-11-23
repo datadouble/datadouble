@@ -38,6 +38,13 @@ done <<< "${DATADOUBLE_MOUNTS:-}"
 while IFS= read -r name; do
     if [ -n "$name" ]; then options+=(--env "$name"); fi
 done <<< "${DATADOUBLE_ENVIRONMENT:-}"
+# A directory for files the step archives, such as the lock job's new lock:
+# emptied of an earlier build's files, and writable by the engine's user.
+if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
+    rm -rf "${WORKSPACE:?}/$DATADOUBLE_ARTIFACTS"
+    mkdir -p "$WORKSPACE/$DATADOUBLE_ARTIFACTS"
+    chmod 0777 "$WORKSPACE/$DATADOUBLE_ARTIFACTS"
+fi
 
 status=0
 docker run "${options[@]}" "$DATADOUBLE_IMAGE" \

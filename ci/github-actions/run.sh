@@ -40,6 +40,13 @@ done <<< "$DATADOUBLE_MOUNTS"
 while IFS= read -r name; do
     if [ -n "$name" ]; then options+=(--env "$name"); fi
 done <<< "$DATADOUBLE_ENVIRONMENT"
+# A directory for files the workflow publishes, such as the lock job's new
+# lock: emptied of an earlier run's files, and writable by the engine's user.
+if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
+    rm -rf "${GITHUB_WORKSPACE:?}/$DATADOUBLE_ARTIFACTS"
+    mkdir -p "$GITHUB_WORKSPACE/$DATADOUBLE_ARTIFACTS"
+    chmod 0777 "$GITHUB_WORKSPACE/$DATADOUBLE_ARTIFACTS"
+fi
 
 status=0
 docker run "${options[@]}" "$DATADOUBLE_IMAGE" \

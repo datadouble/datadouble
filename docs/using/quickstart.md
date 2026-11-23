@@ -71,7 +71,10 @@ datadouble run plan,extract,load,transform,package,verify,store \
 
 The lock goes beside the spec by default; here it goes where Datadouble's
 user can write it. `lock` records the catalog, so a new table or column later fails the plan
-until someone decides what to do with it (strict mode). `run` prints each
+until someone decides what to do with it (strict mode). Running `lock` again
+lists what changed since the last lock, for someone to check for personal
+data; in CI, the manual `lock` job does this and publishes the result for
+review. `run` prints each
 stage, the verification result, and where it stored the image:
 `/var/tmp/shop/store/shop/all/postgres-18/`.
 

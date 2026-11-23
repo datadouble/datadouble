@@ -21,10 +21,13 @@ here happens inside the production boundary.
 
 ```
 datadouble ci init --system <github-actions|gitlab|jenkins|argocd> \
-    --job build,promote,prune --spec <spec> --runner <runner> --work <dir>
+    --job build,promote,prune,lock --spec <spec> --runner <runner> --work <dir>
 ```
 
-Generate `promote` with it, so it follows a successful build. Add `--env
+Generate `promote` with it, so it follows a successful build. `lock` is a
+manual job on the same runner, with only the source's secrets: it re-locks
+the catalog and publishes the new lock and its changes for review, never
+committing them (see `datadouble-spec`). Add `--env
 NAME` for credentials an adapter reads from the environment rather than the
 spec, such as `AWS_ACCESS_KEY_ID` for an S3 store.
 

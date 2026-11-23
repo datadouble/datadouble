@@ -6,7 +6,7 @@
 #     - local: .gitlab/datadouble-shop-non-production.yml
 include:
 - remote: https://raw.githubusercontent.com/datadouble/datadouble/v1.2.3/ci/gitlab/src/datadouble_gitlab/datadouble.yml
-  integrity: sha256-gvFSahh6oPkFhDzL3iAAwYGo3d27vGGRcuNYzDZUBng=
+  integrity: sha256-/Xvpogkc6/qLiF6d8oiXCYS5mAiY1sYwhlkFSRimoJU=
 variables:
   DATADOUBLE_JOB:
     value: ''

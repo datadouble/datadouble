@@ -410,7 +410,7 @@ class ArgoCdOnKind:
         return self._finished(world.namespace, name)
 
     def _release(self, repository: Path, job: str) -> str:
-        production = {"build", "promote", "prune-production"}
+        production = {"build", "promote", "prune-production", "lock"}
         spec = yaml.safe_load(self._spec(repository).read_text("utf-8"))
         side = Side.PRODUCTION if job in production else Side.NON_PRODUCTION
         return f"{spec['name']}-{side}"
@@ -556,6 +556,11 @@ class ArgoCdOnKind:
 
     def uploaded(self) -> list[Path]:
         return []
+
+    @property
+    def artifact_storage(self) -> bool:
+        """Kubernetes keeps no job artifacts: the lock job prints its files to the log."""
+        return False
 
 
 def _mounts_lock(cronjobs: JsonValue, prefix: str) -> bool:

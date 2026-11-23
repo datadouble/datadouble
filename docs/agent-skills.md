@@ -52,8 +52,8 @@ One skill per job, one for the spec, and one for a whole pipeline:
 | Skill | Sets up | Main commands it drives |
 |---|---|---|
 | `datadouble-pipeline` | A complete pipeline, end to end, by running the skills below in order | All of them |
-| `datadouble-spec` | The spec: sources, subset (native or from a Jailer model), excludes, anonymization, hooks, verification checks | `plan --estimate`, Jailer conversion |
-| `datadouble-build` | The `build` job on a production runner, with its scratch work directory and storage | `ci init --job build` |
+| `datadouble-spec` | The spec: sources, subset (native or from a Jailer model), excludes, anonymization, hooks, verification checks, and re-locking through the `lock` job with its changes reviewed for personal data | `plan --estimate`, Jailer conversion, `lock` |
+| `datadouble-build` | The `build` job on a production runner, with its scratch work directory and storage, and the manual `lock` job | `ci init --job build,lock` |
 | `datadouble-promote` | The export store and the `promote` job, with its verification and strict-mode requirements | `ci init --job promote` |
 | `datadouble-fetch` | Non-production staging and the `fetch` job | `ci init --job fetch` |
 | `datadouble-provision` | `replicate` and `announce`: pool or on-demand mode, clone kind, announce targets | `ci init --job provision` |

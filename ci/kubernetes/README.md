@@ -7,7 +7,7 @@ The Argo CD CI/CD adapter for
 ## Writing Applications
 
 ```
-datadouble ci init --system argocd --job build,promote,prune \
+datadouble ci init --system argocd --job build,promote,prune,lock \
     --spec datadouble/shop.yml --runner datadouble-prod --work /srv/datadouble/work
 datadouble ci init --system argocd --job fetch,provision,release,prune,activate \
     --spec datadouble/shop.yml --runner datadouble-dev
@@ -41,6 +41,20 @@ job's pod, so `promote` runs after a successful `build`, and a pool's
 A retried pod keeps its Job's name, which is the run's retry key, so a build
 that fails part way resumes on Kubernetes' own retry.
 
+## Re-locking the catalog
+
+The `lock` job (`--job lock`, on the production side with `build`) has no
+schedule; start it with `kubectl create job
+--from=cronjob/datadouble-<spec>-production-lock`. It runs `datadouble lock
+--output datadouble-lock`, into an `emptyDir`, against the lock in the
+Application's values. Kubernetes keeps no job artifacts, so the job prints
+the new `catalog.lock` and `changes.txt` to its log (`kubectl logs`), each
+after a `==> <path> <==` line, and its termination message carries
+`fingerprint` and `changes`, their number. It never commits: check every new
+or changed column for personal data, commit `catalog.lock` beside the spec,
+and generate the Application again so its values carry the new lock. A lock
+holds names, types and versions, never values (decision 123).
+
 ## On-demand copies
 
 A request's copies are Argo CD hooks. An Application whose values set
@@ -72,5 +86,5 @@ spec:
 
 A Kubernetes Job succeeds or fails; it has no warning state. A warning
 succeeds and says so in the log and in the container's termination message,
-which holds the outputs (`outcome`, `generation`, `error`). Nothing is kept
-anywhere else.
+which holds the outputs (`outcome`, `generation`, `error`; `fingerprint` and
+`changes` for `lock`). Nothing is kept anywhere else.

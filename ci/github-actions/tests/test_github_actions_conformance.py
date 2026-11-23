@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import tempfile
+import zipfile
 from collections.abc import Generator, Mapping
 from pathlib import Path
 
@@ -158,7 +159,20 @@ class Act:
         return RUNNERS[side]
 
     def uploaded(self) -> list[Path]:
-        return sorted(path for path in self.artifacts.rglob("*") if path.is_file())
+        """Every file in the artifact server, and the files inside the archives it holds."""
+        found: list[Path] = []
+        for path in sorted(self.artifacts.rglob("*")):
+            if not path.is_file():
+                continue
+            found.append(path)
+            if zipfile.is_zipfile(path):
+                with zipfile.ZipFile(path) as archive:
+                    found.extend(Path(name) for name in archive.namelist())
+        return found
+
+    @property
+    def artifact_storage(self) -> bool:
+        return True
 
 
 @pytest.fixture
