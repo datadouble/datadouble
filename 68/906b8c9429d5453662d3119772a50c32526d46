@@ -1,0 +1,50 @@
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_9cecf6060a867b 418,465-469
+conformance/src/datadouble_conformance/kind.py
+  s_ad63f2bf16b775::t_66d7a4aaaf9d80 1-164
+CHANGELOG.md
+  s_ad63f2bf16b775::t_1289e7d8f7eaed 27-37
+ci/jenkins/tests/test_jenkins_kubernetes_conformance.py
+  s_ad63f2bf16b775::t_67323b06e41f79 408-429
+  s_ad63f2bf16b775::t_353723de18ce52 1-407
+  s_ad63f2bf16b775::t_46525368ac3624 430-506
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_2569e2846d461c 22,45,108,220-223,226,228,277,364,374,419
+conformance/tests/test_kind.py
+  s_ad63f2bf16b775::t_f6c3bc70ead02a 1-92
+  s_ad63f2bf16b775::t_60be0ba0be1187 93-103
+TESTING.md
+  s_ad63f2bf16b775::t_f811efffdfdc80 28
+ci/jenkins/tests/test_jenkins_conformance.py
+  s_ad63f2bf16b775::t_24ec3b42183628 27,82-87,106-107,155-167,171,179-185,187-190,192,195,200-204,218-224,245,263,296-303,319,384,404-406,410
+ci/gitlab/tests/test_gitlab_conformance.py
+  s_ad63f2bf16b775::t_09fed100ce141c 297-300
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_3236b26b4cf916 166-181
+Makefile
+  s_ad63f2bf16b775::t_cfaf13b8989961 50,113-116,119-120,127
+ci/github-actions/tests/test_github_actions_conformance.py
+  s_ad63f2bf16b775::t_31138c6fc772fb 80-83
+.github/workflows/ci.yml
+  s_ad63f2bf16b775::t_50ccb220962ff9 271-273,280
+conformance/src/datadouble_conformance/ci.py
+  s_ad63f2bf16b775::t_607170d3d5e356 173-177,311,370,378,380,386-388,479,518
+pyproject.toml
+  s_ad63f2bf16b775::t_527c264103d8ed 181,237,289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "68906b8c9429d5453662d3119772a50c32526d46",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
