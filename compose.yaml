@@ -174,7 +174,7 @@ services:
   # OpenBao (API-compatible with HashiCorp Vault) in dev mode, for the vault
   # announce adapter. Dev mode keeps everything in memory, with a fixed token.
   vault:
-    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    image: openbao/openbao:2.7.3@sha256:ba4b133eb9586630024e71a617e66f37f29cc3534cdd46a6233e098ceded8dc9
     command: ["server", "-dev", "-dev-root-token-id=datadouble-test", "-dev-listen-address=0.0.0.0:8200"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
