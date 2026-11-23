@@ -314,6 +314,19 @@ def test_fetch_skips_when_nothing_is_newer(tmp_path: Path, registry: Registry) -
     assert again.generation == "0000000000010001"
 
 
+def test_staging_channels_stay_private(tmp_path: Path, registry: Registry) -> None:
+    spec = promoted(tmp_path, registry, "0000000000010001")
+    previous = os.umask(0o022)
+    try:
+        fetch(spec, registry)
+    finally:
+        os.umask(previous)
+    assert Staging(settings(spec)).store.mode == 0o600
+    files = list((tmp_path / "staging" / PREFIX / "channels").iterdir())
+    assert files
+    assert {path.stat().st_mode & 0o777 for path in files} == {0o600}
+
+
 def test_fetch_keeps_the_newest_and_activate_rolls_back(tmp_path: Path, registry: Registry) -> None:
     spec = promoted(tmp_path, registry, "0000000000010001")
     fetch(spec, registry)

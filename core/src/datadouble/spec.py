@@ -615,9 +615,11 @@ class Promote(_Model):
     """Where ``promote`` copies verified images, and what it requires of them."""
 
     to: tuple[AdapterSettings, ...] = Field(min_length=1)
-    """The export stores, one adapter each, such as ``{filesystem: ...}`` or ``{s3: ...}``.
-    Each also gets an index of its images per group (``<spec>/<group>/index.json``), which
-    stores that cannot list keys, like ``http``, are read through."""
+    """The export stores, one adapter each, such as ``{filesystem: ...}`` or ``{s3: ...}``;
+    a filesystem store's ``mode`` (``"0640"`` by default) decides who can read the files,
+    such as a web server serving them. Each also gets an index of its images per group
+    (``<spec>/<group>/index.json``), which stores that cannot list keys, like ``http``, are
+    read through."""
     channel: str = "latest"
     strict: Strict = Strict()
     """The least strict level, per kind, an image may have been built with."""
@@ -866,7 +868,11 @@ class Spec(_Model):
     which reaches another cluster through ``kubeconfig``, a secret reference."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     """Where images are stored after the build, one adapter each: ``{filesystem: ...}``,
-    ``{s3: ...}``."""
+    ``{s3: ...}``. The filesystem store takes ``path``, a directory, and ``mode``, an octal
+    string (``"0640"`` by default) every file it writes gets whatever the umask; directories
+    it creates get ``mode`` plus the search bit wherever it has the read bit (``0750``).
+    Modes that let anyone but the owner write, or the owner not read and write, are
+    refused."""
     signing: Signing | None = None
     """How the build signs its images."""
     trust: Trust | None = None

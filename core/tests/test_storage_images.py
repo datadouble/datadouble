@@ -1,8 +1,12 @@
 # Copyright (c) 2026- Tight Line LLC
 # SPDX-License-Identifier: MIT
 
+import errno
 import io
+import os
+import stat
 import tarfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -26,6 +30,7 @@ from datadouble.storage import (
     FilesystemStore,
     StoreError,
     check_key,
+    directory_mode,
     filesystem_store,
 )
 from fakes import Unlisted
@@ -67,6 +72,106 @@ def test_filesystem_settings(tmp_path: Path) -> None:
     assert isinstance(filesystem_store({"path": str(tmp_path)}), FilesystemStore)
     with pytest.raises(SettingsError, match="filesystem store settings are invalid: path"):
         filesystem_store({"path": 3})
+
+
+@pytest.fixture
+def restrictive_umask() -> Iterator[None]:
+    previous = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(previous)
+
+
+def _mode(path: Path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
+
+
+@pytest.mark.usefixtures("restrictive_umask")
+def test_the_default_mode(tmp_path: Path) -> None:
+    store = filesystem_store({"path": str(tmp_path / "store")})
+    store.put_bytes("shop/all/one.json", b"{}")
+    source = tmp_path / "source"
+    source.write_bytes(b"image")
+    store.put_file("shop/all/two.tar.gz", source)
+    assert _mode(tmp_path / "store/shop/all/one.json") == 0o640
+    assert _mode(tmp_path / "store/shop/all/two.tar.gz") == 0o640
+    for directory in ("store", "store/shop", "store/shop/all"):
+        assert _mode(tmp_path / directory) == 0o750
+
+
+@pytest.mark.usefixtures("restrictive_umask")
+@pytest.mark.parametrize(
+    ("mode", "file", "directory"),
+    [("0644", 0o644, 0o755), ("600", 0o600, 0o700), ("0604", 0o604, 0o705), ("0740", 0o740, 0o750)],
+)
+def test_an_explicit_mode(tmp_path: Path, mode: str, file: int, directory: int) -> None:
+    store = filesystem_store({"path": str(tmp_path / "store"), "mode": mode})
+    store.put_bytes("a/b", b"one")
+    store.put_bytes("a/b", b"two")
+    assert _mode(tmp_path / "store/a/b") == file
+    assert _mode(tmp_path / "store/a") == directory
+    assert _mode(tmp_path / "store") == directory
+
+
+@pytest.mark.usefixtures("restrictive_umask")
+def test_directories_that_exist_keep_their_mode(tmp_path: Path) -> None:
+    (tmp_path / "store").mkdir(mode=0o700)
+    store = filesystem_store({"path": str(tmp_path / "store"), "mode": "0644"})
+    store.put_bytes("a/b", b"one")
+    assert _mode(tmp_path / "store") == 0o700
+    assert _mode(tmp_path / "store/a") == 0o755
+
+
+def test_directory_modes() -> None:
+    assert directory_mode(0o640) == 0o750
+    assert directory_mode(0o644) == 0o755
+    assert directory_mode(0o600) == 0o700
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "0660",
+        "0646",
+        "0666",
+        "0400",
+        "0200",
+        "0040",
+        "1640",
+        "4640",
+        "640 ",
+        "0o640",
+        "0x1a0",
+        "",
+        "0648",
+        "0640\n",
+    ],
+)
+def test_refused_modes(tmp_path: Path, mode: str) -> None:
+    with pytest.raises(SettingsError, match="filesystem store settings are invalid: mode"):
+        filesystem_store({"path": str(tmp_path), "mode": mode})
+
+
+def test_a_mode_that_cannot_be_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "a").mkdir()
+    store = FilesystemStore(tmp_path)
+
+    def refuse(*_: object) -> None:
+        raise PermissionError(errno.EPERM, os.strerror(errno.EPERM))
+
+    monkeypatch.setattr(Path, "chmod", refuse)
+    with pytest.raises(
+        StoreError,
+        match=r"cannot set the mode of a/b in filesystem:.*: Operation not permitted",
+    ):
+        store.put_bytes("a/b", b"data")
+    assert list((tmp_path / "a").iterdir()) == []
+
+
+def test_a_mode_must_be_a_string(tmp_path: Path) -> None:
+    with pytest.raises(SettingsError, match="filesystem store settings are invalid: mode"):
+        filesystem_store({"path": str(tmp_path), "mode": 0o640})
 
 
 def test_pack_and_unpack(tmp_path: Path) -> None:
