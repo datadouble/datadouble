@@ -166,6 +166,7 @@ class PvReplicator:
                 "engine": identity.engine,
                 "engine-version": identity.engine_version,
                 "generation": identity.generation,
+                **({"server-version": summary.server_version} if summary.server_version else {}),
             }
         )
         volume: dict[str, JsonValue] = {

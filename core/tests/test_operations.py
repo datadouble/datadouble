@@ -657,6 +657,17 @@ def test_signing_payload_ignores_the_signature(tmp_path: Path) -> None:
     )
 
 
+def test_summaries_signed_before_later_fields_still_verify(tmp_path: Path) -> None:
+    summary = build(tmp_path, "0000000000010001").model_copy(update={"server_version": None})
+    # A summary written before server_version existed: its JSON has no such key.
+    old = summary.model_dump(mode="json", exclude={"server_version"})
+    old["signature"] = None
+    signed_then = json.dumps(old, sort_keys=True, separators=(",", ":")).encode()
+    assert payload(ImageSummary.model_validate_json(json.dumps(old))) == signed_then
+    newer = summary.model_copy(update={"server_version": "1.0.3"})
+    assert b'"server_version":"1.0.3"' in payload(newer)
+
+
 def test_cosign_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     summary = build(tmp_path, "0000000000010001", signed=False)
     monkeypatch.delenv("DATADOUBLE_COSIGN")

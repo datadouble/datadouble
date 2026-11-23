@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from typing import assert_never
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from datadouble import jailer
 from datadouble.catalog import (
@@ -73,6 +73,10 @@ class Capabilities(BaseModel):
     complete: bool = False
     """Whether every table must be seeded or excluded, as a file tree's top-level
     directories must be: nothing in the source goes unconsidered."""
+    version_line: int = Field(default=1, ge=1)
+    """How many leading numbers of a server version name its compatibility line:
+    1 for PostgreSQL (``17``), 2 for MySQL (``8.4``), whose minor releases change
+    what a data directory holds."""
 
 
 class PlanError(Exception):

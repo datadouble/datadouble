@@ -79,8 +79,13 @@ class RedisEngine:
 
     def capabilities(self) -> Capabilities:
         """Physical images and Lua expressions; no nested strategy or hooks."""
+        # Each minor release (7.2, 7.4) may write an RDB version older servers refuse.
         return Capabilities(
-            formats=(ImageFormat.PHYSICAL,), expressions=True, nested=False, hooks=False
+            formats=(ImageFormat.PHYSICAL,),
+            expressions=True,
+            nested=False,
+            hooks=False,
+            version_line=2,
         )
 
     @contextmanager

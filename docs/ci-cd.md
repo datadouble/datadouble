@@ -82,10 +82,30 @@ that GitLab `allow_failure: exit_codes` recognizes).
 ### Image identity, channels and image summaries
 
 An image is identified by spec name, image group (see
-[golden images](architecture.md#golden-images)), engine, target engine version
-and a **generation** (a unique ID assigned at build, shared by every image from
-that build). Consumers usually select by
-engine and engine version, since a copy must be started by a compatible server.
+[golden images](architecture.md#golden-images)), engine, the engine's
+**compatibility line** and a **generation** (a unique ID assigned at build,
+shared by every image from that build). Consumers usually select by engine and
+line, since a copy must be started by a compatible server.
+
+The line is the part of the server version that decides which servers can
+open a copy, and each engine adapter says how much of the version that is
+(decision 120): the major version for PostgreSQL (`17`), SQL Server (`16`,
+whose images are tagged by year, `2022`) and Oracle (`23`); the major and
+minor for MySQL (`8.4`, since 8.0 cannot open what 8.4 wrote), MongoDB
+(`8.0`), Redis (`7.4`, each minor writing its own RDB version), and
+Elasticsearch and OpenSearch (`8.15`, since a snapshot restores only on the
+same or a later minor). A build uses the source's exact version, so when the
+source is upgraded within a line, the next image simply joins it; an upgrade
+to a new line starts a new series of images. The image summary records the
+exact version too (`server_version`).
+
+A consumer serving a copy needs a server of the copy's line, at least as new
+as the copy's `server_version`: the newest release of the line opens what
+older ones wrote. Where the vendor publishes a tag for the line (`postgres:17`,
+`mysql:8.4`, `redis:7.4`, `mongo:8.0`, `opensearchproject/opensearch:2`), that
+tag does; elsewhere, use the newest exact release. Oracle copies are the
+exception: a pluggable database plugs cleanly only into the release update
+that wrote it, so serve them with exactly `server_version`.
 
 Every store holds, next to each image, a small **image summary**: a few
 kilobytes with the image's identity, build time, content hashes, verification
@@ -158,7 +178,7 @@ In pool mode, consumers outside Kubernetes take a copy with `datadouble claim
 
 `announce` lets consumers know where database clones can be accessed, either as volumes or as connection parameters. It never writes data: `replicate` has already made the
 clone, and `announce` only records where it is and how to reach it. Every clone
-carries labels (spec, image group, engine, engine version, channel, owner) and
+carries labels (spec, image group, engine, compatibility line, channel, owner) and
 provenance (image ID, generation, build time).
 
 - **Volume clones** are announced as a volume consumers can claim and start
@@ -174,8 +194,9 @@ provenance (image ID, generation, build time).
 | dotenv | A dotenv file, readable only by its owner | Local and simple CI use |
 
 On Kubernetes, a `k8s-pv` copy's PersistentVolume, labelled with the copy's
-spec, group, engine version and generation, is itself the announcement
-consumers match in a PersistentVolumeClaim selector (decision 61).
+spec, group, engine line (`engine-version`), exact server version
+(`server-version`) and generation, is itself the announcement consumers match
+in a PersistentVolumeClaim selector (decision 61).
 
 A clone's credentials go only to secret-capable targets (`k8s-secret`,
 `vault`, `dotenv`). `ci-outputs` announces the endpoint without them, because
@@ -198,9 +219,9 @@ job outputs on most systems are not secret.
 
 `prune` applies retention to images in any store and in staging: keep the last
 N generations and anything younger than M days, and never remove the image a
-channel points to. Retention is also applied by engine version: once a newer
-target engine version is in use, older versions' images, staging and pools can
-be removed, keeping the K most recent versions. `prune` supports `--dry-run` and
+channel points to. Retention is also applied by compatibility line: once a
+newer line is in use, older lines' images, staging and pools can be removed,
+keeping the K most recent lines. `prune` supports `--dry-run` and
 reports the space it would recover.
 
 ## CI/CD adapters

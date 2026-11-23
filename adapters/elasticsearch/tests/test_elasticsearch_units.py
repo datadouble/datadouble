@@ -247,6 +247,7 @@ def test_settings_and_commands() -> None:
     elastic = ElasticEngine()
     assert (elastic.name, elastic.owner) == ("elasticsearch", "1000:0")
     assert elastic.capabilities().nested is False
+    assert elastic.capabilities().version_line == 2  # snapshots restore only on newer minors
     assert engine().name == "elasticsearch"
 
 

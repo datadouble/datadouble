@@ -117,6 +117,8 @@ class ImageSummary(_Model):
     verification: Verification
     strict: StrictLevel
     """The strict-mode level the image was built with."""
+    server_version: str | None = None
+    """The exact version of the server that wrote the image; the identity names its line."""
     signature: str | None = None
     """The store key of the signature bundle, if the image is signed."""
 
@@ -183,3 +185,8 @@ def read_summary(store: Store, prefix: str, generation: Generation) -> ImageSumm
     """A generation's image summary, if the store has it."""
     data = store.get_bytes(f"{prefix}/{generation}{_SUMMARY}")
     return None if data is None else ImageSummary.model_validate_json(data)
+
+
+def version_line(version: str, parts: int) -> str:
+    """The compatibility line of a server version: its first ``parts`` numbers."""
+    return ".".join(version.split(".")[:parts])

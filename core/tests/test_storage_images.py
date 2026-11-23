@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from datadouble.images import ImageError, digest, new_generation, pack, unpack
+from datadouble.images import ImageError, digest, new_generation, pack, unpack, version_line
 from datadouble.settings import SettingsError
 from datadouble.storage import FilesystemStore, StoreError, check_key, filesystem_store
 
@@ -99,3 +99,11 @@ def test_a_store_it_cannot_write(tmp_path: Path) -> None:
         StoreError, match=r"cannot write a/b to filesystem:.*store: Not a directory"
     ):
         store.put_bytes("a/b", b"data")
+
+
+@pytest.mark.parametrize(
+    ("version", "parts", "line"),
+    [("8.4.13", 2, "8.4"), ("8.4.13", 1, "8"), ("17.2", 1, "17"), ("18", 2, "18")],
+)
+def test_version_lines(version: str, parts: int, line: str) -> None:
+    assert version_line(version, parts) == line
