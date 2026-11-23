@@ -1,0 +1,89 @@
+dev/ci/jenkins/plugins.txt
+  s_ad63f2bf16b775::t_51801e655ba3d0 8-9,13,41-43,45,48
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-prune-non-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_e0df20c986a3c7 1-67,105-108
+ci/jenkins/resources/datadouble/pod.sh
+  s_ad63f2bf16b775::t_4cf8832bd90a08 1-14,17-31,41,43-44
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_b85222b6ebc384 26-35,39,43-45,47-48,57,59-60,69-76,117-261,313-318,325-326,330,404,416-459,468-472,481-483
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-activate.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_5991111f7de50c 1-64,102-105
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_49d171bed43c0a 35-45,52-56,73-74
+ci/gitlab/src/datadouble_gitlab/__init__.py
+  s_ad63f2bf16b775::t_e63a56470ef468 36,279-283
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_8c0e1712b28856 9,20-21,31,37,67-70,411-414,456-457,466-467,469-493
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_864ac7aa3b871c 1-64,66,68,70-75,105
+ci/gitlab/tests/test_gitlab.py
+  s_ad63f2bf16b775::t_b21df613f6ee07 22,269
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_e329f09dbdabf6 19-30,33-36,59-62,70-72,83-84,86-89,99-102,104-111,255-265,272-412
+  s_ad63f2bf16b775::t_1c84eeadc0a67c 12,16
+ci/github-actions/src/datadouble_github_actions/__init__.py
+  s_ad63f2bf16b775::t_40f1265235baf3 30,274-278
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_945956910530cf 21,160-162,238
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_541b38d94d1822 1-68,77-81,119-122
+ci/jenkins/vars/datadouble.groovy
+  s_ad63f2bf16b775::t_b2e1d2bbfc46d9 13-15,18,30-31,50-56
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-promote.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_dc1cfec05a0ed4 1-65,67,69,71-76,106
+docs/using/ci-cd-libraries.md
+  s_ad63f2bf16b775::t_c6e66762e1d0c5 47-49,100-107
+  s_ad63f2bf16b775::t_8f508a6d87f04d 108-110
+CHANGELOG.md
+  s_ad63f2bf16b775::t_f32f920bde3579 101-112
+  s_ad63f2bf16b775::t_9bf6df6436dbaa 113-114,346-350
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_7476370f49d773 30,78-79,231-239,426-436,439
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_ad63f2bf16b775::t_a7ea2af87f759f 41,52,83-85,94,242-246
+  s_ad63f2bf16b775::t_23480ac0155e3f 40
+docs/using/cli-reference.md
+  s_ad63f2bf16b775::t_e0d5283ae9d7a5 190
+  s_ad63f2bf16b775::t_1faa17ebdae798 191
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_f170df7046723b 43,332-336,771-780,794
+  s_ad63f2bf16b775::t_7cf677248c295e 795
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-build.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_69a799a6a401f2 1-68,70,72,74-79,109
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_7f2828319952fb 372,559-578,581-582,594
+ci/github-actions/tests/test_github_actions.py
+  s_ad63f2bf16b775::t_fc982eb5dee3fd 22,210
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_23b7193ff0581e 7-10,107-177,182-203
+ci/jenkins/tests/golden/kubernetes-production/datadouble-shop-prune-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_30c44d6423621f 1-68,77-80,118-121
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_a61e4683fe35c1 19-24
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_223e1404b3f360 17,58-66,158-163,217-221,339-343,554-555,637-639,641-676
+ci/jenkins/tests/golden/kubernetes-on-demand/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_bfde61a660a960 1-64,102-105
+docs/decisions.md
+  s_ad63f2bf16b775::t_867c9ec65ef873 133
+ci/kubernetes/chart/templates/_helpers.tpl
+  s_ad63f2bf16b775::t_b57a8381e7e92c 98-100
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_6ba31f56a8c83d 34,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2fabf729dfdbc67037d402f696581765fddd1222",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
