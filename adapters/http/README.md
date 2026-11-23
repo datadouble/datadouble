@@ -54,7 +54,7 @@ this one.
 ## Listing: the index
 
 Web servers have no standard way to list files, and `fetch` lists the store
-to find each group's image lines (engine versions). So `promote` writes an
+to find each group's image lines (engine compatibility lines). So `promote` writes an
 index, `<spec>/<group>/index.json`, beside the images on every export store,
 naming the group's image lines and the generations with a summary in each,
 and rewrites it after each image's summary and channel; `prune --target
