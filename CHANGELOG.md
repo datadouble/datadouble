@@ -489,6 +489,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Error messages hide only data values, and keep the objects they name**
+  ([#107](https://github.com/datadouble/datadouble/issues/107)). Engine errors
+  hid every quoted string, so `null value in column "…" of relation "…"`
+  didn't say which column. Each engine adapter now lists the message shapes
+  its engine uses for data values (`Key (email)=(…) already exists`,
+  `Duplicate entry '…' for key 'users.email'`, `The duplicate key value is
+  (…)`, ORA-01722's string) and hides only those, keeping quoted table,
+  column, constraint, role and file names; a quoted string it cannot classify
+  is still hidden, and so is every quoted string in a message a trigger or
+  procedure raised. A MySQL connection URL whose password holds a line break
+  is now refused, since `mysqldump`'s option file can't carry it. When an
+  engine tool exits with status 125, 126 or 127, the output comes from `docker
+  run` or `podman run` failing before the tool started, or from a command that
+  could not run or was not found, and is shown whole, so the message names the
+  image that could not be pulled (`Unable to find image "postgres:18.7-trixie"
+  locally`).
 - Argo CD: a failed follower (`promote` after `build`, a pool's `provision`
   after `fetch`) made the Job run its pod again, so the leader ran a second
   time; a build whose promote was refused built, and notified, twice. A

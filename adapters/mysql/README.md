@@ -22,6 +22,15 @@ sources:
         env: SHOP_MYSQL_URL
 ```
 
+The URL's password can't hold a line break (`%0A` or `%0D`): `mysqldump`
+reads it from an option file, one option a line, so the connection is
+refused with an error that names the URL and never the password.
+
+Error messages keep quoted object names only when the message is the
+server's own text for its error number (`Duplicate entry '…' for key
+'users.email'`). A trigger can `SIGNAL` with any number and text, so any
+other message has every quoted string shown as `…`.
+
 ## Accounts
 
 A physical image carries no account that logs in over the network, so a

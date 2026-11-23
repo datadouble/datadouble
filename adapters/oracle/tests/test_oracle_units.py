@@ -129,6 +129,31 @@ def test_quoting_and_errors() -> None:
     assert redact("ORA-12899: value too large: 'secret'") == "ORA-12899: value too large: '…'"
     assert redact("ORA-1: insert values (1, 'x')") == "ORA-1: insert values (…)"
     assert redact("") == ""
+    # Data values are hidden, in every shape listed; identifiers are kept.
+    hidden = {
+        'ORA-01722: unable to convert string value containing x to a number: "SHOP"."T"."N"': (
+            'ORA-01722: unable to convert string value containing … to a number: "SHOP"."T"."N"'
+        ),
+        "ORA-03302: (ORA-01722 details) invalid string value: 12x": (
+            "ORA-03302: (ORA-01722 details) invalid string value: …"
+        ),
+        'ORA-01438: value 12345 greater than specified precision (3, 0) for column "N"': (
+            'ORA-01438: value … greater than specified precision (3, 0) for column "N"'
+        ),
+    }
+    for message, redacted in hidden.items():
+        assert redact(message) == redacted
+    for message in (
+        'ORA-12899: value too large for column "SHOP"."T"."C" (actual: 20, maximum: 10)',
+        "ORA-27037: unable to obtain file status for file '/u01/app/x.dbf'",
+    ):
+        assert redact(message) == message
+    # A user-raised message (RAISE_APPLICATION_ERROR) hides every quoted string.
+    raised = "ORA-20001: unknown user 'a@b.c' for file 'x'\nORA-06512: at line 3"
+    assert redact(raised) == "ORA-20001: unknown user '…' for file '…' (also ORA-06512)"
+    assert redact("ORA-01756: quoted string not properly terminated: q'[x]'") == (
+        "ORA-01756: quoted string not properly terminated: q'…'"
+    )
 
 
 def test_types() -> None:

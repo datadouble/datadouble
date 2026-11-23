@@ -74,12 +74,20 @@ def parse_url(url: str) -> tuple[dict[str, str], str | None]:
     if parts.scheme != "mysql" or not parts.hostname:
         message = "the mysql url must look like mysql://user:password@host:3306/database"
         raise EngineError(message)
+    password = unquote(parts.password or "")
+    if "\n" in password or "\r" in password:
+        # mysqldump reads the password from an option file, one option a line.
+        message = (
+            "the mysql connection url's password holds a line break, which"
+            " mysqldump's option file cannot carry; choose a password without one"
+        )
+        raise EngineError(message)
     return (
         {
             "host": parts.hostname,
             "port": str(parts.port or 3306),
             "user": unquote(parts.username or ""),
-            "password": unquote(parts.password or ""),
+            "password": password,
         },
         database,
     )

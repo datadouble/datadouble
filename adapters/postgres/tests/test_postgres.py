@@ -228,7 +228,7 @@ def test_failing_hooks_name_objects_not_values(source: PostgresScratch, tmp_path
     with pytest.raises(EngineError) as caught:
         build(source, tmp_path, spec=broken)
     assert str(caught.value) == (
-        'an after_transform hook failed: [23502] null value in column "…" of relation "…" '
+        'an after_transform hook failed: [23502] null value in column "name" of relation "parent" '
         "violates not-null constraint (schema public, table parent, column name)"
     )
     before = SPEC.replace("SELECT 1", "SELEKT 1")

@@ -8,6 +8,7 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -110,6 +111,31 @@ def test_clusters(tmp_path: Path) -> None:
 
 def test_images() -> None:
     assert default_image("16.4") == "postgres:16.4-trixie"
+
+
+def test_raised_database_errors_hide_everything(monkeypatch: pytest.MonkeyPatch) -> None:
+    for sqlstate, context in (
+        ("P0001", None),
+        ("23505", "PL/pgSQL function f() line 1"),
+        ("XX000", 'PL/Python function "f"'),
+        ("38000", 'PL/Perl function "f"'),
+    ):
+        diag = SimpleNamespace(
+            sqlstate=sqlstate,
+            context=context,
+            message_primary='unknown user "a@b.c" for role "app"',
+            schema_name=None,
+            table_name=None,
+            column_name=None,
+            constraint_name=None,
+        )
+
+        def read(_: object, found: SimpleNamespace = diag) -> SimpleNamespace:
+            return found
+
+        monkeypatch.setattr(psycopg.errors.RaiseException, "diag", property(read))
+        error = database_error(psycopg.errors.RaiseException(), "loading")
+        assert str(error) == f'loading failed: [{sqlstate}] unknown user "…" for role "…"'
 
 
 def test_database_errors_without_details() -> None:

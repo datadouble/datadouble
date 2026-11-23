@@ -463,6 +463,26 @@ acceptance of Microsoft's licence, and takes an `edition` (decision 83).
 PostgreSQL's takes `shared_preload_libraries`, for extensions that must load
 at server start.
 
+Errors from engines name the objects involved but never data values (decisions
+54 and 139). Each engine adapter lists the message shapes its engine uses to
+report data values, such as PostgreSQL's `Key (email)=(…) already exists` or
+MySQL's `Duplicate entry '…' for key`, and those values show as `…`. A quoted
+string after a word that names an object (`table "orders"`, `constraint
+'pk_orders'`) is kept; any other quoted string is hidden, so a message no
+adapter has classified stays safe. A message a user raised (a trigger's `RAISE
+EXCEPTION`, MySQL's `SIGNAL`, SQL Server's `THROW`, Oracle's
+`RAISE_APPLICATION_ERROR`) can put any value anywhere, so every quoted string
+in it is hidden. MySQL lets a trigger raise any error number, so there a
+message keeps names only when it is the server's own text for its number. When
+a tool exits with status 125, 126 or 127 its output is shown whole: `docker
+run` and `podman run` exit with 125 when they fail before the tool starts, and
+126 or 127 mean the command could not be run or was not found. That output
+comes from the container runtime and holds no data, image names included:
+
+```text
+pg_dump exited with status 125: Unable to find image "postgres:18.7-trixie" locally; docker: Error response from daemon: ...
+```
+
 ### Source requirements
 
 A source often depends on more than its server: PostgreSQL extensions, MySQL

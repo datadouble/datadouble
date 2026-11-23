@@ -43,6 +43,9 @@ re-locking below).
   the tables it lists; do not guess which one the person meant.
 - **Globs stay within a part.** `audit.*` is every table in namespaces called
   `audit`; `shop.*.*` is every table in PostgreSQL's database `shop`.
+- **A MySQL connection URL's password can't hold a line break** (`%0A`,
+  `%0D`); the connection is refused naming the URL, never the value. Tell
+  the person to choose another password; never ask to see it.
 - **Several databases from one server** go in one spec with
   `sources.<name>.connection.databases`, names or globs, for MySQL and PostgreSQL
   (`["*"]` for all). The copies then hold every database. Read the adapter's
