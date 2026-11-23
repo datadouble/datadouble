@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # setup-uv downloads uv from Astral's mirror (releases.astral.sh),
@@ -44,7 +44,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv and Python (the minimum supported version)
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.13"
           enable-cache: true
@@ -89,7 +89,7 @@ jobs:
         python: ["3.14", "3.15"]
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # setup-uv downloads uv from Astral's mirror (releases.astral.sh),
@@ -110,7 +110,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv and Python
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: ${{ matrix.python }}
           enable-cache: true
@@ -131,7 +131,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -164,7 +164,7 @@ jobs:
       matrix: ${{ steps.jobs.outputs.matrix }}
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -194,7 +194,7 @@ jobs:
       matrix: ${{ fromJSON(needs.integration-jobs.outputs.matrix) }}
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # Docker Hub (its blobs come from CloudFront or Cloudflare) for the
@@ -279,7 +279,7 @@ jobs:
         system: [github-actions, gitlab, jenkins, kubernetes]
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # As the integration jobs, for the Datadouble, PostgreSQL, GitLab
@@ -320,7 +320,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv and Python
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.13"
           enable-cache: true
@@ -391,7 +391,7 @@ jobs:
         run: test "$GROUPS_RESULT" = success && test "$CI_RESULT" = success
 
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # GitHub for the checkout and artifacts, Astral's mirror and GitHub
@@ -422,7 +422,7 @@ jobs:
       # lines differently, so data recorded under one reads as missed lines
       # under another.
       - name: Set up uv
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.15"
 
@@ -511,7 +511,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # binaries.sonarsource.com serves the scanner, which the action caches,
@@ -571,7 +571,7 @@ jobs:
         group: [k8s, btrfs]
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           # As the integration job, which builds the same test image; the k3s
@@ -611,7 +611,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -629,7 +629,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv and Python
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.13"
           enable-cache: true
