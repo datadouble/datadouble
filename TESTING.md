@@ -101,7 +101,7 @@ the shards less even, never skip or repeat a test.
 
 | Group | Tests | Services | User | Shards |
 |---|---|---|---|---|
-| `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3 and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao | 999:999 | 1 |
+| `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3, HTTP and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao, Caddy serving an export store over HTTPS with basic auth (`dev/https`) | 999:999 | 1 |
 | `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
 | `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 | 1 |
 | `redis` | The Redis adapter | Redis 8.10 with a generated keyspace of every data type (`dev/redis`), seeded at every start | 999:999 | 1 |

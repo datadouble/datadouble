@@ -5,8 +5,9 @@
 
 ``promote`` runs in production. It copies images from the build's store into
 the export stores, the only storage non-production can read, and advances a
-channel there. It checks every image before copying any, and refuses an image
-unless:
+channel there, then rewrites the group's index (``index.json``), which stores
+that cannot list keys are read through. It checks every image before copying
+any, and refuses an image unless:
 
 - verification passed, with every check run and none failed;
 - it was built with a strict-mode level at least as strict as required;
@@ -23,7 +24,14 @@ from pydantic import BaseModel, ConfigDict
 
 from datadouble.boundary import require_inside
 from datadouble.channels import point_channel
-from datadouble.images import ImageSummary, digest, generations, image_lines, read_summary
+from datadouble.images import (
+    ImageSummary,
+    digest,
+    generations,
+    image_lines,
+    read_summary,
+    write_index,
+)
 from datadouble.names import Generation, GroupName
 from datadouble.signing import SigningError, bundle_key, verify
 from datadouble.spec import CosignTrust, Spec, StrictLevel
@@ -146,6 +154,7 @@ class _Promotion:
             point_channel(
                 target, candidate.prefix, self.settings.channel, summary.identity.generation
             )
+            write_index(target, summary.identity.spec, summary.identity.group)
         return Promoted(
             summary=summary,
             channel=self.settings.channel,

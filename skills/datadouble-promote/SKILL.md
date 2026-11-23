@@ -11,7 +11,12 @@ boundary, after `build`.
 ## The spec's side of it
 
 - `promote.to`: the export stores. Non-production gets read-only credentials
-  for these and nothing else.
+  for these and nothing else. `promote` also writes an `index.json` under
+  each `<spec>/<group>/` there, which `fetch` reads when the export store is
+  served by a web server (the read-only `http` store, in `fetch.from` only).
+  Point `promote.to` at the directory or bucket itself, never at `http`.
+  `promote` lists each export store to rebuild the index, so S3 export
+  stores need `s3:ListBucket` for `promote`'s credentials.
 - `promote.strict`: the strict-mode level an image must have been built with
   (`columns` by default). Never lower it to let an image through (rule 4).
 - `trust`: how promote checks the image's signature (a public key, or the

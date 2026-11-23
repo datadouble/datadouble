@@ -18,7 +18,9 @@ Inspect first (rule 3), then ask in one round for what is missing:
 - The runner (label, tags, agent label or namespace) inside the production
   boundary, and the one outside it.
 - The build's work directory in production scratch space.
-- Stores: where builds are kept, and the export store non-production reads.
+- Stores: where builds are kept, and the export store non-production reads,
+  and how non-production reaches it: the same directory or bucket, or a web
+  server serving it (the read-only `http` store; see `datadouble-fetch`).
 - Copies: a pool kept ready, or copies made on demand per pull request, and
   where they live.
 

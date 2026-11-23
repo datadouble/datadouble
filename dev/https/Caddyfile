@@ -1,0 +1,19 @@
+# Copyright (c) 2026- Tight Line LLC
+# SPDX-License-Identifier: MIT
+
+# The exports volume at https://web/, behind basic auth. The user and the
+# password's hash come from the environment (start.sh hashes the password).
+{
+	admin off
+	skip_install_trust
+	auto_https disable_redirects
+}
+
+https://web {
+	tls internal
+	basic_auth {
+		{$EXPORT_USER} {$EXPORT_PASSWORD_HASH}
+	}
+	root * /srv/exports
+	file_server
+}

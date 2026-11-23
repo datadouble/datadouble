@@ -43,6 +43,30 @@ production scratch space or production storage. A push-based variant (production
 writes directly into non-production storage) is a storage adapter choice; the
 gate is the same.
 
+### Export stores
+
+An export store is any store adapter: a directory (`filesystem`), a bucket
+(`s3`), or, for `fetch` only, a web server (`http`). The `http` store suits a
+production side that already publishes files through a web server
+non-production can reach over HTTPS but can neither mount nor call an S3 API
+on. It is read-only: `promote` writes with the filesystem or S3 store into
+the directory the server serves, and `fetch` reads through the server, with
+basic auth or a bearer token given as secret references, and optionally its
+own CA bundle. Any write through it fails, naming the store. See the
+[adapter's README](https://github.com/datadouble/datadouble/tree/main/adapters/http).
+
+Web servers have no standard listing, and `fetch` lists the store to find
+each group's engine versions. So `promote` writes an **index** under each
+`<spec>/<group>/` (`index.json`) on every export store, naming the group's
+image lines and the generations with a summary in each, and rewrites it
+after each image's summary and channel; `prune --target export` rewrites it
+to match what is left, or removes it when nothing is. A store that cannot
+list keys reads the index instead: `fetch` takes only its line names, then
+reads the channel and summary as with any store, so the `http` store needs
+nothing server-specific. Everything else in the store's layout is unchanged.
+`promote` rebuilds the index by listing each export store, so an S3 export
+store needs `s3:ListBucket` for `promote`'s credentials.
+
 ## Stages and operations
 
 The CI/CD work extends the [architecture](architecture.md) pipeline to:
@@ -113,12 +137,14 @@ result and signature reference, copied from its full manifest (which travels
 inside the image). It is read without downloading the image:
 
 ```
-export-store/shop/billing/postgres-18/
-  0193a7c21b4e9f30.physical.tar.gz   # one archive per format, possibly many GB
-  0193a7c21b4e9f30.logical.tar.gz
-  0193a7c21b4e9f30.verify.json       # the full verification report
-  0193a7c21b4e9f30.summary.json      # the image summary, written last
-  channels/latest                    # points at generation 0193a7c21b4e9f30
+export-store/shop/billing/
+  index.json                           # image lines and generations, for stores that cannot list
+  postgres-18/
+    0193a7c21b4e9f30.physical.tar.gz   # one archive per format, possibly many GB
+    0193a7c21b4e9f30.logical.tar.gz
+    0193a7c21b4e9f30.verify.json       # the full verification report
+    0193a7c21b4e9f30.summary.json      # the image summary, written last
+    channels/latest                    # points at generation 0193a7c21b4e9f30
 ```
 
 `fetch` reads the channel and the image summary to decide whether anything newer

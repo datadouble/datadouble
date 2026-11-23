@@ -124,7 +124,7 @@ datadouble-postgres      datadouble-mysql         datadouble-mssql
 datadouble-oracle        datadouble-mongodb       datadouble-redis
 datadouble-elasticsearch datadouble-opensearch    datadouble-files
 datadouble-salesforce    datadouble-s3            datadouble-kubernetes
-datadouble-btrfs
+datadouble-btrfs         datadouble-http
 ```
 
 The version 1 run does not tag releases. If it adds package names, its pull

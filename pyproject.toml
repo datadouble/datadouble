@@ -35,6 +35,7 @@ members = [
     "adapters/files",
     "adapters/salesforce",
     "adapters/s3",
+    "adapters/http",
     "adapters/vault",
     "ci/github-actions",
     "ci/gitlab",
@@ -56,6 +57,7 @@ datadouble-files = { workspace = true }
 datadouble-salesforce = { workspace = true }
 datadouble-conformance = { workspace = true }
 datadouble-s3 = { workspace = true }
+datadouble-http = { workspace = true }
 datadouble-docker = { workspace = true }
 datadouble-vault = { workspace = true }
 datadouble-kubernetes = { workspace = true }
@@ -84,6 +86,7 @@ dev = [
     "datadouble-files",
     "datadouble-salesforce",
     "datadouble-s3",
+    "datadouble-http",
     "datadouble-vault",
     "datadouble-github-actions",
     "datadouble-gitlab",
@@ -156,6 +159,7 @@ known-first-party = [
     "datadouble_files",
     "datadouble_salesforce",
     "datadouble_s3",
+    "datadouble_http",
     "datadouble_vault",
     "datadouble_github_actions",
     "datadouble_gitlab",
@@ -218,6 +222,8 @@ files = [
     "adapters/salesforce/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
+    "adapters/http/src",
+    "adapters/http/tests",
     "adapters/vault/src",
     "adapters/vault/tests",
     "ci/github-actions/src",
@@ -233,7 +239,7 @@ files = [
     "scripts",
     "tests",
 ]
-mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/salesforce/src:adapters/salesforce/tests:adapters/s3/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:ci/jenkins/src:ci/kubernetes/src:conformance/src:scripts"
+mypy_path = "core/src:core/tests:adapters/btrfs/src:adapters/docker/src:adapters/kubernetes/src:adapters/mongodb/src:adapters/mongodb/tests:adapters/mssql/src:adapters/mssql/tests:adapters/mysql/src:adapters/mysql/tests:adapters/oracle/src:adapters/oracle/tests:adapters/postgres/src:adapters/postgres/tests:adapters/redis/src:adapters/redis/tests:adapters/elasticsearch/src:adapters/elasticsearch/tests:adapters/opensearch/src:adapters/opensearch/tests:adapters/files/src:adapters/files/tests:adapters/salesforce/src:adapters/salesforce/tests:adapters/s3/src:adapters/http/src:adapters/vault/src:ci/github-actions/src:ci/gitlab/src:ci/jenkins/src:ci/kubernetes/src:conformance/src:scripts"
 explicit_package_bases = true
 
 [tool.pyright]
@@ -270,6 +276,8 @@ include = [
     "adapters/salesforce/tests",
     "adapters/s3/src",
     "adapters/s3/tests",
+    "adapters/http/src",
+    "adapters/http/tests",
     "adapters/vault/src",
     "adapters/vault/tests",
     "ci/github-actions/src",
@@ -306,6 +314,7 @@ testpaths = [
     "adapters/files/tests",
     "adapters/salesforce/tests",
     "adapters/s3/tests",
+    "adapters/http/tests",
     "adapters/vault/tests",
     "ci/github-actions/tests",
     "ci/gitlab/tests",
@@ -350,6 +359,7 @@ source = [
     "adapters/files/src",
     "adapters/salesforce/src",
     "adapters/s3/src",
+    "adapters/http/src",
     "adapters/vault/src",
     "ci/github-actions/src",
     "ci/gitlab/src",

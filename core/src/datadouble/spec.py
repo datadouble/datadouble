@@ -420,6 +420,9 @@ class Promote(_Model):
     """Where ``promote`` copies verified images, and what it requires of them."""
 
     to: tuple[AdapterSettings, ...] = Field(min_length=1)
+    """The export stores, one adapter each, such as ``{filesystem: ...}`` or ``{s3: ...}``.
+    Each also gets an index of its images per group (``<spec>/<group>/index.json``), which
+    stores that cannot list keys, like ``http``, are read through."""
     channel: str = "latest"
     strict: StrictLevel = StrictLevel.COLUMNS
     """The least strict strict-mode level an image may have been built with."""
@@ -447,6 +450,9 @@ class Fetch(_Model):
     )
 
     source: AdapterSettings = Field(alias="from")
+    """The export store to read, one adapter: ``{filesystem: ...}``, ``{s3: ...}``, or
+    ``{http: ...}``, a web server serving it, which is read-only and reads the index
+    ``promote`` writes."""
     staging: Path
     channel: str = "latest"
     staging_channel: str = "active"

@@ -40,12 +40,21 @@ services:
       TMPDIR: /work
       DATADOUBLE_TEST_VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: datadouble-test
+      # The web service serves the exports volume over HTTPS with basic auth,
+      # with a certificate from Caddy's internal CA, whose root is in web-ca.
+      DATADOUBLE_TEST_HTTPS_URL: https://web/
+      DATADOUBLE_TEST_HTTPS_ROOT: /exports
+      DATADOUBLE_TEST_HTTPS_CA: /https-ca/root.crt
+      DATADOUBLE_TEST_HTTPS_USER: exports
+      DATADOUBLE_TEST_HTTPS_PASSWORD: Datadouble-1
     # No bind mounts from the repository: on hosts whose home directories are
     # network mounts the Docker daemon cannot read them. Reports are copied out
     # of the stopped container instead (see `make test-integration`).
     volumes:
       - work:/work
       - jailer:/jailer:ro
+      - exports:/exports
+      - web-ca:/https-ca:ro
 
   # PostgreSQL 18 with Pagila (dev/postgres).
   postgres:
@@ -182,6 +191,25 @@ services:
       timeout: 5s
       retries: 60
 
+  # Caddy serving the exports volume over HTTPS with basic auth (dev/https),
+  # for the http store: the tests promote into the volume and fetch through
+  # the server. Ready once its certificate is issued and the root it was
+  # signed with is in web-ca.
+  web:
+    build:
+      context: dev/https
+    environment:
+      EXPORT_USER: exports
+      EXPORT_PASSWORD: Datadouble-1
+    volumes:
+      - exports:/srv/exports
+      - web-ca:/ca
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
   # MongoDB 9.0 with the generated cinema database (dev/mongodb), as a
   # single-node replica set, ready once seeded.
   mongodb:
@@ -311,5 +339,7 @@ volumes:
   jailer:
   fixtures:
   work:
+  exports:
+  web-ca:
   k8s-work:
   k3s-config:
