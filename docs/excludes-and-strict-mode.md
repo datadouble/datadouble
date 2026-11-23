@@ -42,7 +42,7 @@ built:
 
 - **Jailer models** already carry one: the data model folder (`table.csv`,
   `column.csv`).
-- **Native specs** get a `catalog.lock`, written by `datadouble subset lock` and
+- **Native specs** get a `catalog.lock`, written by `datadouble lock` and
   committed next to the spec. It lists tables, columns, primary keys and foreign
   keys, with a fingerprint. The Jailer converter writes one too.
 
@@ -95,3 +95,27 @@ resolve it:
 1. Exclude it.
 2. Add it to the subset model and re-lock.
 3. Add anonymization rules for it, then re-lock.
+
+### Re-locking
+
+`datadouble lock` reads the source, so it runs only inside the production
+boundary (decision 98). Its response lists what changed from the lock it
+replaces (`changes`): tables, columns, primary and foreign keys and
+requirements added, removed or changed, each with its type, key or version.
+Column changes cover the type, its kind and nullability, and a table's
+column order. The CLI prints the same list. A first lock has nothing to
+compare with (`changes` is `null`), so every table and column in it needs
+the same check; so does a lock replacing one that cannot be read, which the
+response says (`unreadable`, with the reason).
+
+Where the only machine inside the boundary is a CI runner, re-lock through
+the manual `lock` job (`ci init --job lock`, see
+[CI/CD integration](ci-cd.md#the-lock-job)). It runs `datadouble lock
+--output datadouble-lock`, which writes the new lock and its changes
+(`changes.txt`) into that directory and leaves the committed lock as it is
+(an `--output` that is the committed lock's own directory is refused),
+and publishes both as the job's artifact. The job never commits. A person
+downloads the artifact, checks every new or changed column for personal
+data (anonymizing or excluding it in the spec where it holds any), and
+commits the new lock beside the spec. That review is what strict mode is
+for: committing a lock without it accepts every new column as safe.

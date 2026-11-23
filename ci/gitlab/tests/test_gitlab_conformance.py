@@ -451,6 +451,10 @@ class GitLabCe:
                     found.extend(Path(name) for name in sorted(names))
         return found
 
+    @property
+    def artifact_storage(self) -> bool:
+        return True
+
 
 @pytest.fixture
 def ci_harness(gitlab: Server, tmp_path: Path) -> CiHarness:

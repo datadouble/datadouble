@@ -10,7 +10,10 @@
  *   datadouble(image: '...', user: '999:999', mounts: ['/srv/...'],
  *              environment: ['SHOP_SOURCE_DSN'], arguments: ['run', ...])
  *
- * Empty arguments, such as an unset --dry-run, are left out.
+ * Empty arguments, such as an unset --dry-run, are left out. `artifacts`
+ * names a workspace directory the command writes files into for review,
+ * such as the lock job's new lock and its changes: it is emptied first, made
+ * writable by the engine's user, and archived as the build's artifacts.
  */
 def call(Map config) {
     writeFile(file: '.datadouble-run.sh', text: libraryResource('datadouble/run.sh'))
@@ -22,8 +25,12 @@ def call(Map config) {
         "DATADOUBLE_USER=${config.user}",
         "DATADOUBLE_MOUNTS=${(config.mounts ?: []).join('\n')}",
         "DATADOUBLE_ENVIRONMENT=${(config.environment ?: []).join('\n')}",
+        "DATADOUBLE_ARTIFACTS=${config.artifacts ?: ''}",
     ]) {
         status = sh(script: 'bash .datadouble-run.sh', returnStatus: true)
+    }
+    if (config.artifacts) {
+        archiveArtifacts(artifacts: "${config.artifacts}/**", allowEmptyArchive: true)
     }
     Map<String, String> outputs = [:]
     if (fileExists('.datadouble-outputs')) {

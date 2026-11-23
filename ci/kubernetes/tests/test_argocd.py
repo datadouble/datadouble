@@ -9,6 +9,7 @@ kubeconform. To accept a deliberate change, run the tests with
 ``DATADOUBLE_UPDATE_GOLDEN=1`` and review the diff.
 """
 
+import io
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -67,7 +68,7 @@ def planned(
 
 ON_DEMAND = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
 SCENARIOS = {
-    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE),
+    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(*ON_DEMAND),
     "pool": planned(JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, mode="pool"),
 }
@@ -113,7 +114,7 @@ def test_production_values() -> None:
     assert at(production, "spec", "lock") == "{}\n"
     jobs = at(production, "jobs")
     assert isinstance(jobs, list)
-    build, promote, prune = jobs
+    build, promote, prune, lock = jobs
     assert at(build, "schedule") == "0 2 * * 1"
     assert at(build, "steps", 0, "arguments", 0) == "run"
     assert at(build, "steps", 1, "arguments", 0) == "promote"
@@ -121,6 +122,13 @@ def test_production_values() -> None:
     assert at(build, "steps", 0, "arguments", -1) == "$(DATADOUBLE_RUN)"
     assert at(promote, "schedule") == ""
     assert at(prune, "name") == "prune-production"
+    assert isinstance(prune, dict)
+    assert "artifacts" not in prune
+    assert at(lock, "schedule") == ""
+    assert at(lock, "artifacts") == "datadouble-lock"
+    assert at(lock, "steps", 0, "arguments") == [
+        "lock", "--spec", "datadouble/shop.yml", "--output", "datadouble-lock"
+    ]  # fmt: skip
 
 
 def test_request_hooks() -> None:
@@ -173,6 +181,25 @@ def test_run_time(tmp_path: Path) -> None:
     assert log.read_text() == ""
     assert argocd.report(warned, tmp_path) is ExitCode.SUCCESS
     assert (tmp_path / "outputs").read_text() == "outcome=warning\n"
+
+
+def test_published_files_go_to_the_log(tmp_path: Path) -> None:
+    lock = tmp_path / "catalog.lock"
+    lock.write_text("{}\n", encoding="utf-8")
+    changes = tmp_path / "changes.txt"
+    changes.write_text("no changes from the earlier lock\n", encoding="utf-8")
+    stream = io.StringIO()
+    locked = Report(
+        command="lock",
+        outcome=Outcome.SUCCESS,
+        outputs={"outcome": "success", "changes": "0"},
+        summary="",
+        files=(lock, changes),
+    )
+    assert ArgoCd(tmp_path / "termination-log", stream).report(locked, None) is ExitCode.SUCCESS
+    assert stream.getvalue() == (
+        f"==> {lock} <==\n{{}}\n==> {changes} <==\nno changes from the earlier lock\n"
+    )
 
 
 def test_the_entry_point() -> None:

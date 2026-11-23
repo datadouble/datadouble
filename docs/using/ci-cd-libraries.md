@@ -13,10 +13,11 @@ system, decided by Datadouble rather than the library (decision 100):
 | provision | non-production | replicate | hourly and after fetch (pool), or a pull request (on demand) |
 | release | non-production | release | a closed pull request, and a daily sweep |
 | activate | non-production | activate a chosen generation | by hand |
+| lock | production | lock, publishing the new lock and its changes for review | by hand |
 
 ```
 datadouble ci init --system <github-actions|gitlab|jenkins|argocd> \
-    --job build,promote,prune --spec datadouble/shop.yml \
+    --job build,promote,prune,lock --spec datadouble/shop.yml \
     --runner <inside the boundary> --work /srv/datadouble/work
 datadouble ci init --system <...> --job fetch,provision,release,prune,activate \
     --spec datadouble/shop.yml --runner <outside it>
@@ -26,6 +27,14 @@ The response lists the files written, the environment variables to define
 as secrets on that side (each job gets only its own), and anything the
 system's configuration cannot hold (`instructions`). Generate again after
 changing the spec or the options, rather than editing the files.
+
+The `lock` job re-locks the catalog after a schema change, on the production
+runner, since reading the source needs the boundary. It never commits: it
+publishes the new `catalog.lock` and `changes.txt`, what changed since the
+committed lock, as the job's artifact (on Argo CD, in the job's log).
+Someone checks every new or changed column for personal data, then commits
+the lock beside the spec. A lock holds names, types and versions, never
+values (decision 123).
 
 Each system's details are in its adapter's README:
 

@@ -15,9 +15,9 @@ datadouble/shop.yml in our GitLab CI", "copy the avatars from our uploads too",
 | Skill | Sets up |
 |---|---|
 | `datadouble-pipeline` | Everything, in order, with one summary at the end |
-| `datadouble-spec` | The spec, checked with `datadouble plan` |
+| `datadouble-spec` | The spec, checked with `datadouble plan`, and re-locking through the `lock` job with the changes reviewed for personal data |
 | `datadouble-files` | File trees, with each `find` expression explained and tried first |
-| `datadouble-build`, `datadouble-promote` | The production jobs |
+| `datadouble-build`, `datadouble-promote` | The production jobs, `lock` among them |
 | `datadouble-fetch`, `datadouble-provision`, `datadouble-release`, `datadouble-prune`, `datadouble-activate` | The non-production jobs |
 
 Every skill follows the same rules (`skills/RULES.md`): CI/CD configuration

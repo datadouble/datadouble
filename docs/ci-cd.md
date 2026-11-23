@@ -18,6 +18,7 @@ operations, runs in a known place, and is usually triggered on its own schedule:
 | **release** | release | Non-production | Pull request closed, environment stopped, or schedule |
 | **prune** | prune | Each environment | Schedule |
 | **activate** | activate | Non-production | Manual (rollback) |
+| **lock** | lock (re-lock the catalog for review) | Production | Manual, after a schema change |
 
 `replicate` and `announce` are separate stages because announce targets vary
 independently of replication, but they normally run as one job.
@@ -66,6 +67,35 @@ reads the channel and summary as with any store, so the `http` store needs
 nothing server-specific. Everything else in the store's layout is unchanged.
 `promote` rebuilds the index by listing each export store, so an S3 export
 store needs `s3:ListBucket` for `promote`'s credentials.
+
+### The lock job
+
+Strict mode refuses to plan without a catalog lock, and `datadouble lock`
+reads the source, so it runs only inside the boundary. Where the only machine
+there is a CI runner, the manual `lock` job (`ci init --job lock`) re-locks:
+
+- It runs on the production side, on the same `--runner` as `build`, with
+  only the secrets the spec's `source` section names. It is refused on a
+  vendor's hosted runner, like `build`.
+- It has no schedule: someone always means to re-lock.
+- It runs `datadouble lock --spec <spec> --output datadouble-lock`, which
+  writes the new lock (`catalog.lock`) and its changes against the committed
+  lock (`changes.txt`, the list the CLI prints) into that workspace
+  directory, leaving the committed lock as it is.
+- It publishes that directory as the CI system's job artifact: a GitHub
+  artifact, a GitLab job artifact, a Jenkins archived artifact. Kubernetes
+  keeps no job artifacts, so on Argo CD the job prints both files to its log,
+  and its termination message carries the outputs (`fingerprint`, and
+  `changes`, the number of changes).
+- It never commits. A person reviews the changes, checks every new or
+  changed column for personal data, and commits the lock. That review is the
+  point of strict mode, so no job does it for them.
+
+A lock holds table, column and key names, engine type names and requirement
+versions, never values, so publishing it as a CI artifact is consistent with
+[no data in CI storage](#no-data-in-ci-storage) (decision 123). Type names
+can carry schema literals, such as a MySQL `enum` column's labels; those are
+part of the schema and already in the committed lock.
 
 ## Stages and operations
 
@@ -268,8 +298,8 @@ requests and maps the CI system's conventions onto them. It has three parts:
 ### Generation
 
 ```
-datadouble ci init --system github-actions --job build,promote,prune --spec datadouble/shop.yml \
-    --runner prod-db --work /srv/datadouble/work
+datadouble ci init --system github-actions --job build,promote,prune,lock \
+    --spec datadouble/shop.yml --runner prod-db --work /srv/datadouble/work
 datadouble ci init --system github-actions --job fetch,provision,release,prune,activate \
     --spec datadouble/shop.yml --runner staging
 ```
@@ -306,13 +336,15 @@ so the jobs are the same on every system. Generated configuration:
   the generation to `activate`.
 - Passes the CI system's run ID as `--retry-key` to `build`, so retrying a
   failed run resumes the generation it started (decision 100).
+- Publishes the `lock` job's new lock and its changes as the job's artifact
+  (see [the lock job](#the-lock-job)); no other job publishes files.
 - Makes on-demand copies when a pull or merge request opens, for
   `pr-<number>`, and releases them when it closes. Requests from forks never
   run on the team's runners.
 
 The mode, pool or on-demand, comes from the spec's `replicate` section.
-Generating `build` or `promote` requires an explicit runner target, and
-`build` an absolute work directory (see [where jobs run](#where-jobs-run)).
+Generating `build`, `promote` or `lock` requires an explicit runner target,
+and `build` an absolute work directory (see [where jobs run](#where-jobs-run)).
 
 ### Supported systems
 
@@ -374,12 +406,14 @@ CI workspace.
 
 Manifests and reports may be uploaded as CI artifacts, so they must never
 contain data values. In particular, `pii-scan` reports name columns and
-detector types, never the matched values.
+detector types, never the matched values. The `lock` job's catalog lock and
+its changes are published this way: they hold names, types, keys and
+requirement versions, never values (decision 123).
 
 ## Where jobs run
 
-`build` and `promote` must run on infrastructure inside the production
-boundary: self-hosted GitHub runners (or Actions Runner Controller), GitLab
+`build`, `promote` and `lock` must run on infrastructure inside the
+production boundary: self-hosted GitHub runners (or Actions Runner Controller), GitLab
 runners selected by tag, Jenkins agents selected by label, or a Kubernetes
 cluster in production.
 
@@ -392,8 +426,8 @@ cluster in production.
   Datadouble's Kubernetes jobs. A machine nobody marked, such as a vendor's
   hosted runner or an unfamiliar CI system, is refused before anything
   connects.
-- `datadouble ci init --job build` fails without `--runner`. It never emits a
-  vendor-hosted runner such as `ubuntu-latest`.
+- `datadouble ci init --job build` (or `promote`, or `lock`) fails without
+  `--runner`. It never emits a vendor-hosted runner such as `ubuntu-latest`.
 - At run time, reading the source and `promote` also fail if any installed
   CI/CD adapter recognizes a vendor-hosted runner (for example, GitHub's
   `RUNNER_ENVIRONMENT=github-hosted`), even one marked inside.
@@ -485,6 +519,9 @@ source, stores and repository, with jobs `ci init` wrote for both sides:
   closes, and its scheduled sweep runs.
 - `prune` never removes an image a channel points to.
 - No data artifact is uploaded to the CI system's artifact storage.
+- `lock` publishes the new lock and its changes (in the job's artifact, or on
+  Argo CD its log), leaves the committed lock as it is, and is refused on a
+  vendor-hosted runner.
 
 The core's own tests cover what needs a clock or a race rather than a CI
 system: `release --expired` collecting a copy past its expiry, pool recycling

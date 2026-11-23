@@ -22,6 +22,7 @@ from typing import TextIO, assert_never
 from pydantic import JsonValue
 
 from datadouble import api
+from datadouble.catalog import describe_changes
 from datadouble.ci import JobKind, Side, masking
 from datadouble.outcome import ExitCode
 from datadouble.prune import PruneTarget
@@ -209,7 +210,9 @@ def _ci_parsers(add: _Add) -> None:
         help=f"jobs, comma-separated or repeated, on one side of the boundary: {','.join(JobKind)}",
     )
     init.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
-    init.add_argument("--runner", help="the runner jobs run on; required for build and promote")
+    init.add_argument(
+        "--runner", help="the runner jobs run on; required for build, promote and lock"
+    )
     init.add_argument("--work", help="the build's work directory in production scratch space")
     init.add_argument(
         "--side", choices=[side.value for side in Side], help="the side prune alone runs on"
@@ -259,8 +262,15 @@ def build_parser() -> CommandParser:
 
     add(api.Command.VERSION, "show the installed version")
     add(api.Command.SCHEMA, "print the spec JSON Schema")
-    lock = add(api.Command.LOCK, "write the catalog lock for a spec")
+    lock = add(api.Command.LOCK, "write the catalog lock for a spec, listing what changed")
     _spec_arguments(lock)
+    lock.add_argument(
+        "--output",
+        help=(
+            "a directory for the new lock (catalog.lock) and its changes (changes.txt),"
+            " leaving the current lock as it is"
+        ),
+    )
     importing = add(
         api.Command.IMPORT_JAILER,
         "translate a Jailer subset into native spec settings, and lock the catalog",
@@ -383,7 +393,7 @@ def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.VERSION: lambda _: {},
     api.Command.SCHEMA: lambda _: {},
-    api.Command.LOCK: _spec_fields,
+    api.Command.LOCK: lambda arguments: _set(_spec_fields(arguments), arguments, "output"),
     api.Command.IMPORT_JAILER: lambda arguments: {
         **_spec_fields(arguments),
         "model": arguments.model,
@@ -533,7 +543,11 @@ def _simple(
         case api.SchemaResponse():
             return json.dumps(response.schema_, indent=2)
         case api.LockResponse():
-            return f"wrote {response.lock}: {response.tables} tables ({response.fingerprint})"
+            lines = [f"wrote {response.lock}: {response.tables} tables ({response.fingerprint})"]
+            if response.changes_file is not None:
+                lines.append(f"wrote {response.changes_file}")
+            lines.extend(describe_changes(response.changes, response.unreadable))
+            return "\n".join(lines)
         case api.CiInitResponse():
             return "\n".join(_ci_lines(response))
         case _:

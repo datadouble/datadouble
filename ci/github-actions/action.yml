@@ -30,11 +30,33 @@ inputs:
     description: Environment variables the spec reads secrets from, one name per line
     required: false
     default: ""
+  artifacts:
+    description: A workspace directory the command writes files into for the workflow to publish, emptied first and made writable by the engine's user
+    required: false
+    default: ""
+
+outputs:
+  outcome:
+    description: success, warning or failure
+    value: ${{ steps.datadouble.outputs.outcome }}
+  generation:
+    description: The generation a run built
+    value: ${{ steps.datadouble.outputs.generation }}
+  error:
+    description: The error code of a failure
+    value: ${{ steps.datadouble.outputs.error }}
+  fingerprint:
+    description: The new catalog lock's fingerprint, for lock
+    value: ${{ steps.datadouble.outputs.fingerprint }}
+  changes:
+    description: How many changes the new lock has from the earlier one, for lock
+    value: ${{ steps.datadouble.outputs.changes }}
 
 runs:
   using: composite
   steps:
     - name: datadouble
+      id: datadouble
       shell: bash
       env:
         DATADOUBLE_ARGUMENTS: ${{ inputs.arguments }}
@@ -42,4 +64,5 @@ runs:
         DATADOUBLE_USER: ${{ inputs.user }}
         DATADOUBLE_MOUNTS: ${{ inputs.mounts }}
         DATADOUBLE_ENVIRONMENT: ${{ inputs.environment }}
+        DATADOUBLE_ARTIFACTS: ${{ inputs.artifacts }}
       run: '"$GITHUB_ACTION_PATH/run.sh"'

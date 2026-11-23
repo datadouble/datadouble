@@ -64,7 +64,7 @@ def planned(
 
 
 SCENARIOS = {
-    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE),
+    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(
         JobKind.FETCH,
         JobKind.PROVISION,

@@ -28,7 +28,15 @@ from datadouble import __version__, jailer
 from datadouble.announce import AnnounceError, announce, withdraw
 from datadouble.anonymize import AnonymizeError
 from datadouble.boundary import BoundaryError, require_inside
-from datadouble.catalog import CatalogError, CatalogLock, read_lock, write_lock
+from datadouble.catalog import (
+    CatalogError,
+    CatalogLock,
+    LockChange,
+    changes,
+    describe_changes,
+    read_lock,
+    write_lock,
+)
 from datadouble.channels import Channel
 from datadouble.ci import (
     IMAGE,
@@ -163,9 +171,14 @@ class _SpecRequest(_Request):
 
 
 class LockRequest(_SpecRequest):
-    """Introspect the source and write its catalog lock."""
+    """Introspect the source and write its catalog lock, listing what changed."""
 
     command: Literal[Command.LOCK]
+    output: Path | None = None
+    """A directory to write the new lock (``catalog.lock``) and its changes
+    (``changes.txt``) into, leaving the current lock as it is, for someone to
+    review before committing; the CI ``lock`` job uses it. The current lock is
+    replaced when omitted."""
 
 
 class ImportJailerRequest(_SpecRequest):
@@ -296,7 +309,7 @@ class CiInitRequest(_Request):
     jobs: tuple[JobKind, ...] = Field(min_length=1)
     spec: Path
     runner: str | None = None
-    """The runner jobs run on; required for build and promote."""
+    """The runner jobs run on; required for build, promote and lock."""
     work: Path | None = None
     """The build's work directory in production scratch space; required for build."""
     side: Side | None = None
@@ -382,6 +395,12 @@ class LockResponse(_Message):
     lock: str
     fingerprint: str
     tables: int
+    changes: tuple[LockChange, ...] | None
+    """What changed from the earlier lock; None when there was no lock to compare with."""
+    changes_file: str | None = None
+    """Where the changes were written for people, with ``output``."""
+    unreadable: str | None = None
+    """Why the earlier lock could not be read, when one exists; ``changes`` is None then."""
 
 
 class ImportJailerResponse(_Message):
@@ -575,16 +594,51 @@ def _lock(request: _SpecRequest) -> CatalogLock | None:
 
 
 def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
+    current = request.lock_path()
+    if request.output is not None and request.output.resolve() == current.resolve().parent:
+        message = (
+            f"output {request.output} holds the current lock {current}; name another"
+            " directory, so the current lock stays as it is"
+        )
+        raise CatalogError(message)
     spec = load_spec(request.spec)
     engine = registry.engine(spec.source.engine)
     require_inside("reading the source", registry)
     with engine.connect(spec.source.connection) as session:
         lock = CatalogLock.of(session.catalog())
-    path = request.lock_path()
+    earlier, unreadable = _earlier_lock(current)
+    found = None if earlier is None else changes(earlier.catalog, lock.catalog)
+    path = current
+    changes_file: Path | None = None
+    if request.output is not None:
+        request.output.mkdir(parents=True, exist_ok=True)
+        path = request.output / "catalog.lock"
+        changes_file = request.output / "changes.txt"
+        text = "".join(f"{line}\n" for line in describe_changes(found, unreadable))
+        changes_file.write_text(text, encoding="utf-8")
     write_lock(lock, path)
     return LockResponse(
-        lock=str(path), fingerprint=lock.fingerprint, tables=len(lock.catalog.tables)
+        lock=str(path),
+        fingerprint=lock.fingerprint,
+        tables=len(lock.catalog.tables),
+        changes=found,
+        changes_file=None if changes_file is None else str(changes_file),
+        unreadable=unreadable,
     )
+
+
+def _earlier_lock(path: Path) -> tuple[CatalogLock | None, str | None]:
+    """The lock a new one replaces, or why it cannot be read.
+
+    A lock that cannot be read is replaced without a comparison, since writing
+    a new one is how to fix it.
+    """
+    if not path.is_file():
+        return None, None
+    try:
+        return read_lock(path), None
+    except CatalogError as error:
+        return None, str(error)
 
 
 def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJailerResponse:
@@ -865,6 +919,7 @@ def exit_code(response: Response) -> ExitCode:
 def ci_report(response: Response, summary: str) -> Report:
     """What the CI system is told about a response: no data values, only identifiers."""
     outputs = {"outcome": str(response.outcome)}
+    files: tuple[Path, ...] = ()
     match response:
         case ErrorResponse():
             outputs["error"] = str(response.error)
@@ -880,6 +935,13 @@ def ci_report(response: Response, summary: str) -> Report:
             warnings = response.result.warnings
         case PlanResponse():
             warnings = response.plan.warnings
+        case LockResponse():
+            outputs["fingerprint"] = response.fingerprint
+            if response.changes is not None:
+                outputs["changes"] = str(len(response.changes))
+            if response.changes_file is not None:
+                files = (Path(response.lock), Path(response.changes_file))
+            warnings = ()
         case _:
             warnings = ()
     return Report(
@@ -888,4 +950,5 @@ def ci_report(response: Response, summary: str) -> Report:
         outputs=outputs,
         summary=summary,
         warnings=tuple(warnings),
+        files=files,
     )

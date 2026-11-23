@@ -55,6 +55,9 @@
     - {name: spec, mountPath: {{ printf "/workspace/%s/catalog.lock" (dir $root.Values.spec.path) | quote }}, subPath: lock}
     {{- end }}
     - {name: claim, mountPath: {{ $root.Values.claim.mount | quote }}}
+    {{- if .artifacts }}
+    - {name: artifacts, mountPath: {{ printf "/workspace/%s" .artifacts | quote }}}
+    {{- end }}
 {{- end -}}
 
 {{/* A job's pod: earlier steps as init containers, the last as the container. */}}
@@ -76,15 +79,21 @@ spec:
   initContainers:
     {{- range $index, $step := $job.steps }}
     {{- if lt (add $index 1) $count }}
-    {{- include "datadouble.container" (dict "root" $root "step" $step "name" (printf "step-%d" (add $index 1))) | nindent 4 }}
+    {{- include "datadouble.container" (dict "root" $root "step" $step "artifacts" $job.artifacts "name" (printf "step-%d" (add $index 1))) | nindent 4 }}
     {{- end }}
     {{- end }}
   {{- end }}
   containers:
-    {{- include "datadouble.container" (dict "root" $root "step" (last $job.steps) "name" (printf "step-%d" $count)) | nindent 4 }}
+    {{- include "datadouble.container" (dict "root" $root "step" (last $job.steps) "artifacts" $job.artifacts "name" (printf "step-%d" $count)) | nindent 4 }}
   volumes:
     - name: spec
       configMap: {name: {{ include "datadouble.name" $root }}}
     - name: claim
       persistentVolumeClaim: {claimName: {{ $root.Values.claim.name | quote }}}
+    {{- if $job.artifacts }}
+    # Files the job writes for review (the lock job's new lock and changes),
+    # printed to its log; Kubernetes keeps no job artifacts.
+    - name: artifacts
+      emptyDir: {}
+    {{- end }}
 {{- end -}}

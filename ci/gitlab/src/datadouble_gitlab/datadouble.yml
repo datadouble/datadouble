@@ -13,7 +13,10 @@
 # its outputs (outcome, generation, error code: never data) into
 # datadouble.env, a dotenv report that later jobs read and a file people can
 # download; a warning exits with 3, which `allow_failure: exit_codes` shows as
-# a warning.
+# a warning. A job that publishes files for review (the lock job's new lock
+# and its changes) names their directory in DATADOUBLE_ARTIFACTS, which is
+# emptied and made writable by the engine's user, and adds it to its
+# artifacts' paths.
 
 .datadouble:
   allow_failure:
@@ -53,6 +56,11 @@
       while IFS= read -r name; do
           if [ -n "$name" ]; then options+=(--env "$name"); fi
       done <<< "${DATADOUBLE_ENVIRONMENT:-}"
+      if [ -n "${DATADOUBLE_ARTIFACTS:-}" ]; then
+          rm -rf "${CI_PROJECT_DIR:?}/$DATADOUBLE_ARTIFACTS"
+          mkdir -p "$CI_PROJECT_DIR/$DATADOUBLE_ARTIFACTS"
+          chmod 0777 "$CI_PROJECT_DIR/$DATADOUBLE_ARTIFACTS"
+      fi
       status=0
       docker run "${options[@]}" "$DATADOUBLE_IMAGE" \
           --ci gitlab --ci-directory "$bridge" "${arguments[@]}" || status=$?

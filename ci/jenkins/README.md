@@ -13,7 +13,7 @@ The Jenkins CI/CD adapter for
 ## Writing Jenkinsfiles
 
 ```
-datadouble ci init --system jenkins --job build,promote,prune \
+datadouble ci init --system jenkins --job build,promote,prune,lock \
     --spec datadouble/shop.yml --runner prod-db --work /srv/datadouble/work
 datadouble ci init --system jenkins --job fetch,provision,release,prune,activate \
     --spec datadouble/shop.yml --runner staging
@@ -52,6 +52,16 @@ A retried Jenkins build is a new build, with a new `BUILD_TAG`. To resume a
 `build` that failed part way, start it with `RETRY_KEY` set to the failed
 build's `BUILD_TAG`, shown at the top of its log.
 
+## Re-locking the catalog
+
+The manual `lock` job (`--job lock`, on the production side with `build`)
+re-locks after a schema change. It runs `datadouble lock --output
+datadouble-lock` and archives the new `catalog.lock` and `changes.txt` as the
+build's artifacts. It never commits: download them from the build's page,
+check every new or changed column in `changes.txt` for personal data, then
+commit `catalog.lock` beside the spec. A lock holds names, types and versions,
+never values (decision 123).
+
 ## What a job needs on its agent
 
 - The labels given to `--runner`.
@@ -72,5 +82,6 @@ build's `BUILD_TAG`, shown at the top of its log.
 | warning | unstable | as above |
 | failure | fails | `error`, the error code |
 
-The step sets the build's description to the generation it built. Nothing is
-archived as a build artifact.
+The step sets the build's description to the generation it built. Only the
+`lock` job archives build artifacts: its lock and changes, which hold no data
+values.

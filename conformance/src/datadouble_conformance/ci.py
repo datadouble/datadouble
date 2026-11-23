@@ -158,6 +158,11 @@ class CiHarness(Protocol):
         """Files jobs uploaded to the system's own artifact storage."""
         ...
 
+    @property
+    def artifact_storage(self) -> bool:
+        """Whether the system keeps jobs' artifacts; without it (Argo CD) they go to the log."""
+        ...
+
     def runtime(self, network: str, base: Path) -> Mapping[str, JsonValue]:
         """The container runtime jobs use, for a world on ``network`` with files in ``base``."""
         ...
@@ -348,6 +353,27 @@ def _keys(built: World) -> dict[str, str]:
     }
 
 
+def _history(repository: Path) -> tuple[str, str, str] | None:
+    """The repository's HEAD, its number of commits and its uncommitted changes.
+
+    None for a harness that keeps the jobs in no git repository (Argo CD reads
+    them from the Application's values).
+    """
+    if not (repository / ".git").exists():
+        return None
+
+    def git(*arguments: str) -> str:
+        done = run_program("git", ["-C", str(repository), *arguments])
+        assert done.status == 0, done.stderr
+        return done.stdout.strip()
+
+    return (
+        git("rev-parse", "HEAD"),
+        git("rev-list", "--count", "HEAD"),
+        git("status", "--porcelain"),
+    )
+
+
 def ci_init(built: World, system: str, spec: Path, *jobs: JobKind, **fields: str) -> api.Response:
     """Run ``ci init`` into the world's repository."""
     request = {
@@ -370,7 +396,7 @@ def _generate(built: World, system: str) -> None:
         locked = api.handle_json(json.dumps({"command": "lock", "spec": str(on_demand)}))
     assert isinstance(locked, api.LockResponse), locked
     production = ci_init(
-        built, system, on_demand, JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE,
+        built, system, on_demand, JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK,
         runner=built.runners[Side.PRODUCTION], work=str(built.base / "work"),
     )  # fmt: skip
     assert isinstance(production, api.CiInitResponse), production
@@ -501,14 +527,15 @@ class CiConformance:
         assert refused.state is State.FAILURE
 
     def test_hosted_runners_are_refused(self, ci_harness: CiHarness, shop: World) -> None:
-        """``build`` is never generated for, nor runs on, a vendor-hosted runner."""
+        """``build`` and ``lock`` are never generated for, nor run on, a vendor-hosted runner."""
         if ci_harness.hosted_runner is not None:
-            refused = ci_init(
-                shop, ci_harness.system, shop.spec("on-demand"), JobKind.BUILD,
-                runner=ci_harness.hosted_runner, work=str(shop.base / "work"),
-            )  # fmt: skip
-            assert isinstance(refused, api.ErrorResponse)
-            assert refused.error is api.ErrorCode.CI_FAILED
+            for kind in (JobKind.BUILD, JobKind.LOCK):
+                refused = ci_init(
+                    shop, ci_harness.system, shop.spec("on-demand"), kind,
+                    runner=ci_harness.hosted_runner, work=str(shop.base / "work"),
+                )  # fmt: skip
+                assert isinstance(refused, api.ErrorResponse)
+                assert refused.error is api.ErrorCode.CI_FAILED
         environ = {"DATADOUBLE_BOUNDARY": "inside", **ci_harness.hosted_environment}
         hosted = ci_harness.run(
             shop.repository, "build", Event.MANUAL, shop.context(run_id="301", environ=environ)
@@ -521,3 +548,31 @@ class CiConformance:
         )  # fmt: skip
         assert unmarked.outputs.get("error") == "outside_boundary", unmarked.log
         assert shop.generations(shop.store) == []
+        locked = ci_harness.run(
+            shop.repository, "lock", Event.MANUAL, shop.context(run_id="303", environ=environ)
+        )
+        assert locked.state is State.FAILURE, locked.log
+        assert locked.outputs.get("error") == "outside_boundary", locked.log
+
+    def test_the_lock_job(self, ci_harness: CiHarness, shop: World) -> None:
+        """``lock`` publishes the new lock and its changes for review, and commits nothing."""
+        lock = shop.spec("on-demand").parent / "catalog.lock"
+        committed = lock.read_bytes()
+        history = _history(shop.repository)
+        docker(
+            "exec", shop.name, "psql", "--username", "postgres", "--quiet",
+            "--set", "ON_ERROR_STOP=1", "--command", "ALTER TABLE customer ADD COLUMN phone text",
+        )  # fmt: skip
+        done = ci_harness.run(shop.repository, "lock", Event.MANUAL, shop.context(run_id="501"))
+        assert done.state is State.SUCCESS, done.log
+        assert done.outputs.get("changes") == "1", done.log
+        assert "added column public.customer.phone: text (text) null" in done.log
+        assert lock.read_bytes() == committed
+        assert _history(shop.repository) == history
+        if ci_harness.artifact_storage:
+            names = {path.name for path in ci_harness.uploaded()}
+            assert {"catalog.lock", "changes.txt"} <= names, names
+        else:
+            assert "==> datadouble-lock/catalog.lock <==" in done.log
+            assert '"name": "phone"' in done.log
+        assert shop.secrets["DDCI_SOURCE_DSN"].split("@")[0].split(":")[-1] not in done.log

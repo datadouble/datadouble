@@ -8,14 +8,17 @@ The workflows are compared with the golden files under ``golden/``, which
 change, run the tests with ``DATADOUBLE_UPDATE_GOLDEN=1`` and review the diff.
 """
 
+import inspect
 import io
 import os
+import re
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
+from datadouble import api
 from datadouble.ci import CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import Spec, parse_spec
@@ -40,6 +43,8 @@ fetch:
 replicate: {using: {docker-volume: {}}, mode: MODE, size: 1}
 announce: [{ci-outputs: {}}]
 """
+
+ACTION = Path(__file__).resolve().parents[1]
 
 
 def spec(mode: str = "on-demand") -> Spec:
@@ -71,7 +76,7 @@ def github() -> tuple[GitHubActions, io.StringIO]:
 
 
 SCENARIOS = {
-    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE),
+    "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(
         JobKind.FETCH,
         JobKind.PROVISION,
@@ -206,3 +211,15 @@ def test_jobs_without_host_paths() -> None:
 def test_workflows_need_no_other_setup() -> None:
     ci, _ = github()
     assert ci.instructions(SCENARIOS["production"]) == ()
+
+
+def test_the_action_declares_every_output() -> None:
+    """Workflows read a step's outputs only if the action declares them."""
+    action = yaml.safe_load((ACTION / "action.yml").read_text(encoding="utf-8"))
+    (step,) = action["runs"]["steps"]
+    assert step["id"] == "datadouble"
+    reported = set(re.findall(r'outputs\["(\w+)"\]', inspect.getsource(api.ci_report)))
+    reported.add("outcome")
+    assert set(action["outputs"]) == reported
+    for name, output in action["outputs"].items():
+        assert output["value"] == f"${{{{ steps.datadouble.outputs.{name} }}}}"

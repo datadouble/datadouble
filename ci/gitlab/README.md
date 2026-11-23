@@ -8,7 +8,7 @@ a dotenv report and an exit code GitLab understands.
 ## Writing jobs
 
 ```
-datadouble ci init --system gitlab --job build,promote,prune \
+datadouble ci init --system gitlab --job build,promote,prune,lock \
     --spec datadouble/shop.yml --runner prod-db --work /srv/datadouble/work
 datadouble ci init --system gitlab --job fetch,provision,release,prune,activate \
     --spec datadouble/shop.yml --runner staging
@@ -34,6 +34,17 @@ remote` with `integrity`). GitLab must be able to reach
 `raw.githubusercontent.com`; on a GitLab without that, mirror the file and
 change the URL. The CI/CD Catalog components follow once the GitLab mirror of
 this repository exists.
+
+## Re-locking the catalog
+
+The manual `lock` job (`--job lock`, on the production side with `build`)
+re-locks after a schema change. It runs `datadouble lock --output
+datadouble-lock` and keeps the new `catalog.lock` and `changes.txt` in the
+job's artifacts with `datadouble.env`; start it by running a pipeline with
+`DATADOUBLE_JOB` set to `<spec>-lock`. It never commits: download the job's
+artifacts, check every new or changed column in `changes.txt` for personal
+data, then commit `catalog.lock` beside the spec. A lock holds names, types
+and versions, never values (decision 123).
 
 ## What a job needs on its runner
 
