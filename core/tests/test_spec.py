@@ -185,6 +185,18 @@ def test_json_is_accepted() -> None:
         (MINIMAL + "subset: {edges: {'a -> b': {}}}", "subset.edges.a -> b", "exactly one"),
         (MINIMAL + "package: {formats: []}", "package.formats", "at least 1"),
         (MINIMAL + "objects: [{function: a, view: b}]", "objects.0", "at most 1"),
+        (
+            MINIMAL
+            + "images: {a: {include: [x]}, b: {include: [y], standalone: true, requires: [a]}}",
+            "images.b",
+            "cannot also have `requires`",
+        ),
+        (MINIMAL + "images: {a: {include: [x], rows: {y: all}}}", "images.a", "set `standalone"),
+        (
+            MINIMAL + "images: {a: {include: [x], standalone: true, rows: {y: some}}}",
+            "images.a.rows.y",
+            "Input should be",
+        ),
         (MINIMAL + "objects: [{table: a}]", "objects.0.table.[key]", "Input should be"),
     ],
 )

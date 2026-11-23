@@ -139,12 +139,23 @@ type), the triggers on the group's tables and views over them, and every
 object's dependencies, across schemas and databases.
 
 - **`standalone: true`** on a group pulls what its closure reaches into its
-  image: objects, and tables with the rows the group's rows reference. Such a
-  group needs no `requires:` for followed references. Suggest it when a
-  person wants one schema or database of a larger source as an image of its
-  own. Building standalone images is not available yet: the plan shows each
-  closure (the group's `pulled` list, each with the path that reached it),
-  and a build stops before extracting. Say so.
+  image: objects, and tables with the rows the group's rows reference. The
+  image then holds exactly its closure. Such a group cannot have
+  `requires:`. Suggest it when a person wants one schema or database of a
+  larger source as an image of its own. The plan lists what each group
+  pulls in (its `pulled` list, each with the path that reached it).
+  PostgreSQL, MySQL and SQL Server build standalone images; Oracle and the
+  engines without objects refuse them by name.
+- **`rows:`** on a standalone group overrides which rows a pulled-in table
+  brings: `referenced` (the default), `all` (every source row) or `none`
+  (structure only). Keys are a table name or glob, or a reference
+  `child.column -> parent`, which wins. A table reached only through
+  objects comes without rows and the plan warns: ask the person whether the
+  image needs its rows before setting `rows` for it.
+- **Groups place objects too.** `include` patterns match functions, views
+  and other objects like tables. A group that is not standalone and needs an
+  object another group includes fails the plan; the fix is `requires:` for
+  that group, or `standalone: true`.
 - **`objects:`**, at the top of the spec or in a group, declares what code
   outside Datadouble expects in the images, by kind and name:
   `{function: public.uuid_generate_v4}`, `{view: reporting.daily}`. Ask the

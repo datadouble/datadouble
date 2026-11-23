@@ -116,6 +116,7 @@ class MysqlEngine:
             nested=True,
             version_line=2,
             accounts=AccountNames(max_characters=32, reserved=(USER, COPY_USER)),
+            standalone=True,
         )
 
     @contextmanager

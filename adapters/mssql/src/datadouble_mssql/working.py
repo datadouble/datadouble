@@ -8,7 +8,11 @@
 ``BULK INSERT`` (which checks no constraints and fires no triggers), fallbacks
 for missing parents, then indexes, check constraints, foreign keys, modules and
 triggers. Only the group's tables are created; a foreign key, view or function
-that needs a table the database does not have is left out. ``transform``
+that needs a table the database does not have is left out. A standalone
+group's database holds exactly its closure: the tables it pulls in, with the
+rows of the group's own extract and no foreign keys into those that come
+without rows, and only the closure's sequences, modules and triggers, in the
+same dependency order. ``transform``
 copies the detached files and anonymizes the copy with its triggers disabled,
 the rules and hooks in one transaction. ``package`` writes the data and log
 files (physical) or the schema and rows in extract's format (logical);
@@ -26,7 +30,13 @@ from pydantic import BaseModel, ConfigDict
 from pymssql import Connection
 
 from datadouble.catalog import Column, ColumnKind, Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import (
+    EngineError,
+    RestoredImage,
+    TableCount,
+    Transformation,
+    group_extract,
+)
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -45,7 +55,7 @@ from datadouble_mssql.render import (
     qualified,
     quote,
 )
-from datadouble_mssql.script import Phase, Schema, Statement, script
+from datadouble_mssql.script import Phase, Schema, Statement, object_name, script
 from datadouble_mssql.server import DATA, MssqlServer, Tools, literal
 from datadouble_mssql.source import (
     ExtractedTable,
@@ -235,11 +245,21 @@ def _copy_tree(source: Path, destination: Path) -> None:
 class _Builder:
     """Creates a database's objects from a schema, phase by phase."""
 
-    def __init__(self, connection: Connection, schema: Schema) -> None:
+    def __init__(
+        self,
+        connection: Connection,
+        schema: Schema,
+        outside: frozenset[str] = frozenset(),
+        rowless: frozenset[TableName] = frozenset(),
+    ) -> None:
         self.connection = connection
         self.schema = schema
         self.present: set[str] = set()
         self._users: dict[str, str] = {}
+        self.outside = outside
+        """Objects a standalone group's closure lacks, which its database leaves out."""
+        self.rowless = frozenset(str(table) for table in rowless)
+        """Pulled-in tables without rows, which foreign keys may not point at."""
 
     def run(self, phase: Phase, tables: frozenset[TableName] | None = None) -> None:
         """Run a phase's statements whose table and needs exist.
@@ -254,6 +274,14 @@ class _Builder:
             self.present.add(statement.name)
 
     def _wanted(self, statement: Statement, tables: frozenset[TableName] | None) -> bool:
+        if statement.name in self.outside:
+            return False
+        if (
+            statement.phase is Phase.FOREIGN_KEY
+            and set(statement.needs) & self.rowless
+            and str(statement.table) not in self.rowless
+        ):
+            return False
         if statement.table is not None:
             if tables is not None and statement.table not in tables:
                 return False
@@ -322,6 +350,37 @@ class _Builder:
         for phase in (Phase.INDEX, Phase.FOREIGN_KEY, Phase.MODULE, Phase.TRIGGER):
             self.run(phase)
         self.finish()
+
+
+def _outside(plan: Plan, group: PlannedGroup) -> frozenset[str]:
+    """The objects a standalone group's closure lacks, by the names statements use."""
+    wanted = frozenset(group.objects)
+    return frozenset(
+        object_name(item.ref.namespace[-1], item.ref.name)
+        for item in plan.catalog.objects
+        if item.ref not in wanted
+    )
+
+
+def _sources(
+    group: PlannedGroup, index: ExtractIndex, extract: Path
+) -> Iterator[tuple[Path, ExtractedTable]]:
+    """Each table whose rows the group's database holds, and the folder its file is in.
+
+    A standalone group's own extract has the rows it pulls in, and its own
+    tables' when they gained some; other own tables come from the shared one.
+    """
+    own = group_extract(extract, group.name)
+    taken: set[TableName] = set()
+    if own is not None:
+        pulled = ExtractIndex.model_validate_json((own / "index.json").read_bytes())
+        for table in pulled.tables:
+            taken.add(table.table)
+            yield own, table
+    members = frozenset(group.tables)
+    for table in index.tables:
+        if table.table in members and table.table not in taken:
+            yield extract, table
 
 
 def _bulk_load(connection: Connection, extract: Path, table: ExtractedTable, scratch: Path) -> None:
@@ -535,8 +594,10 @@ class MssqlWorking:
         """Build the group's working database."""
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         schema = Schema.model_validate_json((extract / "schema.json").read_bytes())
-        members = frozenset(group.tables)
-        server = MssqlServer(self.tools, directory, directory, (extract,))
+        members = frozenset(group.packaged())
+        own = group_extract(extract, group.name)
+        mounts = (extract,) if own is None else (extract, own)
+        server = MssqlServer(self.tools, directory, directory, mounts)
         with server.running():
             version = self._check_version(server, index.server_version)
             server.create(index.database, schema.collation)
@@ -544,17 +605,21 @@ class MssqlWorking:
                 _configure(connection, index.database, schema)
                 for hook in hooks:
                     _execute(connection, "a before_load hook", hook.sql)
-                builder = _Builder(connection, schema)
+                builder = _Builder(
+                    connection,
+                    schema,
+                    _outside(plan, group) if group.standalone else frozenset(),
+                    group.rowless(),
+                )
                 builder.tables(members)
-                for table in index.tables:
-                    if table.table in members:
-                        _bulk_load(connection, extract, table, directory)
+                for folder, table in _sources(group, index, extract):
+                    _bulk_load(connection, folder, table, directory)
                 as_of = as_of_value(plan.as_of)
                 for fixup in group.fixups:
                     self._fixup(connection, plan, index, fixup, as_of)
                 builder.rest()
                 _reseed(connection)
-                counts = MssqlRestored(connection, Physical()).counts(group.tables)
+                counts = MssqlRestored(connection, Physical()).counts(group.packaged())
             server.detach(index.database)
         info = DatabaseInfo(
             database=index.database, server_version=version, edition=self.tools.edition
@@ -669,7 +734,7 @@ class MssqlWorking:
                         f"enabling the triggers of {table}",
                         compose("ALTER TABLE {} ENABLE TRIGGER ALL", qualified(table)),
                     )
-                counts = MssqlRestored(connection, physical).counts(group.tables)
+                counts = MssqlRestored(connection, physical).counts(group.packaged())
             server.detach(info.database)
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
 

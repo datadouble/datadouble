@@ -119,11 +119,14 @@ def _row_counts(restored: RestoredImage, expected: tuple[TableCount, ...]) -> Ch
 
 
 def _references(plan: Plan, group: PlannedGroup, restored: RestoredImage) -> list[Check]:
-    members = set(group.tables)
+    members = set(group.packaged())
+    rowless = group.rowless()
     checks: list[Check] = []
     for edge in plan.edges:
         if edge.child not in members or edge.parent not in members:
             continue
+        if edge.parent in rowless and edge.child not in rowless:
+            continue  # The image holds the parent's structure only, on purpose.
         orphans = restored.orphans(edge)
         checks.append(
             Check(
@@ -139,7 +142,7 @@ def _references(plan: Plan, group: PlannedGroup, restored: RestoredImage) -> lis
 def _pii_scan(plan: Plan, group: PlannedGroup, restored: RestoredImage) -> list[Check]:
     allow = {rule.column: [like_pattern(p) for p in rule.patterns] for rule in plan.pii_allow}
     checks: list[Check] = []
-    members = set(group.tables)
+    members = set(group.packaged())
     for table in plan.catalog.tables:
         if table.name not in members:
             continue

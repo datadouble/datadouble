@@ -449,6 +449,18 @@ type ObjectRoot = Annotated[
 ]
 
 
+class PulledRows(StrEnum):
+    """Which rows of a table a standalone group pulls into its image."""
+
+    REFERENCED = "referenced"
+    """The rows the image's rows reference, and those referencing them where
+    the spec follows references down (the default)."""
+    ALL = "all"
+    """Every row of the source table."""
+    NONE = "none"
+    """None: the table's structure only."""
+
+
 class ImageGroup(_Model):
     """One image's share of the extract."""
 
@@ -462,6 +474,20 @@ class ImageGroup(_Model):
     objects: tuple[ObjectRoot, ...] = ()
     """Objects code outside Datadouble expects in this image, such as
     ``{function: public.uuid_generate_v4}``; they join the image's closure."""
+    rows: dict[str, PulledRows] = Field(default_factory=dict[str, PulledRows])
+    """Which rows a standalone group pulls in, overriding ``referenced``: keys
+    are a table name or glob, or a reference ``child.column -> parent`` (which
+    wins over a table key), and values ``referenced``, ``all`` or ``none``."""
+
+    @model_validator(mode="after")
+    def _alone(self) -> "ImageGroup":
+        if self.standalone and self.requires:
+            message = "a standalone group works on its own, so it cannot also have `requires`"
+            raise ValueError(message)
+        if self.rows and not self.standalone:
+            message = "`rows` says what a standalone group pulls in; set `standalone: true`"
+            raise ValueError(message)
+        return self
 
 
 class AccountPrivileges(StrEnum):

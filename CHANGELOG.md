@@ -159,7 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as new. An object that changes between planning and extracting stops the
   extract, as a changed table does. The MySQL adapter now needs MySQL
   8.0.13 or later and says so.
-- **Package planning: each image group's closure, and `standalone` groups**
+- **Package planning: each image works on its own with `standalone: true`**
   ([#79](https://github.com/datadouble/datadouble/issues/79)). After the
   subset plan, the plan works out per group what its image needs: from its
   tables, the objects that come with them (triggers, views over them alone)
@@ -167,16 +167,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`{function: public.uuid_generate_v4}`), it follows followed references,
   what tables need and every object's dependencies, across schemas and
   databases. A group with `standalone: true` pulls what it reaches into its
-  image, objects and tables with the rows its rows reference, and needs no
-  `requires:` for followed references. The plan lists each group's declared
-  objects, the objects its image needs in dependency order, and what a
-  standalone group pulls in with the path that reached it. An object that
-  needs an excluded table, or one the catalog does not list, fails the plan
-  naming the path, or warns when an inferred edge is on it. Strict mode now
-  also fails on a removed object that a packaged table or a declared object
-  still needs, and on a new or changed object on a path to an excluded
-  table. Building standalone images is not available yet: a run with a
-  standalone group plans and stops before extracting.
+  image and holds exactly that closure: tables with the rows its rows
+  reference, and objects created from their definitions in dependency
+  order, no others. `rows:` on the group overrides a pulled-in table's rows
+  (`referenced`, `all` for every source row, or `none`), keyed by a table or
+  glob or by a reference; a table reached only through objects comes
+  without rows, with a warning. Pulled-in rows are read in the same snapshot
+  into the group's own extract, so other groups' images are unaffected. The
+  plan lists each group's declared objects, the objects its image needs and
+  what it pulls in with the path that reached it; an object that needs an
+  excluded table, or one the catalog does not list, fails the plan naming
+  the path, or warns when an inferred edge is on it. Strict mode also fails
+  on a removed object a packaged table or declared object still needs, and
+  on a new or changed object on a path to an excluded table. PostgreSQL,
+  MySQL and SQL Server build standalone images; Oracle and engines without
+  objects refuse them by name for now.
+- **Image groups' `include` patterns place objects too**
+  ([#79](https://github.com/datadouble/datadouble/issues/79)). A group that
+  is not standalone and needs a function, view or other object another
+  group's patterns match now fails the plan, as a reference into another
+  group's table does; add `requires:` for that group, or make the group
+  standalone. A standalone group cannot have `requires:`.
 - **Tables list the objects they need.** The catalog records the sequences
   and functions tables' column defaults, generated or computed columns and
   check constraints use, and their columns' user-defined types: exactly from

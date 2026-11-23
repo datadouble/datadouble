@@ -17,11 +17,14 @@ over them alone), and follows, transitively and across namespaces:
   column's user-defined type;
 - every object's dependency edges, exact and inferred.
 
-The result is the group's **closure**. A ``standalone`` group pulls
-everything reached that it does not include into its image: objects with
-their definitions, and tables with the rows its rows reference. Other groups
-pull nothing in, so they follow only what their tables and roots need of
-objects; references between groups stay with ``requires:`` and fallbacks.
+The result is the group's **closure**. A ``standalone`` group starts from
+the objects its ``include`` patterns match too, and pulls everything reached
+that it does not include into its image: objects with their definitions, and
+tables with the rows ``rows:`` asks for (by default those its rows
+reference; :func:`pulled_rows` reads them). Other groups pull nothing in, so
+they follow only what their tables and roots need of objects; references
+between groups stay with ``requires:`` and fallbacks, and so do objects
+another group's patterns place.
 
 What an image cannot have fails the plan, naming the object and the path to
 it: an excluded table an object needs (copies leave such an object out), or
@@ -34,32 +37,33 @@ definitions.
 """
 
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from datadouble.catalog import Catalog, ObjectKind, ObjectRef, SourceObject
 from datadouble.names import GroupName, TableName
-from datadouble.subset import Edge, EdgeMode
+from datadouble.spec import PulledRows
+from datadouble.subset import (
+    AllRows,
+    Condition,
+    Edge,
+    EdgeMode,
+    KeyReader,
+    KeyTuple,
+    NoRows,
+    Predicate,
+    ValuesIn,
+    all_of,
+    any_of,
+)
 
 type Node = TableName | ObjectRef
 
 
 class _Model(BaseModel):
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
-
-
-class PulledRows(StrEnum):
-    """Which rows of a table a standalone group pulls in."""
-
-    REFERENCED = "referenced"
-    """The rows the group's rows reference (the default)."""
-    ALL = "all"
-    """Every row the extract holds."""
-    NONE = "none"
-    """None: the structure only."""
 
 
 class Pulled(_Model):
@@ -98,6 +102,36 @@ class Packaging:
     excluded: frozenset[TableName]
     structure_only: frozenset[TableName]
     edges: tuple[Edge, ...]
+    placement: dict[ObjectRef, tuple[GroupName, ...]] = field(
+        default_factory=dict[ObjectRef, tuple[GroupName, ...]]
+    )
+    """The groups whose ``include`` patterns match each object."""
+
+
+@dataclass(frozen=True, slots=True)
+class RowsRule:
+    """One ``rows`` override of a standalone group, resolved."""
+
+    key: str
+    """As the spec wrote it."""
+    rows: PulledRows
+    tables: frozenset[TableName] = frozenset()
+    """The tables a table key or glob matches."""
+    edge: Edge | None = None
+    """The reference a ``child.column -> parent`` key names."""
+
+
+@dataclass(frozen=True, slots=True)
+class GroupInput:
+    """One image group, as package planning sees it."""
+
+    name: GroupName
+    tables: frozenset[TableName]
+    roots: tuple[ObjectRef, ...] = ()
+    standalone: bool = False
+    allowed: frozenset[GroupName] = frozenset()
+    """The group and the groups it requires, whose objects it may need."""
+    rows: tuple[RowsRule, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,46 +170,49 @@ _PULLS_PARENTS = frozenset({EdgeMode.FOLLOW, EdgeMode.ALL})
 class _Walk:
     """One group's walk over the catalog's tables, references and objects."""
 
-    def __init__(
-        self,
-        packaging: Packaging,
-        name: GroupName,
-        own: frozenset[TableName],
-        *,
-        standalone: bool,
-    ) -> None:
+    def __init__(self, packaging: Packaging, group: GroupInput) -> None:
         self.packaging = packaging
-        self.name = name
-        self.own = own
-        self.standalone = standalone
+        self.group = group
+        self.name = group.name
+        self.own = group.tables
+        self.standalone = group.standalone
         self.objects = {item.ref: item for item in packaging.catalog.objects}
+        self.included = frozenset(
+            ref for ref, groups in packaging.placement.items() if group.name in groups
+        )
         self.tables = {
             table.name: table
             for table in packaging.catalog.tables
             if table.name not in packaging.excluded
         }
         self.reached: dict[Node, _Step] = {}
-        self.present: set[TableName] = set(own)
+        self.present: set[TableName] = set(group.tables)
         self.queue: deque[Node] = deque()
         self.closure = Closure()
         self.attaching: dict[TableName, list[SourceObject]] = {}
         for item in packaging.catalog.objects:
             for table in _exact_tables(item):
                 self.attaching.setdefault(table, []).append(item)
-        self.related: dict[TableName, list[TableName]] = {}
+        self.related: dict[TableName, list[tuple[TableName, Edge]]] = {}
         for edge in packaging.edges:
             # A reference to a table that is excluded, or not in the catalog,
             # already fails the subset plan.
             if edge.mode in _PULLS_PARENTS and edge.parent in self.tables:
-                self.related.setdefault(edge.child, []).append(edge.parent)
+                self.related.setdefault(edge.child, []).append((edge.parent, edge))
             if edge.down and edge.child in self.tables:
-                self.related.setdefault(edge.parent, []).append(edge.child)
+                self.related.setdefault(edge.parent, []).append((edge.child, edge))
+        self.reaching: dict[TableName, list[Edge]] = {}
+        """The followed references that reach each table from the image."""
 
-    def run(self, roots: Iterable[ObjectRef]) -> Closure:
+    def run(self) -> Closure:
         for table in sorted(self.own, key=str):
             self.reach(table, _Step((table,), inferred=False))
-        for root in roots:
+        for root in self.group.roots:
             self.reach(root, _Step((root,), inferred=False))
+        if self.standalone:
+            # A standalone image holds the objects its patterns include.
+            for ref in sorted(self.included, key=str):
+                self.reach(ref, _Step((ref,), inferred=False))
         while self.queue:
             node = self.queue.popleft()
             if isinstance(node, TableName):
@@ -187,7 +224,22 @@ class _Walk:
         self.closure.nodes = frozenset(self.reached)
         self.closure.tables = frozenset(self.present)
         self.closure.pulled = self.pulled()
+        if not self.standalone:
+            self.placed(found)
         return self.closure
+
+    def placed(self, found: list[ObjectRef]) -> None:
+        """Fail objects the group needs that only groups it does not require include."""
+        for ref in found:
+            groups = self.packaging.placement.get(ref, ())
+            if not groups or set(groups) & self.group.allowed:
+                continue
+            path = " -> ".join(label(node) for node in self.reached[ref].path)
+            others = ", ".join(repr(g) for g in groups)
+            self.closure.problems.append(
+                f"group {self.name!r}: {ref} is in group {others}; add `requires:` for it, "
+                f"or make this group standalone; reached by {path}"
+            )
 
     def reach(self, node: Node, step: _Step) -> None:
         if node in self.reached:
@@ -205,7 +257,8 @@ class _Walk:
 
     def visit_table(self, name: TableName) -> None:
         if self.standalone:
-            for target in self.related.get(name, []):
+            for target, reference in self.related.get(name, []):
+                self.reaching.setdefault(target, []).append(reference)
                 self.reach(target, self.through(name, target, inferred=False))
         for edge in self.tables[name].depends_on:
             self.reach(edge.target, self.through(name, edge.target, inferred=edge.inferred))
@@ -262,7 +315,7 @@ class _Walk:
         Roots are not, nor objects that come with the group's own tables (a
         trigger on one, a view over them alone).
         """
-        if len(self.reached[ref].path) == 1:
+        if len(self.reached[ref].path) == 1 or ref in self.included:
             return False
         item = self.objects.get(ref)
         tables = set(_exact_tables(item)) if item is not None else set[TableName]()
@@ -272,20 +325,57 @@ class _Walk:
         if not self.standalone:
             return ()
         pulled: list[Pulled] = []
+        used: set[str] = set()
         for node, step in self.reached.items():
             path = tuple(label(n) for n in step.path)
             if isinstance(node, TableName):
                 if node in self.own:
                     continue
-                rows = (
-                    PulledRows.NONE
-                    if node in self.packaging.structure_only
-                    else PulledRows.REFERENCED
-                )
+                rows = self.rows(node, used)
                 pulled.append(Pulled(table=node, path=path, inferred=step.inferred, rows=rows))
             elif node in self.objects and self.is_pulled(node):
                 pulled.append(Pulled(object=node, path=path, inferred=step.inferred))
+        self.closure.problems.extend(
+            f"group {self.name!r}: rows: {rule.key!r} matches no table its closure pulls in"
+            for rule in self.group.rows
+            if rule.key not in used
+        )
         return tuple(pulled)
+
+    def rows(self, table: TableName, used: set[str]) -> PulledRows:
+        """Which rows of a pulled-in table come with it.
+
+        A reference key wins over a table key; with neither, a table a
+        reference reaches comes with the rows referenced, and one reached only
+        through objects comes without rows.
+        """
+        reaching = self.reaching.get(table, [])
+        by_edge = [r for r in self.group.rows if r.edge is not None and r.edge in reaching]
+        by_table = [r for r in self.group.rows if table in r.tables]
+        chosen = by_edge or by_table
+        used.update(rule.key for rule in (*by_edge, *by_table))
+        modes = {rule.rows for rule in chosen}
+        if len(modes) > 1:
+            keys = ", ".join(repr(rule.key) for rule in chosen)
+            self.closure.problems.append(
+                f"group {self.name!r}: rows {keys} disagree about {label(table)}"
+            )
+        wanted = (
+            chosen[0].rows if chosen else PulledRows.REFERENCED if reaching else PulledRows.NONE
+        )
+        if table in self.packaging.structure_only:
+            if wanted is not PulledRows.NONE and chosen:
+                self.closure.problems.append(
+                    f"group {self.name!r}: rows asks for rows of {label(table)}, "
+                    "which is structure-only"
+                )
+            return PulledRows.NONE
+        if not chosen and not reaching:
+            self.closure.warnings.append(
+                f"group {self.name!r}: {label(table)} is reached only through objects, so it "
+                "comes without rows; set `rows` for it to copy some"
+            )
+        return wanted
 
 
 def _exact_tables(item: SourceObject) -> tuple[TableName, ...]:
@@ -296,6 +386,14 @@ def _exact_tables(item: SourceObject) -> tuple[TableName, ...]:
 def _inferred(item: SourceObject) -> bool:
     """Whether a routine has dependencies inferred from its body."""
     return item.ref.kind in _ROUTINES and any(e.inferred for e in item.depends_on)
+
+
+def ordered(found: Iterable[ObjectRef], catalog: Iterable[SourceObject]) -> tuple[ObjectRef, ...]:
+    """Objects in dependency order: each after those it needs, cycles broken by name.
+
+    Adapters create objects in this order, and drop them in its reverse.
+    """
+    return _ordered(list(found), {item.ref: item for item in catalog})
 
 
 def _ordered(
@@ -321,14 +419,123 @@ def _ordered(
     return tuple(done)
 
 
-def close(
-    packaging: Packaging,
-    name: GroupName,
-    tables: Iterable[TableName],
-    roots: Iterable[ObjectRef],
-    *,
-    standalone: bool,
-) -> Closure:
+def close(packaging: Packaging, group: GroupInput) -> Closure:
     """The closure of one group: its tables, its roots and everything they need."""
-    walk = _Walk(packaging, name, frozenset(tables), standalone=standalone)
-    return walk.run(roots)
+    return _Walk(packaging, group).run()
+
+
+class _Rows:
+    """The rows of a standalone image beyond the shared extract, read by keys."""
+
+    def __init__(
+        self,
+        edges: Iterable[Edge],
+        own: frozenset[TableName],
+        modes: Mapping[TableName, PulledRows],
+        baseline: Mapping[TableName, Condition],
+    ) -> None:
+        self.own, self.modes, self.baseline = own, modes, baseline
+        image = own | frozenset(modes)
+        self.up: list[Edge] = []
+        self.down: list[Edge] = []
+        for edge in edges:
+            if edge.child not in image or edge.parent not in image:
+                continue
+            if edge.mode in _PULLS_PARENTS and (
+                self.referenced(edge.parent) or (edge.parent in own and edge.child in modes)
+            ):
+                self.up.append(edge)
+            if edge.down and self.referenced(edge.child):
+                self.down.append(edge)
+        self.values: dict[Edge, set[KeyTuple]] = {}
+
+    def referenced(self, table: TableName) -> bool:
+        return self.modes.get(table) is PulledRows.REFERENCED
+
+    def condition(self, table: TableName) -> Condition:
+        found: list[Condition] = [
+            ValuesIn(e.parent_columns, frozenset(self.values.get(e, ())))
+            for e in self.up
+            if e.parent == table
+        ]
+        if table in self.own:
+            return any_of([self.baseline[table], *found])
+        mode = self.modes[table]
+        if mode is PulledRows.ALL or any(
+            e.parent == table and e.mode is EdgeMode.ALL for e in self.up
+        ):
+            return AllRows()
+        if mode is PulledRows.NONE:
+            return NoRows()
+        found.extend(
+            _when(e, ValuesIn(e.columns, frozenset(self.values.get(e, ()))))
+            for e in self.down
+            if e.child == table
+        )
+        return any_of(found)
+
+    def step(self, table: TableName, reader: KeyReader) -> set[TableName]:
+        """Re-read what ``table``'s rows reference; the tables that gained rows."""
+        condition = self.condition(table)
+        grown: set[TableName] = set()
+        if isinstance(condition, NoRows):
+            return grown
+        outgoing = [(e, e.columns, e.when, e.parent) for e in self.up if e.child == table]
+        outgoing += [(e, e.parent_columns, None, e.child) for e in self.down if e.parent == table]
+        for edge, columns, when, target in outgoing:
+            narrowed = all_of([condition, Predicate(when)]) if when else condition
+            fresh = {
+                row
+                for row in reader.project(table, narrowed, columns)
+                if all(value is not None for value in row)
+            }
+            known = self.values.setdefault(edge, set())
+            if not fresh <= known:
+                known |= fresh
+                grown.add(target)
+        return grown
+
+
+def _when(edge: Edge, condition: Condition) -> Condition:
+    return all_of([condition, Predicate(edge.when)]) if edge.when else condition
+
+
+def pulled_rows(
+    edges: Iterable[Edge],
+    own: frozenset[TableName],
+    modes: Mapping[TableName, PulledRows],
+    baseline: Mapping[TableName, Condition],
+    reader: KeyReader,
+) -> dict[TableName, Condition]:
+    """The rows a standalone group's image needs beyond the shared extract.
+
+    ``modes`` gives each pulled-in table's rows, and ``baseline`` the
+    extract's conditions of the group's own tables, standing alone (as the
+    keys strategy computes them). Starting from those rows, references are
+    followed up to parents and down where the spec follows them, reading
+    keys through ``reader`` until nothing changes, as the keys strategy does.
+    The result holds a condition for each pulled-in table with rows, and for
+    each own table that gained rows a pulled-in table references, so its
+    parents are in the image too.
+    """
+    state = _Rows(edges, own, modes, baseline)
+    pending = sorted(own | frozenset(modes), key=str)
+    queued = set(pending)
+    while pending:
+        table = pending.pop(0)
+        queued.discard(table)
+        for grown in sorted(state.step(table, reader), key=str):
+            if grown not in queued:
+                queued.add(grown)
+                pending.append(grown)
+    result = {
+        table: state.condition(table)
+        for table, mode in modes.items()
+        if mode is not PulledRows.NONE
+    }
+    result.update(
+        (table, state.condition(table))
+        for table in own
+        if any(e.parent == table and state.values.get(e) for e in state.up)
+    )
+    return result

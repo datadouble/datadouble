@@ -699,3 +699,115 @@ def test_listing_databases_fails_on_a_closed_connection(source: MysqlScratch) ->
         session.connection.close()
         with pytest.raises(EngineError, match="listing the databases failed"):
             list_databases(session.connection)
+
+
+# A slice of one database: the second's orders refer to the first's
+# customers, a trigger on them calls a function in the third, and
+# applications call a function in the first. A standalone image of the
+# second pulls all of that in, and nothing else.
+SLICE_SCHEMA = [
+    "CREATE DATABASE PREFIX_a",
+    "CREATE DATABASE PREFIX_b",
+    "CREATE DATABASE PREFIX_c",
+    "CREATE TABLE PREFIX_a.customers (id INT PRIMARY KEY, email VARCHAR(80) NOT NULL)",
+    "CREATE TABLE PREFIX_a.visits (id INT PRIMARY KEY, at DATE)",
+    """CREATE TABLE PREFIX_b.orders (
+        id INT PRIMARY KEY, customer_id INT NOT NULL, status VARCHAR(10),
+        CONSTRAINT fk_slice_customer FOREIGN KEY (customer_id) REFERENCES PREFIX_a.customers (id)
+    )""",
+    "CREATE FUNCTION PREFIX_c.fresh() RETURNS VARCHAR(10) DETERMINISTIC NO SQL RETURN 'fresh'",
+    """CREATE TRIGGER PREFIX_b.orders_fresh BEFORE INSERT ON PREFIX_b.orders FOR EACH ROW
+        SET NEW.status = PREFIX_c.fresh()""",
+    (
+        "CREATE FUNCTION PREFIX_a.greet(n VARCHAR(20)) RETURNS VARCHAR(30) DETERMINISTIC NO SQL"
+        " RETURN CONCAT('hello ', n)"
+    ),
+    "CREATE FUNCTION PREFIX_a.unused() RETURNS INT DETERMINISTIC NO SQL RETURN 1",
+    "INSERT INTO PREFIX_a.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x')",
+    "INSERT INTO PREFIX_a.visits VALUES (1, '2026-01-01')",
+    "INSERT INTO PREFIX_b.orders VALUES (10, 1, 'new'), (11, 2, 'new')",
+]
+
+SLICE_SPEC = """
+name: scratch
+source:
+  engine: mysql
+  connection:
+    url:
+      env: VARIABLE
+    databases: ["PREFIX_*"]
+objects:
+  - function: PREFIX_a.greet
+subset:
+  unselected: none
+  seeds:
+    orders: "true"
+    customers: "id = 3"
+    visits: "true"
+images:
+  orders:
+    include: ["PREFIX_b.*"]
+    standalone: true ROWS
+  rest:
+    include: ["PREFIX_a.*", "PREFIX_c.*"]
+anonymize:
+  customers:
+    email:
+      faker: email
+store:
+  - filesystem:
+      path: STORE
+"""
+
+SLICE_CHECKS = {
+    "SELECT 1 FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA LIKE 'PREFIX%'": 2,
+    "SELECT 1 FROM information_schema.ROUTINES WHERE ROUTINE_NAME = 'unused'": 0,
+    "SELECT 1 FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'PREFIX_b'": 1,
+    "SELECT 1 FROM DUAL WHERE PREFIX_a.greet('x') <> 'hello x'": 0,
+    "SELECT 1 FROM DUAL WHERE PREFIX_c.fresh() <> 'fresh'": 0,
+    "SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS"
+    " WHERE CONSTRAINT_SCHEMA = 'PREFIX_b'": 1,
+    "SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA LIKE 'PREFIX%'": 2,
+}
+
+
+@pytest.mark.parametrize(
+    ("rows", "customers"), [("", 2), (", rows: {customers: all}", 3)], ids=["referenced", "all"]
+)
+def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
+    prefix = f"dd_slice_{uuid.uuid4().hex[:8]}"
+    variable = f"DD_{prefix.upper()}"
+    parts = urlsplit(os.environ[URL_VARIABLE])
+    os.environ[variable] = urlunsplit((parts.scheme, parts.netloc, f"/{prefix}_b", "", ""))
+    try:
+        for statement in SLICE_SCHEMA:
+            admin(statement.replace("PREFIX", prefix))
+        spec = parse_spec(
+            SLICE_SPEC.replace("ROWS", rows)
+            .replace("PREFIX", prefix)
+            .replace("VARIABLE", variable)
+            .replace("STORE", str(tmp_path / "store"))
+            + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
+        )
+        with MysqlEngine().connect(spec.source.connection) as session:
+            lock = CatalogLock.of(session.catalog())
+        options = RunOptions(stages=tuple(Stage), work=tmp_path / "work")
+        result = Run(spec, lock, registry(), options).execute()
+        assert not result.failed(), result.verification
+        image_summary = next(s for s in result.images if s.identity.group == "orders")
+        orders = TableName.of(f"{prefix}_b", "orders")
+        found_customers = TableName.of(f"{prefix}_a", "customers")
+        working = working_databases(tmp_path / "check")
+        for archive in image_summary.archives:
+            image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / f"u-{archive.format}")
+            with working.restore(image, archive.format, tmp_path / f"r-{archive.format}") as found:
+                assert found.counts([orders, found_customers]) == {
+                    orders: 2,
+                    found_customers: customers,
+                }
+                for query, expected in SLICE_CHECKS.items():
+                    assert found.failing_rows(query.replace("PREFIX", prefix)) == expected, query
+    finally:
+        os.environ.pop(variable, None)
+        for suffix in ("_a", "_b", "_c"):
+            admin(f"DROP DATABASE IF EXISTS {quote(f'{prefix}{suffix}')}")

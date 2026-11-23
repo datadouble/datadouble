@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import pytest
-from test_planner import CYCLE_FREE, planned
+from test_planner import CAPABILITIES, CYCLE_FREE, planned
 
 from datadouble.catalog import (
     Catalog,
@@ -12,10 +12,12 @@ from datadouble.catalog import (
     SourceObject,
     definition_fingerprint,
 )
-from datadouble.closure import Pulled, PulledRows
-from datadouble.names import GroupName, TableName
+from datadouble.closure import Pulled, ordered, pulled_rows
+from datadouble.names import ColumnName, GroupName, TableName
 from datadouble.planner import PlanError, PlannedGroup
-from fakes import shop
+from datadouble.spec import PulledRows
+from datadouble.subset import AllRows, Edge, EdgeMode, ValuesIn
+from fakes import FakeSource, shop
 
 T = TableName.of
 USERS, POSTS, LOG = T("public", "users"), T("public", "posts"), T("audit", "log")
@@ -117,7 +119,7 @@ def test_a_standalone_group_pulls_in_what_it_needs() -> None:
         "function audit.write_log",
     )
     assert str(found["audit.log"]) == (
-        "table audit.log (rows: referenced), reached by table public.posts -> "
+        "table audit.log (rows: none), reached by table public.posts -> "
         "trigger public.posts.posts_log -> function audit.write_log -> table audit.log"
     )
     # The image's objects, each after what it needs; a view over its own table comes along.
@@ -141,12 +143,104 @@ def test_other_groups_pull_nothing_in() -> None:
     assert {str(ref) for ref in people.objects} == {str(STAMP), str(USERS_STAMP)}
 
 
-def test_objects_of_other_groups_need_tables_elsewhere_without_pulling_them() -> None:
+def test_objects_another_group_includes_need_requires() -> None:
     body = KEEP_AUDIT + "images: {main: {include: ['public.*']}, logs: {include: ['audit.*']}}\n"
+    with pytest.raises(PlanError) as caught:
+        planned(body, live=objects())
+    assert caught.value.problems == (
+        (
+            "group 'main': function audit.write_log is in group 'logs'; add `requires:` for "
+            "it, or make this group standalone; reached by table public.posts -> "
+            "trigger public.posts.posts_log -> function audit.write_log"
+        ),
+    )
+    body = body.replace("['public.*']}", "['public.*'], requires: [logs]}")
     main = group("main", body, objects())
     assert WRITE_LOG in main.objects
     assert main.pulled == ()
-    assert LOG not in main.tables
+    assert LOG not in main.packaged()
+
+
+def test_a_standalone_group_holds_the_objects_it_includes() -> None:
+    body = KEEP_AUDIT + "images: {logs: {include: ['audit.*'], standalone: true}}\n"
+    logs = group("logs", body, objects())
+    assert WRITE_LOG in logs.objects
+    assert pulled(logs) == {}
+
+
+def test_rows_overrides() -> None:
+    def rows(overrides: str) -> dict[str, PulledRows | None]:
+        body = KEEP_AUDIT + STANDALONE.replace(
+            "standalone: true", f"standalone: true\n    rows: {overrides}"
+        )
+        return {key: p.rows for key, p in pulled(group("content", body, objects())).items()}
+
+    found = rows("{audit.log: referenced, 'public.c*': all}")
+    assert found["audit.log"] is PulledRows.REFERENCED
+    assert found["public.categories"] is PulledRows.ALL
+    assert found["public.users"] is PulledRows.REFERENCED
+    # A reference key wins over a table key.
+    found = rows("{users: none, 'posts.user_id -> users': all}")
+    assert found["public.users"] is PulledRows.ALL
+    with pytest.raises(PlanError) as caught:
+        planned(
+            KEEP_AUDIT
+            + STANDALONE.replace(
+                "standalone: true",
+                "standalone: true\n    rows: {'posts.user_id -> users': all,"
+                " 'comments.author_id -> users': none, events: all, 'nope*': all,"
+                " nope: all, 'nope -> users': all}",
+            ),
+            live=objects(),
+        )
+    assert set(caught.value.problems) == {
+        "group 'content': rows: 'nope*' matches no table",
+        (
+            "group 'content': rows 'posts.user_id -> users', 'comments.author_id -> users' "
+            "disagree about table public.users"
+        ),
+        "group 'content': rows: 'events' matches no table its closure pulls in",
+        "table 'nope' is not in the catalog",
+        "'nope' is not a table or column in the catalog",
+    }
+
+
+def test_structure_only_tables_take_no_rows() -> None:
+    with pytest.raises(PlanError) as caught:
+        planned(
+            KEEP_AUDIT
+            + 'structure_only: ["comments"]\n'
+            + "images: {people: {include: [users], standalone: true, rows: {comments: all}}}\n"
+            + "subset: {follow: {down: ['users -> posts', 'posts -> comments']}}\n",
+            live=shop(),
+        )
+    assert caught.value.problems == (
+        "group 'people': rows asks for rows of table public.comments, which is structure-only",
+    )
+
+
+def test_engines_that_cannot_build_standalone_images() -> None:
+    limited = CAPABILITIES.model_copy(update={"standalone": False})
+    with pytest.raises(PlanError) as caught:
+        planned(KEEP_AUDIT + STANDALONE, live=objects(), capabilities=limited)
+    assert caught.value.problems == (
+        "group 'content' is standalone, and the fake adapter cannot build standalone images yet",
+    )
+    # Nothing to pull in and no objects: a standalone group is an ordinary one.
+    alone = "images: {all: {include: ['*'], standalone: true}}\n"
+    assert planned(CYCLE_FREE + alone, capabilities=limited).groups[0].standalone
+
+
+def test_references_to_tables_without_rows_are_left_out() -> None:
+    content = group(
+        "content",
+        KEEP_AUDIT
+        + STANDALONE.replace("standalone: true", "standalone: true\n    rows: {users: none}"),
+        objects(),
+    )
+    assert content.rowless() == {USERS, LOG}
+    assert {"posts_user_id_fkey", "comments_author_id_fkey"} <= set(content.omitted_references)
+    assert content.rows()[USERS] is PulledRows.NONE
 
 
 def test_followed_children_and_structure_only_tables() -> None:
@@ -318,3 +412,81 @@ def test_new_or_changed_objects_that_need_what_an_image_cannot_have_fail() -> No
         "strict mode: object-changed function audit.write_log: its definition differs from the "
         "lock; group 'all': function audit.write_log needs table audit.log"
     )
+
+
+def test_pulled_rows_follow_references_both_ways() -> None:
+    source = FakeSource(
+        rows={
+            POSTS: [
+                {"id": 10, "user_id": 1, "category_id": 1},
+                {"id": 11, "user_id": 2, "category_id": 2},
+                {"id": 12, "user_id": 4, "category_id": None},
+            ],
+            USERS: [{"id": i} for i in range(1, 6)],
+            T("public", "comments"): [
+                {"id": 100, "post_id": 10, "author_id": 3},
+                {"id": 101, "post_id": 10, "author_id": 5},
+                {"id": 102, "post_id": 11, "author_id": None},
+            ],
+            T("public", "categories"): [{"id": 1}, {"id": 2}],
+        }
+    )
+    comments, categories = T("public", "comments"), T("public", "categories")
+    up = Edge("posts_user", POSTS, (ColumnName("user_id"),), USERS, (ColumnName("id"),))
+    down = Edge(
+        "comments_post",
+        comments,
+        (ColumnName("post_id"),),
+        POSTS,
+        (ColumnName("id"),),
+        down=True,
+        when="author_id != 5",
+    )
+    authors = Edge(
+        "comments_author", comments, (ColumnName("author_id"),), USERS, (ColumnName("id"),)
+    )
+    every = Edge(
+        "posts_category",
+        POSTS,
+        (ColumnName("category_id"),),
+        categories,
+        (ColumnName("id"),),
+        mode=EdgeMode.ALL,
+    )
+    first = ValuesIn((ColumnName("id"),), frozenset({(10,)}))
+    elsewhere = Edge(
+        "staff_user", T("public", "staff"), (ColumnName("id"),), USERS, (ColumnName("id"),)
+    )
+    found = pulled_rows(
+        (up, down, authors, every, elsewhere),
+        frozenset({POSTS}),
+        {
+            USERS: PulledRows.REFERENCED,
+            comments: PulledRows.REFERENCED,
+            categories: PulledRows.REFERENCED,
+            T("public", "events"): PulledRows.NONE,
+        },
+        {POSTS: first},
+        source,
+    )
+    # Posts the comments reference are read again with the group's own rows.
+    assert set(found) == {USERS, comments, categories, POSTS}
+    assert [r["id"] for r in source.select(POSTS, found)] == [10]
+    assert sorted(str(r["id"]) for r in source.select(USERS, found)) == ["1", "3"]
+    assert [r["id"] for r in source.select(comments, found)] == [100]
+    assert isinstance(found[categories], AllRows)
+    # An own table gains the rows that every row of a pulled-in table references.
+    grown = pulled_rows(
+        (up,),
+        frozenset({USERS}),
+        {POSTS: PulledRows.ALL},
+        {USERS: ValuesIn((ColumnName("id"),), frozenset({(5,)}))},
+        source,
+    )
+    assert sorted(str(r["id"]) for r in source.select(USERS, grown)) == ["1", "2", "4", "5"]
+
+
+def test_objects_in_dependency_order() -> None:
+    catalog = objects().objects
+    found = ordered([POSTS_LOG, WRITE_LOG, USERS_STAMP, STAMP], catalog)
+    assert found == (WRITE_LOG, STAMP, POSTS_LOG, USERS_STAMP)

@@ -33,7 +33,10 @@ from datadouble.subset import AllRows, EdgeMode, NoRows, nested_conditions
 from fakes import catalog, shop, table
 
 CAPABILITIES = Capabilities(
-    formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL), expressions=True, nested=True
+    formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
+    expressions=True,
+    nested=True,
+    standalone=True,
 )
 NOW = dt.datetime(2026, 11, 11, 12, 30, 15, 999, tzinfo=dt.UTC)
 HEADER = "name: shop\nsource: {engine: fake}\n"

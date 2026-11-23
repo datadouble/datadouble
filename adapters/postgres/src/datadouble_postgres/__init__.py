@@ -121,6 +121,7 @@ class PostgresEngine:
                 reserved_prefixes=("pg_",),
                 keep_all=(SUPERUSER,),
             ),
+            standalone=True,
             joins_outermost=False,
         )
 

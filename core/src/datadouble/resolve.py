@@ -87,7 +87,11 @@ class Resolver:
         namespaces called ``audit``, and ``shop.*.*`` every table in
         PostgreSQL's database ``shop``.
         """
-        return ends_with(name.parts, pattern.split("."), self._glob_same)
+        return self.matches_parts(pattern, name.parts)
+
+    def matches_parts(self, pattern: str, parts: Sequence[str]) -> bool:
+        """Whether a glob matches a name given as its parts: a table's, or an object's."""
+        return ends_with(parts, pattern.split("."), self._glob_same)
 
     def glob(self, pattern: str) -> tuple[TableName, ...]:
         """Every table a glob matches, in catalog order."""

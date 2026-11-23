@@ -34,6 +34,12 @@ and check constraints and computed columns use, from the same view, and the
 alias and table types of their columns. Package planning follows these
 edges to work out what an image needs.
 
+A standalone group's database holds exactly its closure: the scripted
+schema runs as for any group, with the pulled-in tables, the rows of the
+group's own extract, and only the closure's sequences, modules and triggers,
+in the same dependency order. Foreign keys into a pulled-in table without
+rows are left out.
+
 Reading the catalog needs SQL Server 2017 or later, and the `VIEW
 DEFINITION` permission on the database (or on each schema): SQL Server's
 metadata visibility shows a user only the objects it has some permission

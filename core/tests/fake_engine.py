@@ -33,6 +33,7 @@ from datadouble.engine import (
     Tooling,
     Transformation,
     WorkingDatabases,
+    group_extract,
 )
 from datadouble.names import ColumnName, ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup
@@ -221,8 +222,14 @@ class FakeWorking:
             message = "the fake engine was told to fail"
             raise EngineError(message)
         self.engine.hooks.extend(h.sql for h in hooks)
-        everything = _read(extract / "rows.json")
-        rows = {_key(t): everything.get(_key(t), []) for t in group.tables}
+        shared = _read(extract / "rows.json")
+        own_tables = set(group.tables)
+        rows = {
+            _key(t): shared.get(_key(t), []) if t in own_tables else [] for t in group.packaged()
+        }
+        own = group_extract(extract, group.name)
+        if own is not None:
+            rows.update(_read(own / "rows.json"))
         _apply_fixups(rows, group, plan.catalog)
         _write(directory / "db.json", rows)
         return _counts(rows)

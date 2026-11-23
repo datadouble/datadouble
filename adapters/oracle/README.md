@@ -45,6 +45,10 @@ sequence (`DEFAULT orders_seq.NEXTVAL`), so defaults are parsed for the
 objects they name, and those edges are marked inferred. Package planning
 follows these edges to work out what an image needs.
 
+The Oracle adapter cannot build standalone images yet: a plan with a
+standalone group fails, naming it. Package planning still lists what each
+group's image needs.
+
 The `ALL_*` views show only what the connecting user owns or has been
 granted. Connecting as each schema's owner, as by default, sees everything.
 Another user needs privileges on the objects (or `SELECT ANY DICTIONARY`):

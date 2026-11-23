@@ -29,7 +29,7 @@ from datadouble.catalog import (
     Requirement,
     Table,
 )
-from datadouble.closure import Closure, Packaging, Pulled, close
+from datadouble.closure import Closure, GroupInput, Packaging, Pulled, RowsRule, close
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
@@ -46,6 +46,7 @@ from datadouble.spec import (
     ObjectRoot,
     OnMissing,
     PathsFrom,
+    PulledRows,
     Rule,
     Spec,
     Strategy,
@@ -139,6 +140,9 @@ class Capabilities(BaseModel):
     accounts: AccountNames | None = None
     """The names physical images' accounts (``package.accounts``) can have; None
     when the adapter cannot give images accounts."""
+    standalone: bool = False
+    """Whether the adapter can build standalone images: load what a closure
+    pulls in, and leave out of the image every object the closure lacks."""
     joins_outermost: bool = True
     """Whether one query can join tables in different outermost namespaces.
     PostgreSQL's databases cannot be joined, so a virtual reference between
@@ -197,6 +201,20 @@ class PlannedGroup(_Model):
     its tables, its roots, and what they need."""
     pulled: tuple[Pulled, ...] = ()
     """What a standalone group's closure pulled in from outside the group, and from where."""
+
+    def packaged(self) -> tuple[TableName, ...]:
+        """The tables its image holds: its own, then those its closure pulls in."""
+        return (*self.tables, *(p.table for p in self.pulled if p.table is not None))
+
+    def rowless(self) -> frozenset[TableName]:
+        """Pulled-in tables that come without rows."""
+        return frozenset(
+            p.table for p in self.pulled if p.table is not None and p.rows is PulledRows.NONE
+        )
+
+    def rows(self) -> dict[TableName, PulledRows]:
+        """Which rows of each pulled-in table its image holds."""
+        return {p.table: p.rows for p in self.pulled if p.table is not None and p.rows}
 
 
 class PiiAllow(_Model):
@@ -575,6 +593,53 @@ class _Planner:
 
     # Groups
 
+    def placement(self) -> dict[ObjectRef, tuple[GroupName, ...]]:
+        """The groups whose ``include`` patterns match each object, from the right."""
+        placed: dict[ObjectRef, tuple[GroupName, ...]] = {}
+        for item in self.catalog.objects:
+            parts = (*item.ref.namespace, item.ref.name)
+            groups = tuple(
+                name
+                for name, group in self.spec.images.items()
+                if any(self.resolver.matches_parts(pattern, parts) for pattern in group.include)
+            )
+            if groups:
+                placed[item.ref] = groups
+        return placed
+
+    def rows_rules(self, name: GroupName, edges: list[Edge]) -> tuple[RowsRule, ...]:
+        """A group's ``rows`` overrides, resolved: references to edges, tables to names."""
+        found: list[RowsRule] = []
+        for key, rows in self.spec.images[name].rows.items():
+            if "->" in key:
+                reference = self.attempt(self.resolver.reference, key)
+                index = None if reference is None else self.find_edge(edges, reference, key)
+                if index is not None:
+                    found.append(RowsRule(key=key, rows=rows, edge=edges[index]))
+                continue
+            if _is_glob(key):
+                tables = self.resolver.glob(key.strip())
+            else:
+                table = self.attempt(self.resolver.table, key)
+                tables = () if table is None else (table.name,)
+            if tables:
+                found.append(RowsRule(key=key, rows=rows, tables=frozenset(tables)))
+            elif _is_glob(key):
+                self.problems.append(f"group {name!r}: rows: {key!r} matches no table")
+        return tuple(found)
+
+    def check_standalone(self) -> None:
+        """Refuse standalone groups the engine adapter cannot build."""
+        if self.capabilities.standalone:
+            return
+        for name, group in self.spec.images.items():
+            closure = self.closures[name]
+            if group.standalone and (closure.pulled or self.catalog.objects):
+                self.problems.append(
+                    f"group {name!r} is standalone, and the {self.catalog.engine} adapter "
+                    "cannot build standalone images yet"
+                )
+
     def members(self, kept: tuple[TableName, ...]) -> dict[GroupName, tuple[TableName, ...]]:
         """The kept tables each group's patterns include."""
         return {
@@ -603,13 +668,18 @@ class _Planner:
         planned: list[PlannedGroup] = []
         for name, group in self.spec.images.items():
             closure = self.closures[name]
-            # A standalone group holds what its closure pulls in, too.
+            # A standalone group holds what its closure pulls in, too; a
+            # pulled-in table without rows cannot keep references to it.
             tables = set(closure.tables)
+            rowless = {p.table for p in closure.pulled if p.rows is PulledRows.NONE}
             reachable = self.required(name)
             omitted: list[str] = []
             fixups: list[Fixup] = []
             for edge in edges:
                 if edge.child not in tables:
+                    continue
+                if edge.parent in rowless and edge.child not in rowless:
+                    omitted.append(edge.name)
                     continue
                 parent_here = edge.parent in tables
                 parent_rule = rules.get(edge.parent)
@@ -878,13 +948,24 @@ class _Planner:
         edges = self.edges(kept_tables)
         members = self.members(kept)
         self.group_roots = self.roots()
-        packaging = Packaging(self.catalog, excluded, structure_only, tuple(edges))
+        packaging = Packaging(
+            self.catalog, excluded, structure_only, tuple(edges), self.placement()
+        )
         self.closures = {
             name: close(
-                packaging, name, members[name], self.group_roots[name], standalone=group.standalone
+                packaging,
+                GroupInput(
+                    name=name,
+                    tables=frozenset(members[name]),
+                    roots=self.group_roots[name],
+                    standalone=group.standalone,
+                    allowed=self.required(name) | {name},
+                    rows=self.rows_rules(name, edges),
+                ),
             )
             for name, group in self.spec.images.items()
         }
+        self.check_standalone()
         strict = self.strict_report(excluded)
         if strict is not None and strict.failed():
             failures = tuple(f"strict mode: {f}" for f in strict.findings if f.severity == "fail")

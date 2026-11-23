@@ -173,8 +173,9 @@ Subset planning decides which rows the extract reads. **Package planning**
 runs after it, once per group, and works out what the group's image needs
 to work: its **closure**. It starts from the group's tables, the objects the
 spec and the group declare in `objects:` (code outside Datadouble expects
-them), and the objects that come with the group's tables (triggers on them,
-views over them alone), and follows, transitively and across schemas and
+them), the objects that come with the group's tables (triggers on them,
+views over them alone) and, for a standalone group, the objects its
+`include` patterns match, and follows, transitively and across schemas and
 databases:
 
 - references from a table up to its parents where the reference is
@@ -199,31 +200,67 @@ images:
 
 A **standalone** group pulls into its image everything its closure reaches
 that the group does not include: objects with their definitions, and tables
-with the rows the group's rows reference. It needs no `requires:` for the
-references it follows. Other groups pull nothing in: their references into
-other groups stay with `requires:` and fallbacks, and their closure follows
-only what their tables and declared objects need of objects.
+with their rows. It cannot also have `requires:`, since its image works
+alone. Other groups pull nothing in and build as they always have: their
+references into other groups need `requires:` or a fallback, and so do the
+objects they need that another group's `include` patterns match (patterns
+place objects as they place tables, matched from the right).
+
+Which rows a pulled-in table brings is set per group with `rows:`, keyed by
+a table name or glob or by a reference written `child.column -> parent`; a
+reference key wins over a table key:
+
+```yaml
+images:
+  billing:
+    include: ["billing.*"]
+    standalone: true
+    rows:
+      shop.customers: all                        # every row of the source table
+      "invoices.referred_by -> customers": none  # what this reference reaches: structure only
+```
+
+- **`referenced`** (the default for a table a reference reaches): the rows
+  the image's rows reference, and the rows referencing them where the spec
+  follows references down, transitively.
+- **`all`**: every row of the source table, and the rows those reference in
+  turn. Other groups' images are unaffected.
+- **`none`**: the table's structure only. References into it are left out
+  of the image, as references to another group are. A table reached only
+  through objects, such as one a trigger's function writes to, defaults to
+  `none`, with a warning, since no row of the image references it.
+
+The rows come from the same snapshot as the shared extract. After the shared
+extract, each standalone group that pulls tables in reads them again, keys
+first as the keys strategy does (whichever strategy chose the shared rows),
+into an extract of its own beside the shared one (`groups/<group>`). That
+extract also holds any of the group's own tables that gained rows a
+pulled-in table references, so every reference in the image has its parent.
+`load` takes the tables listed there from it and the group's other tables
+from the shared extract.
 
 The plan lists, per group, its declared objects, every object its image
-needs in dependency order, and for a standalone group each table and object
-pulled in with the path that reached it. Anything an image cannot have fails
-the plan naming the object and that path: an object that needs an excluded
-table (copies leave such an object out), or an object the catalog does not
-list, such as one in a database the spec does not read. When an inferred
-edge is on the path it warns instead, since inferred edges never fail a plan
-on their own; a pulled-in routine whose edges were inferred warns too, so a
-person checks it. Engines without objects (MongoDB, Redis, Elasticsearch,
-OpenSearch, Salesforce, file trees) get the table closure only.
+needs in dependency order, and for a standalone group each table (with its
+rows) and object pulled in, with the path that reached it. Anything an image
+cannot have fails the plan naming the object and that path: an object that
+needs an excluded table (copies leave such an object out), or an object the
+catalog does not list, such as one in a database the spec does not read.
+When an inferred edge is on the path it warns instead, since inferred edges
+never fail a plan on their own; a pulled-in routine whose edges were
+inferred warns too, so a person checks it.
+
+`load` builds a standalone image as exactly its closure: its own and
+pulled-in tables, its objects created from their definitions in dependency
+order, and none of the source's other objects. The PostgreSQL, MySQL and SQL
+Server adapters build standalone images. Other adapters refuse a standalone
+group by name when it pulls anything in or the source has objects: Oracle
+for now, and the engines without objects (MongoDB, Redis, Elasticsearch,
+OpenSearch, Salesforce), whose closures hold tables only.
 
 Strict mode asks package planning what a difference from the lock breaks
 (decision 130): a removed object that a packaged table or a declared object
 still needs, and a new or changed object on a path to something an image
 cannot have, fail the plan at every level.
-
-Building standalone images is not available yet: a run with a standalone
-group plans, and `datadouble plan` shows each closure, but stops before
-extracting. Loading a closure creates its objects from their definitions
-and its tables in dependency order, in the engine's adapter.
 
 Groups match on whatever namespace an engine has, like every name in a spec
 ([table names](subsetting.md#table-names)): databases and schemas for

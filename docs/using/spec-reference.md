@@ -252,6 +252,7 @@ One image's share of the extract.
 | `requires` | list of string |  | Groups whose images a copy of this one is provisioned with, for references into them. |
 | `standalone` | boolean | `false` | Whether the image must work on its own: what its tables and objects need from outside the group is pulled into it (package planning). |
 | `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in this image, such as `{function: public.uuid_generate_v4}`; they join the image's closure. |
+| `rows` | map of [PulledRows](#pulledrows) |  | Which rows a standalone group pulls in, overriding `referenced`: keys are a table name or glob, or a reference `child.column -> parent` (which wins over a table key), and values `referenced`, `all` or `none`. |
 
 ### JailerSubset
 
@@ -349,6 +350,12 @@ Where `promote` copies verified images, and what it requires of them.
 | `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
 | `channel` | string | `"latest"` |  |
 | `strict` | [Strict](#strict) | see type | The least strict level, per kind, an image may have been built with. |
+
+### PulledRows
+
+Which rows of a table a standalone group pulls into its image.
+
+One of `referenced` or `all` or `none`.
 
 ### Replicate
 

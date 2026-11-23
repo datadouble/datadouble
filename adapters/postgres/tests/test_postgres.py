@@ -650,3 +650,106 @@ def test_listing_databases_fails_on_a_closed_connection(source: PostgresScratch)
         session.connection.close()
         with pytest.raises(EngineError, match="listing the databases failed"):
             list_databases(session.connection)
+
+
+# A slice of one schema: billing's invoices refer to shop's customers, a
+# trigger on them calls a function in audit, and applications call a public
+# function. A standalone billing image pulls all of that in, and nothing else.
+SLICE_SCHEMA = """
+CREATE SCHEMA shop;
+CREATE SCHEMA billing;
+CREATE SCHEMA audit;
+CREATE TABLE shop.customers (id integer PRIMARY KEY, email text NOT NULL);
+CREATE VIEW shop.emails AS SELECT email FROM shop.customers;
+CREATE TABLE billing.invoices (
+    id integer PRIMARY KEY, customer_id integer NOT NULL REFERENCES shop.customers, amount int
+);
+CREATE TABLE audit.entries (id serial PRIMARY KEY, invoice_id integer);
+CREATE FUNCTION audit.record() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO audit.entries (invoice_id) VALUES (NEW.id);
+    RETURN NEW;
+END $$;
+CREATE TRIGGER invoices_audit AFTER INSERT ON billing.invoices
+    FOR EACH ROW EXECUTE FUNCTION audit.record();
+CREATE FUNCTION public.greet(name text) RETURNS text LANGUAGE sql IMMUTABLE RETURN 'hello ' || name;
+CREATE FUNCTION public.unused() RETURNS integer LANGUAGE sql IMMUTABLE RETURN 1;
+INSERT INTO shop.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x.test');
+INSERT INTO billing.invoices VALUES (10, 1, 5), (11, 2, 6);
+"""
+
+SLICE_SPEC = """
+name: scratch
+source:
+  engine: postgres
+  connection: CONNECTION
+exclude: [items]
+objects:
+  - function: public.greet
+subset:
+  unselected: none
+  seeds:
+    invoices: "true"
+    customers: "id = 3"
+images:
+  billing:
+    include: ["billing.*"]
+    standalone: true ROWS
+  rest:
+    include: ["shop.*", "audit.*"]
+anonymize:
+  customers:
+    email:
+      faker: email
+store:
+  - filesystem:
+      path: STORE
+"""
+
+SLICE_CHECKS = {
+    "SELECT 1 FROM pg_catalog.pg_proc"
+    " WHERE pronamespace::regnamespace::text IN ('public', 'audit')": 2,
+    "SELECT 1 FROM pg_catalog.pg_proc WHERE proname = 'unused'": 0,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'invoices_audit'": 1,
+    "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'emails'": 1,
+    "SELECT 1 WHERE public.greet('x') <> 'hello x'": 0,
+    "SELECT 1 FROM pg_catalog.pg_constraint WHERE contype = 'f'": 1,
+}
+
+
+@pytest.mark.parametrize(
+    ("rows", "customers"), [("", 2), (", rows: {customers: all}", 3)], ids=["referenced", "all"]
+)
+def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
+    with scratch() as made:
+        made.execute(trusted(SLICE_SCHEMA))
+        spec = SLICE_SPEC.replace("ROWS", rows)
+        planned = build(made, tmp_path, spec=spec, stages=(Stage.PLAN,))
+        assert any("audit.entries is reached only through objects" in w for w in planned.warnings)
+        result = build(made, tmp_path, spec=spec, resume=planned.generation)
+        assert not result.failed(), result.verification
+        billing = next(s for s in result.images if s.identity.group == "billing")
+        tables = {
+            name: TableName.of(made.database, *name.split("."))
+            for name in ("billing.invoices", "shop.customers", "audit.entries")
+        }
+        working = working_databases(tmp_path / "check")
+        for archive in billing.archives:
+            image, _ = unpack(tmp_path / "store" / archive.key, tmp_path / f"u-{archive.format}")
+            with working.restore(image, archive.format, tmp_path / f"r-{archive.format}") as found:
+                counts = found.counts(tables.values())
+                assert {str(t).split(".", 1)[1]: n for t, n in counts.items()} == {
+                    "billing.invoices": 2,
+                    "shop.customers": customers,
+                    "audit.entries": 0,
+                }
+                for query, expected in SLICE_CHECKS.items():
+                    assert found.failing_rows(query) == expected, query
+                # Only the closure's tables are there.
+                assert (
+                    found.failing_rows(
+                        "SELECT 1 FROM pg_catalog.pg_tables"
+                        " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
+                    )
+                    == 3
+                )
