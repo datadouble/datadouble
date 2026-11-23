@@ -12,8 +12,8 @@ rules. It reports every problem it finds, not just the first.
 
 import datetime as dt
 import re
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import replace
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import assert_never
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -30,7 +30,16 @@ from datadouble.catalog import (
     Table,
 )
 from datadouble.closure import Closure, GroupInput, Packaging, Pulled, RowsRule, close
-from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
+from datadouble.images import version_line
+from datadouble.names import (
+    ColumnName,
+    ColumnRef,
+    EngineName,
+    GroupName,
+    SourceName,
+    SpecName,
+    TableName,
+)
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
     AccountPrivileges,
@@ -59,6 +68,7 @@ from datadouble.strict import (
     Difference,
     Excludes,
     Finding,
+    PatternMatch,
     StrictReport,
     check_strict,
     resolve_excludes,
@@ -147,6 +157,25 @@ class Capabilities(BaseModel):
     """Whether one query can join tables in different outermost namespaces.
     PostgreSQL's databases cannot be joined, so a virtual reference between
     two of them fails the plan."""
+    several_sources: bool = False
+    """Whether one working server can hold several sources' extracts, so a
+    spec may name more than one source."""
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCatalog:
+    """What planning needs from one source: its catalog and its server's version."""
+
+    name: SourceName
+    catalog: Catalog
+    server_version: str
+    namespaces: tuple[str, ...] = ()
+    """The databases the source reads, empty ones included (``SourceSession.namespaces``)."""
+
+    def databases(self) -> tuple[str, ...]:
+        """Its outermost namespaces: those it reads, and those its tables are in."""
+        found = (*self.namespaces, *(t.name.outermost for t in self.catalog.tables))
+        return tuple(dict.fromkeys(found))
 
 
 class PlanError(Exception):
@@ -250,6 +279,30 @@ class PlannedPaths(_Model):
         return matched[1] if matched else None
 
 
+class PlannedSource(_Model):
+    """One of the spec's sources, as planned."""
+
+    name: SourceName
+    server_version: str
+    catalog_fingerprint: str
+    """Its live catalog's fingerprint, which its snapshot checks again."""
+    namespaces: tuple[str, ...]
+    """The outermost namespaces (databases) of its tables, which no other source has."""
+    requirements: tuple[Requirement, ...] = ()
+    """The requirements it uses that the copies keep, which the working image must provide."""
+
+
+class SourceReference(_Model):
+    """A reference between two sources, read under different snapshots."""
+
+    edge: str
+    """The reference's name, as the plan's edges give it."""
+    child: TableName
+    child_source: SourceName
+    parent: TableName
+    parent_source: SourceName
+
+
 class PlannedSeed(_Model):
     """One ``subset.seeds`` key and the tables it gave a seed to."""
 
@@ -280,7 +333,7 @@ class Plan(_Model):
     catalog: Catalog
     """The live catalog minus excluded tables and omitted requirements."""
     omitted: tuple[Requirement, ...] = ()
-    """The source's requirements that ``source.omit`` leaves out."""
+    """The source's requirements that ``sources.<name>.omit`` leaves out."""
     warnings: tuple[str, ...]
     paths_from: PlannedPaths | None = None
     """How the chosen rows name the files to copy too."""
@@ -288,6 +341,11 @@ class Plan(_Model):
     """Each seed key and the tables it matched."""
     unselected: tuple[TableName, ...] = ()
     """Kept tables no seed or followed reference selected, handled by ``subset.unselected``."""
+    sources: tuple[PlannedSource, ...] = ()
+    """Every source, in the spec's order, with its version and namespaces."""
+    between_sources: tuple[SourceReference, ...] = ()
+    """References whose child and parent are in different sources: each side is
+    read under its own snapshot, so the pair is not one point in time."""
 
     def graph(self) -> Graph:
         """The selection graph."""
@@ -297,6 +355,43 @@ class Plan(_Model):
         """Tables whose definitions and rows are extracted."""
         excluded = self.excludes.excluded()
         return tuple(rule.table for rule in self.tables if rule.table not in excluded)
+
+    def source_of(self, table: TableName) -> SourceName:
+        """The source a table belongs to."""
+        return next(s.name for s in self.sources if table.outermost in s.namespaces)
+
+    def of_source(self, name: SourceName) -> "Plan":
+        """This plan as one source's snapshot sees it: its tables, edges and catalog only.
+
+        Its ``catalog_fingerprint`` is the source's own, which the snapshot
+        checks against its catalog.
+        """
+        source = next(s for s in self.sources if s.name == name)
+        namespaces = frozenset(source.namespaces)
+
+        def own(table: TableName) -> bool:
+            return table.outermost in namespaces
+
+        def matches(found: tuple[PatternMatch, ...]) -> tuple[PatternMatch, ...]:
+            return tuple(
+                m.model_copy(update={"tables": tuple(t for t in m.tables if own(t))}) for m in found
+            )
+
+        return self.model_copy(
+            update={
+                "catalog_fingerprint": source.catalog_fingerprint,
+                "catalog": self.catalog.model_copy(
+                    update={"tables": tuple(t for t in self.catalog.tables if own(t.name))}
+                ),
+                "tables": tuple(rule for rule in self.tables if own(rule.table)),
+                "edges": tuple(e for e in self.edges if own(e.child) and own(e.parent)),
+                "excludes": Excludes(
+                    exclude=matches(self.excludes.exclude),
+                    structure_only=matches(self.excludes.structure_only),
+                ),
+                "between_sources": (),
+            }
+        )
 
 
 class PlanOptions(_Model):
@@ -336,6 +431,10 @@ class _Planner:
         self.warnings: list[str] = []
         self.group_roots: dict[GroupName, tuple[ObjectRef, ...]] = {}
         self.closures: dict[GroupName, Closure] = {}
+        self.sources: tuple[PlannedSource, ...] = ()
+        self.omits: tuple[Requirement, ...] = ()
+        self.users: dict[str, tuple[SourceName, ...]] = {}
+        """The sources that use each requirement, by its text."""
 
     def attempt[**P, T](
         self, action: Callable[P, T], *args: P.args, **kwargs: P.kwargs
@@ -364,6 +463,9 @@ class _Planner:
                 )
             return None
         report = check_strict(self.catalog, self.lock, excluded, strict, self.breaks)
+        report = report.model_copy(
+            update={"findings": tuple(self.named(finding) for finding in report.findings)}
+        )
         self.warnings.extend(
             f"strict mode: {finding}" for finding in report.findings if finding.severity == "warn"
         )
@@ -451,6 +553,20 @@ class _Planner:
             except ResolveError:
                 continue
         return found
+
+    def named(self, finding: Finding) -> Finding:
+        """A finding whose resolutions name the sources that use its requirement."""
+        users = self.users.get(finding.object)
+        if not users:
+            return finding
+        omits = " or ".join(f"`sources.{name}.omit`" for name in users)
+        return finding.model_copy(
+            update={
+                "resolutions": tuple(
+                    text.replace("`sources.<name>.omit`", omits) for text in finding.resolutions
+                )
+            }
+        )
 
     # References
 
@@ -825,12 +941,19 @@ class _Planner:
         for user in dict.fromkeys(users):
             self.problems.extend(names.problems(engine, user, firsts[user].privileges))
 
-    def strategy(self, graph: Graph) -> Strategy:
+    def strategy(self, graph: Graph, between: tuple[SourceReference, ...]) -> Strategy:
         wanted = self.options.strategy or self.spec.subset.strategy
         acyclic = graph.is_acyclic() and self.capabilities.nested
         if wanted is Strategy.AUTO:
-            return Strategy.NESTED if acyclic else Strategy.KEYS
-        if wanted is Strategy.NESTED:
+            # No query reads two servers, so references between sources need keys.
+            return Strategy.NESTED if acyclic and not between else Strategy.KEYS
+        if wanted is Strategy.NESTED and between:
+            self.problems.extend(
+                f"{reference.edge} joins sources {reference.child_source} and"
+                f" {reference.parent_source}, which no one query can read; use the keys strategy"
+                for reference in between
+            )
+        elif wanted is Strategy.NESTED:
             if not self.capabilities.nested:
                 self.problems.append(
                     f"the {self.catalog.engine} adapter cannot run the nested strategy"
@@ -972,7 +1095,7 @@ class _Planner:
         strict = self.strict_report(excluded)
         if strict is not None and strict.failed():
             failures = tuple(f"strict mode: {f}" for f in strict.findings if f.severity == "fail")
-            raise PlanError(failures, strict)
+            raise PlanError((*self.problems, *failures), strict)
         for closure in self.closures.values():
             self.problems.extend(closure.problems)
             self.warnings.extend(closure.warnings)
@@ -1014,9 +1137,10 @@ class _Planner:
             self.spec.hooks.before_load or self.spec.hooks.after_transform
         ):
             self.problems.append(f"the {self.catalog.engine} adapter does not run hooks")
-        omitted = self.omitted()
+        omitted = self.omits
         formats = self.formats()
-        strategy = self.strategy(graph)
+        between = self.between_sources(edges)
+        strategy = self.strategy(graph, between)
         paths_from = self.paths_from(excluded)
         if self.problems:
             raise PlanError(tuple(self.problems), strict)
@@ -1048,17 +1172,24 @@ class _Planner:
             paths_from=paths_from,
             seeds=seeds,
             unselected=unselected,
+            sources=self.sources,
+            between_sources=between,
         )
 
-    def omitted(self) -> tuple[Requirement, ...]:
-        found: list[Requirement] = []
-        for name in self.spec.source.omit:
-            requirement = self.catalog.requirement(name)
-            if requirement is None:
-                self.problems.append(f"source.omit names {name!r}, which the source does not use")
-            else:
-                found.append(requirement)
-        return tuple(found)
+    def between_sources(self, edges: Iterable[Edge]) -> tuple[SourceReference, ...]:
+        """References whose child and parent are in different sources."""
+        owner = {n: s.name for s in self.sources for n in s.namespaces}
+        return tuple(
+            SourceReference(
+                edge=edge.name,
+                child=edge.child,
+                child_source=owner[edge.child.outermost],
+                parent=edge.parent,
+                parent_source=owner[edge.parent.outermost],
+            )
+            for edge in edges
+            if owner.get(edge.child.outermost) != owner.get(edge.parent.outermost)
+        )
 
     def placeholders(self, table: Table, template: str) -> dict[str, ColumnName]:
         names: dict[str, ColumnName] = {}
@@ -1177,18 +1308,154 @@ def _mode(policy: EdgePolicy) -> EdgeMode:
     return EdgeMode.ALL if policy.on_missing is None else _FALLBACKS[policy.on_missing]
 
 
+def collisions(sources: Sequence[SourceCatalog]) -> list[str]:
+    """Each database (outermost namespace) more than one source reads, named.
+
+    One working server holds every source's databases under their own names,
+    so none may repeat, even one without tables.
+    """
+    holders: dict[str, list[SourceName]] = {}
+    for source in sources:
+        for namespace in source.databases():
+            holders.setdefault(namespace, []).append(source.name)
+    return [
+        f"{namespace} is in sources {' and '.join(names)}; one working server holds every"
+        " source, so database names must not repeat across sources"
+        for namespace, names in holders.items()
+        if len(names) > 1
+    ]
+
+
+def merge(sources: Sequence[SourceCatalog]) -> Catalog:
+    """Every source's catalog as one, for planning and the lock.
+
+    Requirements are listed once each. A table only the :func:`collisions`
+    already report could repeat; the first source's is kept.
+    """
+    if not sources:
+        message = "a spec needs at least one source"
+        raise ValueError(message)
+    if len(sources) == 1:
+        return sources[0].catalog
+    tables: dict[TableName, Table] = {}
+    requirements: dict[Requirement, None] = {}
+    for source in sources:
+        for table in source.catalog.tables:
+            tables.setdefault(table.name, table)
+        requirements.update(dict.fromkeys(source.catalog.requirements))
+    return Catalog(
+        engine=sources[0].catalog.engine,
+        tables=tuple(tables.values()),
+        requirements=tuple(requirements),
+    )
+
+
+def _key(requirement: Requirement) -> tuple[str, str]:
+    return (requirement.kind, requirement.name)
+
+
+def _own_omits(spec: Spec, source: SourceCatalog, problems: list[str]) -> list[Requirement]:
+    """The requirements a source's ``omit`` names; a name it does not use is a problem."""
+    found: list[Requirement] = []
+    for name in spec.sources[source.name].omit:
+        requirement = source.catalog.requirement(name)
+        if requirement is None:
+            problems.append(
+                f"sources.{source.name}.omit names {name!r}, which the source does not use"
+            )
+        else:
+            found.append(requirement)
+    return found
+
+
+def _requirement_problems(
+    sources: Sequence[SourceCatalog], omits: Mapping[SourceName, list[Requirement]]
+) -> list[str]:
+    """Requirements the sources disagree on: at different versions, or omitted by only some.
+
+    One working server provides each requirement once, at one version, or not at all.
+    """
+    problems: list[str] = []
+    users: dict[tuple[str, str], list[tuple[SourceName, Requirement]]] = {}
+    for source in sources:
+        for requirement in source.catalog.requirements:
+            users.setdefault(_key(requirement), []).append((source.name, requirement))
+    for (kind, name), found in users.items():
+        first_source, first = found[0]
+        for other_source, other in found[1:]:
+            if other.version != first.version:
+                problems.append(
+                    f"{kind} {name} is at version {first.version} in source {first_source}"
+                    f" and {other.version} in source {other_source}; one working server"
+                    " provides one version, so the sources must agree"
+                )
+        omitting = [s for s, _ in found if any(_key(r) == (kind, name) for r in omits[s])]
+        if omitting:
+            problems.extend(
+                f"source {omitter} omits {kind} {name}, which source {user} uses; one working"
+                " server holds every source, so omit it in every source that uses it, or in none"
+                for omitter in omitting
+                for user, _ in found
+                if user not in omitting
+            )
+    return problems
+
+
+def _planned_sources(
+    spec: Spec, sources: Sequence[SourceCatalog], capabilities: Capabilities
+) -> tuple[tuple[PlannedSource, ...], tuple[Requirement, ...], list[str]]:
+    """Each source as planned, the requirements the copies leave out, and problems."""
+    problems: list[str] = []
+    if len(sources) > 1 and not capabilities.several_sources:
+        problems.append(
+            f"the {sources[0].catalog.engine} adapter reads one source per spec;"
+            f" this spec has {len(sources)}"
+        )
+        return (), (), problems
+    problems.extend(collisions(sources))
+    lines = {
+        source.name: version_line(source.server_version, capabilities.version_line)
+        for source in sources
+    }
+    if len(set(lines.values())) > 1:
+        listed = ", ".join(f"{s.name} {s.server_version}" for s in sources)
+        problems.append(
+            f"the sources run different version lines ({listed}); one working server"
+            " cannot hold them all, so every source must share a line"
+        )
+    omits = {source.name: _own_omits(spec, source, problems) for source in sources}
+    problems.extend(_requirement_problems(sources, omits))
+    omitted = tuple(dict.fromkeys(r for found in omits.values() for r in found))
+    planned = tuple(
+        PlannedSource(
+            name=source.name,
+            server_version=source.server_version,
+            catalog_fingerprint=source.catalog.fingerprint(),
+            namespaces=source.databases(),
+            requirements=tuple(r for r in source.catalog.requirements if r not in omitted),
+        )
+        for source in sources
+    )
+    return planned, omitted, problems
+
+
 def plan(
     spec: Spec,
-    catalog: Catalog,
+    sources: Sequence[SourceCatalog],
     lock: CatalogLock | None,
     capabilities: Capabilities,
     options: PlanOptions | None = None,
 ) -> Plan:
     """Plan a build; raises :class:`PlanError` listing every problem found.
 
-    A subset from Jailer is translated against ``catalog`` first; its excluded
-    tables join the spec's.
+    ``sources`` are the spec's sources' live catalogs, in the spec's order;
+    they are planned as one catalog. A subset from Jailer is translated
+    against it first; its excluded tables join the spec's.
     """
+    planned_sources, omitted, problems = _planned_sources(spec, sources, capabilities)
+    if not planned_sources:
+        raise PlanError(tuple(problems))
+    catalog = merge(sources)
     warnings: tuple[str, ...] = ()
     if spec.subset.jailer is not None:
         try:
@@ -1206,5 +1473,14 @@ def plan(
         exclude = tuple(dict.fromkeys((*spec.exclude, *translated.exclude)))
         spec = spec.model_copy(update={"subset": subset, "exclude": exclude})
         warnings = tuple(f"Jailer subset: {line}" for line in translated.report)
-    planned = _Planner(spec, catalog, lock, capabilities, options or PlanOptions()).plan()
+    planner = _Planner(spec, catalog, lock, capabilities, options or PlanOptions())
+    planner.sources = planned_sources
+    users: dict[str, list[SourceName]] = {}
+    for source in sources:
+        for requirement in source.catalog.requirements:
+            users.setdefault(str(requirement), []).append(source.name)
+    planner.users = {text: tuple(names) for text, names in users.items()}
+    planner.omits = omitted
+    planner.problems.extend(problems)
+    planned = planner.plan()
     return planned.model_copy(update={"warnings": (*warnings, *planned.warnings)})

@@ -136,7 +136,7 @@ def test_refusals_and_errors(spec_file: Path, tmp_path: Path) -> None:
 
 
 def test_spec_validation() -> None:
-    base = "name: shop\nsource: {engine: fake}\n"
+    base = "name: shop\nsources: {app: {engine: fake}}\n"
     for extra, problem in (
         ("announce: [{a: {}, b: {}}]", "exactly one adapter"),
         ("signing: {cosign: {}}", "exactly one of `key` or `keyless"),

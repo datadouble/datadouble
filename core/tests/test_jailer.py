@@ -18,7 +18,7 @@ from datadouble.spec import (
     VirtualForeignKey,
     parse_spec,
 )
-from fakes import shop, table
+from fakes import one, shop, table
 
 TABLES = """# Name; Upsert; Primary Key; ; Author
 USERS; N; ID INTEGER; ; Jailer
@@ -183,7 +183,7 @@ def test_ambiguous_names(tmp_path: Path) -> None:
         jailer.load(jm, datamodel, doubled)
 
 
-HEADER = "name: shop\nsource: {engine: fake}\n"
+HEADER = "name: shop\nsources: {app: {engine: fake}}\n"
 
 
 def test_planning_a_jailer_subset(tmp_path: Path) -> None:
@@ -194,7 +194,7 @@ def test_planning_a_jailer_subset(tmp_path: Path) -> None:
     )
     capabilities = Capabilities(formats=(ImageFormat.LOGICAL,), expressions=True, nested=True)
     live = shop()
-    planned = plan(spec, live, CatalogLock.of(live), capabilities, PlanOptions())
+    planned = plan(spec, one(live), CatalogLock.of(live), capabilities, PlanOptions())
     assert "Jailer subset: ignored the layout block, which does not choose rows" in planned.warnings
     # Tables the model doesn't reach keep no rows, as in Jailer, with a warning.
     assert TableName.of("public", "film_actor") in planned.unselected
@@ -203,7 +203,7 @@ def test_planning_a_jailer_subset(tmp_path: Path) -> None:
         HEADER + f"subset:\n  jailer: {{model: {tmp_path / 'nope.jm'}, datamodel: {datamodel}}}\n"
     )
     with pytest.raises(PlanError) as caught:
-        plan(broken, live, CatalogLock.of(live), capabilities, PlanOptions())
+        plan(broken, one(live), CatalogLock.of(live), capabilities, PlanOptions())
     assert caught.value.problems[0].startswith("the Jailer subset: there is no Jailer")
 
 

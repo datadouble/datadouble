@@ -47,7 +47,7 @@ _HEALTH = "http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=
 
 
 class ServerSettings(BaseModel):
-    """The ``source.server`` settings."""
+    """The ``sources.<name>.server`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 

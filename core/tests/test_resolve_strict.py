@@ -259,7 +259,7 @@ def test_requirement_drift(level: StrictLevel, severity: str) -> None:
         ("new-requirement", severity, "extension hstore 1.8"),
     }
     new = next(f for f in report.findings if f.difference is Difference.NEW_REQUIREMENT)
-    assert "source.omit" in new.resolutions[1]
+    assert "sources.<name>.omit" in new.resolutions[1]
 
 
 def ref(kind: ObjectKind, name: str) -> ObjectRef:

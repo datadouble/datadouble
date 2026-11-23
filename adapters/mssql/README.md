@@ -10,12 +10,13 @@ images as the database's data and log files (`physical`) or its schema and rows
 version, through the spec's container runtime.
 
 ```yaml
-source:
-  engine: mssql
-  connection:
-    url:                         # mssql://user:password@host:1433/database, by reference
-      env: SHOP_MSSQL_URL
-    accept_eula: true            # you accept the SQL Server licence for working databases
+sources:
+  app:
+    engine: mssql
+    connection:
+      url:                         # mssql://user:password@host:1433/database, by reference
+        env: SHOP_MSSQL_URL
+      accept_eula: true            # you accept the SQL Server licence for working databases
 ```
 
 ## Objects

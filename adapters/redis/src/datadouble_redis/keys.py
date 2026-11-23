@@ -149,7 +149,8 @@ class Literals:
             )
             message = (
                 f"keys have too many distinct values in {where}, which look like data"
-                " rather than names; declare patterns for them in source.connection.patterns"
+                " rather than names; declare patterns for them in"
+                " sources.<name>.connection.patterns"
                 f" (such as 'user:{PLACEHOLDER}')"
             )
             raise EngineError(message)

@@ -33,14 +33,15 @@ IMAGE = "redis:8.10.3@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de511
 # names, so their pattern is declared.
 SAMPLE_SPEC = f"""
 name: shop
-source:
-  engine: redis
-  connection:
-    url:
-      env: {URL}
-    databases: [0, 1]
-    patterns: ["session:{{}}"]
-  image: {IMAGE}
+sources:
+  app:
+    engine: redis
+    connection:
+      url:
+        env: {URL}
+      databases: [0, 1]
+      patterns: ["session:{{}}"]
+    image: {IMAGE}
 exclude: ["maint:run:{{}}"]
 subset:
   unselected: none

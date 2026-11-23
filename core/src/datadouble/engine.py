@@ -41,13 +41,17 @@ class EngineError(Exception):
 
 
 class RequirementError(Exception):
-    """The working image lacks requirements the source uses; ``problems`` lists each."""
+    """The working image lacks requirements the sources use.
 
-    def __init__(self, problems: tuple[str, ...]) -> None:
-        """Name every unmet requirement."""
+    ``problems`` lists each, with the source that uses it.
+    """
+
+    def __init__(self, problems: tuple[tuple[str, str], ...]) -> None:
+        """Name every unmet requirement and its source."""
         super().__init__(
-            f"the working image lacks {len(problems)} requirement(s) of the source;"
-            " name an image that has them in source.image, or leave them out with source.omit"
+            f"the working image lacks {len(problems)} requirement(s) of the sources;"
+            " name an image that has them in sources.<name>.image, or leave them out with"
+            " sources.<name>.omit"
         )
         self.problems = problems
 
@@ -105,9 +109,9 @@ class Tooling:
 
     runtime: ContainerRuntime
     image: str | None = None
-    """``source.image``; when None the adapter picks the vendor image itself."""
+    """The sources' ``image``; when None the adapter picks the vendor image itself."""
     server: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
-    """``source.server``, which the adapter parses."""
+    """The sources' ``server`` settings, which the adapter parses."""
 
 
 type Mapper = Callable[[PlannedRule, Iterable[str]], Mapping[str, str]]
@@ -143,6 +147,15 @@ class SourceSession(Protocol):
 
     def server_version(self) -> str:
         """The source server's version, which picks the default working image."""
+        ...
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces (databases) the source reads, empty ones included.
+
+        Several sources of a spec must not share one, since one working server
+        holds them all. Engines whose namespaces exist only through their
+        tables answer :func:`outermost` of the catalog.
+        """
         ...
 
     def catalog(self) -> Catalog:
@@ -205,17 +218,21 @@ class WorkingDatabases(Protocol):
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
-        """Build the group's working database in ``directory`` from the extract.
+        """Build the group's working database in ``directory`` from the extracts.
 
-        Runs ``before_load`` hooks first, applies the group's fixups, and leaves
-        the database stopped. A standalone group's database holds exactly its
-        closure: the tables of ``group.packaged()``, with the rows of
-        :func:`group_extract` where it has them, and of the group's objects,
-        created in dependency order, no others.
+        ``extracts`` holds one directory per source, in the spec's order, each
+        written by that source's snapshot; every source's databases go into
+        the one working database. There is more than one only when the
+        engine's capabilities allow several sources. Runs ``before_load``
+        hooks first, in the first source's default database, applies the
+        group's fixups, and leaves the database stopped. A standalone group's
+        database holds exactly its closure: the tables of ``group.packaged()``,
+        with the rows of :func:`group_extract` where it has them, and of the
+        group's objects, created in dependency order, no others.
         """
         ...
 
@@ -294,12 +311,17 @@ class ServerPlan(_Model):
 
 
 GROUP_EXTRACTS = "groups"
-"""Where, next to the shared extract's directory, standalone groups' own rows go."""
+"""Where, in the extract stage's directory beside ``data``, standalone groups' own rows go."""
 
 
 def group_extract_path(extract: Path, group: GroupName) -> Path:
-    """Where a standalone group's own rows are extracted, beside the shared ``extract``."""
-    return extract.parent / GROUP_EXTRACTS / group
+    """Where a standalone group's own rows from one source are extracted.
+
+    ``extract`` is that source's shared extract, ``data/<source>``; the
+    group's own extract of it is ``groups/<group>/<source>``, beside ``data``,
+    so it can never be taken for a source's.
+    """
+    return extract.parent.parent / GROUP_EXTRACTS / group / extract.name
 
 
 def group_extract(extract: Path, group: GroupName) -> Path | None:
@@ -345,6 +367,19 @@ def choose_databases(
     return tuple(sorted(chosen))
 
 
+def outermost(catalog: Catalog) -> tuple[str, ...]:
+    """The outermost namespaces of a catalog's tables, in catalog order."""
+    return tuple(dict.fromkeys(table.name.outermost for table in catalog.tables))
+
+
+def one_extract(extracts: tuple[Path, ...]) -> Path:
+    """The one extract of an engine that reads one source per spec."""
+    if len(extracts) != 1:
+        message = f"this engine loads one source's extract, not {len(extracts)}"
+        raise EngineError(message)
+    return extracts[0]
+
+
 def check_owner(engine: "EngineAdapter") -> None:
     """Fail unless Datadouble runs as the user the engine's copies are served as."""
     if identity() != engine.owner:
@@ -380,14 +415,15 @@ class EngineAdapter(Protocol):
         ...
 
     def connect(self, connection: Mapping[str, JsonValue]) -> AbstractContextManager[SourceSession]:
-        """Open the source described by the spec's ``source.connection``."""
+        """Open one source, described by its ``connection`` in the spec's ``sources``."""
         ...
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
         """Working databases under ``scratch``, which only holds files this run owns.
 
         They run in ``tooling.image``, or by default the vendor's image for
-        ``source_version``, the version of the source the extract was read from.
+        ``source_version``: the newest version of the sources the extracts
+        were read from, which all share one version line.
         """
         ...
 

@@ -87,13 +87,13 @@ def test_jailer_and_datadouble_choose_the_same_rows(tmp_path: Path) -> None:
         pytest.skip("no Jailer export; run in the Compose default group")
     spec = parse_spec(
         "name: sakila\n"
-        "source: {engine: mysql, connection: {url: {env: DATADOUBLE_TEST_MYSQL_URL}}}\n"
+        "sources: {app: {engine: mysql, connection: {url: {env: DATADOUBLE_TEST_MYSQL_URL}}}}\n"
         f"subset: {{jailer: {{model: {JAILER / 'sakila.jm'},"
         f" datamodel: {JAILER / 'datamodel'}}}}}\n"
         f"runtime: {json.dumps(runtime_for_tests())}\n"
     )
     engine = MysqlEngine()
-    with engine.connect(spec.source.connection) as session:
+    with engine.connect(spec.working.connection) as session:
         catalog = session.catalog()
     registry = Registry(
         engines={"mysql": MysqlEngine},
@@ -106,7 +106,7 @@ def test_jailer_and_datadouble_choose_the_same_rows(tmp_path: Path) -> None:
         plan=PlanOptions(strategy=Strategy.KEYS),
     )
     result = Run(spec, CatalogLock.of(catalog), registry, options).execute()
-    ours = datadouble_keys(catalog, Path(result.work) / "extract" / "data")
+    ours = datadouble_keys(catalog, Path(result.work) / "extract" / "data" / "app")
     theirs = jailer_keys(catalog)
     differing = {
         name: (sorted(ours.get(name, set()) - keys)[:5], sorted(keys - ours.get(name, set()))[:5])

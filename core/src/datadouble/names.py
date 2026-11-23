@@ -19,6 +19,9 @@ SpecName = NewType("SpecName", str)
 GroupName = NewType("GroupName", str)
 """The name of an image group (``images:`` in the spec)."""
 
+SourceName = NewType("SourceName", str)
+"""The name of one of a spec's sources (``sources:`` in the spec)."""
+
 EngineName = NewType("EngineName", str)
 """The name an engine adapter registers under, such as ``postgres``."""
 

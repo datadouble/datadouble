@@ -33,11 +33,12 @@ orders, replaces names and emails, and stores the image in `/var/tmp/shop`:
 
 ```yaml
 name: shop
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: SHOP_DSN
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: SHOP_DSN
 runtime:
   docker:
     network: shop

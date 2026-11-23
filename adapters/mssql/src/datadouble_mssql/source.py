@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict
 from pymssql import Connection
 
 from datadouble.catalog import Catalog
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling, outermost
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
@@ -233,6 +233,10 @@ class MssqlSession:
         self.connection = connection
         self.settings = settings
         self.database = database
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces of the catalog's tables."""
+        return outermost(self.catalog())
 
     def catalog(self) -> Catalog:
         """Introspect the source."""

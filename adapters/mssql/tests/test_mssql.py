@@ -107,11 +107,12 @@ SCHEMA = [
 
 SPEC = """
 name: scratch
-source:
-  engine: mssql
-  connection: CONNECTION
-  server:
-    accept_eula: true
+sources:
+  app:
+    engine: mssql
+    connection: CONNECTION
+    server:
+      accept_eula: true
 exclude: ["items"]
 subset:
   unselected: none
@@ -382,7 +383,7 @@ def test_excluded_parents_are_nulled(source: MssqlScratch, tmp_path: Path) -> No
 
 def test_corrupt_extracts_fail_to_load(source: MssqlScratch, tmp_path: Path) -> None:
     extracted = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
-    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data"
+    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data" / "app"
     for file in data.glob("*.dat"):
         file.write_bytes(b"\x05\x00\x00\x00short")
     with pytest.raises(EngineError, match=r"loading .*\.\w+ failed: \[\d+\]"):
@@ -446,11 +447,13 @@ def test_working_images_must_match_the_source(source: MssqlScratch, tmp_path: Pa
     extracted = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
     work = tmp_path / "work" / "scratch" / extracted.generation
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
-    index = work / "extract" / "data" / "index.json"
+    index = work / "extract" / "data" / "app" / "index.json"
     index.write_text(index.read_text("utf-8").replace(VERSION, "16.0.1000.6-RTM"), "utf-8")
     working = MssqlEngine().working(tmp_path / "w", tooling(default_image(VERSION)), VERSION)
     with pytest.raises(EngineError, match=r"the source runs 16\.0\.1000\.6-RTM"):
-        working.load(plan, plan.groups[0], work / "extract" / "data", tmp_path / "db", ())
+        working.load(
+            plan, plan.groups[0], (work / "extract" / "data" / "app",), tmp_path / "db", ()
+        )
     assert working.server_version() == VERSION
 
 

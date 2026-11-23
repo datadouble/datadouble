@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from pydantic import JsonValue
 
 from datadouble.catalog import Catalog, Column, ColumnKind, ForeignKey, Table
-from datadouble.names import ColumnName, EngineName, TableName
+from datadouble.names import ColumnName, EngineName, SourceName, TableName
+from datadouble.planner import SourceCatalog
 from datadouble.settings import parse_settings
 from datadouble.storage import FilesystemSettings, FilesystemStore, ListingUnsupportedError, Store
 from datadouble.subset import (
@@ -239,3 +240,14 @@ class Unlisted(FilesystemStore):
 def unlisted_store(settings: Mapping[str, JsonValue]) -> Store:
     """A store factory for :class:`Unlisted`, taking the filesystem store's settings."""
     return Unlisted(parse_settings(FilesystemSettings, settings, "unlisted store").path)
+
+
+def one(
+    catalog: Catalog, name: str = "app", version: str = "1.2", namespaces: tuple[str, ...] = ()
+) -> tuple[SourceCatalog, ...]:
+    """A spec's one source, as planning takes it."""
+    return (
+        SourceCatalog(
+            name=SourceName(name), catalog=catalog, server_version=version, namespaces=namespaces
+        ),
+    )

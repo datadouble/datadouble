@@ -9,6 +9,7 @@ requests for this module, so behavior cannot differ between them.
 """
 
 import platform
+from contextlib import ExitStack
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
@@ -29,6 +30,7 @@ from datadouble.announce import AnnounceError, announce, withdraw
 from datadouble.anonymize import AnonymizeError
 from datadouble.boundary import BoundaryError, require_inside
 from datadouble.catalog import (
+    Catalog,
     CatalogError,
     CatalogLock,
     LockChange,
@@ -55,7 +57,15 @@ from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
 from datadouble.notify import Notification, Post, post, send
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.planner import Plan, PlanError, PlanOptions, plan
+from datadouble.planner import (
+    Plan,
+    PlanError,
+    PlanOptions,
+    SourceCatalog,
+    collisions,
+    merge,
+    plan,
+)
 from datadouble.promote import Promoted, PromoteError, promote
 from datadouble.prune import PruneError, PruneResult, PruneTarget, prune
 from datadouble.registry import Registry, RegistryError, installed
@@ -69,7 +79,7 @@ from datadouble.replicate import (
     release,
     replicate,
 )
-from datadouble.run import Run, RunError, RunOptions, RunResult, Stage
+from datadouble.run import Run, RunError, RunOptions, RunResult, Stage, catalogs
 from datadouble.runtime import ContainerError
 from datadouble.secrets import SecretError
 from datadouble.settings import SettingsError
@@ -588,7 +598,8 @@ def _error(error: Exception) -> ErrorResponse:
                 error=ErrorCode.REQUIREMENT_UNMET,
                 message=str(error),
                 details=tuple(
-                    ErrorDetail(location="source.image", problem=p) for p in error.problems
+                    ErrorDetail(location=f"sources.{source}.image", problem=p)
+                    for source, p in error.problems
                 ),
             )
         case PromoteError():
@@ -600,6 +611,27 @@ def _error(error: Exception) -> ErrorResponse:
         case _:
             code = next(code for kind, code in _ERRORS if isinstance(error, kind))
             return ErrorResponse(error=code, message=str(error))
+
+
+def _catalogs(spec: Spec, registry: Registry) -> tuple[SourceCatalog, ...]:
+    """Every source's live catalog and version, read inside the production boundary."""
+    engine = registry.engine(spec.engine)
+    require_inside("reading the source", registry)
+    with ExitStack() as stack:
+        sessions = {
+            name: stack.enter_context(engine.connect(source.connection))
+            for name, source in spec.sources.items()
+        }
+        return catalogs(sessions)
+
+
+def _merged(spec: Spec, registry: Registry) -> Catalog:
+    """Every source's catalog as one; fails naming databases two sources read."""
+    sources = _catalogs(spec, registry)
+    problems = collisions(sources)
+    if problems:
+        raise PlanError(tuple(problems))
+    return merge(sources)
 
 
 def _lock(request: _SpecRequest) -> CatalogLock | None:
@@ -616,10 +648,7 @@ def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
         )
         raise CatalogError(message)
     spec = load_spec(request.spec)
-    engine = registry.engine(spec.source.engine)
-    require_inside("reading the source", registry)
-    with engine.connect(spec.source.connection) as session:
-        lock = CatalogLock.of(session.catalog())
+    lock = CatalogLock.of(_merged(spec, registry))
     earlier, unreadable = _earlier_lock(current)
     found = None if earlier is None else changes(earlier.catalog, lock.catalog)
     path = current
@@ -657,10 +686,7 @@ def _earlier_lock(path: Path) -> tuple[CatalogLock | None, str | None]:
 
 def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJailerResponse:
     spec = load_spec(request.spec)
-    engine = registry.engine(spec.source.engine)
-    require_inside("reading the source", registry)
-    with engine.connect(spec.source.connection) as session:
-        catalog = session.catalog()
+    catalog = _merged(spec, registry)
     translated = jailer.load(
         request.model, request.datamodel, catalog, case_sensitive=spec.case_sensitive
     )
@@ -682,10 +708,9 @@ def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJa
 def _plan(request: PlanRequest, registry: Registry) -> PlanResponse:
     spec = load_spec(request.spec)
     lock = _lock(request)
-    engine = registry.engine(spec.source.engine)
-    require_inside("reading the source", registry)
-    with engine.connect(spec.source.connection) as session:
-        planned = plan(spec, session.catalog(), lock, engine.capabilities(), request.plan_options())
+    engine = registry.engine(spec.engine)
+    sources = _catalogs(spec, registry)
+    planned = plan(spec, sources, lock, engine.capabilities(), request.plan_options())
     if planned.warnings:
         return PlanResponse(outcome=Outcome.WARNING, plan=planned)
     return PlanResponse(outcome=Outcome.SUCCESS, plan=planned)
@@ -762,7 +787,7 @@ def _with_secrets(
 def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     spec = load_spec(request.spec)
     adapter = registry.ci_system(request.system)
-    engine = registry.engine(spec.source.engine)
+    engine = registry.engine(spec.engine)
     root = request.output.resolve()
     try:
         spec_path = request.spec.resolve().relative_to(root).as_posix()

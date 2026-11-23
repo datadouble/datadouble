@@ -80,9 +80,10 @@ SCHEMA = [
 
 SPEC = """
 name: scratch
-source:
-  engine: mysql
-  connection: CONNECTION
+sources:
+  app:
+    engine: mysql
+    connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
@@ -254,7 +255,7 @@ def test_excluded_parents_are_nulled(source: MysqlScratch, tmp_path: Path) -> No
 
 def test_corrupt_extracts_fail_to_load(source: MysqlScratch, tmp_path: Path) -> None:
     extracted = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
-    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data"
+    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data" / "app"
     for file in data.glob("*.tsv"):
         file.write_text("not\ta\trow\tat\tall\tof\tthe\tright\tshape\n", encoding="utf-8")
     with pytest.raises(EngineError, match=r"loading .*\.\w+ failed: \[\d+\]"):
@@ -353,9 +354,10 @@ def test_the_build_user_must_be_removable(tmp_path: Path) -> None:
 
 PLUGIN_SPEC = """
 name: scratch
-source:
-  engine: mysql
-  connection: CONNECTION
+sources:
+  app:
+    engine: mysql
+    connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
@@ -511,12 +513,13 @@ def test_images_get_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 # in the third. The second has a trigger, which transform sets aside.
 DATABASES_SPEC = """
 name: scratch
-source:
-  engine: mysql
-  connection:
-    url:
-      env: VARIABLE
-    databases: ["PREFIX_*"]
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:
+        env: VARIABLE
+      databases: ["PREFIX_*"]
 subset:
   unselected: none
   seeds:
@@ -618,7 +621,7 @@ def test_several_databases_build_as_one(databases: tuple[str, str], tmp_path: Pa
         + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
     )
     spec = parse_spec(text)
-    with MysqlEngine().connect(spec.source.connection) as session:
+    with MysqlEngine().connect(spec.working.connection) as session:
         assert isinstance(session, MysqlSession)
         assert session.databases == (f"{prefix}_a", f"{prefix}_b", f"{prefix}_c")
         assert session.default == f"{prefix}_a"
@@ -665,7 +668,8 @@ def test_several_databases_build_as_one(databases: tuple[str, str], tmp_path: Pa
             tmp_path / "work" / "scratch" / result.generation / "extract" / "manifest.json"
         ).read_text()
     )
-    assert extracted["outputs"]["result"]["snapshots"] == {}
+    (read,) = extracted["outputs"]["sources"]
+    assert read["result"]["snapshots"] == {}
     (summary,) = result.images
     working = working_databases(tmp_path / "check")
     customers, notes = (
@@ -737,12 +741,13 @@ SLICE_SCHEMA = [
 
 SLICE_SPEC = """
 name: scratch
-source:
-  engine: mysql
-  connection:
-    url:
-      env: VARIABLE
-    databases: ["PREFIX_*"]
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:
+        env: VARIABLE
+      databases: ["PREFIX_*"]
 objects:
   - function: PREFIX_a.greet
 subset:
@@ -807,7 +812,7 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
             .replace("STORE", str(tmp_path / "store"))
             + f"\nruntime: {json.dumps(runtime_for_tests())}\n"
         )
-        with MysqlEngine().connect(spec.source.connection) as session:
+        with MysqlEngine().connect(spec.working.connection) as session:
             lock = CatalogLock.of(session.catalog())
         options = RunOptions(stages=tuple(Stage), work=tmp_path / "work")
         result = Run(spec, lock, registry(), options).execute()

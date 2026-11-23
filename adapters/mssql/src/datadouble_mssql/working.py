@@ -38,6 +38,7 @@ from datadouble.engine import (
     TableCount,
     Transformation,
     group_extract,
+    one_extract,
 )
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
@@ -606,8 +607,8 @@ class MssqlWorking:
         if version.partition("-")[0] != source_version.partition("-")[0]:
             message = (
                 f"the working database image {self.tools.image} runs SQL Server {version}, but"
-                f" the source runs {source_version}; set source.image to Microsoft's image of"
-                " the source's version"
+                f" the source runs {source_version}; set sources.<name>.image to Microsoft's"
+                " image of the source's version"
             )
             raise EngineError(message)
         self._version = version
@@ -619,11 +620,12 @@ class MssqlWorking:
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Build the group's working database."""
+        extract = one_extract(extracts)
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         schema = Schema.model_validate_json((extract / "schema.json").read_bytes())
         members = frozenset(group.packaged())

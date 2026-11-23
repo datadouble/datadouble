@@ -20,7 +20,7 @@ import tarfile
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager, closing
+from contextlib import AbstractContextManager, ExitStack, closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -29,13 +29,22 @@ import pytest
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from datadouble.catalog import CatalogLock, write_lock
-from datadouble.engine import EngineAdapter, ExtractResult, Tooling, unmet
+from datadouble.engine import EngineAdapter, Tooling, unmet
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
-from datadouble.planner import Plan, PlanError, PlanOptions
+from datadouble.planner import Plan, PlanError, PlanOptions, merge
 from datadouble.programs import start_program
 from datadouble.registry import Registry, installed
-from datadouble.run import Run, RunOptions, RunResult, Stage, StageManifest, StageStatus
+from datadouble.run import (
+    Run,
+    RunOptions,
+    RunResult,
+    SourceExtract,
+    Stage,
+    StageManifest,
+    StageStatus,
+    catalogs,
+)
 from datadouble.spec import (
     ImageFormat,
     Spec,
@@ -57,7 +66,7 @@ class ScratchSource(Protocol):
 
     @property
     def connection(self) -> Mapping[str, JsonValue]:
-        """``source.connection`` settings for it."""
+        """``sources.<name>.connection`` settings for it."""
         ...
 
     @property
@@ -132,14 +141,38 @@ class _Builds:
     def scratch_spec(self, source: ScratchSource, extra: str = "") -> Spec:
         settings = json.dumps(dict(source.connection))
         # Working databases need the sample's server settings, such as a licence acceptance.
-        server = json.dumps(self.sample().source.server)
+        server = json.dumps(self.sample().working.server)
         engine = self.harness.engine.name
         return parse_spec(
             self.harness.with_runtime(
-                f"name: scratch\nsource: {{engine: {engine}, connection: {settings},"
-                f" server: {server}}}\nsubset: {{unselected: all}}\n{extra}"
+                f"name: scratch\nsources: {{scratch: {{engine: {engine}, connection: {settings},"
+                f" server: {server}}}}}\nsubset: {{unselected: all}}\n{extra}"
             )
         )
+
+    def sources_spec(self, sources: Mapping[str, ScratchSource]) -> Spec:
+        """A spec reading every scratch source in ``sources``, by name."""
+        server = json.dumps(self.sample().working.server)
+        engine = self.harness.engine.name
+        listed = ", ".join(
+            f"{name}: {{engine: {engine}, connection: {json.dumps(dict(source.connection))},"
+            f" server: {server}}}"
+            for name, source in sources.items()
+        )
+        return parse_spec(
+            self.harness.with_runtime(
+                f"name: scratch\nsources: {{{listed}}}\nsubset: {{unselected: all}}\n"
+            )
+        )
+
+    def lock_all(self, spec: Spec) -> CatalogLock:
+        """A lock of every source of ``spec``, merged as planning merges them."""
+        with ExitStack() as stack:
+            sessions = {
+                name: stack.enter_context(self.harness.engine.connect(source.connection))
+                for name, source in spec.sources.items()
+            }
+            return CatalogLock.of(merge(catalogs(sessions)))
 
     def lock(self, connection: Mapping[str, JsonValue]) -> CatalogLock:
         with self.harness.engine.connect(connection) as session:
@@ -174,8 +207,8 @@ class _Builds:
             scratch,
             Tooling(
                 runtime=self.registry.runtime(kind, settings),
-                image=self.sample().source.image,
-                server=self.sample().source.server,
+                image=self.sample().working.image,
+                server=self.sample().working.server,
             ),
             # The full version: the identity names only the major one, and an
             # engine's images may be tagged by more (Oracle's 23.26.3.0).
@@ -212,8 +245,12 @@ def _extract_counts(result: RunResult) -> list[tuple[str, int]]:
     manifest = StageManifest.model_validate_json(
         (Path(result.work) / "extract" / "manifest.json").read_bytes()
     )
-    extracted = ExtractResult.model_validate_json(json.dumps(manifest.outputs["result"]))
-    return sorted((str(count.table), count.rows) for count in extracted.counts)
+    extracted = TypeAdapter(tuple[SourceExtract, ...]).validate_json(
+        json.dumps(manifest.outputs["sources"])
+    )
+    return sorted(
+        (str(count.table), count.rows) for read in extracted for count in read.result.counts
+    )
 
 
 class RunningProcess(Protocol):
@@ -283,7 +320,7 @@ class EngineConformance:
     def test_catalog_references_resolve(self, harness: EngineHarness, tmp_path: Path) -> None:
         """Every key names columns the catalog has, and every reference a table it has."""
         builds = _Builds(harness, tmp_path)
-        with harness.engine.connect(builds.sample().source.connection) as session:
+        with harness.engine.connect(builds.sample().working.connection) as session:
             catalog = session.catalog()
         assert catalog.tables
         for table in catalog.tables:
@@ -304,15 +341,15 @@ class EngineConformance:
         """
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
-        with harness.engine.connect(spec.source.connection) as session:
+        with harness.engine.connect(spec.working.connection) as session:
             version = session.server_version()
             catalog = session.catalog()
         assert version
         ((kind, settings),) = harness.runtime.items()
         tooling = Tooling(
             runtime=builds.registry.runtime(kind, settings),
-            image=spec.source.image,
-            server=spec.source.server,
+            image=spec.working.image,
+            server=spec.working.server,
         )
         with closing(harness.engine.working(tmp_path / "scratch", tooling, version)) as working:
             available = working.available()
@@ -391,7 +428,7 @@ class EngineConformance:
         """
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
-        lock = builds.lock(spec.source.connection)
+        lock = builds.lock(spec.working.connection)
         if not harness.engine.capabilities().nested:
             only = builds.run(
                 spec, lock, "keys", stages=_BUILD, options=PlanOptions(strategy=Strategy.KEYS)
@@ -435,7 +472,7 @@ class EngineConformance:
         """The sample spec runs plan through store, verifies, and stores every format."""
         builds = _Builds(harness, tmp_path)
         spec = builds.sample()
-        result = builds.run(spec, builds.lock(spec.source.connection), "work")
+        result = builds.run(spec, builds.lock(spec.working.connection), "work")
         failures = [c for r in result.verification for c in r.checks() if not c.passed]
         assert not failures, failures
         assert result.stored
@@ -474,7 +511,7 @@ class EngineConformance:
             f"    - {{user: copyadmin, password: {everything}}}\n"
             f"    - {{user: copyreader, password: {reading}, privileges: read}}\n"
         )
-        result = builds.run(spec, builds.lock(spec.source.connection), "accounts")
+        result = builds.run(spec, builds.lock(spec.working.connection), "accounts")
         assert not result.failed(), result.verification
         assert result.images
         assert all(summary.accounts == ("copyadmin", "copyreader") for summary in result.images)
@@ -488,7 +525,7 @@ class EngineConformance:
             harness.with_runtime(harness.sample_spec.replace("STORE", str(tmp_path / "store"))),
             "utf-8",
         )
-        lock = builds.lock(spec.source.connection)
+        lock = builds.lock(spec.working.connection)
         write_lock(lock, tmp_path / "catalog.lock")
         work = tmp_path / "work"
         command = [
@@ -515,6 +552,41 @@ class EngineConformance:
         assert not result.failed(), result.verification
         assert result.stored
 
+    def test_several_sources_build_one_image(self, harness: EngineHarness, tmp_path: Path) -> None:
+        """Two sources build one image holding both, each read under its own snapshot.
+
+        A database in both fails the plan, naming it. An engine that reads one
+        source per spec fails the plan saying so.
+        """
+        builds = _Builds(harness, tmp_path)
+        if not harness.engine.capabilities().several_sources:
+            with harness.scratch() as source:
+                spec = builds.sources_spec({"first": source, "second": source})
+                with pytest.raises(PlanError) as caught:
+                    builds.run(spec, None, "refused", stages=(Stage.PLAN,))
+            assert any("one source per spec" in p for p in caught.value.problems)
+            return
+        with harness.scratch() as first, harness.scratch() as second:
+            same = builds.sources_spec({"first": first, "second": first})
+            with pytest.raises(PlanError) as caught:
+                builds.run(same, None, "same", stages=(Stage.PLAN,))
+            assert any("is in sources first and second" in p for p in caught.value.problems)
+            first.insert(1)
+            second.insert(2)
+            spec = builds.sources_spec({"first": first, "second": second})
+            result = builds.run(spec, builds.lock_all(spec), "work", stages=_BUILD)
+        assert not result.failed(), result.verification
+        counts = dict(_extract_counts(result))
+        assert counts[str(first.items)] == 1
+        assert counts[str(second.items)] == 1
+        plan = _plan(result)
+        assert [s.name for s in plan.sources] == ["first", "second"]
+        (image,) = result.images
+        ids = [ColumnRef(table=first.items, column=_ID), ColumnRef(table=second.items, column=_ID)]
+        restored = builds.restored_values(result, image, ids, "sources")
+        assert restored[str(ids[0])] == {"1"}
+        assert restored[str(ids[1])] == {"2"}
+
     def test_groups_share_a_generation_and_agree(
         self, harness: EngineHarness, tmp_path: Path
     ) -> None:
@@ -531,7 +603,7 @@ class EngineConformance:
         )
         result = builds.run(
             spec,
-            builds.lock(spec.source.connection),
+            builds.lock(spec.working.connection),
             "work",
             stages=_BUILD,
             options=PlanOptions(formats=(chosen,)),

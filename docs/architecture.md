@@ -12,7 +12,7 @@ plus three operations on existing images and copies: `release`, `prune` and
 | Stage | Input | Output |
 |---|---|---|
 | plan | Subset spec (native or Jailer `.jm`), live catalog, catalog lock | Execution plan: per-table extraction queries, resolved excludes, strict-mode result, size estimate |
-| extract | Plan | Raw extract artifacts, all read from one consistent snapshot |
+| extract | Plan | Raw extract artifacts, each source's read from one consistent snapshot of its own |
 | load | Extract artifacts | One working database per image group (scratch space, never shared storage); `before_load` hooks run first |
 | transform | Working database | Anonymized working database; `after_transform` hooks run last |
 | package | Anonymized working databases | One golden image per group and engine, in each requested format, plus manifests |
@@ -246,10 +246,12 @@ images:
   through objects, such as one a trigger's function writes to, defaults to
   `none`, with a warning, since no row of the image references it.
 
-The rows come from the same snapshot as the shared extract. After the shared
-extract, each standalone group that pulls tables in reads them again, keys
-first as the keys strategy does (whichever strategy chose the shared rows),
-into an extract of its own beside the shared one (`groups/<group>`). Under
+The rows come from the same snapshot as the shared extract: with several
+sources, each table's rows and keys from its own source's snapshot, as for
+references between sources. After the shared extract, each standalone group
+that pulls tables in reads them again, keys first as the keys strategy does
+(whichever strategy chose the shared rows), into an extract of its own per
+source beside the shared ones (`groups/<group>/<source>`). Under
 the nested strategy that first means one keys pass over the whole subset,
 since nested selections cannot be read on their own: the cost nested
 otherwise avoids, paid only when a standalone group pulls tables in. That
@@ -285,8 +287,95 @@ Groups match on whatever namespace an engine has, like every name in a spec
 ([table names](subsetting.md#table-names)): databases and schemas for
 relational engines and MongoDB, database numbers or key prefixes for Redis,
 index patterns for Elasticsearch and OpenSearch, object sets for Salesforce, and
-top-level directories for the filesystem adapter. A spec with several sources
-produces one image per engine per group, all sharing the generation.
+top-level directories for the filesystem adapter. A spec's `files` section is
+built beside its sources and produces images of its own, one per group, all
+sharing the generation.
+
+### Several sources
+
+A spec names its sources in `sources`, a map from a name to a source, even
+when there is only one:
+
+```yaml
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: APP_DSN
+      databases: [orders, billing]
+  warehouse:
+    engine: postgres
+    connection:
+      dsn:
+        env: WAREHOUSE_DSN
+      databases: [warehouse]
+images:
+  everything:
+    include: ["*"]
+```
+
+Some applications keep related databases on several servers of one engine; a
+spec with a source per server copies them together, into one image and one
+working server per group (decision 129).
+
+1. **One engine, one working server.** Every source has the same engine, and
+   gives the same `image` and `server` settings, or none. The plan fails when
+   the sources run different compatibility lines (as much of the version as
+   the engine says names a line, as an image's identity names it: `17` for
+   PostgreSQL, `8.4` for MySQL; decision 120), and otherwise the working server runs the
+   newest of their versions. Engines whose working server can hold several
+   sources' extracts say so (the `several_sources` capability: PostgreSQL and
+   MySQL); for the others, a second source fails the plan.
+2. **Names do not collide.** Every source's databases go into the one working
+   server under their own names, so a database (an outermost namespace: a
+   table, for engines without one) that more than one source reads fails the
+   plan, naming it, even one without tables: each session reports the
+   databases it reads (`SourceSession.namespaces`). Specs then name tables
+   exactly as they would with one source.
+3. **Requirements agree.** One working server provides every source's
+   requirements once: a requirement two sources use at different versions
+   fails the plan, naming both, and a source may `omit` a requirement only if
+   every source that uses it does. Each source's kept requirements are in the
+   plan, and a missing one is reported against the source that uses it
+   (`sources.<name>.image`).
+4. **A snapshot per source, not one point in time.** No snapshot spans
+   servers. Each source is read under its own, and the run opens them one
+   after another before reading anything, so they are as close together as
+   the sources allow. The image's manifest records each source's snapshot and
+   when it was opened (`sources`), so nobody mistakes a multi-server image for
+   one point in time.
+5. **References between sources are listed.** A virtual reference whose child
+   and parent are in different sources is followed like any other, but no
+   single query reads two servers, so the plan uses the keys strategy (asking
+   for `nested` fails) and lists each such reference in `between_sources`, as
+   the image's manifest does too. A child read in one snapshot may name a
+   parent the other snapshot does not hold yet: verification's reference
+   check then fails, which stops the build, unless the reference has an
+   `on_missing` fallback (`null`, `stub` or `drop`) to apply instead of
+   following it. Engines that cannot join databases (PostgreSQL) refuse
+   virtual references between them, and so between their sources. Foreign
+   tables and other links between servers are not listed yet; links to other
+   servers ([#80](https://github.com/datadouble/datadouble/issues/80)) will
+   catalog them and copy their rows from the source they point at.
+6. **Everything else is as for one source.** Images, groups, anonymization
+   and verification see one catalog, the sources' catalogs merged, and the
+   catalog lock records it. Anonymization is keyed once per run, so equal
+   values get equal replacements in every source. Each source's credentials
+   are its own secret references, and CI jobs get all of them.
+7. **How the core drives it.** The core opens a session per source through the
+   engine adapter's `connect`, plans against the merged catalog, and hands
+   each source's snapshot a view of the plan holding only its tables
+   (`Plan.of_source`), whose catalog fingerprint is that source's. Strategy B
+   reads each table's keys through its own source's snapshot. Each source's
+   extract goes to its own directory, and `WorkingDatabases.load` takes them
+   all, in the spec's order: the adapter puts every source's databases in
+   the one working server, and runs hooks in the first source's default
+   database.
+
+Name sources after what they hold (`app`, `warehouse`, `reporting`): the names
+appear in the plan, the manifest and the extract's directories, and follow the
+rules for spec names (lowercase letters, digits, `-` and `_`).
 
 ## Adapters
 
@@ -363,10 +452,12 @@ in containers from the engine vendor's official image: by default the image of
 exactly the source's version, so a PostgreSQL 16.4 source is built with
 `postgres:16.4-trixie`: a dump from a newer minor release can hold what an
 older server rejects. A source running a release whose image is not published
-yet fails to pull, and names an image in `source.image`.
-`source.image` names another, for example one with the extensions the source
-uses, or a copy in a private registry.
-`source.server` holds settings for the working servers, which the engine
+yet fails to pull, and names an image in `sources.<name>.image`.
+`sources.<name>.image` names another, for example one with the extensions the
+source uses, or a copy in a private registry. A spec with several sources
+gives every source the same `image` and `server`, since one working server
+holds them all; by default it runs the newest of their versions.
+`sources.<name>.server` holds settings for the working servers, which the engine
 adapter checks; SQL Server's needs `accept_eula: true`, the operator's
 acceptance of Microsoft's licence, and takes an `edition` (decision 83).
 PostgreSQL's takes `shared_preload_libraries`, for extensions that must load
@@ -388,13 +479,13 @@ working image that lacks one cannot load the data (decision 107).
   build asks the working image what it provides (the adapter's
   `available()`) and fails with `requirement_unmet`, listing every
   requirement it lacks or lacks at the source's version. The fix is an image
-  that has them, in `source.image`. An adapter whose working copies need no
+  that has them, in `sources.<name>.image`. An adapter whose working copies need no
   add-ons to hold the data answers None, and the build skips the check:
   Salesforce's copies are local databases, which keep a managed package's
   objects and fields as ordinary tables and columns (decision 111).
 - **The working database runs the source's versions.** PostgreSQL creates
   each extension at the source's version, not the image's default.
-- **Leaving one out is explicit.** `source.omit` names requirements the
+- **Leaving one out is explicit.** `sources.<name>.omit` names requirements the
   copies go without. Anything that uses an omitted one must be excluded too,
   or the build fails; nothing is dropped silently. Naming a requirement the
   source does not use fails the plan.

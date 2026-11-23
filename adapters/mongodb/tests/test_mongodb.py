@@ -42,9 +42,10 @@ pytestmark = pytest.mark.integration
 
 SPEC = """
 name: scratch
-source:
-  engine: mongodb
-  connection: CONNECTION
+sources:
+  app:
+    engine: mongodb
+    connection: CONNECTION
 exclude: ["gone"]
 subset:
   unselected: none
@@ -258,7 +259,9 @@ def test_working_failures(source: MongoScratch, tmp_path: Path) -> None:
     group = plan.groups[0]
     working = MongoWorking(tools(), tmp_path / "scratch")
     with pytest.raises(EngineError, match="does not run hooks"):
-        working.load(plan, group, work / "extract" / "data", tmp_path / "x", (Hook(sql="x"),))
+        working.load(
+            plan, group, (work / "extract" / "data" / "app",), tmp_path / "x", (Hook(sql="x"),)
+        )
     # An extract without the group's collections restores nothing.
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -266,7 +269,7 @@ def test_working_failures(source: MongoScratch, tmp_path: Path) -> None:
     (empty / "index.json").write_text(
         ExtractIndex(database=source.database, collections=()).model_dump_json(), "utf-8"
     )
-    counts = working.load(plan, group, empty, tmp_path / "empty-db", ())
+    counts = working.load(plan, group, (empty,), tmp_path / "empty-db", ())
     assert all(count.rows == 0 for count in counts)
 
     child = TableName.of(source.database, "child")

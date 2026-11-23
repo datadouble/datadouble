@@ -14,10 +14,17 @@ import pytest
 from datadouble.catalog import ColumnKind
 from datadouble.engine import EngineError, Tooling, Transformation
 from datadouble.names import ColumnName, ColumnRef, TableName
-from datadouble.planner import PlannedRule, PlanOptions, plan
+from datadouble.planner import PlannedRule, PlanOptions, SourceCatalog, plan
 from datadouble.programs import Completed
 from datadouble.runtime import Container, Server
-from datadouble.spec import ImageFormat, NullOptions, NullRule, TransformHook, parse_spec
+from datadouble.spec import (
+    FILES_SOURCE,
+    ImageFormat,
+    NullOptions,
+    NullRule,
+    TransformHook,
+    parse_spec,
+)
 from datadouble.subset import (
     AllOf,
     AllRows,
@@ -170,16 +177,16 @@ def test_working_copies(tmp_path: Path) -> None:
     assert working.available() == ()
     planned = plan(
         parse_spec(
-            "name: t\nsource: {engine: files}\nstrict: {data: off}\nexclude: [tmp]\n"
+            "name: t\nsources: {files: {engine: files}}\nstrict: {data: off}\nexclude: [tmp]\n"
             "subset: {seeds: {documents: '-type f', avatars: '-type f'}}"
         ),
-        catalog(root),
+        (SourceCatalog(name=FILES_SOURCE, catalog=catalog(root), server_version="1"),),
         None,
         FilesEngine().capabilities(),
         PlanOptions(now=AS_OF),
     )
     group = planned.groups[0]
-    counts = working.load(planned, group, extract, tmp_path / "loaded", ())
+    counts = working.load(planned, group, (extract,), tmp_path / "loaded", ())
     assert {c.table: c.rows for c in counts} == {DOCS: 2, table_name("avatars"): 0}
     hook = TransformHook(sql="rm -f documents/2.txt")
     transformation = Transformation((), lambda _r, _v: {}, (hook,))
@@ -235,10 +242,10 @@ def test_extract_copies_the_chosen_files(tmp_path: Path, monkeypatch: pytest.Mon
     root = tree(tmp_path / "source")
     planned = plan(
         parse_spec(
-            "name: t\nsource: {engine: files}\nstrict: {data: off}\nexclude: [tmp]\n"
+            "name: t\nsources: {files: {engine: files}}\nstrict: {data: off}\nexclude: [tmp]\n"
             "subset: {seeds: {documents: \"-name '2*'\", avatars: '-type f'}}"
         ),
-        catalog(root),
+        (SourceCatalog(name=FILES_SOURCE, catalog=catalog(root), server_version="1"),),
         None,
         FilesEngine().capabilities(),
         PlanOptions(now=AS_OF),

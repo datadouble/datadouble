@@ -84,9 +84,10 @@ INSERT INTO public.r VALUES (1, 5);
 
 SPEC = """
 name: scratch
-source:
-  engine: postgres
-  connection: CONNECTION
+sources:
+  app:
+    engine: postgres
+    connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
@@ -272,7 +273,7 @@ def test_excluded_parents_are_nulled(source: PostgresScratch, tmp_path: Path) ->
 def test_corrupt_extracts_fail_to_load(source: PostgresScratch, tmp_path: Path) -> None:
     spec = SPEC.replace('exclude: ["items"]\n', "")
     extracted = build(source, tmp_path, spec=spec, stages=(Stage.PLAN, Stage.EXTRACT))
-    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data"
+    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data" / "app"
     for file in data.glob("*.copy"):
         file.write_text("not\ta\trow\tat\tall\n", encoding="utf-8")
     table = rf"{re.escape(source.database)}\.public\.\w+"
@@ -473,12 +474,13 @@ INSERT INTO public.orders VALUES (30, 'x'), (31, 'y');
 
 DATABASES_SPEC = """
 name: scratch
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: VARIABLE
-    databases: ["PREFIX_*"]
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: VARIABLE
+      databases: ["PREFIX_*"]
 subset:
   unselected: none
   seeds:
@@ -554,7 +556,7 @@ def test_several_databases_build_one_image(databases: tuple[str, str], tmp_path:
     prefix, variable = databases
     a, b, c = (f"{prefix}_{suffix}" for suffix in "abc")
     spec = databases_spec(prefix, variable, tmp_path)
-    with PostgresEngine().connect(spec.source.connection) as session:
+    with PostgresEngine().connect(spec.working.connection) as session:
         assert isinstance(session, PostgresSession)
         assert (tuple(session.connections), session.default) == ((a, b, c), a)
         lock = CatalogLock.of(session.catalog())
@@ -569,7 +571,8 @@ def test_several_databases_build_one_image(databases: tuple[str, str], tmp_path:
     result = Run(spec, lock, registry(), options).execute()
     assert not result.failed(), result.verification
     manifest = tmp_path / "work" / "scratch" / result.generation / "extract" / "manifest.json"
-    extracted = json.loads(manifest.read_text())["outputs"]["result"]
+    (read,) = json.loads(manifest.read_text())["outputs"]["sources"]
+    extracted = read["result"]
     assert extracted["snapshot"] == ""
     assert set(extracted["snapshots"]) == {a, b, c}
     tables = {
@@ -611,7 +614,7 @@ def test_names_across_databases(databases: tuple[str, str], tmp_path: Path) -> N
     a, c = f"{prefix}_a", f"{prefix}_c"
     plan_only = RunOptions(stages=(Stage.PLAN,), work=tmp_path / "work")
     spec = databases_spec(prefix, variable, tmp_path)
-    with PostgresEngine().connect(spec.source.connection) as session:
+    with PostgresEngine().connect(spec.working.connection) as session:
         lock = CatalogLock.of(session.catalog())
     # A name two databases share fails, naming both; a virtual reference
     # between databases cannot be read in one query.
@@ -750,9 +753,10 @@ INSERT INTO billing.invoices VALUES (10, 1, 5), (11, 2, 6);
 
 SLICE_SPEC = """
 name: scratch
-source:
-  engine: postgres
-  connection: CONNECTION
+sources:
+  app:
+    engine: postgres
+    connection: CONNECTION
 exclude: [items]
 objects:
   - function: public.greet

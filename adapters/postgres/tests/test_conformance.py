@@ -66,12 +66,13 @@ PGVECTOR = (
 # rather than pulling one in.
 SAMPLE_SPEC = """
 name: pagila
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: DATADOUBLE_TEST_POSTGRES_DSN
-  image: PGVECTOR
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: DATADOUBLE_TEST_POSTGRES_DSN
+    image: PGVECTOR
 exclude: ["dba.*"]
 subset:
   unselected: none
@@ -254,9 +255,9 @@ def test_extensions_keep_their_versions_and_omitted_ones_go(tmp_path: Path) -> N
         source.execute(sql.SQL("INSERT INTO public.tags VALUES (1, 'k=>v')"))
         settings = json.dumps(dict(source.connection))
         spec = parse_spec(
-            f"name: scratch\nsource: {{engine: postgres, connection: {settings},"
+            f"name: scratch\nsources: {{app: {{engine: postgres, connection: {settings},"
             f" image: {json.dumps(PGVECTOR)}, omit: [cube],"
-            " server: {shared_preload_libraries: [pg_stat_statements]}}\n"
+            " server: {shared_preload_libraries: [pg_stat_statements]}}}\n"
             "subset: {seeds: {items: 'true', tags: 'true'}, unselected: none}\n"
             f"runtime: {json.dumps(runtime_for_tests())}\n"
         )

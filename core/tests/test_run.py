@@ -11,10 +11,10 @@ import pytest
 from datadouble.anonymize import Anonymizer
 from datadouble.boundary import BoundaryError
 from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import Account, EngineError, RequirementError, Tooling
+from datadouble.engine import Account, EngineError, RequirementError, Tooling, one_extract
 from datadouble.images import ImageSummary, unpack
 from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
-from datadouble.planner import AccountNames, Capabilities, PlannedRule, PlanOptions
+from datadouble.planner import AccountNames, Capabilities, Plan, PlannedRule, PlanOptions
 from datadouble.registry import Registry
 from datadouble.run import (
     Run,
@@ -39,7 +39,8 @@ from datadouble.spec import (
 )
 from datadouble.storage import FilesystemStore, filesystem_store
 from datadouble.verify import CheckKind
-from fake_engine import FakeEngine, FakeRuntime, check_protocols
+from datadouble.versions import newest
+from fake_engine import FakeEngine, FakeRuntime, FakeServer, check_protocols
 from fakes import FakeSource, catalog, shop, table
 
 ALL = tuple(Stage)
@@ -81,11 +82,12 @@ def dataset() -> FakeSource:
 
 SPEC = """
 name: shop
-source:
-  engine: fake
-  connection:
-    where: here
-  image: vendor/fake:1
+sources:
+  app:
+    engine: fake
+    connection:
+      where: here
+    image: vendor/fake:1
 runtime:
   fake: {}
 exclude: ["store", "staff", "dba_*", "audit.*", "events", "film_actor"]
@@ -519,7 +521,9 @@ def test_files_build_beside_the_source(tmp_path: Path, engine: FakeEngine) -> No
     followed = json.loads((Path(result.work) / "extract" / "paths.json").read_text())
     assert followed == ["a", "b", "c"]
     # The files the chosen posts name, and the avatars the files' own seed selects.
-    rows = json.loads((Path(result.work) / "files" / "extract" / "data" / "rows.json").read_text())
+    rows = json.loads(
+        (Path(result.work) / "files" / "extract" / "data" / "files" / "rows.json").read_text()
+    )
     assert {table: sorted(r["path"] for r in found) for table, found in rows.items()} == {
         "files.avatars": ["a1"],
         "files.documents": ["a", "b"],
@@ -609,7 +613,7 @@ def test_the_image_must_provide_the_source_requirements(
     engine.catalog = shop().model_copy(update={"requirements": (vector,)})
     with pytest.raises(RequirementError) as missing:
         run(tmp_path / "a", registry, lock=engine.catalog)
-    assert missing.value.problems == ("extension vector is not in the working image",)
+    assert missing.value.problems == (("app", "extension vector is not in the working image"),)
     # The image is checked before the snapshot opens, by working databases it closes.
     assert engine.snapshots == 0
     assert engine.closed == 1
@@ -617,7 +621,7 @@ def test_the_image_must_provide_the_source_requirements(
     with pytest.raises(RequirementError) as other:
         run(tmp_path / "b", registry, lock=engine.catalog)
     assert other.value.problems == (
-        "extension vector 0.8.2 is not in the working image, which has 0.8.7",
+        ("app", "extension vector 0.8.2 is not in the working image, which has 0.8.7"),
     )
     engine.available = (vector,)
     assert not run(tmp_path / "c", registry, lock=engine.catalog).failed()
@@ -812,3 +816,168 @@ def test_standalone_groups_hold_what_they_pull_in(tmp_path: Path) -> None:
     bare = loaded(", rows: {users: none, categories: none}", "keys")
     assert bare["content"]["public.users"] == []
     assert bare["posts"]["public.users"] == [1, 2, 4]
+
+
+TWO_SOURCES = """
+name: shop
+sources:
+  app:
+    engine: fake
+    connection:
+      where: here
+  warehouse:
+    engine: fake
+    connection:
+      server: wh
+runtime:
+  fake: {}
+exclude: ["store", "staff", "dba_*", "audit.*", "events", "film_actor", "comments", "posts"]
+subset:
+  seeds:
+    facts: "id <= 2"
+    categories: "id = 1"
+  virtual_fks:
+    "facts.user_id -> users": {}
+anonymize:
+  users:
+    email:
+      hash: {}
+  facts:
+    email:
+      hash: {}
+store:
+  - filesystem:
+      path: STORE
+"""
+
+
+def test_two_sources_build_one_image(tmp_path: Path) -> None:
+    facts = T("warehouse", "facts")
+    second = catalog(
+        table(
+            "facts",
+            ["id", "user_id", "email"],
+            namespace="warehouse",
+            kinds={"email": ColumnKind.TEXT},
+        )
+    )
+    engine = FakeEngine(
+        catalog=shop(),
+        source=dataset(),
+        capabilities_=Capabilities(
+            formats=(ImageFormat.LOGICAL,), expressions=True, nested=True, several_sources=True
+        ),
+        servers={
+            "wh": FakeServer(
+                second,
+                FakeSource(
+                    rows={
+                        facts: [
+                            {"id": i, "user_id": i + 2, "email": f"user{i + 2}@realmail.net"}
+                            for i in (1, 2, 3)
+                        ]
+                    }
+                ),
+                "1.4",
+            )
+        },
+        working_version="1.4",
+    )
+    registry = Registry(
+        engines={"fake": lambda: check_protocols(engine)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
+    )
+    merged = Catalog(engine=EngineName("fake"), tables=(*shop().tables, *second.tables))
+    result = run(tmp_path, registry, spec=TWO_SOURCES, lock=merged)
+    assert not result.failed(), result.verification
+    assert engine.connections == [{"where": "here"}, {"server": "wh"}]
+    assert engine.snapshots == 2
+    # Both snapshots open before any key or row is read through either.
+    assert engine.events[:2] == ["snapshot", "snapshot"]
+    assert set(engine.events[2:]) == {"read"}
+    # The working server runs the newest of the sources' versions.
+    assert engine.working_versions == ["1.4"]
+    assert engine.extracts == [("app", "warehouse")]
+    work = Path(result.work)
+    planned = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
+    assert planned.strategy is Strategy.KEYS
+    (crossing,) = planned.between_sources
+    assert (crossing.child, crossing.parent) == (facts, T("public", "users"))
+    stored = stored_rows(tmp_path, result)
+    assert sorted(int(str(r["id"])) for r in stored["warehouse.facts"]) == [1, 2]
+    # The facts' users come from the other source, and equal values get equal
+    # replacements in both, since the run has one key.
+    users = {r["id"]: r["email"] for r in stored["public.users"]}
+    assert sorted(int(str(u)) for u in users) == [3, 4]
+    assert {r["email"] for r in stored["warehouse.facts"]} == set(users.values())
+    (summary,) = result.images
+    archive = summary.archives[0]
+    _, manifest = unpack(tmp_path / "store" / archive.key, tmp_path / "manifest")
+    built = json.loads(manifest)
+    assert built["working_server_version"] == "1.0"
+    assert sorted(built["sources"]) == ["app", "warehouse"]
+    assert built["sources"]["warehouse"]["server_version"] == "1.4"
+    assert built["sources"]["app"]["snapshot_at"] == "2026-11-11T09:00:00Z"
+    assert built["between_sources"][0]["child_source"] == "warehouse"
+
+
+def test_a_standalone_group_pulls_rows_from_another_source(tmp_path: Path) -> None:
+    facts = T("warehouse", "facts")
+    second = catalog(
+        table(
+            "facts",
+            ["id", "user_id", "email"],
+            namespace="warehouse",
+            kinds={"email": ColumnKind.TEXT},
+        )
+    )
+    warehouse = FakeSource(
+        rows={facts: [{"id": i, "user_id": i + 2, "email": f"u{i}@x.example"} for i in (1, 2, 3)]}
+    )
+    engine = FakeEngine(
+        catalog=shop(),
+        source=dataset(),
+        capabilities_=Capabilities(
+            formats=(ImageFormat.LOGICAL,),
+            expressions=True,
+            nested=True,
+            several_sources=True,
+            standalone=True,
+        ),
+        servers={"wh": FakeServer(second, warehouse, "1.4")},
+        working_version="1.4",
+    )
+    registry = Registry(
+        engines={"fake": lambda: check_protocols(engine)},
+        stores={"filesystem": filesystem_store},
+        runtimes={"fake": lambda _settings: FakeRuntime()},
+    )
+    merged = Catalog(engine=EngineName("fake"), tables=(*shop().tables, *second.tables))
+    groups = (
+        "images:\n  people: {include: [users]}\n  facts: {include: [facts], standalone: true}\n"
+    )
+    spec = TWO_SOURCES.replace("subset:\n  seeds:", "subset:\n  seeds:", 1) + groups
+    result = run(tmp_path, registry, spec=spec, lock=merged)
+    assert not result.failed(), result.verification
+    work = Path(result.work)
+    # The users the facts reference are read through the app source's snapshot,
+    # into that source's extract for the group.
+    pulled = work / "extract" / "groups" / "facts"
+    assert sorted(path.name for path in pulled.iterdir()) == ["app"]
+    loaded = json.loads((work / "load" / "facts" / "db" / "db.json").read_text("utf-8"))
+    assert sorted(int(r["id"]) for r in loaded["public.users"]) == [3, 4]
+    assert sorted(int(r["id"]) for r in loaded["warehouse.facts"]) == [1, 2]
+
+
+def test_one_source_engines_load_one_extract(tmp_path: Path) -> None:
+    assert one_extract((tmp_path,)) == tmp_path
+    with pytest.raises(EngineError, match="loads one source's extract, not 2"):
+        one_extract((tmp_path, tmp_path))
+
+
+def test_the_newest_version_wins() -> None:
+    assert newest(("8.4.3", "8.4.10", "8.0.40")) == "8.4.10"
+    assert newest(("16.0.4135.4", "16.0.4135.4")) == "16.0.4135.4"
+    with pytest.raises(ValueError, match="no versions"):
+        newest(())

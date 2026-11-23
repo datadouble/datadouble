@@ -18,6 +18,7 @@ services:
     # need (tests/integration-groups.txt), and waits for them to be healthy.
     environment:
       DATADOUBLE_TEST_POSTGRES_DSN: postgresql://datadouble:datadouble@postgres:5432/datadouble
+      DATADOUBLE_TEST_POSTGRES_SECOND_DSN: postgresql://datadouble:datadouble@postgres-second:5432/datadouble
       DATADOUBLE_TEST_MONGODB_URI: mongodb://mongodb:27017/cinema?replicaSet=rs0
       DATADOUBLE_TEST_MYSQL_URL: mysql://datadouble:datadouble@mysql:3306/sakila
       DATADOUBLE_TEST_MSSQL_URL: mssql://datadouble:Datadouble-1@mssql:1433/sakila
@@ -66,6 +67,20 @@ services:
       POSTGRES_DB: datadouble
     healthcheck:
       # Ready only once the init scripts (Pagila) have finished.
+      test: ["CMD-SHELL", "psql -U datadouble -d datadouble -tAc 'SELECT count(*) FROM public.audit_event' | grep -q 100"]
+      interval: 2s
+      timeout: 5s
+      retries: 90
+
+  # A second PostgreSQL server, the same image, for specs with two sources.
+  postgres-second:
+    build:
+      context: dev/postgres
+    environment:
+      POSTGRES_USER: datadouble
+      POSTGRES_PASSWORD: datadouble
+      POSTGRES_DB: datadouble
+    healthcheck:
       test: ["CMD-SHELL", "psql -U datadouble -d datadouble -tAc 'SELECT count(*) FROM public.audit_event' | grep -q 100"]
       interval: 2s
       timeout: 5s

@@ -35,13 +35,14 @@ URL_VARIABLE = "DATADOUBLE_TEST_MSSQL_URL"
 # cycle, and bring their sales targets, in a second schema.
 SAMPLE_SPEC = """
 name: sakila
-source:
-  engine: mssql
-  connection:
-    url:
-      env: DATADOUBLE_TEST_MSSQL_URL
-  server:
-    accept_eula: true
+sources:
+  app:
+    engine: mssql
+    connection:
+      url:
+        env: DATADOUBLE_TEST_MSSQL_URL
+    server:
+      accept_eula: true
 exclude: ["dba_*"]
 subset:
   unselected: none

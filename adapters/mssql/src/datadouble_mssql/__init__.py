@@ -5,22 +5,22 @@
 
 Spec settings::
 
-    source:
-      engine: mssql
-      connection:
-        url:                         # mssql://user:password@host:1433/database, by reference
-          env: SHOP_MSSQL_URL
-      server:
-        accept_eula: true            # required: you accept the SQL Server licence
-        edition: Developer           # the default; any value MSSQL_PID takes
+    sources:
+      app:
+        engine: mssql
+        connection:
+          url: {env: SHOP_MSSQL_URL}   # mssql://user:password@host:1433/database, by reference
+        server:
+          accept_eula: true            # required: you accept the SQL Server licence
+          edition: Developer           # the default; any value MSSQL_PID takes
 
 The catalog is the URL's database, which must allow snapshot isolation.
 Extract runs no programs in containers. Working databases and restores run in
 Microsoft's SQL Server image of the source's release and cumulative update
 (``mcr.microsoft.com/mssql/server:2022-CU28-ubuntu-22.04``), or in
-``source.image``, through the spec's container runtime, as uid and gid 10001,
+``sources.<name>.image``, through the spec's container runtime, as uid and gid 10001,
 which Datadouble must run as too. They run SQL Server under its licence terms,
-which the operator accepts with ``source.server.accept_eula``; Developer
+which the operator accepts with ``sources.<name>.server.accept_eula``; Developer
 edition is licensed for development and testing, not production.
 """
 
@@ -84,7 +84,7 @@ wait "$server"
 
 
 class MssqlConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -92,7 +92,7 @@ class MssqlConnection(BaseModel):
 
 
 class MssqlServerSettings(BaseModel):
-    """The ``source.server`` settings."""
+    """The ``sources.<name>.server`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -127,13 +127,13 @@ def parse_url(url: str) -> tuple[dict[str, str], str]:
 
 
 def server_settings(server: Mapping[str, JsonValue]) -> MssqlServerSettings:
-    """The ``source.server`` settings, which must accept the licence."""
+    """The ``sources.<name>.server`` settings, which must accept the licence."""
     settings = parse_settings(MssqlServerSettings, server, "mssql server")
     if settings.accept_eula is None:
         message = (
             "SQL Server working databases run Microsoft's SQL Server image, whose licence the"
-            " operator must accept: set source.server.accept_eula to true (Developer edition,"
-            " the default, is licensed for development and testing)"
+            " operator must accept: set sources.<name>.server.accept_eula to true"
+            " (Developer edition, the default, is licensed for development and testing)"
         )
         raise EngineError(message)
     return settings

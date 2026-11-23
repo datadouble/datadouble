@@ -34,6 +34,7 @@ from datadouble.engine import (
     Transformation,
     WorkingDatabases,
     group_extract,
+    outermost,
 )
 from datadouble.names import ColumnName, ColumnRef, EngineName, TableName
 from datadouble.planner import Capabilities, Plan, PlannedGroup
@@ -95,10 +96,12 @@ class FakeRuntime:
 class FakeSnapshot:
     source: FakeSource
     opened: list[str]
+    version: str = "1.2"
 
     def project(
         self, table: TableName, condition: Condition, columns: tuple[ColumnName, ...]
     ) -> Iterable[KeyTuple]:
+        self.opened.append("read")
         return self.source.project(table, condition, columns)
 
     def extract(
@@ -109,33 +112,52 @@ class FakeSnapshot:
         tooling: Tooling,
     ) -> ExtractResult:
         self.source.toolings.append(tooling)
+        self.opened.append("read")
         rows: Rows = {
             _key(table): [dict(r) for r in self.source.select(table, selections)]
             for table in plan.extracted()
         }
         _write(directory / "rows.json", rows)
         return ExtractResult(
-            server_version="1.2",
+            server_version=self.version,
             snapshot="fake-snapshot",
             snapshot_seconds=0.0,
             counts=_counts(rows),
         )
 
 
+@dataclass(frozen=True)
+class FakeServer:
+    """One more source server: its catalog, rows and version."""
+
+    catalog: Catalog
+    source: FakeSource
+    version: str = "1.2"
+    namespaces: tuple[str, ...] = ()
+
+
 @dataclass
 class FakeSession:
     engine: "FakeEngine"
+    server: FakeServer | None = None
 
     def server_version(self) -> str:
-        return "1.2"
+        return "1.2" if self.server is None else self.server.version
+
+    def namespaces(self) -> tuple[str, ...]:
+        return outermost(self.catalog()) if self.server is None else self.server.namespaces
 
     def catalog(self) -> Catalog:
-        return self.engine.catalog
+        return self.engine.catalog if self.server is None else self.server.catalog
 
     @contextmanager
     def snapshot(self, as_of: dt.datetime) -> Generator[Snapshot]:
         self.engine.snapshots += 1
-        yield FakeSnapshot(self.engine.source, [])
+        self.engine.events.append("snapshot")
+        if self.server is None:
+            yield FakeSnapshot(self.engine.source, self.engine.events)
+        else:
+            yield FakeSnapshot(self.server.source, self.engine.events, self.server.version)
 
 
 @dataclass
@@ -214,7 +236,7 @@ class FakeWorking:
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
@@ -222,14 +244,19 @@ class FakeWorking:
             message = "the fake engine was told to fail"
             raise EngineError(message)
         self.engine.hooks.extend(h.sql for h in hooks)
-        shared = _read(extract / "rows.json")
+        self.engine.extracts.append(tuple(e.name for e in extracts))
+        everything: Rows = {}
+        for extract in extracts:
+            everything.update(_read(extract / "rows.json"))
         own_tables = set(group.tables)
         rows = {
-            _key(t): shared.get(_key(t), []) if t in own_tables else [] for t in group.packaged()
+            _key(t): everything.get(_key(t), []) if t in own_tables else []
+            for t in group.packaged()
         }
-        own = group_extract(extract, group.name)
-        if own is not None:
-            rows.update(_read(own / "rows.json"))
+        for extract in extracts:
+            own = group_extract(extract, group.name)
+            if own is not None:
+                rows.update(_read(own / "rows.json"))
         _apply_fixups(rows, group, plan.catalog)
         _write(directory / "db.json", rows)
         return _counts(rows)
@@ -319,6 +346,13 @@ class FakeEngine:
     """Accounts given to physical images, and where."""
     accounts_working: bool = True
     """False makes working databases that cannot add accounts."""
+    servers: dict[str, FakeServer] = field(default_factory=dict[str, FakeServer])
+    """Further source servers, chosen by a connection's ``server`` setting."""
+    working_version: str = "1.2"
+    extracts: list[tuple[str, ...]] = field(default_factory=list[tuple[str, ...]])
+    events: list[str] = field(default_factory=list[str])
+    """Snapshots opened and reads through them, in order."""
+    working_versions: list[str] = field(default_factory=list[str])
 
     @property
     def name(self) -> EngineName:
@@ -334,10 +368,12 @@ class FakeEngine:
     @contextmanager
     def connect(self, connection: Mapping[str, JsonValue]) -> Generator[SourceSession]:
         self.connections.append(connection)
-        yield FakeSession(self)
+        server = connection.get("server")
+        yield FakeSession(self, self.servers[server] if isinstance(server, str) else None)
 
     def working(self, scratch: Path, tooling: Tooling, source_version: str) -> WorkingDatabases:
-        assert source_version == "1.2"
+        assert source_version == self.working_version
+        self.working_versions.append(source_version)
         self.source.toolings.append(tooling)
         if self.accounts_working:
             return FakeAccountsWorking(self, scratch)

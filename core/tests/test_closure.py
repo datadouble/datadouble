@@ -372,14 +372,16 @@ def test_removing_what_a_packaged_table_or_root_needs_fails() -> None:
             live=_lock_without(UUID),
             lock=objects(),
         )
-    assert caught.value.problems[0].endswith("group 'web' declares it in objects")
+    # The live catalog lacks the declared function, which is a problem of its own.
+    assert caught.value.problems[-1].endswith("group 'web' declares it in objects")
     with pytest.raises(PlanError) as caught:
         planned(
             KEEP_AUDIT + "objects: [{view: nope}, {function: uuid}]\n",
             live=_lock_without(POSTS_SEQ),
             lock=objects(),
         )
-    assert caught.value.problems[0].startswith("strict mode: object-removed sequence")
+    assert caught.value.problems[0] == "the spec: objects: view 'nope' is not in the catalog"
+    assert caught.value.problems[-1].startswith("strict mode: object-removed sequence")
     # Nothing needs the view: removing it warns.
     result = planned(KEEP_AUDIT, live=_lock_without(TITLES), lock=objects())
     assert any(w.startswith("strict mode: object-removed view") for w in result.warnings)

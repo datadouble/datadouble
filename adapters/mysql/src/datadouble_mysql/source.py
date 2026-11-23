@@ -293,6 +293,10 @@ class MysqlSession:
         self.databases = databases
         self.default = default
 
+    def namespaces(self) -> tuple[str, ...]:
+        """Every database read, tables or not."""
+        return tuple(self.databases)
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         try:

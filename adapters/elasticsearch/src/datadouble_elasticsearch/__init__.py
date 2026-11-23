@@ -5,21 +5,20 @@
 
 Spec settings::
 
-    source:
-      engine: elasticsearch
-      connection:
-        url:                        # http[s]://[user:password@]host[:port], by reference
-          env: SEARCH_URL
-        api_key:                    # optional; sent instead of the URL's credentials
-          env: SEARCH_KEY
-        indices: ["*", "-logs-*"]   # index patterns; the default is every open index
-        sample: 1000                # documents sampled for fields mappings do not declare
-      server:
-        heap: 512m                  # the Java heap of working nodes
+    sources:
+      app:
+        engine: elasticsearch
+        connection:
+          url: {env: SEARCH_URL}      # http[s]://[user:password@]host[:port], by reference
+          api_key: {env: SEARCH_KEY}  # optional; sent instead of the URL's credentials
+          indices: ["*", "-logs-*"]   # index patterns; the default is every open index
+          sample: 1000                # documents sampled for fields mappings do not declare
+        server:
+          heap: 512m                  # the Java heap of working nodes
 
 The source is Elasticsearch 7.17 or later. Extract reads over HTTP. Working
 nodes and restores run in the official Elasticsearch image of the source's
-exact version (``elasticsearch:<version>``), or in ``source.image``, through
+exact version (``elasticsearch:<version>``), or in ``sources.<name>.image``, through
 the spec's container runtime.
 """
 
@@ -46,7 +45,7 @@ MOUNT = "/var/lib/datadouble"
 
 
 class ElasticConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 

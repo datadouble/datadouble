@@ -14,7 +14,7 @@ A whole spec.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `name` (required) | string |  | The spec's name: the first part of its images' identity. |
-| `source` (required) | [Source](#source) |  | The system to copy from: its engine and connection. |
+| `sources` (required) | map of [Source](#source) |  | The servers to copy from, by name: one engine, each with its connection. Every source's databases go into one working server, so their names must not collide; each source is read under its own snapshot. |
 | `exclude` | list of string |  | Tables left out of every image, as globs matched from the right: `audit.*` is every table in a namespace `audit`, `shop.*.*` every table in PostgreSQL's database `shop`. |
 | `structure_only` | list of string |  | Tables copied without their rows, as globs. |
 | `case_sensitive` | boolean | `false` | Whether table and column names match case-sensitively. |
@@ -406,15 +406,15 @@ How `store` signs images.
 
 ### Source
 
-The system to extract from. `connection` is checked by the engine adapter, which knows its fields.
+One server to extract from. `connection` is checked by the engine adapter, which knows its fields.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `engine` (required) | string |  |  |
-| `connection` | map of JSON |  |  |
-| `image` | string |  | The vendor image working databases and engine tools run in; by default the engine adapter picks the official image of the source's version. |
-| `server` | map of JSON |  | Settings for the engine's working servers, checked by the engine adapter. |
-| `omit` | list of string |  | Requirements (extensions, plugins, modules) the source uses that copies leave out, by name. Anything that uses one must be excluded too, or the build fails. |
+| `engine` (required) | string |  | The engine adapter; every source of a spec has the same one. |
+| `connection` | map of JSON |  | Where the server is and what to read, checked by the engine adapter. |
+| `image` | string |  | The vendor image working databases and engine tools run in; by default the engine adapter picks the official image of the newest source's version. Every source gives the same image, or none does. |
+| `server` | map of JSON |  | Settings for the engine's working servers, checked by the engine adapter. Every source gives the same settings, since one working server holds them all. |
+| `omit` | list of string |  | Requirements (extensions, plugins, modules) this source uses that copies leave out, by name. Anything that uses one must be excluded too, or the build fails. |
 
 ### Strategy
 

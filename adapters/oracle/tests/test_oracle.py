@@ -81,9 +81,10 @@ SCHEMA = [
 
 SPEC = """
 name: scratch
-source:
-  engine: oracle
-  connection: CONNECTION
+sources:
+  app:
+    engine: oracle
+    connection: CONNECTION
 exclude: ["items"]
 subset:
   unselected: none
@@ -337,7 +338,7 @@ def test_schema_changes_after_planning_are_caught(source: OracleScratch, tmp_pat
 
 def test_corrupt_extracts_fail_to_load(source: OracleScratch, tmp_path: Path) -> None:
     extracted = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
-    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data"
+    data = tmp_path / "work" / "scratch" / extracted.generation / "extract" / "data" / "app"
     for file in data.glob("*.dat"):
         file.write_bytes(b"\x03\x00\x00\x00abc" * 20)
     with pytest.raises(EngineError, match=r"loading .*\.\w+ failed: ORA-"):
@@ -415,11 +416,13 @@ def test_working_images_must_match_the_source(source: OracleScratch, tmp_path: P
     extracted = build(source, tmp_path, stages=(Stage.PLAN, Stage.EXTRACT))
     work = tmp_path / "work" / "scratch" / extracted.generation
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
-    index = work / "extract" / "data" / "index.json"
+    index = work / "extract" / "data" / "app" / "index.json"
     index.write_text(index.read_text("utf-8").replace(VERSION, "23.26.0.0.0"), "utf-8")
     working = working_databases(tmp_path / "w", default_image(VERSION))
     with pytest.raises(EngineError, match=r"the source runs 23\.26\.0\.0\.0"):
-        working.load(plan, plan.groups[0], work / "extract" / "data", tmp_path / "db", ())
+        working.load(
+            plan, plan.groups[0], (work / "extract" / "data" / "app",), tmp_path / "db", ()
+        )
     assert working.server_version() == VERSION
 
 
@@ -441,10 +444,11 @@ def test_instances_take_only_their_password(tmp_path: Path) -> None:
 
 TEXT_SPEC = """
 name: scratch
-source:
-  engine: oracle
-  connection: CONNECTION
-  omit: OMIT
+sources:
+  app:
+    engine: oracle
+    connection: CONNECTION
+    omit: OMIT
 exclude: ["items", "parent", "child", "files", "child_log"]
 subset:
   unselected: none

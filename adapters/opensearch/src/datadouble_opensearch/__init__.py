@@ -5,15 +5,15 @@
 
 Spec settings::
 
-    source:
-      engine: opensearch
-      connection:
-        url:                        # http[s]://[user:password@]host[:port], by reference
-          env: SEARCH_URL
-        indices: ["*", "-logs-*"]   # index patterns; the default is every open index
-        sample: 1000                # documents sampled for fields mappings do not declare
-      server:
-        heap: 512m                  # the Java heap of working nodes
+    sources:
+      app:
+        engine: opensearch
+        connection:
+          url: {env: SEARCH_URL}      # http[s]://[user:password@]host[:port], by reference
+          indices: ["*", "-logs-*"]   # index patterns; the default is every open index
+          sample: 1000                # documents sampled for fields mappings do not declare
+        server:
+          heap: 512m                  # the Java heap of working nodes
 
 The source is OpenSearch 2.4 or later, the first with points in time. The
 adapter is the Elasticsearch adapter's package serving OpenSearch

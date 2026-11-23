@@ -33,7 +33,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Column, ColumnKind, Requirement, RequirementKind
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -442,8 +442,8 @@ class OracleWorking:
         if version != source_version:
             message = (
                 f"the working database image {self.tools.image} runs Oracle {version}, but the"
-                f" source runs {source_version}; set source.image to an Oracle Database Free"
-                " image of the source's version"
+                f" source runs {source_version}; set sources.<name>.image to an Oracle Database"
+                " Free image of the source's version"
             )
             raise EngineError(message)
         self._version = version
@@ -455,11 +455,12 @@ class OracleWorking:
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Build the group's working database."""
+        extract = one_extract(extracts)
         index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
         schema = Schema.model_validate_json((extract / "schema.json").read_bytes())
         schema = schema.without(frozenset(r.name for r in plan.omitted))

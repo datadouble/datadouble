@@ -63,8 +63,16 @@ from datadouble.images import (
     unpack,
     version_line,
 )
-from datadouble.names import EngineName, Generation, GroupName, TableName
-from datadouble.planner import Plan, PlannedGroup, PlannedPaths, PlannedRule, PlanOptions, plan
+from datadouble.names import ColumnName, EngineName, Generation, GroupName, SourceName, TableName
+from datadouble.planner import (
+    Plan,
+    PlannedGroup,
+    PlannedPaths,
+    PlannedRule,
+    PlanOptions,
+    SourceCatalog,
+    plan,
+)
 from datadouble.registry import Registry
 from datadouble.secrets import resolve_secret
 from datadouble.signing import bundle_key, sign
@@ -81,11 +89,14 @@ from datadouble.subset import (
     AnyOf,
     Condition,
     Graph,
+    KeyReader,
+    KeyTuple,
     ValuesIn,
     key_conditions,
     nested_conditions,
 )
 from datadouble.verify import FormatReport, VerificationReport, check_image, restore_failed
+from datadouble.versions import newest
 
 
 class Stage(StrEnum):
@@ -163,6 +174,15 @@ class RunResult(_Model):
         return any(not report.passed() for report in self.verification)
 
 
+class SourceExtract(_Model):
+    """What one source's snapshot read, and when it was opened."""
+
+    source: SourceName
+    opened_at: AwareDatetime
+    """When its snapshot was opened: each source is its own point in time."""
+    result: ExtractResult
+
+
 class RunOptions(_Model):
     """How to run: which stages, where, and overrides over the spec."""
 
@@ -228,18 +248,18 @@ class Run:
         self.registry = registry
         self.options = options
         self.clock = clock
-        self.engine: EngineAdapter = registry.engine(spec.source.engine)
+        self.engine: EngineAdapter = registry.engine(spec.engine)
         self.resumed = False
         if options.within is None:
             self.record = self._record()
             self.root = (options.work / spec.name / self.record.generation).resolve()
         else:
             self.record = RunRecord.model_validate_json((options.within / "run.json").read_bytes())
-            self.root = options.within / spec.source.engine
+            self.root = options.within / spec.engine
             self.root.mkdir(exist_ok=True)
         self.records: list[StageRecord] = []
         self.warnings: list[str] = []
-        self._session: SourceSession | None = None
+        self._sessions: dict[SourceName, SourceSession] | None = None
         self._tooling: Tooling | None = None
         self._exits = ExitStack()
         self._accounts: tuple[Account, ...] | None = None
@@ -404,19 +424,20 @@ class Run:
             ((kind, settings),) = self.spec.runtime.items()
             self._tooling = Tooling(
                 runtime=self.registry.runtime(kind, settings),
-                image=self.spec.source.image,
-                server=self.spec.source.server,
+                image=self.spec.working.image,
+                server=self.spec.working.server,
             )
         return self._tooling
 
-    def session(self) -> SourceSession:
-        """The source connection, opened on first use."""
-        if self._session is None:
+    def sessions(self) -> dict[SourceName, SourceSession]:
+        """A connection to every source, in the spec's order, opened on first use."""
+        if self._sessions is None:
             require_inside("reading the source", self.registry)
-            self._session = self._exits.enter_context(
-                self.engine.connect(self.spec.source.connection)
-            )
-        return self._session
+            self._sessions = {
+                name: self._exits.enter_context(self.engine.connect(source.connection))
+                for name, source in self.spec.sources.items()
+            }
+        return self._sessions
 
     def plan(self) -> Plan:
         """Plan against the live catalog, or reuse the generation's plan."""
@@ -426,12 +447,12 @@ class Run:
                 message = f"generation {self.record.generation} has no plan; include plan"
                 raise RunError(message)
             return Plan.model_validate_json(path.read_bytes())
-        catalog = self.session().catalog()
+        sources = catalogs(self.sessions())
         options = self.options.plan.model_copy(update={"now": self.record.created_at})
-        planned = plan(self.spec, catalog, self.lock, self.engine.capabilities(), options)
+        planned = plan(self.spec, sources, self.lock, self.engine.capabilities(), options)
         inputs = {
             "spec": self.spec,
-            "catalog": catalog.fingerprint(),
+            "sources": [(s.name, s.catalog.fingerprint(), s.server_version) for s in sources],
             "lock": None if self.lock is None else self.lock.fingerprint,
             "options": options,
         }
@@ -444,8 +465,12 @@ class Run:
         self.warnings.extend(planned.warnings)
         return Plan.model_validate_json(path.read_bytes())
 
-    def extract(self, planned: Plan) -> ExtractResult:
-        """Read the chosen rows from one snapshot."""
+    def extract(self, planned: Plan) -> tuple[SourceExtract, ...]:
+        """Read the chosen rows of every source, each under its own snapshot.
+
+        The snapshots are opened one after another before anything is read,
+        so they are as close together as the sources allow.
+        """
         inputs = {
             "tables": planned.tables,
             "edges": planned.edges,
@@ -454,6 +479,7 @@ class Run:
             "excludes": planned.excludes,
             "catalog": planned.catalog_fingerprint,
             "pulled": [(g.name, g.tables, g.pulled) for g in planned.groups if g.standalone],
+            "sources": planned.sources,
             "followed": None
             if self.options.within is None
             else fingerprint((self.options.within / Stage.EXTRACT / _MANIFEST).read_bytes()),
@@ -461,25 +487,42 @@ class Run:
 
         def work(directory: Path) -> dict[str, JsonValue]:
             graph = planned.graph()
-            with self.session().snapshot(planned.as_of) as snapshot:
+            sessions = self.sessions()
+            with ExitStack() as stack:
+                snapshots: dict[SourceName, Snapshot] = {}
+                opened: dict[SourceName, dt.datetime] = {}
+                for source in planned.sources:
+                    snapshots[source.name] = stack.enter_context(
+                        sessions[source.name].snapshot(planned.as_of)
+                    )
+                    opened[source.name] = self.clock()
+                reader = _Routed(planned, snapshots)
                 selections = (
                     nested_conditions(graph)
                     if planned.strategy == "nested"
-                    else key_conditions(graph, snapshot)
+                    else key_conditions(graph, reader)
                 )
                 selections = self._followed(planned, selections)
-                result = snapshot.extract(planned, selections, directory / "data", self.tooling())
-                self._pull(planned, graph, snapshot, selections, directory)
+                results: list[JsonValue] = []
+                for source in planned.sources:
+                    result = snapshots[source.name].extract(
+                        planned.of_source(source.name),
+                        selections,
+                        directory / "data" / source.name,
+                        self.tooling(),
+                    )
+                    read = SourceExtract(
+                        source=source.name, opened_at=opened[source.name], result=result
+                    )
+                    results.append(_JSON.validate_python(read.model_dump(mode="json")))
+                self._pull(planned, graph, reader, selections, directory)
                 unmatched = 0
                 if planned.paths_from is not None:
                     paths, unmatched = self._paths(
-                        planned, planned.paths_from, graph, snapshot, selections
+                        planned, planned.paths_from, graph, reader, selections
                     )
                     (directory / _PATHS).write_text(json.dumps(paths), "utf-8")
-            return {
-                "result": _JSON.validate_python(result.model_dump(mode="json")),
-                "unmatched_paths": unmatched,
-            }
+            return {"sources": results, "unmatched_paths": unmatched}
 
         manifest = self._stage(Stage.EXTRACT, None, inputs, work)
         unmatched = manifest.outputs.get("unmatched_paths")
@@ -488,21 +531,23 @@ class Run:
                 f"files.paths_from: {unmatched} value(s) did not match the pattern, so their"
                 " files were not copied; check `match`"
             )
-        return _load(ExtractResult, manifest.outputs["result"])
+        return _load(tuple[SourceExtract, ...], manifest.outputs["sources"])
 
     def _pull(
         self,
         planned: Plan,
         graph: Graph,
-        snapshot: Snapshot,
+        reader: "_Routed",
         selections: dict[TableName, Condition],
         directory: Path,
     ) -> None:
-        """Read, in the same snapshot, the rows standalone groups pull in.
+        """Read, under each source's snapshot, the rows standalone groups pull in.
 
         Each standalone group's pulled-in tables, and its own tables that gain
-        rows they reference, are extracted again under ``groups/<group>``,
-        with only the rows its image holds; ``load`` takes them from there.
+        rows they reference, are extracted again with only the rows its image
+        holds, each by the source it belongs to, into that source's group
+        extract (:func:`~datadouble.engine.group_extract_path`); ``load``
+        takes them from there.
         """
         keyed: Mapping[TableName, Condition] | None = None
         for group in planned.groups:
@@ -514,30 +559,31 @@ class Run:
                 # the nested strategy this reads every table's keys once more,
                 # the cost that strategy otherwise avoids, and only when a
                 # standalone group pulls something in.
-                # A second source's followed rows (``_followed``) join them,
-                # as they joined the shared selections.
+                # A followed spec's rows (``_followed``) join them, as they
+                # joined the shared selections.
                 keyed = (
-                    self._followed(planned, key_conditions(graph, snapshot))
+                    self._followed(planned, key_conditions(graph, reader))
                     if planned.strategy == "nested"
                     else selections
                 )
             conditions = pulled_rows(
-                planned.edges, frozenset(group.tables), group.rows(), keyed, snapshot
+                planned.edges, frozenset(group.tables), group.rows(), keyed, reader
             )
-            if not conditions:
-                continue
-            part = planned.model_copy(
-                update={"tables": tuple(r for r in planned.tables if r.table in conditions)}
-            )
-            target = group_extract_path(directory / "data", group.name)
-            snapshot.extract(part, conditions, target, self.tooling())
+            for source in planned.sources:
+                own = planned.of_source(source.name)
+                tables = tuple(r for r in own.tables if r.table in conditions)
+                if not tables:
+                    continue
+                target = group_extract_path(directory / "data" / source.name, group.name)
+                part = own.model_copy(update={"tables": tables})
+                reader.snapshots[source.name].extract(part, conditions, target, self.tooling())
 
     @staticmethod
     def _paths(
         planned: Plan,
         wanted: PlannedPaths,
         graph: Graph,
-        snapshot: Snapshot,
+        snapshot: KeyReader,
         selections: Mapping[TableName, Condition],
     ) -> tuple[list[str], int]:
         """The paths the chosen rows name, and how many values the pattern did not match.
@@ -592,7 +638,7 @@ class Run:
             counts = working.load(
                 planned,
                 group,
-                self._dir(Stage.EXTRACT) / "data",
+                tuple(self._dir(Stage.EXTRACT) / "data" / s.name for s in planned.sources),
                 directory / "db",
                 self.spec.hooks.before_load,
             )
@@ -648,7 +694,7 @@ class Run:
         context: "_Context",
     ) -> None:
         """Package every requested format of the group's image."""
-        extract = context.extract
+        extracts = context.extract
         version = working.server_version()
         identity = self.identity(
             group, version_line(version, self.engine.capabilities().version_line)
@@ -668,13 +714,20 @@ class Run:
             build = {
                 "identity": identity,
                 "datadouble": __version__,
-                "source_server_version": extract.server_version,
+                "sources": {
+                    read.source: {
+                        "server_version": read.result.server_version,
+                        "snapshot": read.result.snapshot,
+                        "snapshots": read.result.snapshots,
+                        "snapshot_at": read.opened_at,
+                        "snapshot_seconds": read.result.snapshot_seconds,
+                    }
+                    for read in extracts
+                },
+                "between_sources": planned.between_sources,
                 "working_server_version": version,
                 "requirements": planned.catalog.requirements,
                 "omitted": planned.omitted,
-                "snapshot": extract.snapshot,
-                "snapshots": extract.snapshots,
-                "snapshot_seconds": extract.snapshot_seconds,
                 "as_of": planned.as_of,
                 "strategy": planned.strategy,
                 "strict": planned.strict,
@@ -894,14 +947,16 @@ class Run:
         # Check the image before reading the snapshot, which can take hours.
         checked = bool(planned.catalog.requirements) and self._wanted(Stage.EXTRACT)
         if checked:
-            version = self.session().server_version()
+            version = newest(tuple(source.server_version for source in planned.sources))
             checking = self.engine.working(scratch, self.tooling(), version)
             try:
                 _require(checking, planned)
             finally:
                 checking.close()
         extracted = self.extract(planned)
-        working = self.engine.working(scratch, self.tooling(), extracted.server_version)
+        # The sources share a version line (the plan checks), so the newest reads them all.
+        version = newest(tuple(read.result.server_version for read in extracted))
+        working = self.engine.working(scratch, self.tooling(), version)
         if planned.catalog.requirements and not checked:
             _require(working, planned)
         return _Context(
@@ -939,7 +994,7 @@ class Run:
 class _Context:
     working: WorkingDatabases
     planned: Plan
-    extract: ExtractResult
+    extract: tuple[SourceExtract, ...]
     key: bytes
 
 
@@ -948,6 +1003,34 @@ class _Outputs:
     reports: list[VerificationReport] = field(default_factory=list[VerificationReport])
     summaries: list[ImageSummary] = field(default_factory=list[ImageSummary])
     stored: list[str] = field(default_factory=list[str])
+
+
+def catalogs(sessions: Mapping[SourceName, SourceSession]) -> tuple[SourceCatalog, ...]:
+    """Every source's live catalog and server version, in the spec's order."""
+    several = len(sessions) > 1
+    return tuple(
+        SourceCatalog(
+            name=name,
+            catalog=session.catalog(),
+            server_version=session.server_version(),
+            # Only several sources can collide on a database without tables.
+            namespaces=session.namespaces() if several else (),
+        )
+        for name, session in sessions.items()
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Routed:
+    """Reads each table's keys through the snapshot of the source that holds it."""
+
+    planned: Plan
+    snapshots: Mapping[SourceName, Snapshot]
+
+    def project(
+        self, table: TableName, condition: Condition, columns: tuple[ColumnName, ...]
+    ) -> Iterable[KeyTuple]:
+        return self.snapshots[self.planned.source_of(table)].project(table, condition, columns)
 
 
 def _counts(counts: tuple[TableCount, ...]) -> list[JsonValue]:
@@ -964,7 +1047,11 @@ def _require(working: WorkingDatabases, planned: Plan) -> None:
     available = working.available()
     if available is None:
         return
-    problems = unmet(planned.catalog.requirements, available)
+    problems = tuple(
+        (source.name, problem)
+        for source in planned.sources
+        for problem in unmet(source.requirements, available)
+    )
     if problems:
         raise RequirementError(problems)
 

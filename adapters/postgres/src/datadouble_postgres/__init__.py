@@ -5,17 +5,18 @@
 
 Spec settings::
 
-    source:
-      engine: postgres
-      connection:
-        dsn: {env: SHOP_DSN}      # a libpq connection string or URI, by reference
-        databases: [shop, "billing_*"]  # names or globs; by default the DSN's
+    sources:
+      app:
+        engine: postgres
+        connection:
+          dsn: {env: SHOP_DSN}      # a libpq connection string or URI, by reference
+          databases: [shop, "billing_*"]  # names or globs; by default the DSN's
 
 Tables are named ``database.schema.table``; ``databases`` lists the databases
 read (``["*"]`` for every one the user can connect to), each under a snapshot
 of its own, opened together. Working databases, restores and ``pg_dump`` run
 in the official PostgreSQL image of the source's exact version
-(``postgres:<version>-trixie``), or in ``source.image``, through the spec's
+(``postgres:<version>-trixie``), or in ``sources.<name>.image``, through the spec's
 container runtime. ``pg_dump`` connects to
 the source from a container, so the source must be reachable from there at the
 address in ``dsn``.
@@ -53,7 +54,7 @@ MOUNT = "/var/lib/datadouble"
 
 
 class PostgresConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -86,7 +87,7 @@ def list_databases(connection: Connection) -> tuple[str, ...]:
 
 
 class PostgresServerSettings(BaseModel):
-    """The ``source.server`` settings."""
+    """The ``sources.<name>.server`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -123,6 +124,7 @@ class PostgresEngine:
             ),
             standalone=True,
             joins_outermost=False,
+            several_sources=True,
         )
 
     @contextmanager

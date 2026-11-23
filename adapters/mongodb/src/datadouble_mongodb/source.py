@@ -36,7 +36,7 @@ from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
 from datadouble.catalog import Catalog, Column, ColumnKind, Table
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling, outermost
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
@@ -284,6 +284,10 @@ class MongoSource:
             return str(self.client.server_info().get("version", ""))
         except PyMongoError as error:
             raise failure(error, "reading the server version") from None
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces of the catalog's tables."""
+        return outermost(self.catalog())
 
     def catalog(self) -> Catalog:
         """Introspect the source."""

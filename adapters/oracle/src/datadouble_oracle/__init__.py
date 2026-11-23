@@ -5,12 +5,12 @@
 
 Spec settings::
 
-    source:
-      engine: oracle
-      connection:
-        url:                          # oracle://user:password@host:1521/service, by reference
-          env: SHOP_ORACLE_URL
-        schemas: [SHOP]               # the connecting user's own schema by default
+    sources:
+      app:
+        engine: oracle
+        connection:
+          url: {env: SHOP_ORACLE_URL}   # oracle://user:password@host:1521/service, by reference
+          schemas: [SHOP]               # the connecting user's own schema by default
 
 The catalog is the named schemas, read through the service (a pluggable
 database's service on a multitenant server). The connecting user needs
@@ -19,7 +19,7 @@ tables. Extract runs no programs in containers. Working databases and
 restores are pluggable databases in Oracle Database Free containers of
 exactly the source's version
 (``container-registry.oracle.com/database/free:23.26.3.0``), or in
-``source.image``, through the spec's container runtime, as uid and gid 54321.
+``sources.<name>.image``, through the spec's container runtime, as uid and gid 54321.
 """
 
 import shlex
@@ -69,7 +69,7 @@ wait
 
 
 class OracleConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 

@@ -24,7 +24,7 @@ from typing import IO
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Catalog, Column, ColumnKind, Requirement, RequirementKind, Table
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling, outermost
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import AllRows, Condition, KeyTuple
@@ -395,6 +395,10 @@ class RedisSource:
     def server_version(self) -> str:
         """The first database's server version."""
         return server_version(self.first)
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces of the catalog's tables."""
+        return outermost(self.catalog())
 
     def catalog(self) -> Catalog:
         """Introspect the source."""

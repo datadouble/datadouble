@@ -17,8 +17,8 @@ from datadouble.catalog import (
     SourceObject,
     definition_fingerprint,
 )
-from datadouble.names import ColumnName, GroupName, TableName
-from datadouble.planner import AccountNames, Capabilities, Plan, PlanError, PlanOptions, plan
+from datadouble.names import ColumnName, GroupName, SourceName, TableName
+from datadouble.planner import AccountNames, Capabilities, Plan, PlanError, PlanOptions, merge, plan
 from datadouble.spec import (
     ImageFormat,
     ObjectLevel,
@@ -30,7 +30,7 @@ from datadouble.spec import (
     parse_spec,
 )
 from datadouble.subset import AllRows, EdgeMode, NoRows, nested_conditions
-from fakes import catalog, shop, table
+from fakes import catalog, one, shop, table
 
 CAPABILITIES = Capabilities(
     formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
@@ -39,7 +39,7 @@ CAPABILITIES = Capabilities(
     standalone=True,
 )
 NOW = dt.datetime(2026, 11, 11, 12, 30, 15, 999, tzinfo=dt.UTC)
-HEADER = "name: shop\nsource: {engine: fake}\n"
+HEADER = "name: shop\nsources: {app: {engine: fake}}\n"
 CYCLE_FREE = 'exclude: ["store", "staff", "dba_*", "audit.*"]\n'
 
 
@@ -54,7 +54,7 @@ def planned(
     live = live or shop()
     return plan(
         quiet(parse_spec(HEADER + body)),
-        live,
+        one(live),
         CatalogLock.of(lock or live),
         capabilities,
         options or PlanOptions(now=NOW),
@@ -180,11 +180,11 @@ def test_spec_as_of_wins_and_the_clock_defaults_to_now() -> None:
 
 def test_no_lock() -> None:
     spec = quiet(parse_spec(HEADER + "strict: {data: off}"))
-    result = plan(spec, shop(), None, CAPABILITIES)
+    result = plan(spec, one(shop()), None, CAPABILITIES)
     assert result.strict is None
     assert "no catalog lock" in result.warnings[0]
     with pytest.raises(PlanError) as caught:
-        plan(quiet(parse_spec(HEADER)), shop(), None, CAPABILITIES)
+        plan(quiet(parse_spec(HEADER)), one(shop()), None, CAPABILITIES)
     assert "datadouble lock" in caught.value.problems[0]
 
 
@@ -649,7 +649,7 @@ def test_complete_engines_need_every_table_selected_or_excluded() -> None:
     with pytest.raises(PlanError) as caught:
         plan(
             parse_spec(HEADER + "strict: {data: off}\nsubset: {seeds: {avatars: '-type f'}}"),
-            tree,
+            one(tree),
             None,
             caps,
             PlanOptions(now=NOW),
@@ -659,7 +659,7 @@ def test_complete_engines_need_every_table_selected_or_excluded() -> None:
         parse_spec(
             HEADER + "strict: {data: off}\nexclude: [tmp]\nsubset: {seeds: {avatars: '-type f'}}"
         ),
-        tree,
+        one(tree),
         None,
         caps,
         PlanOptions(now=NOW),
@@ -728,16 +728,18 @@ def test_omitted_requirements() -> None:
 
     def plan_omitting(names: str) -> Plan:
         spec = quiet(
-            parse_spec(f"name: shop\nsource: {{engine: fake, omit: [{names}]}}\n" + CYCLE_FREE)
+            parse_spec(
+                f"name: shop\nsources: {{app: {{engine: fake, omit: [{names}]}}}}\n" + CYCLE_FREE
+            )
         )
-        return plan(spec, live, CatalogLock.of(live), CAPABILITIES, PlanOptions(now=NOW))
+        return plan(spec, one(live), CatalogLock.of(live), CAPABILITIES, PlanOptions(now=NOW))
 
     result = plan_omitting("vector")
     assert result.omitted == (vector,)
     assert result.catalog.requirements == (cube,)
     with pytest.raises(PlanError) as caught:
         plan_omitting("vector, nope")
-    assert "source.omit names 'nope', which the source does not use" in caught.value.problems
+    assert "sources.app.omit names 'nope', which the source does not use" in caught.value.problems
 
 
 # Tables nothing selects, and seed patterns (subset.unselected, glob seeds)
@@ -747,7 +749,7 @@ def strict_plan(body: str, capabilities: Capabilities = CAPABILITIES) -> Plan:
     """Plan without the :func:`quiet` default, as a spec on its own would."""
     live = shop()
     spec = parse_spec(HEADER + CYCLE_FREE + body)
-    return plan(spec, live, CatalogLock.of(live), capabilities, PlanOptions(now=NOW))
+    return plan(spec, one(live), CatalogLock.of(live), capabilities, PlanOptions(now=NOW))
 
 
 def strict_problems(body: str) -> tuple[str, ...]:
@@ -908,3 +910,193 @@ def test_copy_account_names() -> None:
         "package.accounts: 'pg_x' starts with 'pg_', which fake keeps for itself",
         "package.accounts: 'boss' must keep every privilege on fake (privileges: all)",
     }
+
+
+# Several sources
+
+
+SEVERAL = CAPABILITIES.model_copy(update={"several_sources": True})
+TWO = "name: shop\nsources: {app: {engine: fake}, warehouse: {engine: fake}}\n" + CYCLE_FREE
+
+
+def warehouse() -> Catalog:
+    return catalog(table("facts", ["id", "user_id"], namespace="warehouse"))
+
+
+def two(
+    body: str = "",
+    *,
+    second: Catalog | None = None,
+    versions: tuple[str, str] = ("1.2", "1.4"),
+    capabilities: Capabilities = SEVERAL,
+    options: PlanOptions | None = None,
+    namespaces: tuple[tuple[str, ...], tuple[str, ...]] = ((), ()),
+    first: Catalog | None = None,
+    header: str = TWO,
+    lock: Catalog | None = None,
+) -> Plan:
+    first, other = first or shop(), second or warehouse()
+    sources = (
+        *one(first, "app", versions[0], namespaces[0]),
+        *one(other, "warehouse", versions[1], namespaces[1]),
+    )
+    spec = quiet(parse_spec(header + body))
+    return plan(
+        spec,
+        sources,
+        CatalogLock.of(lock or merge(sources)),
+        capabilities,
+        options or PlanOptions(now=NOW),
+    )
+
+
+def test_two_sources_plan_as_one_catalog() -> None:
+    result = two()
+    assert [(s.name, s.server_version, s.namespaces) for s in result.sources] == [
+        ("app", "1.2", ("public", "audit")),
+        ("warehouse", "1.4", ("warehouse",)),
+    ]
+    facts = TableName.of("warehouse", "facts")
+    assert facts in result.extracted()
+    assert result.source_of(facts) == "warehouse"
+    assert result.between_sources == ()
+    view = result.of_source(SourceName("warehouse"))
+    assert view.catalog.names() == (facts,)
+    assert view.catalog_fingerprint == warehouse().fingerprint()
+    assert [rule.table for rule in view.tables] == [facts]
+
+
+def test_references_between_sources_are_listed_and_need_keys() -> None:
+    reference = "subset: {virtual_fks: {'facts.user_id -> users': {}}}\n"
+    result = two(reference)
+    (crossing,) = result.between_sources
+    assert (crossing.child_source, crossing.parent_source) == ("warehouse", "app")
+    assert crossing.edge == "virtual: facts.user_id -> users"
+    assert result.strategy is Strategy.KEYS
+    assert result.of_source(SourceName("app")).edges == tuple(
+        e for e in result.edges if e.child.outermost != "warehouse"
+    )
+    with pytest.raises(PlanError) as caught:
+        two(reference, options=PlanOptions(now=NOW, strategy=Strategy.NESTED))
+    assert caught.value.problems == (
+        (
+            "virtual: facts.user_id -> users joins sources warehouse and app, which no one query"
+            " can read; use the keys strategy"
+        ),
+    )
+
+
+def test_sources_fail_on_shared_databases_lines_and_engines() -> None:
+    with pytest.raises(PlanError) as caught:
+        two(second=catalog(table("more", ["id"], namespace="audit")))
+    assert caught.value.problems == (
+        (
+            "audit is in sources app and warehouse; one working server holds every source,"
+            " so database names must not repeat across sources"
+        ),
+    )
+    with pytest.raises(PlanError) as caught:
+        two(versions=("17.4", "18.1"))
+    assert caught.value.problems == (
+        (
+            "the sources run different version lines (app 17.4, warehouse 18.1); one working"
+            " server cannot hold them all, so every source must share a line"
+        ),
+    )
+    with pytest.raises(PlanError) as caught:
+        two(capabilities=CAPABILITIES)
+    assert caught.value.problems == ("the fake adapter reads one source per spec; this spec has 2",)
+    with pytest.raises(ValueError, match="at least one source"):
+        merge(())
+
+
+def test_sources_share_the_engines_compatibility_line() -> None:
+    # A line as long as the engine's version_line: 8.0 and 8.4 are separate
+    # lines where it is two numbers, though they share a first number.
+    minor = SEVERAL.model_copy(update={"version_line": 2})
+    with pytest.raises(PlanError) as caught:
+        two(versions=("8.0.40", "8.4.3"), capabilities=minor)
+    assert caught.value.problems == (
+        (
+            "the sources run different version lines (app 8.0.40, warehouse 8.4.3); one working"
+            " server cannot hold them all, so every source must share a line"
+        ),
+    )
+    result = two(versions=("8.4.3", "8.4.10"), capabilities=minor)
+    assert [s.server_version for s in result.sources] == ["8.4.3", "8.4.10"]
+    assert two(versions=("8.0.40", "8.4.3")).sources
+
+
+def test_each_source_omits_its_own_requirements() -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8")
+    first = shop().model_copy(update={"requirements": (vector,)})
+    second = warehouse().model_copy(update={"requirements": (vector,)})
+    spec = quiet(
+        parse_spec(
+            "name: shop\nsources: {app: {engine: fake, omit: [vector]},"
+            " warehouse: {engine: fake, omit: [vector]}}\n" + CYCLE_FREE
+        )
+    )
+    sources = (*one(first, "app"), *one(second, "warehouse"))
+    result = plan(spec, sources, CatalogLock.of(merge(sources)), SEVERAL, PlanOptions(now=NOW))
+    assert result.omitted == (vector,)
+    assert result.catalog.requirements == ()
+
+
+def test_databases_without_tables_collide_and_problems_come_together() -> None:
+    with pytest.raises(PlanError) as caught:
+        two(versions=("17.4", "18.1"), namespaces=(("public", "shared"), ("warehouse", "shared")))
+    assert caught.value.problems == (
+        (
+            "shared is in sources app and warehouse; one working server holds every source,"
+            " so database names must not repeat across sources"
+        ),
+        (
+            "the sources run different version lines (app 17.4, warehouse 18.1); one working"
+            " server cannot hold them all, so every source must share a line"
+        ),
+    )
+
+
+def test_the_sources_agree_on_requirements() -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8")
+    older = vector.model_copy(update={"version": "0.7"})
+    with pytest.raises(PlanError) as caught:
+        two(
+            first=shop().model_copy(update={"requirements": (vector,)}),
+            second=warehouse().model_copy(update={"requirements": (older,)}),
+        )
+    assert caught.value.problems[0] == (
+        "extension vector is at version 0.8 in source app and 0.7 in source warehouse;"
+        " one working server provides one version, so the sources must agree"
+    )
+    with pytest.raises(PlanError) as caught:
+        two(
+            first=shop().model_copy(update={"requirements": (vector,)}),
+            second=warehouse().model_copy(update={"requirements": (vector,)}),
+            header="name: shop\nsources: {app: {engine: fake, omit: [vector]},"
+            " warehouse: {engine: fake}}\n" + CYCLE_FREE,
+        )
+    assert caught.value.problems == (
+        (
+            "source app omits extension vector, which source warehouse uses; one working"
+            " server holds every source, so omit it in every source that uses it, or in none"
+        ),
+    )
+
+
+def test_strict_mode_names_the_source_that_uses_a_requirement() -> None:
+    vector = Requirement(kind=RequirementKind.EXTENSION, name="vector", version="0.8")
+    second = warehouse().model_copy(update={"requirements": (vector,)})
+    with pytest.raises(PlanError) as caught:
+        two(
+            second=second,
+            lock=Catalog(engine=shop().engine, tables=(*shop().tables, *second.tables)),
+        )
+    assert caught.value.strict is not None
+    (finding,) = caught.value.strict.findings
+    assert "leave it out with `sources.warehouse.omit`, then re-lock with `datadouble lock`" in (
+        finding.resolutions
+    )
+    result = two(second=second)
+    assert [s.requirements for s in result.sources] == [(), (vector,)]

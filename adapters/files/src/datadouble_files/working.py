@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from datadouble.catalog import Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Plan, PlannedGroup
@@ -125,11 +125,12 @@ class FilesWorking:
         self,
         plan: Plan,  # noqa: ARG002 - the protocol passes the plan; copying needs only the group
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Copy the group's directories from the extract; run ``before_load`` commands."""
+        extract = one_extract(extracts)
         Extracted.model_validate_json((extract / "index.json").read_bytes())
         tree = directory / TREE
         tree.mkdir(parents=True)

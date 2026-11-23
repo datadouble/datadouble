@@ -102,7 +102,7 @@ the shards less even, never skip or repeat a test.
 | Group | Tests | Services | User | Shards |
 |---|---|---|---|---|
 | `core` | `core/tests`, `conformance/tests`, `tests`, and the btrfs, Docker, Kubernetes, S3, HTTP and Vault adapters | PostgreSQL 18 with Pagila (`dev/postgres`), S3 (SeaweedFS), OpenBao, Caddy serving an export store over HTTPS with basic auth (`dev/https`) | 999:999 | 1 |
-| `postgres` | The PostgreSQL adapter | PostgreSQL, S3 | 999:999 | 1 |
+| `postgres` | The PostgreSQL adapter | PostgreSQL, a second PostgreSQL server for specs with two sources (the same image), S3 | 999:999 | 1 |
 | `mongodb` | The MongoDB adapter | MongoDB 9.0 as a one-member replica set with a generated cinema database (`dev/mongodb`) | 999:999 | 1 |
 | `redis` | The Redis adapter | Redis 8.10 with a generated keyspace of every data type (`dev/redis`), seeded at every start | 999:999 | 1 |
 | `elasticsearch` | The Elasticsearch adapter | Elasticsearch 9.5 as a single node with generated indices derived from Pagila (`dev/elasticsearch`), seeded on its first start | 1000:0 | 2 |
@@ -163,7 +163,7 @@ profile has to unload it (`sudo apparmor_parser --remove
 Pagila is fetched when `dev/postgres` is built, at a pinned commit and checked
 against its SHA-256. It uses pgvector, so `dev/postgres` is built on the pinned
 `pgvector/pgvector` image and the conformance spec names the same image in
-`source.image`: the source and its working databases run exactly the same
+`sources.<name>.image`: the source and its working databases run exactly the same
 server. The cinema database is generated
 by `dev/mongodb/seed.js` when the service first starts. Sakila's rows are
 committed as bulk-load files in `dev/sakila` (converted once from jOOQ's

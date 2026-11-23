@@ -29,7 +29,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
@@ -214,11 +214,12 @@ class RedisWorking:
         self,
         plan: Plan,  # noqa: ARG002 - the protocol passes the plan; restoring needs only the group
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Restore the group's keys and apply its fallbacks."""
+        extract = one_extract(extracts)
         if hooks:
             message = "the redis adapter does not run hooks"
             raise EngineError(message)

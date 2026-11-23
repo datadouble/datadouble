@@ -37,9 +37,10 @@ URL = (
 
 SPEC = """
 name: uploads
-source:
-  engine: postgres
-  connection: CONNECTION
+sources:
+  app:
+    engine: postgres
+    connection: CONNECTION
 subset:
   seeds:
     customer: "id <= 3"
@@ -155,7 +156,7 @@ def _engine(key: str) -> str:
 
 
 def copied(result: RunResult) -> list[str]:
-    tree = Path(result.work) / "files" / "extract" / "data" / "tree"
+    tree = Path(result.work) / "files" / "extract" / "data" / "files" / "tree"
     return sorted(str(path.relative_to(tree)) for path in tree.rglob("*") if path.is_file())
 
 

@@ -5,20 +5,20 @@
 
 Spec settings::
 
-    source:
-      engine: redis
-      connection:
-        url:                       # redis:// or rediss://, by reference
-          env: SESSIONS_URL
-        databases: [0]             # the database numbers to copy
-        separator: ":"             # between a key's segments
-        patterns: ["session:{}"]   # key patterns inference would get wrong
-        sample: 1000               # keys sampled per pattern for its columns
+    sources:
+      app:
+        engine: redis
+        connection:
+          url: {env: SESSIONS_URL}   # redis:// or rediss://, by reference
+          databases: [0]             # the database numbers to copy
+          separator: ":"             # between a key's segments
+          patterns: ["session:{}"]   # key patterns inference would get wrong
+          sample: 1000               # keys sampled per pattern for its columns
 
 Each key pattern is a table (see :mod:`datadouble_redis.keys`). Extract reads
 through the client; working databases, restores and served copies run in the
 official Redis image of the source's exact version (``redis:<version>``), or
-in ``source.image``, through the spec's container runtime.
+in ``sources.<name>.image``, through the spec's container runtime.
 """
 
 from collections.abc import Generator, Mapping
@@ -44,7 +44,7 @@ MOUNT = "/var/lib/datadouble"
 
 
 class RedisConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 

@@ -23,7 +23,7 @@ from pymongo.database import Database
 from pymongo.errors import PyMongoError
 
 from datadouble.catalog import Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.files import copy_tree
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -168,11 +168,12 @@ class MongoWorking:
         self,
         plan: Plan,  # noqa: ARG002 - the protocol passes the plan; restoring needs only the group
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Restore the group's collections and apply its fallbacks."""
+        extract = one_extract(extracts)
         if hooks:
             message = "the mongodb adapter does not run hooks"
             raise EngineError(message)

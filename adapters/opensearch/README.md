@@ -8,12 +8,13 @@ there, with OpenSearch's image, security plugin and point-in-time API. The
 source is OpenSearch 2.4 or later, the first version with points in time.
 
 ```yaml
-source:
-  engine: opensearch
-  connection:
-    url:                         # http[s]://[user:password@]host[:port], by reference
-      env: SEARCH_URL
-    indices: ["*", "-logs-*"]    # index patterns; the default is every open index
+sources:
+  app:
+    engine: opensearch
+    connection:
+      url:                         # http[s]://[user:password@]host[:port], by reference
+        env: SEARCH_URL
+      indices: ["*", "-logs-*"]    # index patterns; the default is every open index
 ```
 
 Working nodes and copies run in the official `opensearchproject/opensearch`

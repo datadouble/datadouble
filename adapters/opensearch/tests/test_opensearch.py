@@ -42,7 +42,8 @@ def test_served_copies(tmp_path: Path) -> None:
             source.insert(item)
         spec = parse_spec(
             "name: items\n"
-            f"source: {{engine: opensearch, connection: {json.dumps(dict(source.connection))}}}\n"
+            f"sources: {{app: {{engine: opensearch,"
+            f" connection: {json.dumps(dict(source.connection))}}}}}\n"
             'subset: {seeds: {items: \'{"range": {"id": {"lte": 2}}}\'}}\n'
             f"runtime: {json.dumps(runtime_for_tests())}\n"
         )

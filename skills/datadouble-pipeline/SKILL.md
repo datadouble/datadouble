@@ -12,7 +12,8 @@ order; each also works alone.
 
 Inspect first (rule 3), then ask in one round for what is missing:
 
-- The source: engine, and the environment variable its connection reads.
+- The sources: the engine, and for each server the environment variable its
+  connection reads; `ci init` gives the build job every one of them.
 - The CI/CD system on each side of the boundary (they can differ): GitHub
   Actions, GitLab CI, Jenkins or Argo CD.
 - The runner (label, tags, agent label or namespace) inside the production

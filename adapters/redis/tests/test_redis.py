@@ -46,9 +46,10 @@ VERSION = "8.10.3"
 
 SPEC = """
 name: scratch
-source:
-  engine: redis
-  connection: CONNECTION
+sources:
+  app:
+    engine: redis
+    connection: CONNECTION
 exclude: ["gone:{}"]
 subset:
   unselected: none
@@ -295,15 +296,15 @@ def test_working_failures(source: RedisScratch, tmp_path: Path) -> None:
     group = plan.groups[0]
     working = RedisWorking(tools(), tmp_path / "scratch")
     assert working.server_version() == VERSION
-    extract = work / "extract" / "data"
+    extract = work / "extract" / "data" / "app"
     with pytest.raises(EngineError, match="does not run hooks"):
-        working.load(plan, group, extract, tmp_path / "x", (Hook(sql="x"),))
+        working.load(plan, group, (extract,), tmp_path / "x", (Hook(sql="x"),))
     index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
     broken = tmp_path / "broken"
     shutil.copytree(extract, broken)
     (broken / index.tables[0].file).write_bytes(b"\x00\x00\x00\x01\x00\x00\x00\x02xab")
     with pytest.raises(EngineError, match="loading failed"):
-        working.load(plan, group, broken, tmp_path / "broken-db", ())
+        working.load(plan, group, (broken,), tmp_path / "broken-db", ())
     loaded_db = work / "load" / "all" / "db"
 
     def rule(name: str, column: str, chosen: Rule) -> PlannedRule:
@@ -413,9 +414,10 @@ def test_large_keyspaces_scan_in_rounds(source: RedisScratch) -> None:
 
 MODULE_SPEC = """
 name: scratch
-source:
-  engine: redis
-  connection: CONNECTION
+sources:
+  app:
+    engine: redis
+    connection: CONNECTION
 subset:
   unselected: none
   seeds:

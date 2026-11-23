@@ -4,7 +4,7 @@
 """The scratch side: working databases, anonymization, images and restores.
 
 ``load`` builds a group's working database in a fresh cluster holding every
-database the source read, under its own name: hooks, then in each database the
+database every source read, under its own name: hooks, then in each database the
 source's extensions at the source's versions, the schema's pre-data section,
 the rows (with triggers off), fallbacks for missing parents, the post-data
 section (indexes and constraints, which also check the data), sequences, and
@@ -447,34 +447,43 @@ class PostgresWorking:
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
-        """Build the group's working database, holding every database the source read."""
-        index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
-        partitioned = frozenset(index.partitioned)
-        cluster = Cluster(self.tools, directory / _DATADIR, directory, [extract])
+        """Build the group's working database, holding every database every source read.
+
+        Hooks run in the first source's default database.
+        """
+        indexes = [
+            (extract, ExtractIndex.model_validate_json((extract / "index.json").read_bytes()))
+            for extract in extracts
+        ]
+        default = indexes[0][1].default
+        partitioned = tuple(sorted({t for _, index in indexes for t in index.partitioned}))
+        databases = tuple(database.name for _, index in indexes for database in index.databases)
+        cluster = Cluster(self.tools, directory / _DATADIR, directory, extracts)
         cluster.initialize()
         with cluster.running():
-            for database in index.databases:
-                cluster.create_database(database.name)
-            with cluster.connect(index.default) as connection:
+            for name in databases:
+                cluster.create_database(name)
+            with cluster.connect(default) as connection:
                 for hook in hooks:
                     _execute(connection, "a before_load hook", trusted(hook.sql))
-            loading = _Loading(cluster, plan, group, index, extract)
-            for database in index.databases:
-                self._load_database(loading, database)
-            restored = PostgresRestored(cluster.connect, index.default, partitioned)
+            for extract, index in indexes:
+                loading = _Loading(cluster, plan, group, index, extract)
+                for database in index.databases:
+                    self._load_database(loading, database)
+            restored = PostgresRestored(cluster.connect, default, frozenset(partitioned))
             try:
                 counts = restored.counts(group.packaged())
             finally:
                 restored.close()
         info = DatabaseInfo(
-            databases=tuple(database.name for database in index.databases),
-            default=index.default,
+            databases=databases,
+            default=default,
             server_version=self.server_version(),
-            partitioned=index.partitioned,
+            partitioned=partitioned,
         )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
