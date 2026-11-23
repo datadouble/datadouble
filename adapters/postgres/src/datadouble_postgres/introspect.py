@@ -22,7 +22,8 @@ dependencies come from ``pg_depend``, which is exact for views, triggers,
 types, sequences and routines with SQL-standard bodies; other routine bodies
 (PL/pgSQL and the like) are parsed for names, and those edges are marked
 inferred. A table needs the types of its columns, and the sequences and
-functions its defaults and check constraints use, from ``pg_depend`` too.
+functions its defaults, check constraints, indexes and row-level security
+policies use, from ``pg_depend`` too.
 Objects are named ``database.schema.object`` like tables, and a
 trigger ``database.schema.table.trigger``'s last part is ``table.trigger``,
 since trigger names are only unique per table. Each database is read on its
@@ -242,7 +243,13 @@ SELECT DISTINCT n.relid, d.refclassid::oid, d.refobjid
 FROM pg_catalog.pg_depend d
 CROSS JOIN LATERAL (
   SELECT CASE d.classid
-    WHEN 'pg_catalog.pg_class'::regclass THEN CASE WHEN d.objsubid > 0 THEN d.objid END
+    WHEN 'pg_catalog.pg_class'::regclass THEN CASE
+      WHEN d.objsubid > 0 THEN d.objid
+      -- An index's expressions and predicate count as its table's.
+      ELSE (SELECT i.indrelid FROM pg_catalog.pg_index i WHERE i.indexrelid = d.objid)
+    END
+    WHEN 'pg_catalog.pg_policy'::regclass THEN (
+      SELECT p.polrelid FROM pg_catalog.pg_policy p WHERE p.oid = d.objid)
     WHEN 'pg_catalog.pg_attrdef'::regclass THEN (
       SELECT a.adrelid FROM pg_catalog.pg_attrdef a WHERE a.oid = d.objid)
     WHEN 'pg_catalog.pg_constraint'::regclass THEN (
@@ -252,12 +259,13 @@ CROSS JOIN LATERAL (
 ) n
 WHERE d.deptype = 'n' AND n.relid IS NOT NULL
   AND d.classid IN ('pg_catalog.pg_class'::regclass, 'pg_catalog.pg_attrdef'::regclass,
-                    'pg_catalog.pg_constraint'::regclass)
+                    'pg_catalog.pg_constraint'::regclass, 'pg_catalog.pg_policy'::regclass)
   AND d.refclassid IN ('pg_catalog.pg_proc'::regclass, 'pg_catalog.pg_class'::regclass,
                        'pg_catalog.pg_type'::regclass)
 """
 """What tables need: a column's type, the sequences and functions its default
-uses, and the functions a check constraint calls."""
+uses, and the functions its check constraints, index expressions and
+predicates, and row-level security policies call."""
 
 _OBJECT_KINDS = {
     "f": ObjectKind.FUNCTION,

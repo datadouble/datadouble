@@ -203,12 +203,18 @@ that the group does not include: objects with their definitions, and tables
 with their rows. It cannot also have `requires:`, since its image works
 alone. Other groups pull nothing in and build as they always have: their
 references into other groups need `requires:` or a fallback, and so do the
-objects they need that another group's `include` patterns match (patterns
-place objects as they place tables, matched from the right).
+objects they need that only another group's `include` patterns match
+(patterns place objects as they place tables, matched from the right).
+Objects that come with a group's own tables, such as a trigger on one, and
+the objects it declares are its own whatever the patterns say. Since such a
+group pulls nothing in, a declared object that needs a table neither it nor
+a group it requires holds fails the plan, naming the table.
 
 Which rows a pulled-in table brings is set per group with `rows:`, keyed by
-a table name or glob or by a reference written `child.column -> parent`; a
-reference key wins over a table key:
+a table name or glob, or by a reference written `child.column -> parent`,
+which sets the rows of the table that reference reaches. For a table that
+both kinds of key name, the reference key wins; two keys of the same kind
+that disagree about a table fail the plan:
 
 ```yaml
 images:
@@ -216,15 +222,17 @@ images:
     include: ["billing.*"]
     standalone: true
     rows:
-      shop.customers: all                        # every row of the source table
-      "invoices.referred_by -> customers": none  # what this reference reaches: structure only
+      shop.customers: all                    # every row of the source table
+      "invoices.approved_by -> staff": none  # the table this reaches: structure only
 ```
 
 - **`referenced`** (the default for a table a reference reaches): the rows
   the image's rows reference, and the rows referencing them where the spec
   follows references down, transitively.
 - **`all`**: every row of the source table, and the rows those reference in
-  turn. Other groups' images are unaffected.
+  turn. Other groups' images are unaffected. When the group's own tables
+  gain rows this way, their own references are followed as well, so every
+  reference in the image keeps its parent.
 - **`none`**: the table's structure only. References into it are left out
   of the image, as references to another group are. A table reached only
   through objects, such as one a trigger's function writes to, defaults to
@@ -233,7 +241,10 @@ images:
 The rows come from the same snapshot as the shared extract. After the shared
 extract, each standalone group that pulls tables in reads them again, keys
 first as the keys strategy does (whichever strategy chose the shared rows),
-into an extract of its own beside the shared one (`groups/<group>`). That
+into an extract of its own beside the shared one (`groups/<group>`). Under
+the nested strategy that first means one keys pass over the whole subset,
+since nested selections cannot be read on their own: the cost nested
+otherwise avoids, paid only when a standalone group pulls tables in. That
 extract also holds any of the group's own tables that gained rows a
 pulled-in table references, so every reference in the image has its parent.
 `load` takes the tables listed there from it and the group's other tables

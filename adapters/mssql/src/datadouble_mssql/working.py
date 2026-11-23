@@ -29,7 +29,7 @@ import pymssql
 from pydantic import BaseModel, ConfigDict
 from pymssql import Connection
 
-from datadouble.catalog import Column, ColumnKind, Requirement
+from datadouble.catalog import Column, ColumnKind, ObjectKind, Requirement
 from datadouble.engine import (
     EngineError,
     RestoredImage,
@@ -249,7 +249,7 @@ class _Builder:
         self,
         connection: Connection,
         schema: Schema,
-        outside: frozenset[str] = frozenset(),
+        outside: frozenset[tuple[Phase, str]] = frozenset(),
         rowless: frozenset[TableName] = frozenset(),
     ) -> None:
         self.connection = connection
@@ -274,7 +274,7 @@ class _Builder:
             self.present.add(statement.name)
 
     def _wanted(self, statement: Statement, tables: frozenset[TableName] | None) -> bool:
-        if statement.name in self.outside:
+        if (statement.phase, statement.name) in self.outside:
             return False
         if (
             statement.phase is Phase.FOREIGN_KEY
@@ -352,13 +352,26 @@ class _Builder:
         self.finish()
 
 
-def _outside(plan: Plan, group: PlannedGroup) -> frozenset[str]:
-    """The objects a standalone group's closure lacks, by the names statements use."""
+_PHASES: dict[ObjectKind, Phase] = {
+    ObjectKind.SEQUENCE: Phase.SCHEMA,
+    ObjectKind.VIEW: Phase.MODULE,
+    ObjectKind.FUNCTION: Phase.MODULE,
+    ObjectKind.PROCEDURE: Phase.MODULE,
+    ObjectKind.TRIGGER: Phase.TRIGGER,
+}
+"""The phase whose statements create each kind of object; types are not scripted."""
+
+
+def _outside(plan: Plan, group: PlannedGroup) -> frozenset[tuple[Phase, str]]:
+    """The objects a standalone group's closure lacks, by phase and the name statements use.
+
+    The phase keeps an object from standing for a table or schema of its name.
+    """
     wanted = frozenset(group.objects)
     return frozenset(
-        object_name(item.ref.namespace[-1], item.ref.name)
+        (_PHASES[item.ref.kind], object_name(item.ref.namespace[-1], item.ref.name))
         for item in plan.catalog.objects
-        if item.ref not in wanted
+        if item.ref not in wanted and item.ref.kind in _PHASES
     )
 
 

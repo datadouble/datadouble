@@ -510,7 +510,10 @@ class Run:
                 continue
             if keyed is None:
                 # Nested conditions refer to other tables' selections, which a
-                # projection cannot see; the keys strategy's stand alone.
+                # projection cannot see; the keys strategy's stand alone. Under
+                # the nested strategy this reads every table's keys once more,
+                # the cost that strategy otherwise avoids, and only when a
+                # standalone group pulls something in.
                 keyed = (
                     key_conditions(graph, snapshot) if planned.strategy == "nested" else selections
                 )

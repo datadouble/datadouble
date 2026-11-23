@@ -960,6 +960,9 @@ class _Planner:
                     roots=self.group_roots[name],
                     standalone=group.standalone,
                     allowed=self.required(name) | {name},
+                    elsewhere=frozenset(
+                        table for other in self.required(name) for table in members[other]
+                    ),
                     rows=self.rows_rules(name, edges),
                 ),
             )

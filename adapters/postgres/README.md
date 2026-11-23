@@ -167,7 +167,8 @@ not seen.
 
 Tables list what they need too, exactly from `pg_depend`: the sequences and
 functions their column defaults and generated columns use, the functions
-their check constraints call, and their columns' enum, domain, composite and
+their check constraints, index expressions and predicates, and row-level
+security policies call, and their columns' enum, domain, composite and
 range types. Package planning follows these edges to work out what an
 image needs.
 
@@ -176,5 +177,8 @@ restored as for any group, the pulled-in tables are kept with the rows of
 the group's own extract, and then every object the closure lacks is
 dropped, dependents first and without `CASCADE`: a dependency `pg_depend`
 records but the catalog missed stops the load with PostgreSQL's error
-rather than removing more. Foreign keys into a pulled-in table without rows
-are left out. Schemas stay, even when nothing in them is kept.
+rather than removing more. Aggregates, operators and casts are not in the
+catalog, so a function only they use is not in any closure: dropping it
+fails, naming what depends on it, and declaring the function in the group's
+`objects` keeps it. Foreign keys into a pulled-in table without rows are
+left out. Schemas stay, even when nothing in them is kept.

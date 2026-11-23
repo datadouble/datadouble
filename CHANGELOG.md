@@ -187,10 +187,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is not standalone and needs a function, view or other object another
   group's patterns match now fails the plan, as a reference into another
   group's table does; add `requires:` for that group, or make the group
-  standalone. A standalone group cannot have `requires:`.
+  standalone. Objects that come with a group's own tables, such as triggers
+  on them, and its declared objects are its own. A declared object that
+  needs a table the group and the groups it requires lack fails the plan.
+  A standalone group cannot have `requires:`.
 - **Tables list the objects they need.** The catalog records the sequences
-  and functions tables' column defaults, generated or computed columns and
-  check constraints use, and their columns' user-defined types: exactly from
+  and functions tables' column defaults, generated or computed columns,
+  check constraints (and on PostgreSQL index expressions and row-level
+  security policies) use, and their columns' user-defined types: exactly from
   `pg_depend` and SQL Server's dependency views, from `ALL_DEPENDENCIES` on
   Oracle (whose sequence defaults are parsed, so inferred), and none on
   MySQL, which has no such objects. A table that needs nothing hashes as

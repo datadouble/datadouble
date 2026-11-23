@@ -36,9 +36,9 @@ from datadouble.catalog import (
     Column,
     ColumnKind,
     ObjectKind,
-    ObjectRef,
     Requirement,
     RequirementKind,
+    SourceObject,
 )
 from datadouble.closure import ordered
 from datadouble.engine import (
@@ -55,7 +55,7 @@ from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import AccountPrivileges, ExpressionRule, Hook, ImageFormat, NullRule
 from datadouble.subset import Edge, EdgeMode
 from datadouble_postgres.cluster import SUPERUSER, Cluster, Tools
-from datadouble_postgres.errors import database_error
+from datadouble_postgres.errors import database_error, redact
 from datadouble_postgres.render import (
     Statement,
     columns,
@@ -322,9 +322,24 @@ def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup, datab
             if edge.table is not None and not edge.inferred
         )
     ]
+    objects = {item.ref: item for item in plan.catalog.objects}
     for ref in reversed(ordered(found, plan.catalog.objects)):
-        schema = ref.namespace[-1]
-        _execute(connection, f"dropping {ref}", _drop(connection, ref, schema))
+        statement = _drop(connection, objects[ref])
+        try:
+            connection.execute(statement)
+        except psycopg.errors.DependentObjectsStillExist as error:
+            # The catalog does not list aggregates, operators, casts and the
+            # like, so what blocks a drop can only be named here.
+            blocking = redact(error.diag.message_detail or "")
+            message = (
+                f"dropping {ref}, which the closure of group {group.name!r} lacks, failed: "
+                f"something the catalog does not list depends on it ({blocking}); declare "
+                f"{ref.kind} {'.'.join((ref.namespace[-1], ref.name))} in the group's "
+                "`objects` to keep it"
+            )
+            raise EngineError(message) from None
+        except psycopg.Error as error:
+            raise database_error(error, f"dropping {ref}") from None
 
 
 _DROPPED: dict[ObjectKind, sql.SQL] = {
@@ -336,13 +351,17 @@ _DROPPED: dict[ObjectKind, sql.SQL] = {
 }
 
 
-def _drop(connection: Connection, ref: ObjectRef, schema: str) -> sql.Composed:
-    """The statement that drops ``ref`` if it is there, refusing if anything depends on it."""
+def _drop(connection: Connection, item: SourceObject) -> sql.Composed:
+    """The statement that drops an object if it is there, refusing if anything depends on it."""
+    ref = item.ref
+    schema = ref.namespace[-1]
     name = sql.Identifier(schema, ref.name)
     if ref.kind is ObjectKind.TRIGGER:
-        table, _, trigger = ref.name.partition(".")
+        # A trigger's name is its table's and its own; its exact edge names the table.
+        table = next(e.table for e in item.depends_on if e.table is not None and not e.inferred)
+        trigger = ref.name.removeprefix(f"{table.name}.")
         return sql.SQL("DROP TRIGGER IF EXISTS {} ON {}").format(
-            sql.Identifier(trigger), sql.Identifier(schema, table)
+            sql.Identifier(trigger), _qualified(table)
         )
     if ref.kind is ObjectKind.TYPE:
         found = connection.execute(

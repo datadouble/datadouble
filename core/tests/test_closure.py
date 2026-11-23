@@ -27,6 +27,7 @@ WRITE_LOG = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("audit",), name="writ
 POSTS_LOG = ObjectRef(kind=ObjectKind.TRIGGER, namespace=("public",), name="posts.posts_log")
 POSTS_SEQ = ObjectRef(kind=ObjectKind.SEQUENCE, namespace=("public",), name="posts_id_seq")
 TITLES = ObjectRef(kind=ObjectKind.VIEW, namespace=("public",), name="post_titles")
+DAILY = ObjectRef(kind=ObjectKind.VIEW, namespace=("public",), name="daily")
 UUID = ObjectRef(kind=ObjectKind.FUNCTION, namespace=("public",), name="uuid", signature="()")
 KEEP_AUDIT = 'exclude: ["store", "staff", "dba_*"]\n'
 
@@ -490,3 +491,101 @@ def test_objects_in_dependency_order() -> None:
     catalog = objects().objects
     found = ordered([POSTS_LOG, WRITE_LOG, USERS_STAMP, STAMP], catalog)
     assert found == (WRITE_LOG, STAMP, POSTS_LOG, USERS_STAMP)
+
+
+def _column(name: str) -> tuple[ColumnName, ...]:
+    return (ColumnName(name),)
+
+
+def test_own_tables_that_gain_rows_bring_their_parents() -> None:
+    teams, posts = T("app", "teams"), T("app", "posts")
+    users = T("app", "users")
+    source = FakeSource(
+        rows={
+            users: [{"id": 1, "team_id": 7}, {"id": 2, "team_id": 8}],
+            teams: [{"id": 7}, {"id": 8}],
+            posts: [{"id": 10, "user_id": 2}],
+        }
+    )
+    team = Edge("users_team", users, _column("team_id"), teams, _column("id"))
+    author = Edge("posts_user", posts, _column("user_id"), users, _column("id"))
+    found = pulled_rows(
+        (team, author),
+        frozenset({users, teams}),
+        {posts: PulledRows.ALL},
+        {
+            users: ValuesIn(_column("id"), frozenset({(1,)})),
+            teams: ValuesIn(_column("id"), frozenset({(7,)})),
+        },
+        source,
+    )
+    assert sorted(str(r["id"]) for r in source.select(users, found)) == ["1", "2"]
+    # User 2 came with the post; its team comes with it.
+    assert sorted(str(r["id"]) for r in source.select(teams, found)) == ["7", "8"]
+
+
+def test_drop_references_keep_their_parents() -> None:
+    comments = T("public", "comments")
+    source = FakeSource(
+        rows={
+            POSTS: [{"id": 10, "user_id": 1}],
+            comments: [{"id": 100, "post_id": 10, "editor_id": 3}],
+            USERS: [{"id": i} for i in range(1, 5)],
+        }
+    )
+    author = Edge("posts_user", POSTS, _column("user_id"), USERS, _column("id"))
+    editor = Edge(
+        "comments_editor", comments, _column("editor_id"), USERS, _column("id"), mode=EdgeMode.DROP
+    )
+    found = pulled_rows(
+        (author, editor),
+        frozenset({POSTS, comments}),
+        {USERS: PulledRows.REFERENCED},
+        {POSTS: AllRows(), comments: AllRows()},
+        source,
+    )
+    # Comment 100 was kept because its editor was chosen; the editor comes along.
+    assert sorted(str(r["id"]) for r in source.select(USERS, found)) == ["1", "3"]
+
+
+def test_objects_that_come_with_own_tables_belong_to_the_group() -> None:
+    body = KEEP_AUDIT + "images: {core: {include: [public.users]}, rest: {include: ['*']}}\n"
+    base = objects()
+    alone = base.model_copy(
+        update={
+            "objects": tuple(
+                item(USERS_STAMP, on(USERS)) if o.ref == USERS_STAMP else o
+                for o in base.objects
+                if o.ref != STAMP
+            )
+        }
+    )
+    core = group("core", body, alone)
+    assert core.objects == (USERS_STAMP,)
+    # What the trigger needs from the other group still needs `requires`.
+    with pytest.raises(PlanError) as caught:
+        planned(body, live=objects())
+    assert any(
+        p.startswith("group 'core': function public.stamp() is in group 'rest'")
+        for p in caught.value.problems
+    )
+
+
+def test_declared_objects_need_their_tables_in_the_image() -> None:
+    body = (
+        KEEP_AUDIT
+        + "images:\n  core: {include: [public.users]}\n"
+        + "  rest: {include: [public.posts, public.categories, public.users]}\n"
+    )
+    live = objects(extra=(item(DAILY, on(POSTS)),))
+    with pytest.raises(PlanError) as caught:
+        planned(body + "objects: [{view: daily}]\n", live=live)
+    assert caught.value.problems == (
+        (
+            "group 'core': view public.daily needs table public.posts, which group 'core' does "
+            "not hold; include it, or add `requires:` for a group holding it; reached by "
+            "view public.daily"
+        ),
+    )
+    held = body.replace("[public.users]}", "[public.users], requires: [rest]}", 1)
+    assert DAILY in group("core", held + "objects: [{view: daily}]\n", live).objects

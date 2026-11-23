@@ -659,7 +659,11 @@ SLICE_SCHEMA = """
 CREATE SCHEMA shop;
 CREATE SCHEMA billing;
 CREATE SCHEMA audit;
-CREATE TABLE shop.customers (id integer PRIMARY KEY, email text NOT NULL);
+CREATE TABLE billing.teams (id integer PRIMARY KEY);
+CREATE TABLE billing.clerks (id integer PRIMARY KEY, team_id integer REFERENCES billing.teams);
+CREATE TABLE shop.customers (
+    id integer PRIMARY KEY, email text NOT NULL, manager_id integer REFERENCES billing.clerks
+);
 CREATE VIEW shop.emails AS SELECT email FROM shop.customers;
 CREATE TABLE billing.invoices (
     id integer PRIMARY KEY, customer_id integer NOT NULL REFERENCES shop.customers, amount int
@@ -674,7 +678,19 @@ CREATE TRIGGER invoices_audit AFTER INSERT ON billing.invoices
     FOR EACH ROW EXECUTE FUNCTION audit.record();
 CREATE FUNCTION public.greet(name text) RETURNS text LANGUAGE sql IMMUTABLE RETURN 'hello ' || name;
 CREATE FUNCTION public.unused() RETURNS integer LANGUAGE sql IMMUTABLE RETURN 1;
-INSERT INTO shop.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x.test');
+-- An expression index and a row-level security policy call functions the
+-- table therefore needs, though nothing else names them.
+CREATE FUNCTION shop.cents(amount integer) RETURNS integer LANGUAGE sql IMMUTABLE
+    RETURN amount * 100;
+CREATE INDEX invoices_cents ON billing.invoices (shop.cents(amount));
+CREATE FUNCTION shop.visible(customer integer) RETURNS boolean LANGUAGE sql STABLE
+    RETURN customer > 0;
+ALTER TABLE billing.invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY invoices_visible ON billing.invoices USING (shop.visible(customer_id));
+INSERT INTO billing.teams VALUES (1), (2);
+INSERT INTO billing.clerks VALUES (1, 1), (2, 2);
+INSERT INTO shop.customers VALUES
+    (1, 'ann@shop.test', 1), (2, 'bo@shop.test', NULL), (3, 'cy@x.test', 2);
 INSERT INTO billing.invoices VALUES (10, 1, 5), (11, 2, 6);
 """
 
@@ -690,13 +706,14 @@ subset:
   unselected: none
   seeds:
     invoices: "true"
-    customers: "id = 3"
+    clerks: "id = 1"
 images:
   billing:
     include: ["billing.*"]
     standalone: true ROWS
   rest:
     include: ["shop.*", "audit.*"]
+    requires: [billing]
 anonymize:
   customers:
     email:
@@ -710,10 +727,13 @@ SLICE_CHECKS = {
     "SELECT 1 FROM pg_catalog.pg_proc"
     " WHERE pronamespace::regnamespace::text IN ('public', 'audit')": 2,
     "SELECT 1 FROM pg_catalog.pg_proc WHERE proname = 'unused'": 0,
+    "SELECT 1 FROM pg_catalog.pg_proc WHERE pronamespace::regnamespace::text = 'shop'": 2,
+    "SELECT 1 FROM pg_catalog.pg_indexes WHERE indexname = 'invoices_cents'": 1,
+    "SELECT 1 FROM pg_catalog.pg_policies WHERE policyname = 'invoices_visible'": 1,
     "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'invoices_audit'": 1,
     "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'emails'": 1,
     "SELECT 1 WHERE public.greet('x') <> 'hello x'": 0,
-    "SELECT 1 FROM pg_catalog.pg_constraint WHERE contype = 'f'": 1,
+    "SELECT 1 FROM pg_catalog.pg_constraint WHERE contype = 'f'": 3,
 }
 
 
@@ -721,6 +741,9 @@ SLICE_CHECKS = {
     ("rows", "customers"), [("", 2), (", rows: {customers: all}", 3)], ids=["referenced", "all"]
 )
 def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
+    # Every customer brings its manager, a clerk of the slice's own, and the
+    # clerk's team: own tables that gain rows bring their parents too.
+    clerks = customers - 1
     with scratch() as made:
         made.execute(trusted(SLICE_SCHEMA))
         spec = SLICE_SPEC.replace("ROWS", rows)
@@ -731,7 +754,13 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
         billing = next(s for s in result.images if s.identity.group == "billing")
         tables = {
             name: TableName.of(made.database, *name.split("."))
-            for name in ("billing.invoices", "shop.customers", "audit.entries")
+            for name in (
+                "billing.invoices",
+                "billing.clerks",
+                "billing.teams",
+                "shop.customers",
+                "audit.entries",
+            )
         }
         working = working_databases(tmp_path / "check")
         for archive in billing.archives:
@@ -740,6 +769,8 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
                 counts = found.counts(tables.values())
                 assert {str(t).split(".", 1)[1]: n for t, n in counts.items()} == {
                     "billing.invoices": 2,
+                    "billing.clerks": clerks,
+                    "billing.teams": clerks,
                     "shop.customers": customers,
                     "audit.entries": 0,
                 }
@@ -751,5 +782,28 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
                         "SELECT 1 FROM pg_catalog.pg_tables"
                         " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
                     )
-                    == 3
+                    == 5
                 )
+
+
+def test_a_dependency_the_catalog_lacks_stops_a_standalone_load(tmp_path: Path) -> None:
+    with scratch() as made:
+        made.execute(trusted(SLICE_SCHEMA))
+        # Aggregates are not in the catalog, so nothing keeps the function this one uses.
+        made.execute(
+            trusted(
+                "CREATE FUNCTION public.add_up(a integer, b integer) RETURNS integer"
+                " LANGUAGE sql IMMUTABLE RETURN a + b;"
+                " CREATE AGGREGATE public.total(integer) (sfunc = public.add_up, stype = integer)"
+            )
+        )
+        with pytest.raises(EngineError) as caught:
+            build(made, tmp_path, spec=SLICE_SPEC.replace("ROWS", ""))
+        assert str(caught.value).startswith(
+            f"dropping function {made.database}.public.add_up(a integer, b integer), which "
+            "the closure of group 'billing' lacks, failed: something the catalog does not "
+            "list depends on it ("
+        )
+        assert str(caught.value).endswith(
+            "); declare function public.add_up in the group's `objects` to keep it"
+        )

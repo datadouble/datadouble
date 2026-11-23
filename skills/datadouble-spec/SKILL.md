@@ -154,8 +154,14 @@ object's dependencies, across schemas and databases.
   image needs its rows before setting `rows` for it.
 - **Groups place objects too.** `include` patterns match functions, views
   and other objects like tables. A group that is not standalone and needs an
-  object another group includes fails the plan; the fix is `requires:` for
-  that group, or `standalone: true`.
+  object only another group includes fails the plan; the fix is `requires:`
+  for that group, or `standalone: true`. Triggers on a group's own tables,
+  views over them and its declared objects are its own. A declared object
+  that needs a table the group lacks fails too: include the table, or
+  require the group holding it.
+- **A standalone PostgreSQL build that fails dropping a function** names
+  what uses it, such as an aggregate or operator, which the catalog does not
+  list. Suggest declaring the function in the group's `objects`.
 - **`objects:`**, at the top of the spec or in a group, declares what code
   outside Datadouble expects in the images, by kind and name:
   `{function: public.uuid_generate_v4}`, `{view: reporting.daily}`. Ask the

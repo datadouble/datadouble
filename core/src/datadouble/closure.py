@@ -131,6 +131,8 @@ class GroupInput:
     standalone: bool = False
     allowed: frozenset[GroupName] = frozenset()
     """The group and the groups it requires, whose objects it may need."""
+    elsewhere: frozenset[TableName] = frozenset()
+    """The tables of the groups it requires, provisioned alongside its image."""
     rows: tuple[RowsRule, ...] = ()
 
 
@@ -229,10 +231,15 @@ class _Walk:
         return self.closure
 
     def placed(self, found: list[ObjectRef]) -> None:
-        """Fail objects the group needs that only groups it does not require include."""
+        """Fail objects the group needs that only groups it does not require include.
+
+        Objects that come with the group's own tables (a trigger on one, a
+        view over them alone) and its declared objects are its own, whatever
+        the patterns say.
+        """
         for ref in found:
             groups = self.packaging.placement.get(ref, ())
-            if not groups or set(groups) & self.group.allowed:
+            if not groups or set(groups) & self.group.allowed or not self.is_pulled(ref):
                 continue
             path = " -> ".join(label(node) for node in self.reached[ref].path)
             others = ", ".join(repr(g) for g in groups)
@@ -292,8 +299,28 @@ class _Walk:
             self.unresolved(
                 ref, ref, f"needs {label(table)}, which is not in the catalog", inferred=inferred
             )
+        elif self.unheld(ref, table):
+            reason = (
+                f"needs {label(table)}, which group {self.name!r} does not hold; include it, "
+                "or add `requires:` for a group holding it"
+            )
+            self.unresolved(ref, ref, reason, inferred=inferred)
         else:
             self.reach(table, self.through(ref, table, inferred=inferred))
+
+    def unheld(self, ref: ObjectRef, table: TableName) -> bool:
+        """Whether a declared object, or one it needs, needs a table no image of the group has.
+
+        A group that is not standalone pulls nothing in, so its declared
+        objects would be missing from its image.
+        """
+        declared = isinstance(self.reached[ref].path[0], ObjectRef)
+        return (
+            declared
+            and not self.standalone
+            and table not in self.own
+            and table not in self.group.elsewhere
+        )
 
     def unresolved(self, ref: ObjectRef, subject: Node, reason: str, *, inferred: bool) -> None:
         step = self.reached[ref]
@@ -424,8 +451,18 @@ def close(packaging: Packaging, group: GroupInput) -> Closure:
     return _Walk(packaging, group).run()
 
 
+_KEEPS_PARENTS = frozenset({EdgeMode.FOLLOW, EdgeMode.ALL, EdgeMode.DROP})
+"""Edges whose child rows need their parents in the image: followed ones, and
+``drop`` ones, whose child rows were kept because their parents were chosen."""
+
+
 class _Rows:
-    """The rows of a standalone image beyond the shared extract, read by keys."""
+    """The rows of a standalone image beyond the shared extract, read by keys.
+
+    An own table's rows are its shared ones (``baseline``) and the extra rows
+    references bring to it. Only the extra rows lead anywhere new between own
+    tables, since the shared extract already holds what the shared rows need.
+    """
 
     def __init__(
         self,
@@ -435,61 +472,80 @@ class _Rows:
         baseline: Mapping[TableName, Condition],
     ) -> None:
         self.own, self.modes, self.baseline = own, modes, baseline
-        image = own | frozenset(modes)
         self.up: list[Edge] = []
         self.down: list[Edge] = []
         for edge in edges:
-            if edge.child not in image or edge.parent not in image:
-                continue
-            if edge.mode in _PULLS_PARENTS and (
-                self.referenced(edge.parent) or (edge.parent in own and edge.child in modes)
-            ):
+            if edge.mode in _KEEPS_PARENTS and self.fills(edge.child) and self.takes(edge.parent):
                 self.up.append(edge)
-            if edge.down and self.referenced(edge.child):
+            if edge.down and self.fills(edge.parent) and self.takes(edge.child):
                 self.down.append(edge)
-        self.values: dict[Edge, set[KeyTuple]] = {}
+        self.values: dict[tuple[Edge, bool], set[KeyTuple]] = {}
+        """Values read along each edge, upward (False) or downward (True)."""
 
-    def referenced(self, table: TableName) -> bool:
-        return self.modes.get(table) is PulledRows.REFERENCED
+    def fills(self, table: TableName) -> bool:
+        """Whether ``table`` is in the image with rows that can reference others."""
+        return table in self.own or self.modes.get(table) in {
+            PulledRows.REFERENCED,
+            PulledRows.ALL,
+        }
+
+    def takes(self, table: TableName) -> bool:
+        """Whether ``table`` gains the rows references bring: own ones and ``referenced`` ones."""
+        return table in self.own or self.modes.get(table) is PulledRows.REFERENCED
+
+    def brought(self, table: TableName) -> Condition:
+        """The rows references bring to ``table``, beyond the shared ones."""
+        return any_of(
+            [
+                *(
+                    ValuesIn(e.parent_columns, frozenset(self.values.get((e, False), ())))
+                    for e in self.up
+                    if e.parent == table
+                ),
+                *(
+                    _when(e, ValuesIn(e.columns, frozenset(self.values.get((e, True), ()))))
+                    for e in self.down
+                    if e.child == table
+                ),
+            ]
+        )
 
     def condition(self, table: TableName) -> Condition:
-        found: list[Condition] = [
-            ValuesIn(e.parent_columns, frozenset(self.values.get(e, ())))
-            for e in self.up
-            if e.parent == table
-        ]
         if table in self.own:
-            return any_of([self.baseline[table], *found])
-        mode = self.modes[table]
-        if mode is PulledRows.ALL or any(
+            return any_of([self.baseline[table], self.brought(table)])
+        if self.modes[table] is PulledRows.ALL or any(
             e.parent == table and e.mode is EdgeMode.ALL for e in self.up
         ):
             return AllRows()
-        if mode is PulledRows.NONE:
-            return NoRows()
-        found.extend(
-            _when(e, ValuesIn(e.columns, frozenset(self.values.get(e, ()))))
-            for e in self.down
-            if e.child == table
+        return self.brought(table)
+
+    def gained(self, table: TableName) -> bool:
+        """Whether references brought ``table`` any rows."""
+        return any(self.values.get((e, False)) for e in self.up if e.parent == table) or any(
+            self.values.get((e, True)) for e in self.down if e.child == table
         )
-        return any_of(found)
 
     def step(self, table: TableName, reader: KeyReader) -> set[TableName]:
         """Re-read what ``table``'s rows reference; the tables that gained rows."""
-        condition = self.condition(table)
+        full = self.condition(table)
+        extra = self.brought(table) if table in self.own else full
         grown: set[TableName] = set()
-        if isinstance(condition, NoRows):
-            return grown
-        outgoing = [(e, e.columns, e.when, e.parent) for e in self.up if e.child == table]
-        outgoing += [(e, e.parent_columns, None, e.child) for e in self.down if e.parent == table]
-        for edge, columns, when, target in outgoing:
+        outgoing = [(e, False, e.columns, e.when, e.parent) for e in self.up if e.child == table]
+        outgoing += [
+            (e, True, e.parent_columns, None, e.child) for e in self.down if e.parent == table
+        ]
+        for edge, downward, columns, when, target in outgoing:
+            # Between own tables, the shared rows' references are already in place.
+            condition = extra if target in self.own else full
+            if isinstance(condition, NoRows):
+                continue
             narrowed = all_of([condition, Predicate(when)]) if when else condition
             fresh = {
                 row
                 for row in reader.project(table, narrowed, columns)
                 if all(value is not None for value in row)
             }
-            known = self.values.setdefault(edge, set())
+            known = self.values.setdefault((edge, downward), set())
             if not fresh <= known:
                 known |= fresh
                 grown.add(target)
@@ -515,8 +571,10 @@ def pulled_rows(
     followed up to parents and down where the spec follows them, reading
     keys through ``reader`` until nothing changes, as the keys strategy does.
     The result holds a condition for each pulled-in table with rows, and for
-    each own table that gained rows a pulled-in table references, so its
-    parents are in the image too.
+    each own table that gained rows, so every reference in the image keeps
+    its parent: a gained row's own references are followed too, up to
+    parents along followed and ``drop`` references and down where the spec
+    follows them, among own tables as well.
     """
     state = _Rows(edges, own, modes, baseline)
     pending = sorted(own | frozenset(modes), key=str)
@@ -533,9 +591,5 @@ def pulled_rows(
         for table, mode in modes.items()
         if mode is not PulledRows.NONE
     }
-    result.update(
-        (table, state.condition(table))
-        for table in own
-        if any(e.parent == table and state.values.get(e) for e in state.up)
-    )
+    result.update((table, state.condition(table)) for table in own if state.gained(table))
     return result
