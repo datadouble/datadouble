@@ -26,7 +26,10 @@ what to set up in GitLab:
   environment's stop job releases them when the request is merged or closed.
 - **Define the variables** the jobs read secrets from as masked, protected
   CI/CD variables. Each job passes on only the ones its part of the spec
-  names.
+  names. Use the "Variable" type, not "File": a File variable holds a path
+  the job's container cannot see. GitLab masks only single-line values, so
+  a multi-line one such as a kubeconfig is protected with masking off (see
+  the Kubernetes adapter's README).
 
 The file includes the job template, `datadouble.yml` in this package, from
 this repository at the release's tag, pinned by its SHA-256 (`include:

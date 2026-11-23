@@ -26,7 +26,7 @@ A whole spec.
 | `images` | map of [ImageGroup](#imagegroup) |  | Named images built from one extract; one image of every table by default. |
 | `package` | [Package](#package) | see type | The image formats to produce. |
 | `verify` | [Verify](#verify) | see type | Checks every image must pass: PII scan, row counts, assertions. |
-| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`. |
+| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference. |
 | `store` | list of map of map of JSON |  | Where images are stored after the build, one adapter each: `{filesystem: ...}`, `{s3: ...}`. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |

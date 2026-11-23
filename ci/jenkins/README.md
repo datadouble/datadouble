@@ -30,7 +30,9 @@ only the Pipeline: Groovy Libraries and Git plugins. The response lists:
   parameters when it runs.
 - **The credentials** to add as Secret text, with IDs matching the
   environment variables the jobs read. `withCredentials` binds them, and
-  Jenkins masks them in logs.
+  Jenkins masks them in logs. The web form takes one line, so create a
+  multi-line one, such as a kubeconfig, through the API or Configuration as
+  Code.
 
 Schedules are `cron` triggers in UTC. `promote` has an `upstream` trigger on
 `build` that accepts an unstable build, and a pool's `provision` one on

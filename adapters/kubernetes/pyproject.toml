@@ -12,7 +12,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Tight Line LLC" }]
 requires-python = ">=3.13"
-dependencies = ["datadouble"]
+dependencies = ["datadouble", "pyyaml>=6.0.3"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Programming Language :: Python :: 3 :: Only",

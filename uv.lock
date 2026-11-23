@@ -594,10 +594,14 @@ version = "0.0.0"
 source = { editable = "adapters/kubernetes" }
 dependencies = [
     { name = "datadouble" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "datadouble", editable = "core" }]
+requires-dist = [
+    { name = "datadouble", editable = "core" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
 
 [[package]]
 name = "datadouble-mongodb"

@@ -23,6 +23,17 @@ Docker volume or container, a Kubernetes PersistentVolume), and `announce`
 where consumers learn about it. Only `dotenv`, `k8s-secret` and `vault`
 receive a copy's credentials.
 
+`k8s-pv` and `k8s-secret` reach the cluster the job runs in by its service
+account and need nothing more. For a cluster the job runs outside, add
+`kubeconfig: {env: NAME}` (and `context` if needed) to each: a secret
+reference to the kubeconfig's content, never the runner's own kubeconfig
+file, which the job's container cannot see. `{file: /path}` only fits a
+secret file mounted for the purpose and readable by the engine's user. The
+kubeconfig needs a token or client certificate, since the image has no exec
+credential plugins. `ci init` then lists `NAME` with the job's other
+secrets; tell the person to store the kubeconfig there (a GitLab variable of
+type "Variable", protected, unmasked; see the adapter's README).
+
 ## Engine versions and copies
 
 Images are filed by the engine's compatibility line, not its exact version:

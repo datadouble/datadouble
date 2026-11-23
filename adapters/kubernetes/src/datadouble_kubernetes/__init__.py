@@ -12,22 +12,47 @@ the pool refilled.
 
 ``k8s-secret`` writes a Secret per copy with where it is and, for instance
 copies, its credentials. Both drive ``kubectl``.
+
+Every Kubernetes adapter takes an optional ``kubeconfig``, a secret reference
+to a kubeconfig's content, and an optional ``context``. The kubeconfig is
+written to a private temporary file for each ``kubectl`` call, passed with
+``--kubeconfig``, and removed when the call ends, whether or not it
+succeeded. Without one, ``kubectl`` uses the in-cluster service account or
+the ambient configuration.
 """
 
 import json
+import os
+import re
 import shutil
-from collections.abc import Mapping
+import tempfile
+from collections.abc import Generator, Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+import yaml
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+    model_validator,
+)
 
 from datadouble.announce import Announced, AnnounceError, Announcer
 from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
-from datadouble.programs import locate, run_program
+from datadouble.programs import Completed, locate, run_program, start_program
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
+from datadouble.secrets import resolve_secret
 from datadouble.settings import parse_settings
+from datadouble.spec import SecretRef
+
+if TYPE_CHECKING:
+    import subprocess
 
 _LABEL = "datadouble.dev"
 _PHASES = {
@@ -52,13 +77,137 @@ def kubectl_binary() -> str:
     return binary
 
 
-def kubectl(arguments: list[str], *, stdin: str | None = None) -> str:
-    """Run ``kubectl``; raise :class:`KubectlError` with its last error line."""
-    done = run_program(kubectl_binary(), arguments, stdin=stdin)
-    if done.status != 0:
-        message = f"kubectl {arguments[0]} failed: {done.last_error()}"
+REDACTED_LENGTH = 16
+"""String values of a kubeconfig at least this long are secret (tokens, keys,
+certificates, server URLs): masked in CI logs and removed from ``kubectl``'s output."""
+_LINE_VALUE = re.compile(r"""^[\s-]*(?:["']?[\w.-]+["']?\s*:\s*)?(.*?)[\s,]*$""")
+"""A line's value, after any list marker and key, in YAML or JSON."""
+_JSON: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+
+
+def _strings(value: JsonValue) -> Iterator[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def secret_values(content: str) -> tuple[str, ...]:
+    """A kubeconfig's secret values, longest first.
+
+    Those are its string values at least :data:`REDACTED_LENGTH` characters long,
+    from YAML or JSON, and from each line in case it does not parse.
+    """
+    found: set[str] = set()
+    with suppress(yaml.YAMLError, ValidationError):
+        found.update(_strings(_JSON.validate_python(yaml.safe_load(content))))
+    for line in content.splitlines():
+        found.add(_LINE_VALUE.sub(r"\1", line).strip("'\""))
+    return tuple(sorted((v for v in found if len(v) >= REDACTED_LENGTH), key=len, reverse=True))
+
+
+class Kubectl:
+    """``kubectl``, with a cluster's kubeconfig and context when they are given."""
+
+    def __init__(
+        self,
+        kubeconfig: SecretRef | None = None,
+        context: str | None = None,
+        *,
+        avoid: Path | None = None,
+    ) -> None:
+        """Use ``kubeconfig``, a reference to a kubeconfig's content, and ``context``.
+
+        The kubeconfig's temporary file is never written under ``avoid``, such as
+        a work directory that pods mount.
+        """
+        self.kubeconfig = kubeconfig
+        self.context = context
+        self.avoid = avoid
+        self._content: str | None = None
+        self._secrets: tuple[str, ...] = ()
+
+    def resolve(self) -> None:
+        """Resolve the kubeconfig now, so a missing one fails before any work.
+
+        Raises :class:`~datadouble.secrets.SecretError` when it cannot be resolved.
+        """
+        if self.kubeconfig is not None and self._content is None:
+            content = resolve_secret(self.kubeconfig, masked=secret_values)
+            self._secrets = secret_values(content)
+            self._content = content
+
+    def _directory(self) -> Path:
+        """A new private directory (0700), outside ``avoid``."""
+        for base in (Path(tempfile.gettempdir()), Path.home()):
+            inside = self.avoid is not None and base.resolve().is_relative_to(self.avoid.resolve())
+            if not inside:
+                return Path(tempfile.mkdtemp(prefix="datadouble-kubeconfig-", dir=base))
+        message = (
+            f"the temporary directory and home are under {self.avoid}, which pods mount;"
+            " set TMPDIR elsewhere for the kubeconfig"
+        )
         raise KubectlError(message)
-    return done.stdout
+
+    @contextmanager
+    def options(self) -> Generator[list[str]]:
+        """Global options for ``kubectl`` calls inside the block.
+
+        A kubeconfig is written to a file only its owner can read, in a private
+        temporary directory, both removed when the block ends, even after a failure.
+        """
+        options = [f"--context={self.context}"] if self.context else []
+        self.resolve()
+        if self._content is None:
+            yield options
+            return
+        directory = self._directory()
+        path = directory / "kubeconfig"
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(self._content + "\n")
+            yield [f"--kubeconfig={path}", *options]
+        finally:
+            path.unlink(missing_ok=True)
+            directory.rmdir()
+
+    def run(self, arguments: Sequence[str], *, stdin: str | None = None) -> Completed:
+        """Run ``kubectl`` and return what it did, without the kubeconfig's secret values."""
+        binary = kubectl_binary()
+        with self.options() as options:
+            done = run_program(binary, [*options, *arguments], stdin=stdin)
+        return Completed(done.status, self.redact(done.stdout), self.redact(done.stderr))
+
+    @contextmanager
+    def started(self, arguments: Sequence[str]) -> "Generator[subprocess.Popen[str]]":
+        """``kubectl`` running for the block, such as a port-forward; stopped afterwards."""
+        binary = kubectl_binary()
+        with self.options() as options:
+            process = start_program(binary, [*options, *arguments])
+            try:
+                yield process
+            finally:
+                process.terminate()
+                process.wait()
+
+    def __call__(self, arguments: Sequence[str], *, stdin: str | None = None) -> str:
+        """Run ``kubectl``; raise :class:`KubectlError` with its last error line."""
+        done = self.run(arguments, stdin=stdin)
+        if done.status != 0:
+            message = f"kubectl {arguments[0]} failed: {done.last_error()}"
+            raise KubectlError(message)
+        return done.stdout
+
+    def redact(self, text: str) -> str:
+        """``text`` with each of the kubeconfig's secret values replaced by ``[redacted]``."""
+        for value in self._secrets:
+            text = text.replace(value, "[redacted]")
+        return text
 
 
 def _labels(values: Mapping[str, str]) -> dict[str, str]:
@@ -87,10 +236,24 @@ class NfsVolume(BaseModel):
     path: str
 
 
-class PvSettings(BaseModel):
-    """Settings for the ``k8s-pv`` replicate adapter."""
+class ClusterSettings(BaseModel):
+    """How a Kubernetes adapter reaches its cluster."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    kubeconfig: SecretRef | None = None
+    """A reference to a kubeconfig's content (``{env: NAME}`` or ``{file: path}``);
+    without one, the in-cluster service account or the ambient configuration."""
+    context: str | None = Field(default=None, min_length=1)
+    """The kubeconfig's context to use; its current context otherwise."""
+
+    def kubectl(self, avoid: Path | None = None) -> Kubectl:
+        """``kubectl`` for this cluster, keeping its kubeconfig out of ``avoid``."""
+        return Kubectl(self.kubeconfig, self.context, avoid=avoid)
+
+
+class PvSettings(ClusterSettings):
+    """Settings for the ``k8s-pv`` replicate adapter."""
 
     path: Path
     """Where copies are written, as this process sees it."""
@@ -114,6 +277,7 @@ class PvReplicator:
     def __init__(self, settings: PvSettings) -> None:
         """Copy under ``settings.path``."""
         self.settings = settings
+        self.kubectl = settings.kubectl()
 
     @property
     def kind(self) -> CopyKind:
@@ -147,6 +311,7 @@ class PvReplicator:
 
     def create(self, copy_id: str, image: Path, summary: ImageSummary) -> Made:
         """Copy the image, then create the volume."""
+        self.kubectl.resolve()
         root = self.settings.path
         root.mkdir(parents=True, exist_ok=True)
         partial = root / f".{copy_id}.partial"
@@ -183,7 +348,7 @@ class PvReplicator:
             },
         }
         try:
-            kubectl(["apply", "--filename=-", "--output=name"], stdin=json.dumps(volume))
+            self.kubectl(["apply", "--filename=-", "--output=name"], stdin=json.dumps(volume))
         except KubectlError as error:
             shutil.rmtree(root / copy_id, ignore_errors=True)
             raise ReplicateError(str(error)) from None
@@ -198,7 +363,7 @@ class PvReplicator:
     def destroy(self, copy: Copy) -> None:
         """Delete the volume and the directory."""
         try:
-            kubectl(
+            self.kubectl(
                 [
                     "delete",
                     "persistentvolume",
@@ -215,7 +380,7 @@ class PvReplicator:
     def claim_state(self, copy: Copy, /) -> ClaimState:
         """The volume's phase: available, bound (claimed), or released (returned)."""
         try:
-            phase = kubectl(
+            phase = self.kubectl(
                 [
                     "get",
                     "persistentvolume",
@@ -229,10 +394,8 @@ class PvReplicator:
         return _PHASES.get(phase, ClaimState.RETURNED)
 
 
-class SecretSettings(BaseModel):
+class SecretSettings(ClusterSettings):
     """Settings for the ``k8s-secret`` announce adapter."""
-
-    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     namespace: str = "default"
 
@@ -243,6 +406,7 @@ class SecretAnnouncer:
     def __init__(self, settings: SecretSettings) -> None:
         """Write Secrets into ``settings.namespace``."""
         self.settings = settings
+        self.kubectl = settings.kubectl()
 
     def announce(self, copies: tuple[Announced, ...]) -> tuple[str, ...]:
         """Create or update one Secret per copy."""
@@ -263,7 +427,7 @@ class SecretAnnouncer:
                 "stringData": data,
             }
             try:
-                kubectl(["apply", "--filename=-", "--output=name"], stdin=json.dumps(secret))
+                self.kubectl(["apply", "--filename=-", "--output=name"], stdin=json.dumps(secret))
             except KubectlError as error:
                 raise AnnounceError(str(error)) from None
             written.append(f"k8s-secret:{self.settings.namespace}/datadouble-{copy.copy_id}")
@@ -275,7 +439,7 @@ class SecretAnnouncer:
         if not names:
             return ()
         try:
-            kubectl(
+            self.kubectl(
                 [
                     "delete",
                     "secret",

@@ -328,6 +328,10 @@ def test_masking(monkeypatch: pytest.MonkeyPatch) -> None:
         assert resolve_secret(EnvSecret(env="SHOP_SECRET")) == "s3cret"
     assert resolve_secret(EnvSecret(env="SHOP_SECRET")) == "s3cret"
     assert masked == ["s3cret"]
+    monkeypatch.setenv("SHOP_CONFIG", "kind: Config\ntoken: s3cret-token")
+    with masking(masked.append):
+        resolve_secret(EnvSecret(env="SHOP_CONFIG"), masked=lambda v: [v.split(": ")[-1]])
+    assert masked == ["s3cret", "s3cret-token"]
 
 
 def test_hosted_runners_are_refused(ci: FakeCi, registry: Registry) -> None:

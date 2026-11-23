@@ -10,7 +10,7 @@ one (:func:`datadouble.ci.mask`).
 """
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import assert_never
 
 from datadouble.ci import mask
@@ -21,10 +21,20 @@ class SecretError(Exception):
     """A secret reference that cannot be resolved."""
 
 
-def resolve_secret(ref: SecretRef, environ: Mapping[str, str] | None = None) -> str:
-    """The value a reference points at, without trailing newlines from files."""
+def resolve_secret(
+    ref: SecretRef,
+    environ: Mapping[str, str] | None = None,
+    *,
+    masked: Callable[[str], Iterable[str]] | None = None,
+) -> str:
+    """The value a reference points at, without trailing newlines from files.
+
+    The CI system masks the whole value, or only the parts ``masked`` picks from
+    it, for a structured secret whose layout is not itself secret.
+    """
     value = _resolve(ref, environ)
-    mask(value)
+    for part in (value,) if masked is None else masked(value):
+        mask(part)
     return value
 
 

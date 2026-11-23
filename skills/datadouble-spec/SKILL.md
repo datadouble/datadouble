@@ -16,7 +16,11 @@ Follow `../RULES.md` throughout.
   native settings and the catalog lock, and lists what it could not carry
   over.
 - Secrets are references: `{env: NAME}` or `{file: /path}`. Never write a
-  value into the spec. The one exception is a copy account's password, below.
+  value into the spec. That includes a Kubernetes adapter's `kubeconfig`
+  (`k8s-pv`, `k8s-secret`, the `kubernetes` runtime), whose `{env: NAME}`
+  holds the kubeconfig's content, never the runner's own kubeconfig file;
+  jobs running in the cluster they drive need none. The one exception is a
+  copy account's password, below.
 
 ## Check it, without production data
 

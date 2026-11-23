@@ -10,14 +10,17 @@ running them, and treats ``kill -TERM 1`` as a signal to the supervisor.
 
 import json
 import os
+import secrets
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 from pydantic import JsonValue
 
 from datadouble.runtime import Container, ContainerError
-from datadouble_kubernetes import kubectl
+from datadouble.secrets import SecretError
+from datadouble_kubernetes import Kubectl
 from datadouble_kubernetes.runtime import (
     KubernetesRuntime,
     KubernetesRuntimeSettings,
@@ -51,7 +54,14 @@ import json, os, signal, subprocess, sys, time
 from pathlib import Path
 root = Path(sys.argv[0]).parent / "cluster"
 root.mkdir(exist_ok=True)
-args = [a for a in sys.argv[1:] if not a.startswith("--namespace")]
+options = [a for a in sys.argv[1:] if a.startswith(("--kubeconfig=", "--context="))]
+args = [a for a in sys.argv[1:] if not a.startswith("--namespace") and a not in options]
+call = {"verb": args[0]}
+for option in options:
+    name, value = option[2:].split("=", 1)
+    call[name] = Path(value).read_text() if name == "kubeconfig" else value
+with (root.parent / "calls.jsonl").open("a") as calls:
+    calls.write(json.dumps(call) + "\\n")
 if (root / "fail").exists():
     sys.stderr.write("error: the server is on fire\\n")
     sys.exit(1)
@@ -314,6 +324,42 @@ def test_release(tmp_path: Path, cluster: Path) -> None:
     made.delete("datadouble-other")
 
 
+@pytest.mark.usefixtures("cluster")
+def test_kubeconfig_and_context(
+    tmp_path: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = tmp_path_factory.mktemp("private")  # outside the mount, tmp_path
+    monkeypatch.setattr(tempfile, "tempdir", str(private))
+    content = f"apiVersion: v1\nkind: Config\ncurrent-context: {secrets.token_hex(8)}"
+    monkeypatch.setenv("BUILD_KUBECONFIG", content)
+    settings: dict[str, JsonValue] = {"kubeconfig": {"env": "BUILD_KUBECONFIG"}, "context": "ci"}
+    done = runtime(tmp_path, **settings).run(
+        Container(image="postgres:18", command=("true",), owner=tmp_path / "job")
+    )
+    assert done.status == 0
+    with runtime(tmp_path, access="port-forward", **settings).serve(server(tmp_path)) as running:
+        assert running.execute(["true"]).status == 0
+        (forwarding,) = private.iterdir()  # port-forward's, while it runs
+        assert forwarding.stat().st_mode & 0o777 == 0o700
+        assert (forwarding / "kubeconfig").stat().st_mode & 0o777 == 0o600
+    made = [json.loads(line) for line in (tmp_path / "calls.jsonl").read_text().splitlines()]
+    assert {call["verb"] for call in made} >= {"create", "get", "port-forward", "exec", "delete"}
+    assert all(call == {**call, "kubeconfig": content + "\n", "context": "ci"} for call in made)
+    assert list(private.iterdir()) == []
+    monkeypatch.delenv("BUILD_KUBECONFIG")
+    unresolved = runtime(tmp_path, **settings)
+    with pytest.raises(SecretError, match="BUILD_KUBECONFIG is not set"):
+        unresolved.run(Container(image="x", command=("true",), owner=tmp_path / "again"))
+    with (
+        pytest.raises(SecretError, match="BUILD_KUBECONFIG is not set"),
+        unresolved.serve(server(tmp_path)),
+    ):
+        pass
+    with pytest.raises(SecretError, match="BUILD_KUBECONFIG is not set"):
+        unresolved.release(tmp_path)
+    assert not (tmp_path / "again").exists()
+
+
 def test_kubectl_must_be_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DATADOUBLE_KUBECTL", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))
@@ -330,7 +376,7 @@ IMAGE = "postgres:18-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd
 
 
 @pytest.mark.k8s
-def test_against_k3s(tmp_path: Path) -> None:
+def test_against_k3s(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Jobs and servers in k3s, sharing files through a claim on the work volume."""
     if not os.environ.get("KUBECONFIG"):
         pytest.skip("no cluster; run with the k8s Compose profile")
@@ -356,10 +402,22 @@ def test_against_k3s(tmp_path: Path) -> None:
             "resources": {"requests": {"storage": "1Gi"}},
         },
     }
+    ambient = Kubectl()
     for item in (volume, claim):
-        kubectl(["apply", "--filename=-"], stdin=json.dumps(item))
+        ambient(["apply", "--filename=-"], stdin=json.dumps(item))
+    # The runtime reaches the cluster only through its kubeconfig setting.
+    context = ambient(["config", "current-context"]).strip()
+    monkeypatch.setenv("K3S_KUBECONFIG", Path(os.environ["KUBECONFIG"]).read_text("utf-8"))
+    monkeypatch.delenv("KUBECONFIG")
     made = kubernetes_runtime(
-        {"claim": "datadouble-work", "mount": "/work", "access": "port-forward", "node": "k3s"}
+        {
+            "claim": "datadouble-work",
+            "mount": "/work",
+            "access": "port-forward",
+            "node": "k3s",
+            "kubeconfig": {"env": "K3S_KUBECONFIG"},
+            "context": context,
+        }
     )
     shared = tmp_path / "shared"
     shared.mkdir()

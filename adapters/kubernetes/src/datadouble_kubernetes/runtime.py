@@ -13,6 +13,8 @@ Spec settings::
         node: worker-3                # optional: run pods on this node (ReadWriteOnce claims)
         access: pod-ip                # or port-forward, when Datadouble runs outside the cluster
         image_pull_secrets: [registry]
+        kubeconfig: {env: SHOP_KUBECONFIG}   # optional: another cluster's kubeconfig
+        context: build                       # optional: the kubeconfig's context to use
 
 Datadouble runs with the work directory on ``claim``, mounted at ``mount``;
 every pod mounts the same claim at the same path, so paths mean the same on
@@ -20,7 +22,11 @@ both sides, and every mounted path must be under ``mount``. Pods run as
 Datadouble's own user and group. Secrets reach a pod through a Secret object
 made for it and removed with it. A command's output is written to files on the
 claim and read back, which keeps standard output and standard error apart.
-Everything is done with ``kubectl``, so its configuration and contexts apply.
+Everything is done with ``kubectl``: with the kubeconfig and context the
+settings give, written to a private temporary directory outside ``mount`` for
+each call, or else in-cluster or ambient configuration. A kubeconfig that
+cannot be resolved fails ``run``, ``serve`` and ``release`` with
+:class:`~datadouble.secrets.SecretError` before any pod starts.
 """
 
 import json
@@ -33,9 +39,8 @@ from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
+from pydantic import Field, JsonValue, TypeAdapter
 
-from datadouble.programs import run_program, start_program
 from datadouble.runtime import (
     Completed,
     Container,
@@ -45,7 +50,7 @@ from datadouble.runtime import (
     absolute,
 )
 from datadouble.settings import parse_settings
-from datadouble_kubernetes import KubectlError, kubectl, kubectl_binary
+from datadouble_kubernetes import ClusterSettings, KubectlError
 
 _OWNER = "datadouble.dev/owner"
 _RUNTIME_LABEL = "datadouble.dev/runtime"
@@ -69,10 +74,8 @@ class Access(StrEnum):
     """Through ``kubectl port-forward``: Datadouble runs outside it."""
 
 
-class KubernetesRuntimeSettings(BaseModel):
+class KubernetesRuntimeSettings(ClusterSettings):
     """Settings for the ``kubernetes`` container runtime."""
-
-    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
     namespace: str = "default"
     claim: str
@@ -82,21 +85,6 @@ class KubernetesRuntimeSettings(BaseModel):
     image_pull_secrets: tuple[str, ...] = ()
     ready_seconds: int = Field(default=300, ge=1)
     stop_seconds: int = Field(default=300, ge=1)
-
-
-def _binary() -> str:
-    try:
-        return kubectl_binary()
-    except KubectlError as error:
-        raise ContainerError(str(error)) from None
-
-
-def _kubectl(arguments: list[str], action: str, *, stdin: str | None = None) -> str:
-    try:
-        return kubectl(arguments, stdin=stdin)
-    except KubectlError as error:
-        message = f"{action}: {error}"
-        raise ContainerError(message) from None
 
 
 class KubernetesServer:
@@ -136,10 +124,21 @@ class KubernetesRuntime:
     def __init__(self, settings: KubernetesRuntimeSettings) -> None:
         """Use ``settings`` for every pod."""
         self.settings = settings
+        self.kubectl = settings.kubectl(avoid=settings.mount)
 
     def invoke(self, arguments: Sequence[str]) -> Completed:
         """Run ``kubectl`` and return what it did, whether or not it succeeded."""
-        return run_program(_binary(), arguments)
+        try:
+            return self.kubectl.run(arguments)
+        except KubectlError as error:
+            raise ContainerError(str(error)) from None
+
+    def _kubectl(self, arguments: list[str], action: str, *, stdin: str | None = None) -> str:
+        try:
+            return self.kubectl(arguments, stdin=stdin)
+        except KubectlError as error:
+            message = f"{action}: {error}"
+            raise ContainerError(message) from None
 
     # Pods
 
@@ -208,14 +207,14 @@ class KubernetesRuntime:
                 },
                 "stringData": dict(container.secrets),
             }
-            _kubectl(
+            self._kubectl(
                 ["create", namespace, "-f", "-"], "creating the secret", stdin=json.dumps(secret)
             )
         pod = json.dumps(self.manifest(name, container, command))
-        _kubectl(["create", namespace, "-f", "-"], f"starting {container.image}", stdin=pod)
+        self._kubectl(["create", namespace, "-f", "-"], f"starting {container.image}", stdin=pod)
 
     def _status(self, name: str) -> dict[str, JsonValue]:
-        output = _kubectl(
+        output = self._kubectl(
             ["get", f"--namespace={self.settings.namespace}", "pod", name, "--output=json"],
             "reading the pod",
         )
@@ -252,6 +251,7 @@ class KubernetesRuntime:
 
     def run(self, container: Container) -> Completed:
         """Run a pod to completion; its output comes back through files on the claim."""
+        self.kubectl.resolve()
         name = f"datadouble-{secrets.token_hex(6)}"
         outputs = absolute([container.owner])[0] / f".{name}"
         outputs.mkdir(parents=True, exist_ok=True)
@@ -285,6 +285,7 @@ class KubernetesRuntime:
     @contextmanager
     def serve(self, container: Container) -> Generator[KubernetesServer]:
         """Start a server pod, wait until it is ready, and stop it cleanly afterwards."""
+        self.kubectl.resolve()
         if container.port is None:
             message = "a server container needs a port"
             raise ContainerError(message)
@@ -325,29 +326,19 @@ class KubernetesRuntime:
         if self.settings.access is Access.POD_IP:
             yield Endpoint(host=str(status.get("podIP")), port=port)
             return
-        forward = start_program(
-            _binary(),
-            [
-                "port-forward",
-                f"--namespace={self.settings.namespace}",
-                f"pod/{name}",
-                f":{port}",
-            ],
-        )
-        try:
+        arguments = ["port-forward", f"--namespace={self.settings.namespace}", f"pod/{name}"]
+        # serve() has run kubectl already, so it is installed and the kubeconfig resolved.
+        with self.kubectl.started([*arguments, f":{port}"]) as forward:
             line = forward.stdout.readline() if forward.stdout else ""
             match = _FORWARDING.search(line)
             if match is None:
                 message = f"port-forward to {name} failed"
                 raise ContainerError(message)
             yield Endpoint(host="127.0.0.1", port=int(match.group(1)))
-        finally:
-            forward.terminate()
-            forward.wait()
 
     def _stop(self, name: str) -> None:
         """Signal the server to stop and wait; it must exit cleanly."""
-        _kubectl(
+        self._kubectl(
             [
                 "exec",
                 f"--namespace={self.settings.namespace}",
@@ -375,8 +366,9 @@ class KubernetesRuntime:
 
     def release(self, owner: Path) -> None:
         """Remove pods (and their secrets) labelled with ``owner`` or a directory under it."""
+        self.kubectl.resolve()
         root = absolute([owner])[0]
-        listed = _kubectl(
+        listed = self._kubectl(
             [
                 "get",
                 f"--namespace={self.settings.namespace}",

@@ -651,7 +651,8 @@ class Spec(_Model):
     verify: Verify = Verify()
     """Checks every image must pass: PII scan, row counts, assertions."""
     runtime: AdapterSettings | None = None
-    """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``."""
+    """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``,
+    which reaches another cluster through ``kubeconfig``, a secret reference."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     """Where images are stored after the build, one adapter each: ``{filesystem: ...}``,
     ``{s3: ...}``."""
