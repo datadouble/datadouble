@@ -5,24 +5,37 @@
 
 import datetime as dt
 import json
+import uuid
 from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pymysql
 import pytest
+from pymysql.connections import Connection
 
 from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError, Tooling, Transformation, WorkingDatabases
+from datadouble.engine import (
+    Account,
+    Accounts,
+    EngineError,
+    Tooling,
+    Transformation,
+    WorkingDatabases,
+)
 from datadouble.images import unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
 from datadouble.planner import Plan, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
-from datadouble.spec import HashOptions, HashRule, Strategy, parse_spec
+from datadouble.runtime import Container, Server
+from datadouble.spec import AccountPrivileges, HashOptions, HashRule, Strategy, parse_spec
 from datadouble.storage import filesystem_store
 from datadouble.subset import AllRows, Predicate
 from datadouble_conformance.engine import runtime_for_tests
 from datadouble_mysql import MysqlEngine
+from datadouble_mysql import working as mysql_working
 from datadouble_mysql.server import MysqlServer, Tools, default_image
 from datadouble_mysql.source import MysqlSession
 from test_mysql_conformance import MysqlScratch, admin, scratch
@@ -365,3 +378,104 @@ def test_plugins_the_data_needs_are_installed(source: MysqlScratch, tmp_path: Pa
     finally:
         source.execute("DROP TABLE IF EXISTS notes")
         admin("UNINSTALL PLUGIN simple_parser")
+
+
+@contextmanager
+def served_like_a_consumer(tools: Tools, image: Path) -> Generator[Server]:
+    """A server on the image's data directory, started by the official image's own entrypoint."""
+    container = Container(
+        image=tools.image,
+        command=("docker-entrypoint.sh", "mysqld", f"--datadir={image / 'mysql'}"),
+        owner=image,
+        mounts=(image,),
+        port=3306,
+        # ping succeeds once the server answers, even when it refuses the login.
+        ready=("mysqladmin", "--protocol=tcp", "--host=127.0.0.1", "--user=nobody", "ping"),
+    )
+    with tools.runtime.serve(container) as server:
+        yield server
+
+
+def test_images_get_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    working = working_databases(tmp_path / "scratch")
+    assert isinstance(working, Accounts)
+    tools = Tools(tooling().runtime, default_image("8.4.13"))
+    image = tmp_path / "image"
+    MysqlServer(tools, image / "mysql", image).initialize()
+    first, second, reading, rooted = (uuid.uuid4().hex for _ in range(4))
+    working.add_accounts(image, [Account("app", first), Account("reports", reading)])
+    building = MysqlServer(tools, image / "mysql", image)
+    with building.running(), building.connect() as connection, connection.cursor() as cursor:
+        cursor.execute("CREATE DATABASE shop")
+        cursor.execute("CREATE TABLE shop.items (id INT PRIMARY KEY)")
+        cursor.execute("INSERT INTO shop.items VALUES (1)")
+        cursor.execute(
+            "CREATE SQL SECURITY INVOKER VIEW shop.item_ids AS SELECT id FROM shop.items"
+        )
+    # Giving them again resets the password and leaves exactly the declared privileges.
+    working.add_accounts(
+        image,
+        [
+            Account("app", second),
+            Account("reports", reading, AccountPrivileges.READ),
+            Account("root", rooted),
+        ],
+    )
+    with served_like_a_consumer(tools, image) as server:
+        endpoint = server.endpoint
+
+        def login(user: str, password: str) -> Connection:
+            return pymysql.connect(
+                host=endpoint.host,
+                port=endpoint.port,
+                user=user,
+                password=password,
+                autocommit=True,
+            )
+
+        with pytest.raises(pymysql.MySQLError):
+            login("app", first)
+        with login("app", second) as connection, connection.cursor() as cursor:
+            cursor.execute("SHOW GRANTS")
+            assert any("WITH GRANT OPTION" in str(row) for row in cursor.fetchall())
+            cursor.execute("INSERT INTO shop.items VALUES (2)")
+        with login("reports", reading) as connection, connection.cursor() as cursor:
+            cursor.execute("SHOW GRANTS")
+            assert set(cursor.fetchall()) == {
+                ("GRANT USAGE ON *.* TO `reports`@`%`",),
+                ("GRANT SELECT, SHOW VIEW ON `shop`.* TO `reports`@`%`",),
+            }
+            cursor.execute("SELECT id FROM shop.item_ids")
+            assert cursor.fetchall() == ((1,), (2,))
+            cursor.execute("SHOW CREATE VIEW shop.item_ids")
+            for statement in (
+                "INSERT INTO shop.items VALUES (3)",
+                "CREATE TABLE shop.more (id INT)",
+                "CREATE USER 'other'@'%'",
+                # Not *.*, so no password hashes.
+                "SELECT authentication_string FROM mysql.user",
+            ):
+                with pytest.raises(pymysql.MySQLError):
+                    cursor.execute(statement)
+        with login("root", rooted) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT CURRENT_USER()")
+            assert cursor.fetchone() == ("root@%",)
+        # root@localhost still logs in over the socket without a password.
+        socket = server.execute(["mysql", "-uroot", "--batch", "-e", "SELECT CURRENT_USER()"])
+        assert socket.status == 0, socket.stderr
+        assert "root@localhost" in socket.stdout
+        with login("app", second) as connection, connection.cursor() as cursor:
+            # A locked account stays locked when its password is reset.
+            cursor.execute("ALTER USER 'app'@'%' ACCOUNT LOCK")
+    with pytest.raises(EngineError, match="logging in with the image's account 'app' failed"):
+        working.add_accounts(image, [Account("app", first)])
+    with pytest.raises(EngineError, match=r"giving the image the account 'u+' failed"):
+        working.add_accounts(image, [Account("u" * 40, first)])
+
+    def the_password(_: int) -> str:
+        return second
+
+    # A server that took any password, as it would here, fails the check.
+    monkeypatch.setattr(mysql_working, "secrets", SimpleNamespace(token_hex=the_password))
+    with pytest.raises(EngineError, match="the server accepted a wrong password"):
+        working.add_accounts(image, [Account("reports", second, AccountPrivileges.READ)])

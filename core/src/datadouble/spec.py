@@ -306,10 +306,33 @@ class ImageGroup(_Model):
     requires: tuple[GroupName, ...] = ()
 
 
+class AccountPrivileges(StrEnum):
+    """What an account copies carry may do."""
+
+    ALL = "all"
+    """Every privilege, with the grant option; a PostgreSQL superuser."""
+    READ = "read"
+    """``SELECT`` on the image's data, plus what the engine gives every user."""
+
+
+class CopyAccount(_Model):
+    """An account every copy of a physical image carries, for logins over TCP."""
+
+    user: str = Field(min_length=1)
+    password: Annotated[str, Field(min_length=1)] | SecretRef
+    """Plain text, since copies hold no personal data, or a secret reference."""
+    privileges: AccountPrivileges = AccountPrivileges.ALL
+    """``all``: every privilege, with the grant option (a PostgreSQL superuser);
+    ``read``: ``SELECT`` on the image's data, plus what the engine gives every user."""
+
+
 class Package(_Model):
     """Which image formats to produce; all the engine supports when omitted."""
 
     formats: tuple[ImageFormat, ...] | None = Field(default=None, min_length=1)
+    accounts: tuple[CopyAccount, ...] = ()
+    """Accounts physical images carry for consumers that serve them with the
+    engine's own image; none when omitted."""
 
 
 class PiiScan(_Model):
@@ -596,7 +619,8 @@ class Spec(_Model):
             subset=Subset(as_of=self.subset.as_of, seeds=files.select),
             hooks=Hooks(after_transform=tuple(TransformHook(sql=line) for line in files.cleanup)),
             images=self.images,
-            package=self.package,
+            # Accounts belong to the source's physical images, not the files'.
+            package=self.package.model_copy(update={"accounts": ()}),
             runtime=self.runtime,
             store=self.store,
             signing=self.signing,

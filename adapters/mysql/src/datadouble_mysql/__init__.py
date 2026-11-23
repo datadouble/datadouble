@@ -27,18 +27,20 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.engine import EngineError, ServerPlan, SourceSession, Tooling, WorkingDatabases
 from datadouble.names import EngineName
-from datadouble.planner import Capabilities
+from datadouble.planner import AccountNames, Capabilities
 from datadouble.secrets import resolve_secret
 from datadouble.settings import NoSettings, parse_settings
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_mysql.errors import database_error
 from datadouble_mysql.introspect import ENGINE
-from datadouble_mysql.server import Tools, create_user, default_image
+from datadouble_mysql.server import USER, Tools, create_user, default_image
 from datadouble_mysql.source import MysqlSession
 from datadouble_mysql.working import DatabaseInfo, MysqlWorking
 
 MOUNT = "/var/lib/datadouble"
 """Where container servers mount a copy."""
+COPY_USER = "datadouble"
+"""The user an instance copy's server gets, with the copy's password."""
 
 
 class MysqlConnection(BaseModel):
@@ -81,13 +83,14 @@ class MysqlEngine:
         return "999:999"
 
     def capabilities(self) -> Capabilities:
-        """Both image formats, SQL expressions, the nested strategy and hooks."""
+        """Both image formats, SQL expressions, the nested strategy, hooks and accounts."""
         # Minor releases (8.0, 8.4) change the data directory; 8.0 cannot open 8.4's.
         return Capabilities(
             formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
             expressions=True,
             nested=True,
             version_line=2,
+            accounts=AccountNames(max_characters=32, reserved=(USER, COPY_USER)),
         )
 
     @contextmanager
@@ -133,7 +136,7 @@ class MysqlEngine:
         start = (
             f"rm -f {ready}"
             f" && mysqld {options} --bind-address=127.0.0.1 --daemonize > /dev/null"
-            f" && {create_user('datadouble')}"
+            f" && {create_user(COPY_USER)}"
             " && mysqladmin -uroot shutdown"
             f" && touch {ready}"
             f" && exec mysqld {options} --bind-address=*"
@@ -146,7 +149,7 @@ class MysqlEngine:
             ready=("sh", "-c", f"test -f {ready} && mysqladmin -uroot ping"),
             port=3306,
             database=info.database,
-            user="datadouble",
+            user=COPY_USER,
         )
 
 

@@ -7,7 +7,7 @@ import pytest
 
 from datadouble.catalog import Catalog, CatalogLock, Requirement, RequirementKind
 from datadouble.names import ColumnName, GroupName, TableName
-from datadouble.planner import Capabilities, Plan, PlanError, PlanOptions, plan
+from datadouble.planner import AccountNames, Capabilities, Plan, PlanError, PlanOptions, plan
 from datadouble.spec import ImageFormat, Spec, Strategy, StrictLevel, Unselected, parse_spec
 from datadouble.subset import AllRows, EdgeMode, NoRows, nested_conditions
 from fakes import catalog, shop, table
@@ -665,3 +665,43 @@ def test_unselected_all_still_honours_drop() -> None:
     assert rule.every_row
     condition = nested_conditions(result.graph())[rule.table]
     assert not isinstance(condition, AllRows)
+
+
+def test_copy_accounts_need_the_capability_and_a_physical_image() -> None:
+    accounts = "package: {accounts: [{user: app, password: x}]}\n"
+    reasons = problems(CYCLE_FREE + accounts)
+    assert "the fake adapter cannot give copies accounts (package.accounts)" in reasons
+    able = CAPABILITIES.model_copy(update={"accounts": AccountNames()})
+    assert planned(CYCLE_FREE + accounts, capabilities=able).formats == (
+        ImageFormat.PHYSICAL,
+        ImageFormat.LOGICAL,
+    )
+    logical = "package: {formats: [logical], accounts: [{user: app, password: x}]}\n"
+    reasons = problems(CYCLE_FREE + logical, capabilities=able)
+    assert "package.accounts applies to physical images, and this build makes none" in reasons
+
+
+def test_copy_account_names() -> None:
+    names = AccountNames(
+        max_characters=5,
+        max_bytes=6,
+        reserved=("builder",),
+        reserved_prefixes=("pg_",),
+        keep_all=("boss", "root"),
+    )
+    able = CAPABILITIES.model_copy(update={"accounts": names})
+    users = ["app", "app", "toolong", "éééé", "builder", "pg_x", "root"]
+    accounts = ", ".join(f"{{user: {user}, password: x}}" for user in users)
+    accounts += ", {user: boss, password: x, privileges: read}"
+    reasons = problems(CYCLE_FREE + f"package: {{accounts: [{accounts}]}}\n", capabilities=able)
+    assert set(reasons) == {
+        "package.accounts names 'app' more than once",
+        "package.accounts: 'toolong' is longer than the 5 characters fake allows",
+        "package.accounts: 'toolong' is longer than the 6 bytes fake allows",
+        "package.accounts: 'éééé' is longer than the 6 bytes fake allows",
+        "package.accounts: 'builder' is longer than the 5 characters fake allows",
+        "package.accounts: 'builder' is longer than the 6 bytes fake allows",
+        "package.accounts: 'builder' is a name fake keeps for itself",
+        "package.accounts: 'pg_x' starts with 'pg_', which fake keeps for itself",
+        "package.accounts: 'boss' must keep every privilege on fake (privileges: all)",
+    }

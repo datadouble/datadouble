@@ -8,22 +8,41 @@ import json
 import os
 import uuid
 from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
+import psycopg
 import pytest
+from psycopg.conninfo import make_conninfo
 
 from datadouble.catalog import CatalogLock, ColumnKind
-from datadouble.engine import EngineError, Tooling, Transformation, WorkingDatabases
+from datadouble.engine import (
+    Account,
+    Accounts,
+    EngineError,
+    Tooling,
+    Transformation,
+    WorkingDatabases,
+)
 from datadouble.images import unpack
 from datadouble.names import ColumnName, ColumnRef, Generation, TableName
 from datadouble.planner import Plan, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
-from datadouble.spec import HashOptions, HashRule, ImageFormat, Strategy, parse_spec
+from datadouble.runtime import Container, Server
+from datadouble.spec import (
+    AccountPrivileges,
+    HashOptions,
+    HashRule,
+    ImageFormat,
+    Strategy,
+    parse_spec,
+)
 from datadouble.storage import filesystem_store
 from datadouble.subset import AllRows, Predicate
 from datadouble_conformance.engine import ScratchSource, runtime_for_tests
 from datadouble_postgres import PostgresEngine
+from datadouble_postgres import working as postgres_working
 from datadouble_postgres.cluster import Cluster, Tools, default_image
 from datadouble_postgres.render import trusted
 from datadouble_postgres.source import PostgresSession
@@ -295,3 +314,94 @@ def test_clusters(tmp_path: Path) -> None:
         cluster.create_database("other")
         with cluster.connect("other") as connection:
             assert connection.execute("SELECT 1").fetchone() == (1,)
+
+
+@contextmanager
+def served_like_a_consumer(tools: Tools, image: Path) -> Generator[Server]:
+    """A server on the image's data directory, started by the official image's own entrypoint."""
+    container = Container(
+        image=tools.image,
+        command=("docker-entrypoint.sh", "postgres"),
+        owner=image,
+        mounts=(image,),
+        env={"PGDATA": str(image / "pgdata")},
+        port=5432,
+        ready=("pg_isready", "--host=127.0.0.1"),
+    )
+    with tools.runtime.serve(container) as server:
+        yield server
+
+
+def test_images_get_accounts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    working = working_databases(tmp_path / "scratch")
+    assert isinstance(working, Accounts)
+    tools = Tools(tooling().runtime, default_image("18"), tmp_path / "home")
+    image = tmp_path / "image"
+    Cluster(tools, image / "pgdata", image).initialize()
+    first, second, reading = uuid.uuid4().hex, uuid.uuid4().hex, uuid.uuid4().hex
+    working.add_accounts(image, [Account("copyadmin", first), Account("reports", reading)])
+    cluster = Cluster(tools, image / "pgdata", image)
+    with cluster.running():
+        cluster.create_database("shop")
+        with cluster.connect("shop") as connection:
+            connection.execute("CREATE SCHEMA store")
+            connection.execute("CREATE TABLE store.items (id serial PRIMARY KEY)")
+            connection.execute("INSERT INTO store.items DEFAULT VALUES")
+            connection.execute("CREATE VIEW store.item_ids AS SELECT id FROM store.items")
+    # Giving them again resets the password, leaves exactly the declared privileges,
+    # and the image's pg_hba.conf keeps one password rule.
+    read = Account("reports", reading, AccountPrivileges.READ)
+    working.add_accounts(image, [Account("copyadmin", second), read])
+    hba = (image / "pgdata" / "pg_hba.conf").read_text("utf-8")
+    assert hba.splitlines().count("host all all all scram-sha-256") == 1
+    with served_like_a_consumer(tools, image) as server:
+        endpoint = server.endpoint
+
+        def login(
+            user: str, password: str, dbname: str = "postgres"
+        ) -> psycopg.Connection[tuple[object, ...]]:
+            conninfo = make_conninfo(
+                host=endpoint.host, port=str(endpoint.port), dbname=dbname, user=user
+            )
+            return psycopg.connect(conninfo, password=password, autocommit=True)
+
+        with pytest.raises(psycopg.OperationalError):
+            login("copyadmin", first)
+        with login("copyadmin", second) as connection:
+            row = connection.execute(
+                "SELECT rolname, rolcanlogin, rolsuper, left(rolpassword, 14)"
+                " FROM pg_authid WHERE rolname IN ('copyadmin', 'reports') ORDER BY rolname"
+            ).fetchall()
+            assert row == [
+                ("copyadmin", True, True, "SCRAM-SHA-256$"),
+                ("reports", True, False, "SCRAM-SHA-256$"),
+            ]
+        with login("copyadmin", second, "shop") as connection:
+            connection.execute("INSERT INTO store.items DEFAULT VALUES")
+        with login("reports", reading, "shop") as connection:
+            assert connection.execute("SELECT id FROM store.item_ids").fetchall() == [(1,), (2,)]
+            assert connection.execute("SELECT last_value FROM store.items_id_seq").fetchone()
+            for statement in (
+                "INSERT INTO store.items DEFAULT VALUES",
+                "CREATE TABLE store.more (id int)",
+                "CREATE TABLE more (id int)",
+                "CREATE ROLE other",
+                # Unlike pg_read_all_data, no password hashes.
+                "SELECT rolpassword FROM pg_authid",
+            ):
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute(statement)
+    with pytest.raises(EngineError, match="giving the image the account 'pg_reserved' failed"):
+        working.add_accounts(image, [Account("pg_reserved", first)])
+    monkeypatch.setattr(postgres_working, "_SCRAM", "SCRAM-SHA-1$")
+    with pytest.raises(EngineError, match="checking the image's account 'reports' failed"):
+        working.add_accounts(image, [read])
+    monkeypatch.undo()
+    nowhere = "host=127.0.0.1 port=1 dbname=postgres user=copyadmin connect_timeout=2"
+
+    def unreachable(**_: str) -> str:
+        return nowhere
+
+    monkeypatch.setattr(postgres_working, "make_conninfo", unreachable)
+    with pytest.raises(EngineError, match="logging in with the image's account 'copyadmin'"):
+        working.add_accounts(image, [Account("copyadmin", first)])

@@ -37,6 +37,12 @@ A whole spec.
 | `prune` | [Retention](#retention) | see type | How many images and how much time `prune` keeps. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
 
+### AccountPrivileges
+
+What an account copies carry may do.
+
+One of `all` or `read`.
+
 ### AdapterSettings
 
 ### Assertion
@@ -47,6 +53,16 @@ A native query that must return no rows.
 |---|---|---|---|
 | `name` (required) | string |  |  |
 | `sql` (required) | string |  |  |
+
+### CopyAccount
+
+An account every copy of a physical image carries, for logins over TCP.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `user` (required) | string |  |  |
+| `password` (required) | string or [SecretRef](#secretref) |  | Plain text, since copies hold no personal data, or a secret reference. |
+| `privileges` | [AccountPrivileges](#accountprivileges) | `"all"` | `all`: every privilege, with the grant option (a PostgreSQL superuser); `read`: `SELECT` on the image's data, plus what the engine gives every user. |
 
 ### CosignSigning
 
@@ -251,6 +267,7 @@ Which image formats to produce; all the engine supports when omitted.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `formats` | list of [ImageFormat](#imageformat) |  |  |
+| `accounts` | list of [CopyAccount](#copyaccount) |  | Accounts physical images carry for consumers that serve them with the engine's own image; none when omitted. |
 
 ### PathsFrom
 

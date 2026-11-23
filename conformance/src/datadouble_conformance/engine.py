@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import uuid
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass
@@ -405,6 +406,22 @@ class EngineConformance:
             ),
             "utf-8",
         )
+
+    def test_physical_images_carry_accounts(self, harness: EngineHarness, tmp_path: Path) -> None:
+        """An engine offering ``accounts`` builds and verifies an image with two of them."""
+        if harness.engine.capabilities().accounts is None:
+            pytest.skip("the adapter does not offer package.accounts")
+        builds = _Builds(harness, tmp_path)
+        everything, reading = uuid.uuid4().hex, uuid.uuid4().hex
+        spec = builds.sample(
+            "package:\n  formats: [physical]\n  accounts:\n"
+            f"    - {{user: copyadmin, password: {everything}}}\n"
+            f"    - {{user: copyreader, password: {reading}, privileges: read}}\n"
+        )
+        result = builds.run(spec, builds.lock(spec.source.connection), "accounts")
+        assert not result.failed(), result.verification
+        assert result.images
+        assert all(summary.accounts == ("copyadmin", "copyreader") for summary in result.images)
 
     def test_killed_run_resumes(self, harness: EngineHarness, tmp_path: Path) -> None:
         """A run killed mid-way resumes from its last completed stage."""

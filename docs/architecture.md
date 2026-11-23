@@ -66,6 +66,68 @@ plan and names the formats that engine supports; there is no silent fallback.
 | Salesforce | Not offered | Records and metadata |
 | Filesystem | The file tree | Not offered |
 
+### Accounts in physical images
+
+A physical image carries only the accounts the build leaves, and the build
+removes its own before packaging (decision 74). A consumer that serves a volume
+copy with the engine's official image can't set a password through the image's
+environment variables, since those apply only when a data directory is first
+made, so nothing could log in over TCP. `package.accounts` adds accounts for
+that case:
+
+```yaml
+package:
+  accounts:
+    - {user: app, password: app-password}                         # privileges: all
+    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+```
+
+- **Physical images carry them, and so every copy of one.** Volume copies
+  and instance copies (a server the replicate adapter runs on a volume copy,
+  decision 62) both have the accounts. Logical images never do. A build that
+  makes no physical image refuses the setting, as does an engine adapter that
+  can't create accounts.
+- **Instance copies reset one user.** An instance copy's server sets its
+  generated password on the engine's user for instances when it starts:
+  `datadouble` on MySQL, which Datadouble therefore reserves, and `postgres`
+  on PostgreSQL. A declared `postgres` account keeps its password on volume
+  copies only; on an instance copy it has the copy's generated password.
+- **Passwords may be plain text,** since copies hold no personal data; a secret
+  reference works too. `run` resolves every reference when it starts, before
+  it reads the source (`plan` alone does not), and the image summary
+  (`accounts`) and build manifest name the users and privileges, never the
+  passwords.
+- **`all`** gives every privilege with the grant option (a PostgreSQL
+  superuser). An `all` account on a copy someone can reach can run commands in
+  the consumer's container, for example PostgreSQL's `COPY ... TO PROGRAM`.
+- **`read`** gets `SELECT` on the data in the image: MySQL `SELECT, SHOW VIEW`
+  on each of the image's databases; PostgreSQL `CONNECT` on each database and,
+  in every schema but the system ones, `USAGE` and `SELECT` on every table,
+  view and sequence. Nothing reaches other accounts' password hashes. It is
+  not strictly read-only: on PostgreSQL it also has what the image grants
+  `PUBLIC`, which Datadouble leaves as the engine made it, including temporary
+  tables, running functions and, before version 15, creating objects in the `public` schema; on
+  either engine it can change its own password.
+- **Names an engine can't use fail the plan:** too long, reserved by the
+  engine, Datadouble's own users, and names that must keep `all` (PostgreSQL's
+  `postgres`, its bootstrap superuser). Each adapter declares these in
+  `Capabilities.accounts`, and duplicate names fail too.
+- **Local logins need no password on PostgreSQL.** The image's `pg_hba.conf`
+  keeps the `trust` lines `initdb` wrote for the Unix socket and the loopback
+  address, ahead of the password rule the accounts add. Anything inside the
+  consumer's container, a sidecar sharing its network, or a `kubectl
+  port-forward` to it logs in as `postgres` without a password.
+- The engine adapter writes the accounts into the image's own data directory
+  after packaging it (the `Accounts` protocol), resetting the password and
+  privileges of an existing user of the same name. It then logs in with each
+  account over the network before the image is stored; MySQL also checks that
+  a random wrong password is refused, and PostgreSQL checks each role in
+  `pg_authid`, since its working clusters trust loopback logins. The package
+  stage's inputs hold a keyed digest of each account (an HMAC under the run's
+  anonymization key), so a retried or resumed build packages again when a
+  password changes. MySQL and PostgreSQL support accounts so far; see their
+  adapters' READMEs.
+
 ### Several images from one build
 
 A spec can split its output into named groups, each becoming its own image:

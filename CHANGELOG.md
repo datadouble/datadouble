@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Accounts copies carry, for logins over TCP**
+  ([#70](https://github.com/datadouble/datadouble/issues/70)).
+  `package.accounts` lists users, each with a password (plain text, since
+  copies hold no personal data, or a secret reference) and `privileges`:
+  `all` (the default; every privilege with the grant option, a PostgreSQL
+  superuser) or `read` (`SELECT` on the image's data, plus what PostgreSQL's
+  `PUBLIC` already has; never other accounts' password hashes). Physical
+  images, and so every copy of them, get them: MySQL `'user'@'%'`,
+  PostgreSQL a role with a SCRAM password and a password rule in
+  `pg_hba.conf`. A consumer serving a volume copy with the engine's own image
+  can then connect over the network, which it could not before: those images
+  set their passwords only when a data directory is first made. Keep in mind
+  that an `all` account on a reachable copy can run commands in the
+  consumer's container, and that PostgreSQL images still trust local and
+  loopback logins. The build logs in with each account before it stores the
+  image; the image summary and manifest name the users, never the passwords;
+  `ci init` passes the passwords' references to the build job; and a resumed
+  or retried build packages again when a password changes. Names an engine
+  can't use, duplicates, unset secrets, logical-only builds and engines
+  without accounts fail at the start of the run, before extract.
 - **Salesforce:** an engine adapter (`datadouble-salesforce`) that reads an
   org through its REST, Tooling and Bulk API 2.0 interfaces, with an
   instance URL and access token by reference. Each object is a table and

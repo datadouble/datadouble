@@ -30,6 +30,7 @@ from datadouble.catalog import (
 from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SpecName, TableName
 from datadouble.resolve import Reference, ResolveError, Resolver
 from datadouble.spec import (
+    AccountPrivileges,
     Assertion,
     EdgePolicy,
     ExpressionRule,
@@ -58,6 +59,51 @@ from datadouble.subset import (
 )
 
 
+class AccountNames(BaseModel):
+    """The user names an engine can give copies' accounts (``package.accounts``)."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    max_characters: int | None = None
+    """The longest name, in characters."""
+    max_bytes: int | None = None
+    """The longest name, in bytes of UTF-8."""
+    reserved: tuple[str, ...] = ()
+    """Names the engine or Datadouble keeps for itself, such as its build user."""
+    reserved_prefixes: tuple[str, ...] = ()
+    """Prefixes the engine keeps for its own names."""
+    keep_all: tuple[str, ...] = ()
+    """Names an account can have only with ``privileges: all``, such as a bootstrap
+    superuser that cannot lose its privileges."""
+
+    def problems(self, engine: str, user: str, privileges: AccountPrivileges) -> list[str]:
+        """Why ``engine`` cannot give an account ``user`` these privileges, if it cannot."""
+        found: list[str] = []
+        if user in self.keep_all and privileges is not AccountPrivileges.ALL:
+            found.append(
+                f"package.accounts: {user!r} must keep every privilege on {engine}"
+                " (privileges: all)"
+            )
+        if self.max_characters is not None and len(user) > self.max_characters:
+            found.append(
+                f"package.accounts: {user!r} is longer than the {self.max_characters}"
+                f" characters {engine} allows"
+            )
+        if self.max_bytes is not None and len(user.encode()) > self.max_bytes:
+            found.append(
+                f"package.accounts: {user!r} is longer than the {self.max_bytes}"
+                f" bytes {engine} allows"
+            )
+        if user in self.reserved:
+            found.append(f"package.accounts: {user!r} is a name {engine} keeps for itself")
+        found.extend(
+            f"package.accounts: {user!r} starts with {prefix!r}, which {engine} keeps for itself"
+            for prefix in self.reserved_prefixes
+            if user.startswith(prefix)
+        )
+        return found
+
+
 class Capabilities(BaseModel):
     """What an engine adapter can do, as far as planning is concerned."""
 
@@ -77,6 +123,9 @@ class Capabilities(BaseModel):
     """How many leading numbers of a server version name its compatibility line:
     1 for PostgreSQL (``17``), 2 for MySQL (``8.4``), whose minor releases change
     what a data directory holds."""
+    accounts: AccountNames | None = None
+    """The names physical images' accounts (``package.accounts``) can have; None
+    when the adapter cannot give images accounts."""
 
 
 class PlanError(Exception):
@@ -558,7 +607,34 @@ class _Planner:
                 f"the {self.catalog.engine} adapter cannot produce "
                 f"{', '.join(unsupported)} images; it supports {supported}"
             )
+        self.accounts(wanted)
         return tuple(dict.fromkeys(wanted))
+
+    def accounts(self, wanted: tuple[ImageFormat, ...]) -> None:
+        """Check ``package.accounts`` against the adapter and the formats."""
+        accounts = self.spec.package.accounts
+        if not accounts:
+            return
+        users = [account.user for account in accounts]
+        self.problems.extend(
+            f"package.accounts names {user!r} more than once"
+            for user in dict.fromkeys(users)
+            if users.count(user) > 1
+        )
+        engine = self.catalog.engine
+        names = self.capabilities.accounts
+        if names is None:
+            self.problems.append(
+                f"the {engine} adapter cannot give copies accounts (package.accounts)"
+            )
+            return
+        if ImageFormat.PHYSICAL not in wanted:
+            self.problems.append(
+                "package.accounts applies to physical images, and this build makes none"
+            )
+        firsts = {account.user: account for account in reversed(accounts)}
+        for user in dict.fromkeys(users):
+            self.problems.extend(names.problems(engine, user, firsts[user].privileges))
 
     def strategy(self, graph: Graph) -> Strategy:
         wanted = self.options.strategy or self.spec.subset.strategy

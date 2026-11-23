@@ -16,6 +16,32 @@ source:
     url: {env: SHOP_MYSQL_URL}   # mysql://user:password@host:3306/database, by reference
 ```
 
+## Accounts
+
+A physical image carries no account that logs in over the network, so a
+server started on a copy with the official image accepts only local
+connections. `package.accounts` adds some:
+
+```yaml
+package:
+  accounts:
+    - {user: app, password: app-password}          # privileges: all
+    - {user: reporting, password: {env: REPORTING_PW}, privileges: read}
+```
+
+Each becomes `'user'@'%'`. `all` grants `ALL ON *.*` with the grant option.
+`read` grants `SELECT, SHOW VIEW` on each of the image's databases at
+packaging time, not on `*.*`, so it can't read the `mysql` schema's password
+hashes; it can still change its own password. An existing user of that name,
+such as `root`, gets the password and exactly the declared privileges, and
+`root@localhost` keeps logging in over the socket without one. MySQL rewrites
+the passwords out of the statements it logs. The build logs in with each
+account over TCP, and checks that a wrong password is refused, before storing
+the image.
+
+Names longer than 32 characters fail the plan, as do `datadouble-build` (the
+build user) and `datadouble` (the user instance copies reset).
+
 ## Plugins
 
 Plugins the data needs, storage engines and full-text parsers installed from

@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabases
 from datadouble.names import EngineName
-from datadouble.planner import Capabilities
+from datadouble.planner import AccountNames, Capabilities
 from datadouble.secrets import resolve_secret
 from datadouble.settings import parse_settings
 from datadouble.spec import ImageFormat, SecretRef
@@ -75,9 +75,17 @@ class PostgresEngine:
         return "999:999"
 
     def capabilities(self) -> Capabilities:
-        """Both image formats, SQL expressions and the nested strategy."""
+        """Both image formats, SQL expressions, the nested strategy and accounts."""
         return Capabilities(
-            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL), expressions=True, nested=True
+            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
+            expressions=True,
+            nested=True,
+            accounts=AccountNames(
+                max_bytes=63,
+                reserved=("public", "none", "current_user", "session_user", "current_role"),
+                reserved_prefixes=("pg_",),
+                keep_all=(SUPERUSER,),
+            ),
         )
 
     @contextmanager

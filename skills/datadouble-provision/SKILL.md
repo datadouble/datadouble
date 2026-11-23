@@ -34,6 +34,33 @@ that line (`mysql:8.4`), which opens every copy of it; Oracle copies need
 exactly the version on each copy (`datadouble.dev/server-version`). A Helm chart cannot read the
 labels of the volume its claim will bind, since it renders first.
 
+## Logging in to copies
+
+A volume copy (a directory, btrfs subvolume, Docker volume or Kubernetes
+PersistentVolume) is a data directory the consumer serves itself, usually
+with the engine's official image, which sets passwords only on a new data
+directory. Such a copy has only local accounts unless the spec's
+`package.accounts` gave its physical image some (see `datadouble-spec`). An
+instance copy (a server Datadouble runs on a Docker volume) gets a generated
+password, and has those accounts too.
+
+- Only physical images carry accounts, and a build that makes only logical
+  images refuses them. The accounts are fixed at build time: changing them
+  means a new build, not a new copy.
+- Their passwords may be plain text in the spec, since copies hold no
+  personal data, or references the build job resolves.
+- On PostgreSQL an instance copy's start sets its generated password on
+  `postgres`, so a declared `postgres` account's password holds on volume
+  copies only.
+- `read` accounts get `SELECT` on the data, plus what PostgreSQL's `PUBLIC`
+  allows. An `all` account on a copy others can reach can run commands in the
+  consumer's container (PostgreSQL's `COPY ... TO PROGRAM`), so say so when
+  someone exposes such a copy.
+- PostgreSQL copies trust local and loopback logins, as `initdb` set them up:
+  anything inside the consumer's container, a sidecar sharing its network, or
+  a `kubectl port-forward` logs in as `postgres` without a password. Say so
+  when someone plans to rely on the accounts' passwords for protection.
+
 ## How each system starts on-demand copies
 
 - GitHub Actions: when a pull request opens; `release` when it closes.
