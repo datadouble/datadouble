@@ -1,0 +1,43 @@
+CHANGELOG.md
+  s_ad63f2bf16b775::t_cd3e03e8a4f59f 190-193,195-197
+adapters/mssql/src/datadouble_mssql/working.py
+  s_ad63f2bf16b775::t_28374ea07a8944 32,252,277,355-369,372,374
+adapters/postgres/README.md
+  s_ad63f2bf16b775::t_0f29fba8e0afe7 163-164,173-177
+adapters/postgres/src/datadouble_postgres/introspect.py
+  s_ad63f2bf16b775::t_d38e0166eddc5d 25-26,246-252,262,267-268
+adapters/postgres/src/datadouble_postgres/working.py
+  s_ad63f2bf16b775::t_eb468f4e398dcb 41,58,325,327-342,354-357,360-362,364
+adapters/postgres/tests/test_postgres.py
+  s_ad63f2bf16b775::t_db2b911f333fd4 638-642,657-669,680,683,694-696,700,708-710,721-727,736-737,749,751-773
+core/src/datadouble/closure.py
+  s_ad63f2bf16b775::t_15732e57ae8f80 134-135,234-239,242,302-307,311-324,454-458,460-465,478,480,482-490,492-511,515-516,520-525,530-531,533-541,548,574-577,594
+core/src/datadouble/planner.py
+  s_ad63f2bf16b775::t_ddcd4d391d7a40 963-965
+core/src/datadouble/run.py
+  s_ad63f2bf16b775::t_2f5a199b454814 513-516
+core/tests/test_closure.py
+  s_ad63f2bf16b775::t_8143b181218f17 30,488-585
+docs/architecture.md
+  s_ad63f2bf16b775::t_830cff303d52e8 197-202,205-208,216-217,224-226,235-238
+docs/decisions.md
+  s_ad63f2bf16b775::t_7a1bf9172cb13d 139
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_0e359dd8a9a54c 157-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "281cb1c8388bd587769795c480585ba565d84a15",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
