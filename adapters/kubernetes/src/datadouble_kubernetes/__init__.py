@@ -11,7 +11,9 @@ when its claim is deleted the volume is released, and the copy is removed and
 the pool refilled.
 
 ``k8s-secret`` writes a Secret per copy with where it is and, for instance
-copies, its credentials. Both drive ``kubectl``.
+copies, its credentials, into ``namespace``; left out, the namespace
+``kubectl`` would use (:func:`current_namespace`), as for the ``kubernetes``
+runtime. Both drive ``kubectl``.
 
 Every Kubernetes adapter takes an optional ``kubeconfig``, a secret reference
 to a kubeconfig's content, and an optional ``context``. The kubeconfig is
@@ -47,9 +49,9 @@ from datadouble.files import copy_tree
 from datadouble.images import ImageSummary
 from datadouble.programs import Completed, locate, run_program, start_program
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
-from datadouble.secrets import resolve_secret
+from datadouble.secrets import SecretError, resolve_secret
 from datadouble.settings import parse_settings
-from datadouble.spec import SecretRef
+from datadouble.spec import EnvSecret, FileSecret, SecretRef
 
 if TYPE_CHECKING:
     import subprocess
@@ -208,6 +210,48 @@ class Kubectl:
         for value in self._secrets:
             text = text.replace(value, "[redacted]")
         return text
+
+
+SERVICE_ACCOUNT_NAMESPACE = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+"""The namespace of the pod a process runs in, as Kubernetes mounts it for its service account."""
+
+
+def _kubeconfig_source(kubectl: Kubectl) -> str:
+    """Which kubeconfig and context ``kubectl`` reads, for errors; never their content."""
+    kubeconfig = kubectl.kubeconfig
+    if isinstance(kubeconfig, EnvSecret):
+        source = f"the kubeconfig in {kubeconfig.env}"
+    elif isinstance(kubeconfig, FileSecret):
+        source = f"the kubeconfig at {kubeconfig.file}"
+    elif os.environ.get("KUBECONFIG"):
+        source = "the kubeconfig KUBECONFIG names"
+    else:
+        source = "the default kubeconfig"
+    context = f"context {kubectl.context}" if kubectl.context else "the current context"
+    return f"{context} of {source}"
+
+
+def current_namespace(kubectl: Kubectl) -> str:
+    """The namespace ``kubectl`` uses when told none.
+
+    Inside a cluster, with no kubeconfig (neither the settings' nor a non-empty
+    ``KUBECONFIG``), that is the namespace of the pod Datadouble runs in;
+    otherwise the namespace of the kubeconfig's context (the settings'
+    ``context``, or its current one), or ``default`` when it names none.
+    Raises :class:`KubectlError` when ``kubectl`` cannot be found or cannot
+    read that context, naming the kubeconfig and context.
+    """
+    in_cluster = kubectl.kubeconfig is None and not os.environ.get("KUBECONFIG")
+    if in_cluster and SERVICE_ACCOUNT_NAMESPACE.is_file():
+        return SERVICE_ACCOUNT_NAMESPACE.read_text(encoding="utf-8").strip()
+    done = kubectl.run(["config", "view", "--minify", "--output=jsonpath={..namespace}"])
+    if done.status != 0:
+        message = (
+            f"cannot read the namespace of {_kubeconfig_source(kubectl)}:"
+            f" kubectl config failed: {done.last_error()}"
+        )
+        raise KubectlError(message)
+    return done.stdout.strip() or "default"
 
 
 def _labels(values: Mapping[str, str]) -> dict[str, str]:
@@ -397,16 +441,28 @@ class PvReplicator:
 class SecretSettings(ClusterSettings):
     """Settings for the ``k8s-secret`` announce adapter."""
 
-    namespace: str = "default"
+    namespace: str | None = Field(default=None, min_length=1)
+    """Where Secrets are written; Datadouble's own namespace (or kubectl's) when left out."""
 
 
 class SecretAnnouncer:
     """A Secret per copy, named ``datadouble-<copy id>``."""
 
     def __init__(self, settings: SecretSettings) -> None:
-        """Write Secrets into ``settings.namespace``."""
+        """Write Secrets into ``settings.namespace``, or :func:`current_namespace`."""
         self.settings = settings
         self.kubectl = settings.kubectl()
+        self._namespace = settings.namespace
+
+    @property
+    def namespace(self) -> str:
+        """Where Secrets are written: the settings', or :func:`current_namespace`."""
+        if self._namespace is None:
+            try:
+                self._namespace = current_namespace(self.kubectl)
+            except KubectlError as error:
+                raise AnnounceError(str(error)) from None
+        return self._namespace
 
     def announce(self, copies: tuple[Announced, ...]) -> tuple[str, ...]:
         """Create or update one Secret per copy."""
@@ -421,7 +477,7 @@ class SecretAnnouncer:
                 "type": "Opaque",
                 "metadata": {
                     "name": f"datadouble-{copy.copy_id}",
-                    "namespace": self.settings.namespace,
+                    "namespace": self.namespace,
                     "labels": _labels({"copy": copy.copy_id, **copy.labels}),
                 },
                 "stringData": data,
@@ -429,28 +485,58 @@ class SecretAnnouncer:
             try:
                 self.kubectl(["apply", "--filename=-", "--output=name"], stdin=json.dumps(secret))
             except KubectlError as error:
-                raise AnnounceError(str(error)) from None
-            written.append(f"k8s-secret:{self.settings.namespace}/datadouble-{copy.copy_id}")
+                raise AnnounceError(str(error), written=tuple(written)) from None
+            written.append(f"k8s-secret:{self.namespace}/datadouble-{copy.copy_id}")
         return tuple(written)
 
-    def withdraw(self, copy_ids: tuple[str, ...], /) -> tuple[str, ...]:
-        """Delete the copies' Secrets."""
-        names = [f"datadouble-{copy_id}" for copy_id in copy_ids]
-        if not names:
-            return ()
-        try:
-            self.kubectl(
-                [
-                    "delete",
-                    "secret",
-                    *names,
-                    f"--namespace={self.settings.namespace}",
-                    "--ignore-not-found",
-                ]
-            )
-        except KubectlError as error:
-            raise AnnounceError(str(error)) from None
-        return tuple(f"k8s-secret:{self.settings.namespace}/{name}" for name in names)
+    def _places(
+        self, copy_ids: tuple[str, ...], announced: tuple[str, ...]
+    ) -> tuple[dict[str, list[str]], list[str]]:
+        """Each namespace's Secrets to delete, and copies whose namespace is unknown."""
+        recorded: dict[str, list[str]] = {}
+        for target in announced:
+            adapter, _, place = target.partition(":")
+            namespace, _, name = place.partition("/")
+            if adapter == "k8s-secret" and namespace and name:
+                recorded.setdefault(name, []).append(namespace)
+        places: dict[str, list[str]] = {}
+        unknown: list[str] = []
+        for copy_id in copy_ids:
+            name = f"datadouble-{copy_id}"
+            namespaces = recorded.get(name)
+            if not namespaces:
+                try:
+                    namespaces = [self.namespace]
+                except AnnounceError as error:
+                    unknown.append(f"{name} in an unknown namespace ({error})")
+                    continue
+            for namespace in namespaces:
+                places.setdefault(namespace, []).append(name)
+        return places, unknown
+
+    def withdraw(self, copy_ids: tuple[str, ...], announced: tuple[str, ...], /) -> tuple[str, ...]:
+        """Delete the copies' Secrets from the namespaces they were announced into.
+
+        A copy with no announcement recorded, such as one announced before the
+        registry kept them, is looked for in :attr:`namespace`. Every namespace is
+        tried; then one :class:`AnnounceError` names each Secret left behind.
+        """
+        places, failures = self._places(copy_ids, announced)
+        removed: list[str] = []
+        for namespace, names in places.items():
+            targets = [f"k8s-secret:{namespace}/{name}" for name in names]
+            try:
+                self.kubectl(
+                    ["delete", "secret", *names, f"--namespace={namespace}", "--ignore-not-found"]
+                )
+            except (KubectlError, SecretError) as error:
+                failures.append(f"{', '.join(targets)} ({error})")
+            else:
+                removed.extend(targets)
+        if failures:
+            message = "left behind: " + "; ".join(failures)
+            raise AnnounceError(message)
+        return tuple(removed)
 
 
 def pv_replicator(settings: Mapping[str, JsonValue]) -> Replicator:

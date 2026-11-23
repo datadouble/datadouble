@@ -24,7 +24,21 @@ where consumers learn about it. Only `dotenv`, `k8s-secret` and `vault`
 receive a copy's credentials.
 
 `k8s-pv` and `k8s-secret` reach the cluster the job runs in by its service
-account and need nothing more. For a cluster the job runs outside, add
+account and need nothing more. For jobs, leave `k8s-secret`'s `namespace`
+out: its Secrets then go to the namespace the job's pod runs in, so one spec
+serves both sides and the service account may already write there. Run from
+a laptop, the same spec writes them into the kubeconfig context's namespace
+(or `default` when it names none), so name a namespace when people claim
+from their own machines and consumers must find every Secret in one place,
+or to put the Secrets elsewhere, such as the consumers' namespace, and tell
+the person to grant the service account Secrets there. `release` deletes
+each Secret from the namespace it was written to, whatever its own
+resolves to, so every machine using the spec must reach the same cluster,
+and the releasing identity needs `delete` on Secrets in each namespace
+copies were announced into. If `release` fails naming announcements left
+behind, the copies are already gone: tell the person to delete those
+Secrets by hand, and fix the rights. If the spec's Secrets went to `default` before this default
+changed, keep `namespace: default` until those copies are released. For a cluster the job runs outside, add
 `kubeconfig: {env: NAME}` (and `context` if needed) to each: a secret
 reference to the kubeconfig's content, never the runner's own kubeconfig
 file, which the job's container cannot see. `{file: /path}` only fits a

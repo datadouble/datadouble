@@ -4,6 +4,7 @@
 """The Vault announce adapter: against a stand-in server, and a real OpenBao."""
 
 import datetime as dt
+import http.client
 import http.server
 import json
 import os
@@ -37,12 +38,14 @@ COPY = Announced(
 class _Recorder(http.server.BaseHTTPRequestHandler):
     calls: ClassVar[list[tuple[str, str, dict[str, str], bytes]]] = []
     status = 204
+    refused = ""
 
     def _record(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
         type(self).calls.append((self.command, self.path, dict(self.headers), body))
-        self.send_response(type(self).status)
+        refused = type(self).refused and self.path.endswith(type(self).refused)
+        self.send_response(403 if refused else type(self).status)
         self.end_headers()
 
     do_POST = _record  # noqa: N815 - http.server's naming
@@ -56,6 +59,7 @@ class _Recorder(http.server.BaseHTTPRequestHandler):
 def server() -> Generator[str]:
     _Recorder.calls = []
     _Recorder.status = 204
+    _Recorder.refused = ""
     httpd = http.server.HTTPServer(("127.0.0.1", 0), _Recorder)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -69,7 +73,7 @@ def test_announce_and_withdraw(server: str) -> None:
         {"VAULT_TOKEN": "t", "VAULT_NAMESPACE": "team"},
     )
     assert announcer.announce((COPY,)) == ("vault:kv/clones/shop/abc123",)
-    assert announcer.withdraw(("abc123",)) == ("vault:kv/clones/shop/abc123",)
+    assert announcer.withdraw(("abc123",), ()) == ("vault:kv/clones/shop/abc123",)
     (post, delete) = _Recorder.calls
     assert post[:2] == ("POST", "/v1/kv/data/clones/shop/abc123")
     assert post[2]["X-Vault-Token"] == "t"
@@ -94,11 +98,46 @@ def test_failures(server: str) -> None:
         announcer.announce((COPY,))
     unreachable = VaultAnnouncer(VaultSettings(address="http://127.0.0.1:9"), {"VAULT_TOKEN": "t"})
     with pytest.raises(AnnounceError, match="deleting abc123 failed"):
-        unreachable.withdraw(("abc123",))
+        unreachable.withdraw(("abc123",), ())
     with pytest.raises(AnnounceError, match="VAULT_TOKEN is not set"):
         VaultAnnouncer(VaultSettings(address=server), {})
     with pytest.raises(SettingsError, match="address"):
         vault_announcer({"address": "ftp://x"})
+
+
+def test_partial_failures(server: str) -> None:
+    announcer = VaultAnnouncer(VaultSettings(address=server), {"VAULT_TOKEN": "t"})
+    other = COPY.model_copy(update={"copy_id": "def456"})
+    _Recorder.refused = "/def456"
+    with pytest.raises(AnnounceError, match="writing def456 failed") as caught:
+        announcer.announce((COPY, other))
+    assert caught.value.written == ("vault:secret/datadouble/abc123",)
+    _Recorder.calls = []
+    with pytest.raises(AnnounceError) as failed:
+        announcer.withdraw(("def456", "abc123"), ())
+    assert str(failed.value) == (
+        "left behind: vault:secret/datadouble/def456 (deleting def456 failed: Vault answered 403)"
+    )
+    assert [call[0] for call in _Recorder.calls] == ["DELETE", "DELETE"]
+
+
+@pytest.mark.parametrize(
+    "failure", [TimeoutError("timed out"), http.client.RemoteDisconnected("closed"),
+                http.client.BadStatusLine("x")],
+)  # fmt: skip
+def test_connection_failures_are_announce_errors(
+    failure: Exception, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*_args: object, **_kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(urllib.request, "urlopen", broken)
+    announcer = VaultAnnouncer(VaultSettings(address="http://127.0.0.1:9"), {"VAULT_TOKEN": "t"})
+    name = type(failure).__name__
+    with pytest.raises(AnnounceError, match=f"deleting abc123 failed: {name}"):
+        announcer.withdraw(("abc123",), ())
+    with pytest.raises(AnnounceError, match=f"writing abc123 failed: {name}"):
+        announcer.announce((COPY,))
 
 
 def test_installed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,7 +161,7 @@ def test_against_openbao() -> None:
     with urllib.request.urlopen(request) as response:  # noqa: S310 - as above
         stored = json.loads(response.read())["data"]["data"]
     assert stored["password"] == COPY.secrets["password"]
-    announcer.withdraw((copy.copy_id,))
+    announcer.withdraw((copy.copy_id,), ())
     with pytest.raises(urllib.error.HTTPError) as caught:
         urllib.request.urlopen(request)  # noqa: S310 - as above
     assert caught.value.code == 404

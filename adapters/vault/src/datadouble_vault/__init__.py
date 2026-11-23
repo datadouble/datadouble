@@ -17,6 +17,7 @@ Releasing a copy deletes the secret and its history. The token comes from
 spec. Works with HashiCorp Vault and OpenBao.
 """
 
+import http.client
 import json
 import os
 import urllib.error
@@ -72,6 +73,9 @@ class VaultAnnouncer:
         except urllib.error.URLError as error:
             message = f"{action} failed: {error.reason}"
             raise AnnounceError(message) from None
+        except (OSError, http.client.HTTPException) as error:
+            message = f"{action} failed: {type(error).__name__}"
+            raise AnnounceError(message) from None
 
     def announce(self, copies: tuple[Announced, ...]) -> tuple[str, ...]:
         """Write one secret per copy."""
@@ -85,18 +89,35 @@ class VaultAnnouncer:
                 **copy.secrets,
             }
             url = self._url("data", copy.copy_id)
-            self._request(
-                "POST", url, json.dumps({"data": data}).encode(), f"writing {copy.copy_id}"
-            )
+            try:
+                self._request(
+                    "POST", url, json.dumps({"data": data}).encode(), f"writing {copy.copy_id}"
+                )
+            except AnnounceError as error:
+                raise AnnounceError(str(error), written=tuple(written)) from None
             written.append(f"vault:{self.settings.mount}/{self.settings.path}/{copy.copy_id}")
         return tuple(written)
 
-    def withdraw(self, copy_ids: tuple[str, ...], /) -> tuple[str, ...]:
-        """Delete each copy's secret and its versions."""
+    def withdraw(
+        self, copy_ids: tuple[str, ...], _announced: tuple[str, ...], /
+    ) -> tuple[str, ...]:
+        """Delete each copy's secret and its versions, trying every one.
+
+        Then one :class:`AnnounceError` names each secret left behind.
+        """
         removed: list[str] = []
+        failures: list[str] = []
         for copy_id in copy_ids:
-            self._request("DELETE", self._url("metadata", copy_id), None, f"deleting {copy_id}")
-            removed.append(f"vault:{self.settings.mount}/{self.settings.path}/{copy_id}")
+            target = f"vault:{self.settings.mount}/{self.settings.path}/{copy_id}"
+            try:
+                self._request("DELETE", self._url("metadata", copy_id), None, f"deleting {copy_id}")
+            except AnnounceError as error:
+                failures.append(f"{target} ({error})")
+            else:
+                removed.append(target)
+        if failures:
+            message = "left behind: " + "; ".join(failures)
+            raise AnnounceError(message)
         return tuple(removed)
 
 

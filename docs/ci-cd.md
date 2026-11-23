@@ -305,6 +305,21 @@ job outputs on most systems are not secret.
   replacement. Claimed copies belong to their consumer (for Kubernetes,
   a `Delete` reclaim policy removes the volume when the claim is deleted).
 - Incomplete copies are always removed.
+- Released copies' announcements are withdrawn where the registry says
+  they were made. It records the targets each `announce` entry reported for
+  a copy, and gives each entry back only its own, so a `k8s-secret` Secret
+  written from a laptop into its kubeconfig context's namespace is looked
+  for there by a sweep running in another namespace (decision 135). This
+  holds only if every process that announces or releases with the spec
+  reaches the same cluster through that entry, and if the releasing
+  identity may delete Secrets in every namespace a copy was announced into.
+  A copy with nothing recorded is looked for where the entry's settings
+  resolve now. Withdrawing tries every target of every entry, then fails
+  once, naming each announcement left behind, for a person to remove by
+  hand: the copies themselves are already gone. Entries are told apart by
+  adapter and position (`k8s-secret`, `k8s-secret#2`), so reordering or
+  removing entries of the same adapter while copies are live leaves their
+  announcements to remove by hand too.
 
 ### prune
 

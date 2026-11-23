@@ -450,6 +450,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read and write, are refused, naming `mode`. The channel files `fetch`
   writes into staging stay `0600`; the rest of staging follows the umask,
   as before.
+- **BREAKING: `k8s-secret` writes Secrets into Datadouble's own namespace
+  unless `namespace` is set**
+  ([#103](https://github.com/datadouble/datadouble/issues/103), decision
+  135). The old default of `default` is gone: left out, `namespace` resolves
+  as the `kubernetes` runtime's does, with the adapter's own `kubeconfig` and
+  `context`: in a cluster, the namespace of Datadouble's own pod; outside
+  one, the kubeconfig context's namespace, or `default`. `announce` reports
+  and `release` deletes Secrets in that namespace, so one spec serves both
+  sides, and the Secrets go where the Helm chart's Role and Jenkins
+  `instructions` already allow them. The copy registry now records, per
+  `announce` entry, where each copy was announced (including what an
+  adapter wrote before failing part way), and `release` withdraws each
+  Secret from the namespace it was written to, not the one the releasing
+  process resolves: every process using the spec must reach the same
+  cluster, and the releasing identity needs `delete` on Secrets in each of
+  those namespaces. Withdrawing now tries every target of every announce
+  entry, even when an entry cannot be made or fails with an `OSError`, then
+  fails once naming each announcement left behind, including any recorded
+  by an entry no longer in the spec, to remove by hand. An announcement
+  that succeeds but cannot be recorded fails, naming its targets.
+  A kubeconfig context `kubectl` cannot read now fails, for the runtime too,
+  instead of quietly resolving to `default`; an empty `KUBECONFIG` counts as
+  unset. Secrets announced into `default` under the old default were not
+  recorded, so later releases look for them in the newly resolved namespace
+  and leave them behind: keep `namespace: default` in the spec until those
+  copies are released, or delete the `datadouble-<copy id>` Secrets in
+  `default` by hand. Announce adapters' `withdraw` now takes the recorded
+  targets as a second argument.
 - **BREAKING: the `kubernetes` runtime's `namespace` is optional, and no
   longer defaults to `default`** (decision 133). Left out, engine pods start
   where `kubectl` would put them: in a cluster, the namespace of
