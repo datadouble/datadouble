@@ -209,15 +209,64 @@ def _extract_counts(result: RunResult) -> list[tuple[str, int]]:
     return sorted((str(count.table), count.rows) for count in extracted.counts)
 
 
-def wait_for_stage(root: Path, stage: str, process: subprocess.Popen[str]) -> Path:
-    """The generation under ``root`` that reaches ``stage`` while ``process`` runs."""
+class RunningProcess(Protocol):
+    """The part of a started program :func:`wait_for_stage` uses."""
+
+    @property
+    def returncode(self) -> int | None:
+        """The exit status, once the program has exited."""
+        ...
+
+    def poll(self) -> int | None:
+        """The exit status if the program has exited, else None."""
+        ...
+
+    def communicate(self, *, timeout: float | None = None) -> tuple[str | None, str | None]:
+        """The program's remaining output, once it has exited."""
+        ...
+
+
+_TAIL_LINES = 20
+
+
+def _reached(root: Path, stage: str) -> Path | None:
+    for generation in root.glob("*"):
+        if (generation / stage).exists():
+            return generation
+    return None
+
+
+def _output_tail(process: RunningProcess) -> str:
+    """The last lines of an exited program's standard output, if it can be read."""
+    try:
+        # A program it started may still hold the pipe open; don't wait on it.
+        output, _ = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        return "(its output could not be read)"
+    lines = (output or "").splitlines()[-_TAIL_LINES:]
+    return "\n".join(lines) if lines else "(no output)"
+
+
+def wait_for_stage(root: Path, stage: str, process: RunningProcess) -> Path:
+    """The generation under ``root`` that reaches ``stage`` while ``process`` runs.
+
+    The run may reach the stage and finish between two polls, so the stage is
+    looked for once more after the process exits.
+    """
     deadline = time.monotonic() + 900
     while time.monotonic() < deadline and process.poll() is None:
-        for generation in root.glob("*"):
-            if (generation / stage).exists():
-                return generation
+        if (generation := _reached(root, stage)) is not None:
+            return generation
         time.sleep(0.2)
-    message = f"the run never reached {stage}"
+    if (generation := _reached(root, stage)) is not None:
+        return generation
+    if process.returncode is None:
+        message = f"the run never reached {stage} and is still running"
+    else:
+        message = (
+            f"the run never reached {stage}; it exited with status {process.returncode},"
+            f" its output ending:\n{_output_tail(process)}"
+        )
     raise AssertionError(message)
 
 
