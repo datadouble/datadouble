@@ -153,7 +153,7 @@ services:
 
   # An S3-compatible object store (SeaweedFS) for the S3 storage adapter.
   s3:
-    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    image: chrislusf/seaweedfs:4.54@sha256:4b42c212543a0acd4c0e675215ecdcaf62a186ef98def76c7e12701871222d15
     command: ["server", "-s3", "-dir=/data", "-ip.bind=0.0.0.0"]
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/ || exit 1"]
@@ -164,7 +164,7 @@ services:
   # A Docker daemon for the Docker replicate adapter's tests, isolated from the
   # host's. It needs a privileged container.
   docker:
-    image: docker:29.9.3-dind@sha256:7bf70dcb85c822e3fa6f2d332143e474b99147b9d7b39102b0cfe8b04a7dd61b
+    image: docker:29.10.0-dind@sha256:4bbc7223f81db790097c6dea42fb93e05b8fead4f0431fbe6ccaba6e8473201c
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
@@ -183,7 +183,7 @@ services:
   # OpenBao (API-compatible with HashiCorp Vault) in dev mode, for the vault
   # announce adapter. Dev mode keeps everything in memory, with a fixed token.
   vault:
-    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    image: openbao/openbao:2.7.3@sha256:ba4b133eb9586630024e71a617e66f37f29cc3534cdd46a6233e098ceded8dc9
     command: ["server", "-dev", "-dev-root-token-id=datadouble-test", "-dev-listen-address=0.0.0.0:8200"]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
