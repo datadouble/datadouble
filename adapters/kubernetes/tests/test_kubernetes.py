@@ -136,6 +136,13 @@ def test_local_volumes(tmp_path: Path, cluster: Path) -> None:
     metadata = volume["metadata"]
     assert isinstance(metadata, dict)
     assert metadata["labels"]["datadouble.dev/engine-version"] == "18"
+    assert "datadouble.dev/server-version" not in metadata["labels"]
+    # A summary naming the exact server labels the volume with it too.
+    exact_summary = SUMMARY.model_copy(update={"server_version": "18.3"})
+    replicator.create("def", image(tmp_path / "second"), exact_summary)
+    exact = objects(cluster)["PersistentVolume/datadouble-def"]["metadata"]
+    assert isinstance(exact, dict)
+    assert exact["labels"]["datadouble.dev/server-version"] == "18.3"
     copy = record("abc")
     assert replicator.claim_state(copy) is ClaimState.FREE
     set_phase(cluster, "datadouble-abc", "Bound")

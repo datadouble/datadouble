@@ -172,6 +172,7 @@ def test_engine(tmp_path: Path) -> None:
         False,
         True,
     )
+    assert capabilities.version_line == 2  # 7.0 and 8.0 are separate lines
     (tmp_path / "database.json").write_text(
         DatabaseInfo(database="cinema", server_version="9.0.8").model_dump_json(), "utf-8"
     )

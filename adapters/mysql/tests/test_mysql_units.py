@@ -177,6 +177,7 @@ def test_engine(tmp_path: Path) -> None:
     assert isinstance(engine, MysqlEngine)
     capabilities = engine.capabilities()
     assert (capabilities.nested, capabilities.hooks, capabilities.expressions) == (True, True, True)
+    assert capabilities.version_line == 2  # 8.0 and 8.4 are separate lines
     (tmp_path / "database.json").write_text(
         DatabaseInfo(database="shop", server_version="8.4.13").model_dump_json(), "utf-8"
     )

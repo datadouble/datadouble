@@ -121,7 +121,7 @@ Where `fetch` reads images from and keeps them.
 | `channel` | string | `"latest"` |  |
 | `staging_channel` | string | `"active"` |  |
 | `format` | [ImageFormat](#imageformat) | `"physical"` |  |
-| `engine_version` | string |  | Which engine version's images to fetch; the newest when omitted. |
+| `engine_version` | string |  | Which compatibility line's images to fetch, such as `8.4` (not `8.4.13`); the newest line when omitted. |
 | `keep` | integer | `3` | How many generations staging keeps, for `activate` to roll back to. |
 
 ### FileSecret

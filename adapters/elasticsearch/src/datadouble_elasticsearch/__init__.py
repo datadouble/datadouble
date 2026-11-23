@@ -78,6 +78,8 @@ class ElasticEngine:
             expressions=True,
             nested=False,
             hooks=False,
+            # A snapshot from 8.15 cannot be restored on 8.12: each minor is a line.
+            version_line=2,
         )
 
     @contextmanager

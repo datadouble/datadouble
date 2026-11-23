@@ -71,6 +71,7 @@ class MongoEngine:
             expressions=True,
             nested=False,
             hooks=False,
+            version_line=2,  # 7.0 and 8.0 are separate feature compatibility versions
         )
 
     @contextmanager

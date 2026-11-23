@@ -23,6 +23,17 @@ Docker volume or container, a Kubernetes PersistentVolume), and `announce`
 where consumers learn about it. Only `dotenv`, `k8s-secret` and `vault`
 receive a copy's credentials.
 
+## Engine versions and copies
+
+Images are filed by the engine's compatibility line, not its exact version:
+`17` for PostgreSQL, `8.4` for MySQL (8.0 and 8.4 are separate lines). A
+build follows the source's exact version on its own, so a patch upgrade on the
+source needs no spec change. Tell the person that consumers should select
+copies by line (`datadouble.dev/engine-version`) and run the newest release of
+that line (`mysql:8.4`), which opens every copy of it; Oracle copies need
+exactly the version on each copy (`datadouble.dev/server-version`). A Helm chart cannot read the
+labels of the volume its claim will bind, since it renders first.
+
 ## How each system starts on-demand copies
 
 - GitHub Actions: when a pull request opens; `release` when it closes.

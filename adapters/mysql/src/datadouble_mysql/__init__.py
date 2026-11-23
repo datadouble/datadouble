@@ -82,8 +82,12 @@ class MysqlEngine:
 
     def capabilities(self) -> Capabilities:
         """Both image formats, SQL expressions, the nested strategy and hooks."""
+        # Minor releases (8.0, 8.4) change the data directory; 8.0 cannot open 8.4's.
         return Capabilities(
-            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL), expressions=True, nested=True
+            formats=(ImageFormat.PHYSICAL, ImageFormat.LOGICAL),
+            expressions=True,
+            nested=True,
+            version_line=2,
         )
 
     @contextmanager

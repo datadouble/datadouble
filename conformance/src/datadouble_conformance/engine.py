@@ -386,6 +386,9 @@ class EngineConformance:
             formats = harness.engine.capabilities().formats
             assert {a.format for a in summary.archives} == set(formats)
             assert summary.verification.passed
+            # The summary names the exact version, and the identity its line.
+            assert summary.server_version is not None
+            assert summary.server_version.startswith(summary.identity.engine_version)
         # Each archive's size, packed and unpacked, where CI keeps its reports.
         reports = Path(os.environ.get("DATADOUBLE_TEST_REPORTS", str(tmp_path)))
         (reports / f"image-sizes.{harness.engine.name}.json").write_text(

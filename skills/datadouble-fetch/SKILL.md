@@ -28,3 +28,9 @@ image summary, and downloads only when there is something newer. A pool's
 
 Tell the person which variables to define as secrets on this side only; they
 must never be the source's or the production stores' credentials (rule 5).
+
+## Engine versions
+
+`fetch` takes the newest compatibility line in the export store unless
+`fetch.engine_version` names one (`8.4`, not `8.4.13`). When the source moves
+to a new line, say so: consumers serving copies need a server of that line.

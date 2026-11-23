@@ -429,7 +429,8 @@ class Fetch(_Model):
     staging_channel: str = "active"
     format: ImageFormat = ImageFormat.PHYSICAL
     engine_version: str | None = None
-    """Which engine version's images to fetch; the newest when omitted."""
+    """Which compatibility line's images to fetch, such as ``8.4`` (not ``8.4.13``);
+    the newest line when omitted."""
     keep: int = Field(default=3, ge=1)
     """How many generations staging keeps, for ``activate`` to roll back to."""
 

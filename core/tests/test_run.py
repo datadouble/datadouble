@@ -171,6 +171,7 @@ def test_a_whole_build(tmp_path: Path, registry: Registry, engine: FakeEngine) -
     }
     (summary,) = result.images
     assert summary.identity.engine_version == "1"
+    assert summary.server_version == "1.0"
     assert summary.verification.passed
     assert [a.format for a in summary.archives] == [ImageFormat.PHYSICAL, ImageFormat.LOGICAL]
     store = FilesystemStore(tmp_path / "store")
@@ -626,3 +627,25 @@ def test_a_resumed_build_checks_the_image_too(
             resume=extracted.generation,
             lock=engine.catalog,
         )
+
+
+def test_engines_name_their_compatibility_line(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"version_line": 2})
+    result = run(tmp_path, registry)
+    summary = next(s for s in result.images if s.identity.group == "all")
+    assert summary.identity.engine_version == "1.0"
+    assert summary.identity.prefix() == "shop/all/fake-1.0"
+
+
+def test_a_resumed_build_packages_again_for_a_new_line(
+    tmp_path: Path, registry: Registry, engine: FakeEngine
+) -> None:
+    first = run(tmp_path, registry)
+    engine.capabilities_ = engine.capabilities_.model_copy(update={"version_line": 2})
+    resumed = run(tmp_path, registry, resume=Generation(first.generation))
+    assert statuses(resumed)["package/all"] == "ran"
+    assert statuses(resumed)["transform/all"] == "reused"
+    summary = next(s for s in resumed.images if s.identity.group == "all")
+    assert summary.identity.engine_version == "1.0"

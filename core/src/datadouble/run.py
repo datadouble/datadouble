@@ -57,6 +57,7 @@ from datadouble.images import (
     new_generation,
     pack,
     unpack,
+    version_line,
 )
 from datadouble.names import EngineName, Generation, GroupName, TableName
 from datadouble.planner import Plan, PlannedGroup, PlannedPaths, PlannedRule, PlanOptions, plan
@@ -592,11 +593,14 @@ class Run:
     ) -> None:
         """Package every requested format of the group's image."""
         version = working.server_version()
-        identity = self.identity(group, version.split(".")[0])
+        identity = self.identity(
+            group, version_line(version, self.engine.capabilities().version_line)
+        )
         inputs = {
             "transform": fingerprint(self.required(Stage.TRANSFORM, group.name)),
             "formats": planned.formats,
             "version": version,
+            "line": identity.engine_version,
         }
 
         def work(directory: Path) -> dict[str, JsonValue]:
@@ -639,6 +643,7 @@ class Run:
                 "identity": _JSON.validate_python(identity.model_dump(mode="json")),
                 "archives": archives,
                 "manifest_sha256": hashlib.sha256(manifest).hexdigest(),
+                "server_version": version,
             }
 
         self._stage(Stage.PACKAGE, group.name, inputs, work)
@@ -689,6 +694,7 @@ class Run:
             archives=_load(tuple[ImageArchive, ...], packaged.outputs["archives"]),
             manifest_sha256=str(packaged.outputs["manifest_sha256"]),
             strict=StrictLevel.OFF if planned.strict is None else planned.strict.level,
+            server_version=str(packaged.outputs["server_version"]),
             verification=Verification(
                 passed=report.passed(),
                 checks=len(checks),

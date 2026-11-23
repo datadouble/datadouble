@@ -190,6 +190,7 @@ def test_names_settings_and_servers() -> None:
     engine = RedisEngine()
     assert (engine.name, engine.owner) == ("redis", "999:999")
     assert engine.capabilities().nested is False
+    assert engine.capabilities().version_line == 2  # each minor writes its own RDB version
 
 
 @dataclass

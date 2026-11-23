@@ -11,8 +11,8 @@ export stores in production, staging outside it.
 ## Retention
 
 The spec's `prune` section: keep the last generations and anything younger
-than a number of days, and, by engine version, the most recent versions'
-images only. An image a channel points to is never removed.
+than a number of days, and, by compatibility line (`8.4` for MySQL, `17` for
+PostgreSQL), the most recent lines' images only. An image a channel points to is never removed.
 
 ## See before it removes
 

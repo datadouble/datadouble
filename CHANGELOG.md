@@ -245,6 +245,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Specs whose subsets leave tables unreached on purpose need
   `unselected: none`. Jailer subsets keep Jailer's own behaviour, as if they
   said `unselected: none`, and `import-jailer` writes that setting.
+- **BREAKING: images are filed by the engine's compatibility line**
+  ([#74](https://github.com/datadouble/datadouble/issues/74)). The image
+  identity, store path and copies' `engine-version` label carried the version's
+  first number, so MySQL 8.0 and 8.4 images shared the line `8` though 8.0
+  cannot open what 8.4 wrote. MySQL, MongoDB, Redis, Elasticsearch and
+  OpenSearch lines now have two numbers (`mysql-8.4`); other engines' lines are
+  unchanged. Images in existing stores keep their old line until pruned, and
+  newer lines sort after them. `fetch.engine_version` names a line: change an
+  existing `"8"` to `"8.4"`, or fetch keeps serving the old line. The image
+  summary now records the exact server version, and `k8s-pv` copies carry it
+  as `datadouble.dev/server-version`. Images signed before this change no
+  longer verify, since their summaries lack the field: rebuild them.
 - Redis working servers and copies did not load the image's bundled
   modules, so a source with JSON, search, time series or Bloom keys could
   not load. They now load every module in the image's module directory, and
