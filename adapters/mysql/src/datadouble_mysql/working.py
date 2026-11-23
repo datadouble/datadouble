@@ -182,6 +182,7 @@ _DROPPED = {
     ObjectKind.EVENT: "EVENT",
     ObjectKind.VIEW: "VIEW",
 }
+"""How to drop each kind of object the catalog lists (``introspect``)."""
 
 
 def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup) -> None:
@@ -189,15 +190,15 @@ def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup) -> No
     wanted = frozenset(group.objects)
     found = [item.ref for item in plan.catalog.objects if item.ref not in wanted]
     for ref in reversed(ordered(found, plan.catalog.objects)):
-        kind = _DROPPED.get(ref.kind)
-        if kind is not None:
-            _execute(
-                connection,
-                f"dropping {ref}",
-                compose(
-                    "DROP {} IF EXISTS {}", kind, qualified(TableName.of(*ref.namespace, ref.name))
-                ),
-            )
+        _execute(
+            connection,
+            f"dropping {ref}",
+            compose(
+                "DROP {} IF EXISTS {}",
+                _DROPPED[ref.kind],
+                qualified(TableName.of(*ref.namespace, ref.name)),
+            ),
+        )
 
 
 def _listed(values: tuple[str, ...]) -> str:

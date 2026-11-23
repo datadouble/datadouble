@@ -19,8 +19,8 @@ constraint or the table), and the alias types of their columns.
 """
 
 from collections import defaultdict
-
-from pymssql import Cursor
+from collections.abc import Sequence
+from typing import Protocol
 
 from datadouble.catalog import (
     Dependency,
@@ -31,6 +31,19 @@ from datadouble.catalog import (
 )
 from datadouble.names import TableName
 from datadouble.objects import merge
+
+
+class Cursor(Protocol):
+    """What reading the objects needs of a cursor."""
+
+    def execute(self, operation: str, /) -> object:
+        """Run a query."""
+        ...
+
+    def fetchall(self) -> Sequence[tuple[object, ...]]:
+        """The query's rows."""
+        ...
+
 
 _TABLE_IDS = """
 SELECT t.object_id, s.name, t.name

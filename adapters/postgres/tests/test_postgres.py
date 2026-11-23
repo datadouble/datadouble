@@ -17,7 +17,14 @@ import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from datadouble.catalog import CatalogLock, ColumnKind
+from datadouble.catalog import (
+    CatalogLock,
+    ColumnKind,
+    ObjectKind,
+    ObjectRef,
+    SourceObject,
+    definition_fingerprint,
+)
 from datadouble.engine import (
     Account,
     Accounts,
@@ -27,8 +34,8 @@ from datadouble.engine import (
     WorkingDatabases,
 )
 from datadouble.images import unpack
-from datadouble.names import ColumnName, ColumnRef, Generation, TableName
-from datadouble.planner import Plan, PlanError, PlannedRule, PlanOptions
+from datadouble.names import ColumnName, ColumnRef, Generation, GroupName, TableName
+from datadouble.planner import Plan, PlanError, PlannedGroup, PlannedRule, PlanOptions
 from datadouble.registry import Registry, installed
 from datadouble.run import Run, RunOptions, RunResult, Stage
 from datadouble.runtime import Container, Server
@@ -652,6 +659,29 @@ def test_listing_databases_fails_on_a_closed_connection(source: PostgresScratch)
             list_databases(session.connection)
 
 
+def test_dropping_an_object_fails_on_a_closed_connection(source: PostgresScratch) -> None:
+    unused = ObjectRef(
+        kind=ObjectKind.FUNCTION,
+        namespace=(source.database, "public"),
+        name="unused",
+        signature="()",
+    )
+    objects = (SourceObject(ref=unused, fingerprint=definition_fingerprint("RETURN 1")),)
+    group = PlannedGroup(
+        name=GroupName("billing"),
+        tables=(),
+        requires=(),
+        omitted_references=(),
+        fixups=(),
+        standalone=True,
+    )
+    with PostgresEngine().connect(source.connection) as session:
+        assert isinstance(session, PostgresSession)
+        session.connection.close()
+        with pytest.raises(EngineError, match=r"dropping function .*\.public\.unused\(\) failed"):
+            postgres_working.drop_outside(session.connection, objects, group, source.database)
+
+
 # A slice of one schema: billing's invoices refer to shop's customers, a
 # trigger on them calls a function in audit, and applications call a public
 # function. A standalone billing image pulls all of that in, and nothing else.
@@ -700,6 +730,17 @@ BEGIN
 END $$;
 CREATE TRIGGER recent_write INSTEAD OF INSERT ON shop.recent
     FOR EACH ROW EXECUTE FUNCTION shop.recent_insert();
+-- Nothing reaches a domain, an enum, or a view and its INSTEAD OF trigger,
+-- so the standalone image drops them, the trigger before its view.
+CREATE DOMAIN public.positive AS integer CHECK (VALUE > 0);
+CREATE TYPE public.mood AS ENUM ('calm', 'cross');
+CREATE VIEW public.stale AS SELECT 1 AS id;
+CREATE FUNCTION public.stale_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN NULL;
+END $$;
+CREATE TRIGGER stale_write INSTEAD OF INSERT ON public.stale
+    FOR EACH ROW EXECUTE FUNCTION public.stale_insert();
 INSERT INTO billing.teams VALUES (1), (2);
 INSERT INTO billing.clerks VALUES (1, 1), (2, 2);
 INSERT INTO shop.customers VALUES
@@ -747,6 +788,9 @@ SLICE_CHECKS = {
     "SELECT 1 FROM shop.blocked": 0,
     "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'invoices_audit'": 1,
     "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'emails'": 1,
+    "SELECT 1 FROM pg_catalog.pg_type WHERE typname IN ('positive', 'mood')": 0,
+    "SELECT 1 FROM pg_catalog.pg_views WHERE viewname = 'stale'": 0,
+    "SELECT 1 FROM pg_catalog.pg_trigger WHERE tgname = 'stale_write'": 0,
     "SELECT 1 WHERE public.greet('x') <> 'hello x'": 0,
     "SELECT 1 FROM pg_catalog.pg_constraint WHERE contype = 'f'": 3,
 }

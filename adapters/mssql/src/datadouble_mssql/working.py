@@ -23,13 +23,15 @@ import datetime as dt
 import shutil
 from collections.abc import Generator, Iterable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import pymssql
 from pydantic import BaseModel, ConfigDict
 from pymssql import Connection
 
-from datadouble.catalog import Column, ColumnKind, ObjectKind, Requirement
+from datadouble.catalog import Column, ColumnKind, ObjectKind, Requirement, SourceObject
 from datadouble.engine import (
     EngineError,
     RestoredImage,
@@ -245,21 +247,12 @@ def _copy_tree(source: Path, destination: Path) -> None:
 class _Builder:
     """Creates a database's objects from a schema, phase by phase."""
 
-    def __init__(
-        self,
-        connection: Connection,
-        schema: Schema,
-        outside: frozenset[tuple[Phase, str]] = frozenset(),
-        rowless: frozenset[TableName] = frozenset(),
-    ) -> None:
+    def __init__(self, connection: Connection, schema: Schema, left_out: "LeftOut") -> None:
         self.connection = connection
         self.schema = schema
         self.present: set[str] = set()
         self._users: dict[str, str] = {}
-        self.outside = outside
-        """Objects a standalone group's closure lacks, which its database leaves out."""
-        self.rowless = frozenset(str(table) for table in rowless)
-        """Pulled-in tables without rows, which foreign keys may not point at."""
+        self.left_out = left_out
 
     def run(self, phase: Phase, tables: frozenset[TableName] | None = None) -> None:
         """Run a phase's statements whose table and needs exist.
@@ -268,27 +261,10 @@ class _Builder:
         must have been created already.
         """
         for statement in self.schema.phase(phase):
-            if not self._wanted(statement, tables):
+            if not self.left_out.wanted(statement, tables, self.present):
                 continue
             self._create(statement)
             self.present.add(statement.name)
-
-    def _wanted(self, statement: Statement, tables: frozenset[TableName] | None) -> bool:
-        if (statement.phase, statement.name) in self.outside:
-            return False
-        if (
-            statement.phase is Phase.FOREIGN_KEY
-            and set(statement.needs) & self.rowless
-            and str(statement.table) not in self.rowless
-        ):
-            return False
-        if statement.table is not None:
-            if tables is not None and statement.table not in tables:
-                return False
-            name = str(statement.table)
-            if tables is None and name not in self.present:
-                return False
-        return all(need in self.present for need in statement.needs)
 
     def _create(self, statement: Statement) -> None:
         settings = compose(
@@ -362,20 +338,63 @@ _PHASES: dict[ObjectKind, Phase] = {
 """The phase whose statements create each kind of object; types are not scripted."""
 
 
-def _outside(plan: Plan, group: PlannedGroup) -> frozenset[tuple[Phase, str]]:
-    """The objects a standalone group's closure lacks, by phase and the name statements use.
+@dataclass(frozen=True)
+class LeftOut:
+    """What a group's database leaves out of its schema.
+
+    Only a standalone group's leaves anything out besides what needs a
+    table it does not have.
+    """
+
+    objects: frozenset[tuple[Phase, str]] = frozenset()
+    """The objects its closure lacks, by phase and the name statements use.
 
     The phase keeps an object from standing for a table or schema of its name.
     """
-    wanted = frozenset(group.objects)
-    return frozenset(
-        (_PHASES[item.ref.kind], object_name(item.ref.namespace[-1], item.ref.name))
-        for item in plan.catalog.objects
-        if item.ref not in wanted and item.ref.kind in _PHASES
-    )
+    rowless: frozenset[str] = frozenset()
+    """Pulled-in tables without rows, which foreign keys may not point at."""
+
+    @classmethod
+    def of(cls, objects: Iterable[SourceObject], group: PlannedGroup) -> Self:
+        """What ``group``'s database leaves out of the catalog's ``objects``."""
+        if not group.standalone:
+            return cls()
+        wanted = frozenset(group.objects)
+        return cls(
+            frozenset(
+                (_PHASES[item.ref.kind], object_name(item.ref.namespace[-1], item.ref.name))
+                for item in objects
+                if item.ref not in wanted and item.ref.kind in _PHASES
+            ),
+            frozenset(str(table) for table in group.rowless()),
+        )
+
+    def wanted(
+        self, statement: Statement, tables: frozenset[TableName] | None, present: set[str]
+    ) -> bool:
+        """Whether to run ``statement``, given the names already ``present``.
+
+        With ``tables``, a statement's table must be one of them; without, it
+        must be present already. What the statement needs must be present too.
+        """
+        if (statement.phase, statement.name) in self.objects:
+            return False
+        if (
+            statement.phase is Phase.FOREIGN_KEY
+            and set(statement.needs) & self.rowless
+            and str(statement.table) not in self.rowless
+        ):
+            return False
+        if statement.table is not None:
+            if tables is not None and statement.table not in tables:
+                return False
+            name = str(statement.table)
+            if tables is None and name not in present:
+                return False
+        return all(need in present for need in statement.needs)
 
 
-def _sources(
+def group_sources(
     group: PlannedGroup, index: ExtractIndex, extract: Path
 ) -> Iterator[tuple[Path, ExtractedTable]]:
     """Each table whose rows the group's database holds, and the folder its file is in.
@@ -618,14 +637,9 @@ class MssqlWorking:
                 _configure(connection, index.database, schema)
                 for hook in hooks:
                     _execute(connection, "a before_load hook", hook.sql)
-                builder = _Builder(
-                    connection,
-                    schema,
-                    _outside(plan, group) if group.standalone else frozenset(),
-                    group.rowless(),
-                )
+                builder = _Builder(connection, schema, LeftOut.of(plan.catalog.objects, group))
                 builder.tables(members)
-                for folder, table in _sources(group, index, extract):
+                for folder, table in group_sources(group, index, extract):
                     _bulk_load(connection, folder, table, directory)
                 as_of = as_of_value(plan.as_of)
                 for fixup in group.fixups:
@@ -830,7 +844,7 @@ class MssqlWorking:
         server.create(info.database, schema.collation)
         with server.connect(info.database) as connection:
             _configure(connection, info.database, schema)
-            builder = _Builder(connection, schema)
+            builder = _Builder(connection, schema, LeftOut())
             builder.tables(frozenset(t.table for t in index.tables))
             for table in index.tables:
                 _bulk_load(connection, image, table, scratch)

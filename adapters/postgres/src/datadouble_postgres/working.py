@@ -39,6 +39,7 @@ from datadouble.catalog import (
     ObjectRef,
     Requirement,
     RequirementKind,
+    SourceObject,
 )
 from datadouble.closure import ordered
 from datadouble.engine import (
@@ -306,14 +307,19 @@ def _sources(
             yield extract, table
 
 
-def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup, database: str) -> None:
-    """Drop the database's objects the group's closure lacks, dependents first."""
+def drop_outside(
+    connection: Connection,
+    objects: tuple[SourceObject, ...],
+    group: PlannedGroup,
+    database: str,
+) -> None:
+    """Drop the database's ``objects`` the group's closure lacks, dependents first."""
     wanted = frozenset(group.objects)
     members = frozenset(group.packaged())
     # What needs a table the database lacks went with it.
     found = [
         item.ref
-        for item in plan.catalog.objects
+        for item in objects
         if item.ref.namespace[0] == database
         and item.ref not in wanted
         and all(
@@ -322,10 +328,9 @@ def _drop_outside(connection: Connection, plan: Plan, group: PlannedGroup, datab
             if edge.table is not None and not edge.inferred
         )
     ]
-    for ref in reversed(ordered(found, plan.catalog.objects)):
+    for ref in reversed(ordered(found, objects)):
         try:
-            statement = _drop(connection, ref)
-            if statement is not None:
+            for statement in _drop(connection, ref):
                 connection.execute(statement)
         except psycopg.errors.DependentObjectsStillExist as error:
             # Aggregates, operators, casts and the like are not in the catalog,
@@ -361,19 +366,20 @@ WHERE NOT t.tgisinternal AND n.nspname = %s AND c.relname || '.' || t.tgname = %
 """The table or view a trigger is on, found by the name the catalog gives it."""
 
 
-def _drop(connection: Connection, ref: ObjectRef) -> sql.Composed | None:
-    """The statement that drops ``ref``, refusing if anything depends on it; None if gone."""
+def _drop(connection: Connection, ref: ObjectRef) -> tuple[sql.Composed, ...]:
+    """The statements that drop ``ref``, refusing if anything depends on it; none if it is gone."""
     schema = ref.namespace[-1]
     name = sql.Identifier(schema, ref.name)
     if ref.kind is ObjectKind.TRIGGER:
         # A trigger's catalog name is its table's or view's and its own, joined
         # with a dot; either may hold dots, so the database says which is which.
-        found = connection.execute(_TRIGGER_RELATION, [schema, ref.name]).fetchone()
-        if found is None:
-            return None  # It went with its table or view.
-        relation, trigger = (str(part) for part in found)
-        return sql.SQL("DROP TRIGGER {} ON {}").format(
-            sql.Identifier(trigger), sql.Identifier(schema, relation)
+        # Nothing is found if the trigger went with its table or view.
+        relations = connection.execute(_TRIGGER_RELATION, [schema, ref.name]).fetchall()
+        return tuple(
+            sql.SQL("DROP TRIGGER {} ON {}").format(
+                sql.Identifier(str(trigger)), sql.Identifier(schema, str(relation))
+            )
+            for relation, trigger in relations
         )
     if ref.kind is ObjectKind.TYPE:
         found = connection.execute(
@@ -383,10 +389,10 @@ def _drop(connection: Connection, ref: ObjectRef) -> sql.Composed | None:
             [schema, ref.name],
         ).fetchone()
         kind = sql.SQL("DOMAIN") if found and found[0] == "d" else sql.SQL("TYPE")
-        return sql.SQL("DROP {} IF EXISTS {}").format(kind, name)
+        return (sql.SQL("DROP {} IF EXISTS {}").format(kind, name),)
     # The signature is the catalog's own spelling of the argument types.
     arguments = trusted(ref.signature) if ref.signature else sql.SQL("")
-    return sql.SQL("DROP {} IF EXISTS {}{}").format(_DROPPED[ref.kind], name, arguments)
+    return (sql.SQL("DROP {} IF EXISTS {}{}").format(_DROPPED[ref.kind], name, arguments),)
 
 
 @dataclass(frozen=True, slots=True)
@@ -526,7 +532,7 @@ class PostgresWorking:
                         sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(_qualified(table.table)),
                     )
             if group.standalone:
-                _drop_outside(connection, plan, group, name)
+                drop_outside(connection, plan.catalog.objects, group, name)
 
     def _extensions(
         self, cluster: Cluster, database: ExtractedDatabase, plan: Plan, dump: Path, listing: str

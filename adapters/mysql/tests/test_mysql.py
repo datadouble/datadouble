@@ -704,12 +704,16 @@ def test_listing_databases_fails_on_a_closed_connection(source: MysqlScratch) ->
 # A slice of one database: the second's orders refer to the first's
 # customers, a trigger on them calls a function in the third, and
 # applications call a function in the first. A standalone image of the
-# second pulls all of that in, and nothing else.
+# second pulls all of that in, and nothing else. Taken without rows, the
+# customers keep their own foreign key, but the orders lose theirs.
 SLICE_SCHEMA = [
     "CREATE DATABASE PREFIX_a",
     "CREATE DATABASE PREFIX_b",
     "CREATE DATABASE PREFIX_c",
-    "CREATE TABLE PREFIX_a.customers (id INT PRIMARY KEY, email VARCHAR(80) NOT NULL)",
+    """CREATE TABLE PREFIX_a.customers (
+        id INT PRIMARY KEY, email VARCHAR(80) NOT NULL, referrer_id INT,
+        CONSTRAINT fk_slice_referrer FOREIGN KEY (referrer_id) REFERENCES PREFIX_a.customers (id)
+    )""",
     "CREATE TABLE PREFIX_a.visits (id INT PRIMARY KEY, at DATE)",
     """CREATE TABLE PREFIX_b.orders (
         id INT PRIMARY KEY, customer_id INT NOT NULL, status VARCHAR(10),
@@ -723,7 +727,10 @@ SLICE_SCHEMA = [
         " RETURN CONCAT('hello ', n)"
     ),
     "CREATE FUNCTION PREFIX_a.unused() RETURNS INT DETERMINISTIC NO SQL RETURN 1",
-    "INSERT INTO PREFIX_a.customers VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x')",
+    (
+        "INSERT INTO PREFIX_a.customers (id, email)"
+        " VALUES (1, 'ann@shop.test'), (2, 'bo@shop.test'), (3, 'cy@x')"
+    ),
     "INSERT INTO PREFIX_a.visits VALUES (1, '2026-01-01')",
     "INSERT INTO PREFIX_b.orders VALUES (10, 1, 'new'), (11, 2, 'new')",
 ]
@@ -766,15 +773,24 @@ SLICE_CHECKS = {
     "SELECT 1 FROM DUAL WHERE PREFIX_a.greet('x') <> 'hello x'": 0,
     "SELECT 1 FROM DUAL WHERE PREFIX_c.fresh() <> 'fresh'": 0,
     "SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS"
-    " WHERE CONSTRAINT_SCHEMA = 'PREFIX_b'": 1,
+    " WHERE CONSTRAINT_SCHEMA = 'PREFIX_a'": 1,
     "SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA LIKE 'PREFIX%'": 2,
 }
+
+ORDERS_REFERENCES = (
+    "SELECT 1 FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = 'PREFIX_b'"
+)
+"""The orders' foreign key, which customers without rows leave out."""
 
 
 @pytest.mark.parametrize(
     ("rows", "customers"),
-    [("", 2), ("\n    rows:\n      customers: all", 3)],
-    ids=["referenced", "all"],
+    [
+        ("", 2),
+        ("\n    rows:\n      customers: all", 3),
+        ("\n    rows:\n      customers: none", 0),
+    ],
+    ids=["referenced", "all", "none"],
 )
 def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, customers: int) -> None:
     prefix = f"dd_slice_{uuid.uuid4().hex[:8]}"
@@ -809,6 +825,8 @@ def test_a_standalone_slice_holds_its_closure(tmp_path: Path, rows: str, custome
                 }
                 for query, expected in SLICE_CHECKS.items():
                     assert found.failing_rows(query.replace("PREFIX", prefix)) == expected, query
+                references = found.failing_rows(ORDERS_REFERENCES.replace("PREFIX", prefix))
+                assert references == (1 if customers else 0)
     finally:
         os.environ.pop(variable, None)
         # Foreign keys run between the databases, so whichever goes first
