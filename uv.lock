@@ -828,7 +828,7 @@ dev = [
     { name = "types-pymysql", specifier = ">=1.1.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
 ]
-docs = [{ name = "zensical", specifier = "==0.1.1" }]
+docs = [{ name = "zensical", specifier = ">=0.1.1" }]
 
 [[package]]
 name = "dnspython"
