@@ -1,0 +1,23 @@
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_7b6ac132950843 325
+evals/fixtures/repository.sh
+  s_ad63f2bf16b775::t_c91b9200631b05 25-29,31-32,35-43,48-51,53-55,58-59
+zensical.toml
+  s_ad63f2bf16b775::t_7f62e61a1ba2b0 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5d4d664835d0f9b76d8bfa620cb2a0e1c818a8ed",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
