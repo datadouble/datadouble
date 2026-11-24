@@ -55,6 +55,11 @@ now, here? If not, move it or set it up.
 - **Use plain words.** "Use," not "utilize." "Needs," not "requires the
   presence of." Keep the correct technical term where one exists, and define
   it the first time it appears on a page.
+- **Write like an engineer, not a translator.** Plain words never replace the
+  ordinary phrasing of the field. Write "This page documents all spec
+  configuration options," not "This page lists every field a spec can hold."
+  If a sentence reads as if it was paraphrased to avoid a familiar term, put
+  the familiar term back.
 - **No em dashes or en dashes as separators.** Use a period, a comma, or a
   colon.
 

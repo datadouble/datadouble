@@ -27,7 +27,7 @@ own machine and introduces the ideas the other pages assume.
 
 These pages are generated from the code, so they always match it.
 
-- [Spec reference](spec-reference.md): every field a spec can hold,
+- [Spec reference](spec-reference.md): all spec configuration options,
   generated from the JSON Schema.
 - [CLI reference](cli-reference.md): every command and option, generated
   from the CLI.

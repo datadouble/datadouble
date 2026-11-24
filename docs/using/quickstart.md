@@ -107,7 +107,7 @@ Here is what each section does:
 Notice that the connection names an environment variable. A spec never holds
 a password itself, so it is safe to commit.
 
-The [spec reference](spec-reference.md) lists every field a spec can hold.
+The [spec reference](spec-reference.md) documents all spec configuration options.
 
 ## 4. Lock, plan and build
 
@@ -187,6 +187,17 @@ datadouble run plan,extract,load,transform,package,verify,store \
 
 By default the lock goes beside the spec, as `shop/catalog.lock`. Here it goes
 in `shop/out`, because on Linux Datadouble's user can't write to `shop` itself.
+
+`plan` doesn't write a file. It prints a summary of what a build would copy,
+or fails if the source no longer matches the spec and the lock. To see the
+full plan as JSON, put `--json` before the command:
+
+```
+datadouble --json plan --spec shop/shop.yml --lock shop/out/catalog.lock
+```
+
+`run` saves the same plan as `plan.json` in the build's work directory, under
+`shop/out/work/shop/<generation>/plan/`.
 
 When it finishes, `run` lists each stage it ran, then the verification
 result, then the image summary it stored. Look at what it wrote:
