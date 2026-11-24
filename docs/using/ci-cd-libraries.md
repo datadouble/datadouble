@@ -15,7 +15,7 @@ page covers the steps:
 2. [Set up the runners](#set-up-the-runners) the jobs run on.
 3. [Re-lock the catalog](#re-lock-after-a-schema-change) after a schema
    change.
-4. [Get notified](#get-notified) when a job fails or warns.
+4. [Get notified](#get-notified) when a job fails, warns or recovers.
 
 ## Generate the jobs {#generate-the-jobs}
 
@@ -190,13 +190,13 @@ names, types and versions, never values (decision 123). See
 
 ## Get notified {#get-notified}
 
-The spec's `notify` section configures notifications for jobs that fail or warn.
-It lives in the spec rather than in `ci init`'s options, so generating the
+The spec's `notify` section configures notifications for jobs that fail,
+warn or recover. It lives in the spec rather than in `ci init`'s options, so generating the
 jobs again keeps it:
 
 ```yaml
 notify:
-  when: [failure, warning]          # default: [failure]
+  when: [failure, warning, recovery]   # default: [failure]
   to:
     - webhook:
         url:
@@ -213,18 +213,29 @@ notify:
   Rocket.Chat incoming webhooks accept it. Google Chat refuses any other
   key, so it needs `chat`. The URL is a secret reference, so `ci init`
   lists its variable with the others.
+- **Recovery** is a success after a run that failed, warned or was stopped.
+  A webhook gets one post for it, with `"recovered": true` and a `text`
+  that says the job recovered, and nothing for later successes. Each job
+  keeps a small record of its last outcome for this, in the work directory
+  on the production side and in `fetch.staging` on the other, so `ci init`
+  then needs `--work` for every production job. The first run after you add
+  `recovery` has no record, so it posts nothing.
 - **Email** uses the system's own mechanism:
-    - Jenkins: a `mail` step in the Jenkinsfile's `post` section;
+    - Jenkins: a `mail` step in the Jenkinsfile's `post` section, with
+      `fixed` for recoveries;
     - GitLab: the Pipeline status emails integration, set up by hand as
-      `instructions` says;
+      `instructions` says. It mails no recoveries: GitLab's Fixed pipeline
+      notification mails the pipeline's author, if they turn it on, and
+      `instructions` says so;
     - GitHub: none a workflow can send. GitHub mails a failed run only to
-      whoever started it, so `instructions` suggests a webhook to a service
-      that sends mail;
+      whoever started it, and no recovery at all, so `instructions` suggests
+      a webhook to a service that sends mail;
     - Argo CD: refused, since it has no mail.
 - **A notification that fails** is a warning in the job's log. It never
   changes the job's outcome.
 - **A job that fails before Datadouble starts** (an image that cannot be
-  pulled, a missing path) posts no webhook. The system's own failure
+  pulled, a missing path) posts no webhook, and leaves no record, so the
+  next success is not counted as a recovery from it. The system's own failure
   notifications cover it, and on Argo CD the cluster's monitoring of failed
   Jobs.
 

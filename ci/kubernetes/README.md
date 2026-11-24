@@ -104,13 +104,16 @@ which holds the outputs (`outcome`, `generation`, `error`; `fingerprint` and
 
 ## Notifications
 
-The spec's `notify` section configures notifications for jobs that fail or warn.
-Each step names its job (`--ci-job`), so Datadouble posts the spec's webhooks
+The spec's `notify` section configures notifications for jobs that fail,
+warn or recover. Each step names its job (`--ci-job`), so Datadouble posts the spec's webhooks
 itself after each step's command; a Job has no web page, so `run_url` is
 null. A Job runs a failed pod once more (`backoffLimit: 1`), and each attempt
 posts, so a failure usually notifies twice; a failed follower is not run
 again (see [Jobs](#jobs)), so it, and the leader before it, notify once. Put
-the webhook's variable in the side's Secret like the others. A webhook that cannot be reached is a warning line in the log; the Job's
+the webhook's variable in the side's Secret like the others. For a recovery
+webhook, each step records its last outcome on the claim, in the work
+directory on the production side and in staging on the other, so an attempt
+that succeeds after a failed attempt of the same Job posts a recovery. A webhook that cannot be reached is a warning line in the log; the Job's
 result is unchanged.
 
 Kubernetes Jobs have no mail mechanism, so `ci init` fails for `notify`'s

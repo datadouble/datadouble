@@ -100,8 +100,8 @@ Datadouble cannot mask anything else at run time.
 
 ## Notifications
 
-The spec's `notify` section configures notifications for jobs that fail or warn.
-Each job sets `DATADOUBLE_CI_JOB` to its job, so Datadouble posts the spec's
+The spec's `notify` section configures notifications for jobs that fail,
+warn or recover. Each job sets `DATADOUBLE_CI_JOB` to its job, so Datadouble posts the spec's
 webhooks itself after the command, with the job's page (`CI_JOB_URL`) as
 `run_url`. Define the webhook's variable as a masked CI/CD variable like the
 others. On-demand provision and release run in merge request pipelines,
@@ -114,6 +114,11 @@ GitLab CI has no mail step. For `notify`'s email, `ci init` lists the setup
 in `instructions`: the project's Pipeline status emails integration
 (Settings > Integrations), for those addresses, notifying only broken
 pipelines. It mails failed pipelines only, so a warning, a job allowed to
-fail, mails nobody; list a webhook to hear about warnings. Those emails also
+fail, mails nobody; list a webhook to hear about warnings. It never mails a
+recovery either. GitLab's own Fixed pipeline notification does, but only to
+the pipeline's author (for a schedule, its owner), who turns it on in their
+notification settings at the Custom level; `ci init` says so in
+`instructions` when `notify.when` lists `recovery`. To reach the listed
+addresses, list a webhook whose service mails them. Those emails also
 report a job that fails before Datadouble starts, such as an image that
 cannot be pulled, which posts no webhook.

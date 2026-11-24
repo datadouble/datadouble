@@ -67,7 +67,7 @@ pipeline {
                         job: 'provision',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['replicate', '--spec', 'datadouble/shop.yml', '--owner', params.OWNER],
+                        arguments: ['replicate', '--ci-record', '/srv/datadouble/staging/.datadouble-notify/shop.provision.json', '--spec', 'datadouble/shop.yml', '--owner', params.OWNER],
                     )
                 }
             }
@@ -96,6 +96,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop provision: unstable', body: 'Datadouble shop provision: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop provision: recovered', body: 'Datadouble shop provision: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

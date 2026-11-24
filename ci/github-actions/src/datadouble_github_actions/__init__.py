@@ -300,6 +300,8 @@ class GitHubActions:
         )
         if NotifyOn.WARNING in pipeline.notify.when:
             email += ", and never mails a warning, which is a passing run"
+        if NotifyOn.RECOVERY in pipeline.notify.when:
+            email += ", nor a recovery, which it doesn't tell from any other passing run"
         email += "; to reach those addresses, list a webhook whose service mails them"
         return (email,)
 

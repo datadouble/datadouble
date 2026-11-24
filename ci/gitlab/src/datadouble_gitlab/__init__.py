@@ -321,6 +321,13 @@ class GitLab:
                     "; GitLab mails failed pipelines only, so a warning, a job allowed to fail,"
                     " mails nobody: list a webhook to hear about warnings"
                 )
+            if NotifyOn.RECOVERY in pipeline.notify.when:
+                step += (
+                    "; that integration never mails a recovery, so for recovery mail turn on"
+                    " the Fixed pipeline event in the notification settings (Custom level) of"
+                    " whoever owns the pipeline schedules, since GitLab mails a fixed pipeline"
+                    " only to its author, or list a webhook whose service mails those addresses"
+                )
             steps.append(step)
         return tuple(steps)
 

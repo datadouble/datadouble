@@ -71,7 +71,7 @@ pipeline {
                         job: 'build',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK', 'COSIGN_PASSWORD', 'SHOP_COSIGN_KEY', 'SHOP_SOURCE_DSN'],
-                        arguments: ['run', 'plan,extract,load,transform,package,verify,store', '--spec', 'datadouble/shop.yml', '--work', '/srv/datadouble/work', '--retry-key', (params.RETRY_KEY ?: env.BUILD_TAG)],
+                        arguments: ['run', '--ci-record', '/srv/datadouble/work/.datadouble-notify/shop.build.json', 'plan,extract,load,transform,package,verify,store', '--spec', 'datadouble/shop.yml', '--work', '/srv/datadouble/work', '--retry-key', (params.RETRY_KEY ?: env.BUILD_TAG)],
                     )
                 }
             }
@@ -100,6 +100,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop build: unstable', body: 'Datadouble shop build: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop build: recovered', body: 'Datadouble shop build: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

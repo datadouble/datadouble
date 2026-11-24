@@ -270,6 +270,12 @@ def test_workflows_need_no_other_setup() -> None:
     on_failure = planned_jobs.notify.model_copy(update={"when": (NotifyOn.FAILURE,)})
     (failures,) = ci.instructions(replace(planned_jobs, notify=on_failure))
     assert "warning" not in failures
+    assert "recovery" not in failures
+    on_recovery = planned_jobs.notify.model_copy(
+        update={"when": (NotifyOn.FAILURE, NotifyOn.RECOVERY)}
+    )
+    (recoveries,) = ci.instructions(replace(planned_jobs, notify=on_recovery))
+    assert ", nor a recovery, which it doesn't tell from any other passing run;" in recoveries
 
 
 def test_the_action_declares_every_output() -> None:

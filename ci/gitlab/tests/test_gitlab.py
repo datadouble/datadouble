@@ -242,6 +242,15 @@ def test_instructions() -> None:
     quiet_pipeline = planned(JobKind.ACTIVATE, runner="staging")
     failures = gitlab.instructions(notify_on_failure(quiet_pipeline))
     assert failures[-1].endswith("notifying only broken pipelines")
+    assert quiet_pipeline.notify is not None
+    recovering = quiet_pipeline.notify.model_copy(
+        update={"when": (NotifyOn.FAILURE, NotifyOn.RECOVERY)}
+    )
+    recoveries = gitlab.instructions(replace(quiet_pipeline, notify=recovering))
+    assert (
+        "that integration never mails a recovery, so for recovery mail turn on the Fixed"
+        in (recoveries[-1])
+    )
     silent = replace(
         quiet_pipeline,
         notify=None,

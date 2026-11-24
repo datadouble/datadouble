@@ -35,6 +35,7 @@ Write the catalog lock for a spec, and list what changed since the last one.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
 | `--output` `OUTPUT` | A directory to write the new lock (catalog.lock) and its changes (changes.txt) to, leaving the current lock as it is. |
@@ -69,6 +70,7 @@ Run build stages, or resume a generation.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `STAGES` | The stages to run, comma-separated: plan,extract,load,transform,package,verify,store (required). |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
@@ -85,6 +87,7 @@ Copy verified, signed images to the export stores.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 | `--generation` `GENERATION` | The generation to promote (default: the newest). |
@@ -95,6 +98,7 @@ Bring new promoted images into staging.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 
@@ -104,6 +108,7 @@ Point the staging channel at a staged generation, such as an older one to roll b
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `GENERATION` | The staged generation to point the channel at (required). |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
@@ -114,6 +119,7 @@ Fill the pool, or make on-demand copies, and announce them.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 | `--owner` `OWNER` | Who on-demand copies are for. |
@@ -137,6 +143,7 @@ Destroy copies, chosen by ID, owner or expiry.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `COPY_ID` | The IDs of copies to release. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
@@ -168,6 +175,7 @@ Remove old images, as the spec's prune settings say.
 
 | Argument | Description |
 |---|---|
+| `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--target` `TARGET` | Where to prune: the build's stores, the export stores, or staging (one of store, export, staging) (required). |
 | `--dry-run` | Report what would be removed, and the space it would recover, without removing it. |
@@ -186,7 +194,7 @@ Write CI/CD configuration for a spec's jobs.
 | `--job` `JOBS` | The jobs to write, comma-separated or repeated, all on one side of the boundary: build,promote,fetch,provision,release,prune,activate,lock (required). |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--runner` `RUNNER` | The runner the jobs run on. Jobs on the production side (build, promote, lock, and prune there) need it. |
-| `--work` `WORK` | The build's work directory, an absolute path in production scratch space. Build needs it. |
+| `--work` `WORK` | The build's work directory, an absolute path in production scratch space. Build needs it, and so does every production job when notify sends recoveries to a webhook, since jobs record their last outcome there. |
 | `--side` `SIDE` | The side of the boundary prune runs on, when prune is the only job (one of production, non-production). |
 | `--output` `OUTPUT` | The repository root to write into (default: .). |
 | `--image` `IMAGE` | The Datadouble image the jobs run (default: this version's). |

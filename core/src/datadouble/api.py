@@ -55,7 +55,7 @@ from datadouble.engine import EngineError, RequirementError
 from datadouble.images import ImageError
 from datadouble.jailer import JailerError
 from datadouble.names import Generation, GroupName
-from datadouble.notify import Notification, Post, post, send
+from datadouble.notify import Notification, Post, post, recall, recovered, remember, send
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.planner import (
     Plan,
@@ -324,7 +324,8 @@ class CiInitRequest(_Request):
     runner: str | None = None
     """The runner jobs run on; required for every job on the production side."""
     work: Path | None = None
-    """The build's work directory in production scratch space; required for build."""
+    """The build's work directory in production scratch space; required for build, and for
+    every production job when ``notify`` sends recoveries to a webhook (decision 142)."""
     side: Side | None = None
     """Which side ``prune`` alone runs on."""
     output: Path = Path()
@@ -1008,15 +1009,42 @@ def ci_report(response: Response, summary: str) -> Report:
     )
 
 
+def _record(request: Request) -> Path | None:
+    """The file a generated job's request records its outcome in, if ``ci init`` named one."""
+    if request.ci is None or request.ci.job is None:
+        return None
+    return request.ci.record
+
+
+def previous_outcome(request: Request) -> tuple[str | None, tuple[str, ...]]:
+    """The outcome a generated job's previous run recorded, before this one starts.
+
+    The record is marked as running, so a run that never ends leaves a
+    record that is not a success (decision 142). None when the job keeps no
+    record or has none yet. Returns problems for the caller to log.
+    """
+    path = _record(request)
+    if path is None:
+        return None, ()
+    return recall(path)
+
+
 def notify(
-    request: Request, report: Report, run_url: str | None, *, poster: Post = post
+    request: Request,
+    report: Report,
+    run_url: str | None,
+    *,
+    previous: str | None = None,
+    poster: Post = post,
 ) -> tuple[str, ...]:
-    """Post a generated job's outcome to its spec's webhooks (decision 125).
+    """Post a generated job's outcome to its spec's webhooks (decisions 125 and 142).
 
     Only a request that names its job (``ci.job``) notifies, and only for the
-    outcomes the spec's ``notify`` section lists. Returns a problem per
-    notification that failed, for the caller to log: a failed notification
-    never changes a job's outcome.
+    outcomes the spec's ``notify`` section lists. A success after a
+    ``previous`` outcome that was not one is a recovery. The job's record, if
+    it keeps one, is updated first. Returns a problem per notification that
+    failed, for the caller to log: a failed notification never changes a
+    job's outcome.
     """
     if request.ci is None or request.ci.job is None:
         return ()
@@ -1025,16 +1053,19 @@ def notify(
             return ()
         case _:
             path = request.spec
+    record = _record(request)
+    problems = () if record is None else remember(record, report.outcome)
     try:
         spec = load_spec(path)
     except SpecError:
-        return ("the spec cannot be read, so its webhooks were not posted to",)
+        return (*problems, "the spec cannot be read, so its webhooks were not posted to")
     notification = Notification(
         spec=spec.name,
         job=request.ci.job,
         outcome=report.outcome,
+        recovered=recovered(previous, report.outcome),
         generation=report.outputs.get("generation"),
         error=report.outputs.get("error"),
         run_url=run_url,
     )
-    return send(spec.notify, notification, poster=poster)
+    return (*problems, *send(spec.notify, notification, poster=poster))

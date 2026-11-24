@@ -99,8 +99,8 @@ the `lock` job's lock and changes hold no data values.
 
 ## Notifications
 
-The spec's `notify` section configures notifications for jobs that fail or warn.
-Each step passes the action its job (`job: build`), so Datadouble posts the
+The spec's `notify` section configures notifications for jobs that fail,
+warn or recover. Each step passes the action its job (`job: build`), so Datadouble posts the
 spec's webhooks itself after the command, with the run's page
 (`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID`) as
 `run_url`. The webhook's variable is a secret like the others.
@@ -108,7 +108,7 @@ spec's webhooks itself after the command, with the run's page
 A workflow cannot send mail. GitHub mails a failed run only to whoever
 started it (for a schedule, whoever last changed the workflow), under their
 own Actions notification settings, and never a warning, which is a passing
-run. For `notify`'s email, `ci init` says so in `instructions`; list a
+run, nor a recovery, which GitHub doesn't tell from any other passing run. For `notify`'s email, `ci init` says so in `instructions`; list a
 webhook to a service that mails the team instead. GitHub's own failed-run
 mail is also what reports a job that fails before Datadouble starts, such as
 an image that cannot be pulled, since no webhook is posted then. A webhook

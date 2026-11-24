@@ -22,7 +22,18 @@ import pytest
 
 from datadouble import api
 from datadouble.ci import CiBridge, JobKind, Report
-from datadouble.notify import TIMEOUT_SECONDS, Notification, NotifyError, post, send, tls_context
+from datadouble.notify import (
+    RUNNING,
+    TIMEOUT_SECONDS,
+    Notification,
+    NotifyError,
+    post,
+    recall,
+    recovered,
+    remember,
+    send,
+    tls_context,
+)
 from datadouble.outcome import Outcome
 from datadouble.spec import EnvSecret, NotifyOn, SpecError, WebhookFormat, parse_spec
 
@@ -246,6 +257,10 @@ def test_the_text_line() -> None:
         spec="shop", job=JobKind.FETCH, outcome=Outcome.FAILURE, run_url="https://x.example\n/7"
     )
     assert broken.text == "Datadouble shop: fetch failed - https://x.example /7"
+    healed = Notification(
+        spec="shop", job=JobKind.BUILD, outcome=Outcome.SUCCESS, recovered=True, generation="0193"
+    )
+    assert healed.text == "Datadouble shop: build recovered, generation 0193"
 
 
 def test_chat_webhooks_get_only_text(receiver: Receiver) -> None:
@@ -290,6 +305,7 @@ def test_sending(receiver: Receiver, monkeypatch: pytest.MonkeyPatch) -> None:
         "spec": "shop",
         "job": "build",
         "outcome": "failure",
+        "recovered": False,
         "generation": "0193a7c21b4e9f30",
         "error": "store_failed",
         "run_url": "https://ci.example.com/runs/7",
@@ -344,6 +360,7 @@ def test_requests_notify_for_their_job(tmp_path: Path, monkeypatch: pytest.Monke
         "spec": "shop",
         "job": "fetch",
         "outcome": "failure",
+        "recovered": False,
         "generation": None,
         "error": "staging_failed",
         "run_url": "https://ci.example.com/7",
@@ -377,3 +394,122 @@ def test_requests_notify_for_their_job(tmp_path: Path, monkeypatch: pytest.Monke
     assert api.notify(fetch, failed, None, poster=broken) == (
         "webhook 1: the request failed (OSError)",
     )
+
+
+RECOVERY = """
+notify:
+  when: [failure, recovery]
+  to:
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+    - webhook:
+        url:
+          env: CHAT_WEBHOOK
+        format: chat
+"""
+
+
+def test_recovery_is_a_notify_outcome() -> None:
+    spec = parse_spec(BASE + RECOVERY)
+    assert spec.notify is not None
+    assert spec.notify.when == (NotifyOn.FAILURE, NotifyOn.RECOVERY)
+    assert spec.notify.recovers
+    assert spec.notify.sends("success", recovered=True)
+    assert not spec.notify.sends("success")
+    failures = parse_spec(BASE + NOTIFY)
+    assert failures.notify is not None
+    assert not failures.notify.recovers
+    assert not failures.notify.sends("success", recovered=True)
+    mailed = parse_spec(BASE + "notify: {when: [recovery], to: [{email: {to: [a@example.com]}}]}")
+    assert mailed.notify is not None
+    assert not mailed.notify.recovers
+
+
+def test_a_recovery_is_a_success_after_anything_else() -> None:
+    assert recovered("failure", Outcome.SUCCESS)
+    assert recovered("warning", Outcome.SUCCESS)
+    assert recovered(RUNNING, Outcome.SUCCESS)
+    assert not recovered("success", Outcome.SUCCESS)
+    assert not recovered(None, Outcome.SUCCESS)
+    assert not recovered("failure", Outcome.WARNING)
+    assert not recovered("failure", Outcome.FAILURE)
+
+
+def test_records(tmp_path: Path) -> None:
+    path = tmp_path / "records" / "shop.build.json"
+    assert recall(path) == (None, ())
+    assert json.loads(path.read_text(encoding="utf-8")) == {"outcome": "running"}
+    assert remember(path, "failure") == ()
+    assert recall(path) == ("failure", ())
+    assert [p.name for p in path.parent.iterdir()] == ["shop.build.json"]
+    path.write_text("not json", encoding="utf-8")
+    assert recall(path) == (None, ("the job's outcome record could not be read (ValidationError)",))
+    blocked = tmp_path / "file"
+    blocked.write_text("", encoding="utf-8")
+    (problem,) = remember(blocked / "shop.build.json", "success")
+    assert problem.startswith("the job's outcome record could not be written (")
+    unreadable = tmp_path / "directory.json"
+    unreadable.mkdir()
+    previous, (reading, writing) = recall(unreadable)
+    assert previous is None
+    assert reading.startswith("the job's outcome record could not be read (")
+    assert writing.startswith("the job's outcome record could not be written (")
+    assert list(tmp_path.glob(".directory.json.*")) == []
+
+
+def test_one_recovery_post_after_a_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "shop.yml"
+    path.write_text(BASE + RECOVERY, encoding="utf-8")
+    monkeypatch.setenv("ALERTS_WEBHOOK", "https://hooks.example.com/json")
+    monkeypatch.setenv("CHAT_WEBHOOK", "https://chat.example.com/room")
+    posted: list[tuple[str, bytes]] = []
+
+    def poster(url: str, body: bytes) -> None:
+        posted.append((url, body))
+
+    record = tmp_path / "work" / ".datadouble-notify" / "shop.fetch.json"
+    bridge = CiBridge(system="fake-ci", job=JobKind.FETCH, record=record)
+    fetch = api.FetchRequest(command=api.Command.FETCH, spec=path, ci=bridge)
+
+    def attempt(outcome: Outcome) -> tuple[str, ...]:
+        previous, problems = api.previous_outcome(fetch)
+        assert problems == ()
+        assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "running"}
+        return api.notify(fetch, report(outcome), None, previous=previous, poster=poster)
+
+    assert attempt(Outcome.SUCCESS) == ()
+    assert posted == []
+    assert attempt(Outcome.FAILURE) == ()
+    assert len(posted) == 2
+    posted.clear()
+    assert attempt(Outcome.SUCCESS) == ()
+    (hook, hook_body), (chat, chat_body) = posted
+    assert hook == "https://hooks.example.com/json"
+    assert json.loads(hook_body) == {
+        "spec": "shop",
+        "job": "fetch",
+        "outcome": "success",
+        "recovered": True,
+        "generation": None,
+        "error": None,
+        "run_url": None,
+        "text": "Datadouble shop: fetch recovered",
+    }
+    assert chat == "https://chat.example.com/room"
+    assert json.loads(chat_body) == {"text": "Datadouble shop: fetch recovered"}
+    posted.clear()
+    assert attempt(Outcome.SUCCESS) == ()
+    assert posted == []
+    # A run stopped before it ends leaves "running", which is not a success.
+    api.previous_outcome(fetch)
+    assert attempt(Outcome.SUCCESS) == ()
+    assert len(posted) == 2
+    assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "success"}
+    unrecorded = fetch.model_copy(update={"ci": CiBridge(system="fake-ci", record=record)})
+    assert api.previous_outcome(unrecorded) == (None, ())
+    missing = fetch.model_copy(update={"spec": tmp_path / "missing.yml"})
+    assert api.notify(missing, report(Outcome.FAILURE), None, poster=poster) == (
+        "the spec cannot be read, so its webhooks were not posted to",
+    )
+    assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "failure"}

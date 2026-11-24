@@ -39,7 +39,7 @@ Inspect first (rule 3), then ask in one round for what is missing:
   server serving it (the read-only `http` store; see `datadouble-fetch`).
 - Copies: a pool kept ready, or copies made on demand per pull request, and
   where they live.
-- Notifications: who hears when a job fails or warns, through a webhook
+- Notifications: who hears when a job fails, warns or recovers, through a webhook
   (the environment variable holding its URL) or email. They go in the
   spec's `notify` section (see `datadouble-spec`), so later `ci init` runs
   keep them.

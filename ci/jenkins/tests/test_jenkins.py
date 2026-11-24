@@ -69,7 +69,7 @@ fetch:
       prefix: images
   staging: /srv/datadouble/staging
 notify:
-  when: [failure, warning]
+  when: [failure, warning, recovery]
   to:
     - webhook:
         url:
@@ -191,9 +191,14 @@ def test_email_is_mailed_after_the_build() -> None:
         " subject: 'Datadouble shop build: {0}', body: 'Datadouble shop build: {0}.'"
         " + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))"
     )
-    for condition in ("failure", "aborted", "unstable"):
+    for condition, said in (
+        ("failure", "failure"),
+        ("aborted", "aborted"),
+        ("unstable", "unstable"),
+        ("fixed", "recovered"),
+    ):
         assert f"        {condition} {{\n            script {{\n                try {{\n" in post
-        assert mail.format(condition) in post
+        assert mail.format(said) in post
     assert 'echo "notify\'s email could not be sent"' in post
     assert planned_jobs.notify is not None
     failures = replace(
@@ -202,6 +207,7 @@ def test_email_is_mailed_after_the_build() -> None:
     only = render(failures, failures.jobs[0])
     assert "failure {" in only
     assert "unstable {" not in only
+    assert "fixed {" not in only
     webhooks = planned_jobs.notify.model_copy(update={"to": planned_jobs.notify.to[:1]})
     assert "post {" not in render(replace(planned_jobs, notify=webhooks), planned_jobs.jobs[0])
     assert "post {" not in render(replace(planned_jobs, notify=None), planned_jobs.jobs[0])
@@ -214,7 +220,8 @@ def test_request_jenkinsfiles() -> None:
     assert "when { expression { !params.OWNER } }" in release
     assert "agent { label 'staging && linux' }" in release
     activate = jenkinsfile("on-demand", JobKind.ACTIVATE)
-    assert "arguments: ['activate', params.GENERATION, '--spec', 'datadouble/shop.yml']" in activate
+    record = "'/srv/datadouble/staging/.datadouble-notify/shop.activate.json'"
+    assert f"['activate', '--ci-record', {record}, params.GENERATION, '--spec'," in activate
 
 
 def test_quoting() -> None:

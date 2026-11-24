@@ -187,6 +187,9 @@ class CiBridge(BaseModel):
     """Where the adapter writes outputs and the summary for the native step to pick up."""
     job: JobKind | None = None
     """The generated job the request runs for: its spec's ``notify`` section applies."""
+    record: Path | None = None
+    """The file the generated job records its last outcome in, so a success after
+    anything else is a recovery (decision 142); ``ci init`` names it."""
 
 
 class Report(BaseModel):
@@ -702,13 +705,21 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     if JobKind.FETCH in chosen and spec.fetch is None:
         message = "fetch needs the spec's `fetch` section"
         raise CiError(message)
+    records = _records(spec, side, options.work)
     spec_path = options.spec_path
     context = _Context(spec_path, spec, side, chosen, str(options.work))
     jobs = tuple(
         replace(
-            _JOBS[kind](context),
+            _recording(_JOBS[kind](context), spec, records),
             mounts=host_paths(
-                spec, kind, side, extra if kind is JobKind.BUILD else (), options.remote
+                spec,
+                kind,
+                side,
+                (
+                    *(extra if kind is JobKind.BUILD else ()),
+                    *(() if records is None else (records,)),
+                ),
+                options.remote,
             ),
             environment=tuple(
                 sorted(
@@ -739,6 +750,65 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         agent=options.agent,
         cloud=options.cloud,
         runtime=spec.runtime,
+    )
+
+
+RECORDS = ".datadouble-notify"
+"""The directory, in the work directory or staging, where jobs record their last outcomes."""
+
+
+def _records(spec: Spec, side: Side, work: Path | None) -> Path | None:
+    """Where the side's jobs record their outcomes, when a webhook hears of recoveries.
+
+    The production side records in the work directory, and the other side in
+    staging (decision 142): each job's own side, kept between runs.
+    """
+    if spec.notify is None or not spec.notify.recovers:
+        return None
+    if side is Side.PRODUCTION:
+        if work is None or not work.is_absolute():
+            message = (
+                "notify's recovery webhooks need each job's last outcome, which production jobs"
+                " record in the work directory: give the work directory as an absolute path"
+            )
+            raise CiError(message)
+        return work
+    if spec.fetch is None:
+        message = (
+            "notify's recovery webhooks need each job's last outcome, which non-production"
+            " jobs record in staging: add the spec's `fetch` section"
+        )
+        raise CiError(message)
+    return spec.fetch.staging
+
+
+def _recording(job: Job, spec: Spec, records: Path | None) -> Job:
+    """The job with each command line naming its record file after the command, if it keeps one.
+
+    A job with several command lines keeps a record for each, since each
+    notifies on its own.
+    """
+    if records is None:
+        return job
+    several = len(job.invocations) > 1
+    return replace(
+        job,
+        invocations=tuple(
+            replace(
+                invocation,
+                arguments=(
+                    invocation.arguments[0],
+                    "--ci-record",
+                    str(
+                        records
+                        / RECORDS
+                        / f"{spec.name}.{job.kind}{f'.{index}' if several else ''}.json"
+                    ),
+                    *invocation.arguments[1:],
+                ),
+            )
+            for index, invocation in enumerate(job.invocations, start=1)
+        ),
     )
 
 

@@ -298,7 +298,7 @@ adapter's README before adding one.
 
 ## Notifications
 
-Who hears about a generated CI job that fails or warns is the spec's
+Who hears about a generated CI job that fails, warns or recovers is the spec's
 `notify` section, not a `ci init` option: `ci init` is run again whenever
 the spec, the version or the options change, and an option left off a later
 run would silently drop notifications. Never edit generated files to add
@@ -306,7 +306,7 @@ them (rule 2).
 
 ```yaml
 notify:
-  when: [failure, warning]          # default: [failure]
+  when: [failure, warning, recovery]   # default: [failure]
   to:
     - webhook:
         url:
@@ -317,8 +317,8 @@ notify:
 
 - **A webhook's URL is a secret reference** (rule 6): it usually carries a
   token. Datadouble posts to it after each job's command, on every system,
-  a JSON body with `spec`, `job`, `outcome`, `generation`, `error` (the
-  error code), `run_url` and `text`. It never holds data values or secrets.
+  a JSON body with `spec`, `job`, `outcome`, `recovered`, `generation`,
+  `error` (the error code), `run_url` and `text`. It never holds data values or secrets.
   `text` is one readable line built from the other fields, such as
   `Datadouble shop: build failed (store_failed) - <run_url>`.
   Credentials in the URL need https://, and posts use the runner's proxy
@@ -329,10 +329,25 @@ notify:
   service in between. Google Chat refuses any other key, so a Google Chat
   URL always needs `chat`. Leave the default, `format: json`, for a
   receiver written for Datadouble.
-- **Email is the CI system's own:** Jenkins mails from the Jenkinsfile;
-  GitLab and GitHub need the manual setup `ci init` lists in
-  `instructions`, and GitHub can only mail whoever started a run; Argo CD
-  refuses email, so suggest a webhook to a service that mails the team.
+- **`recovery` is a success after a run that failed, warned or was
+  stopped.** A webhook gets one post for it (`outcome: success`,
+  `recovered: true`, `text` saying the job recovered) and nothing for
+  later successes. Each job records its last outcome for this, in the work
+  directory on the production side and in `fetch.staging` on the other,
+  holding only the outcome. So with `recovery` and a webhook, `ci init`
+  needs `--work` for every production job (even `promote` or `lock`
+  alone) and the `fetch` section on the other side; every production job
+  then mounts the work directory. The first run after adding `recovery`
+  has no record and posts no recovery, and a run stopped before
+  Datadouble started can't be recorded.
+- **Email is the CI system's own:** Jenkins mails from the Jenkinsfile,
+  with `fixed` for `recovery` (a success after a failed or unstable build,
+  not an aborted one); GitLab and GitHub need the manual setup `ci init`
+  lists in `instructions`, and GitHub can only mail whoever started a run
+  and never mails a recovery; GitLab's Pipeline status emails never mail a
+  recovery either, and its Fixed pipeline notification reaches only the
+  pipeline's author; Argo CD refuses email, so suggest a webhook to a
+  service that mails the team.
 - A failed notification never changes a job's outcome, and a job that fails
   before Datadouble starts (an image that cannot be pulled) posts no
   webhook: the CI system's own failure notifications cover that.

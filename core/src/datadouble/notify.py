@@ -15,20 +15,30 @@ returned for the caller to log, and the job ends as it would have. The
 payload, its ``text`` line included, carries names, codes and outcomes, never
 data values or secrets (decisions 18 and 54), and problems never quote the
 webhook's URL, which is a secret.
+
+A recovery (decision 142) needs the job's previous outcome, which only the job
+itself can keep. When ``ci init`` names a record file (``ci.record``), the
+command reads it before it starts, marks it ``running`` and writes its own
+outcome there when it ends. A success after anything else, including a run
+that never got to write its outcome, is a recovery. The record holds only an
+outcome.
 """
 
 import base64
+import contextlib
 import http.client
 import json
+import os
 import ssl
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from email.message import Message
+from pathlib import Path
 from typing import IO, override
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from datadouble import __version__
 from datadouble.ci import JobKind
@@ -50,6 +60,8 @@ class Notification(BaseModel):
     job: JobKind
     """The generated job: ``build``, ``promote``, ``fetch``, ``provision`` and so on."""
     outcome: Outcome
+    recovered: bool = False
+    """Whether this success follows a run that did not succeed (``recovery``)."""
     generation: str | None = None
     """The generation a ``build`` made or resumed, when it got that far."""
     error: str | None = None
@@ -65,7 +77,8 @@ class Notification(BaseModel):
         and ignore the other keys, such as
         ``Datadouble shop: build failed (store_failed) - https://ci.example.com/7``.
         """
-        line = f"Datadouble {self.spec}: {self.job} {_SAID[self.outcome]}"
+        said = "recovered" if self.recovered else _SAID[self.outcome]
+        line = f"Datadouble {self.spec}: {self.job} {said}"
         if self.error is not None:
             line += f" ({self.error})"
         if self.generation is not None:
@@ -182,7 +195,7 @@ def send(
 
     Returns a problem per webhook that failed; never raises for one.
     """
-    if notify is None or not notify.sends(notification.outcome):
+    if notify is None or not notify.sends(notification.outcome, recovered=notification.recovered):
         return ()
     problems: list[str] = []
     for index, webhook in enumerate(notify.webhooks(), start=1):
@@ -197,3 +210,53 @@ def send(
         ) as error:
             problems.append(f"webhook {index}: {_problem(error)}")
     return tuple(problems)
+
+
+RUNNING = "running"
+"""What a job's record says while its command runs. A run stopped before it
+ends leaves it so, and is not a success."""
+
+
+class _Record(BaseModel):
+    """A job's record: its last run's outcome, and nothing else."""
+
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+    outcome: str
+
+
+def recall(path: Path) -> tuple[str | None, tuple[str, ...]]:
+    """The outcome the job's previous run recorded, then mark this run as running.
+
+    No record, or one that cannot be read, is None: no recovery is posted.
+    Returns the problems for the caller to log; never raises for one.
+    """
+    previous: str | None = None
+    problems: list[str] = []
+    try:
+        previous = _Record.model_validate_json(path.read_bytes()).outcome
+    except FileNotFoundError:
+        pass
+    except (OSError, ValidationError) as error:
+        problems.append(f"the job's outcome record could not be read ({type(error).__name__})")
+    problems.extend(remember(path, RUNNING))
+    return previous, tuple(problems)
+
+
+def remember(path: Path, outcome: str) -> tuple[str, ...]:
+    """Write the job's outcome to its record; returns a problem instead of raising."""
+    temporary = path.with_name(f".{path.name}.{os.getpid()}")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(_Record(outcome=outcome).model_dump_json(), encoding="utf-8")
+        temporary.replace(path)
+    except OSError as error:
+        with contextlib.suppress(OSError):
+            temporary.unlink(missing_ok=True)
+        return (f"the job's outcome record could not be written ({type(error).__name__})",)
+    return ()
+
+
+def recovered(previous: str | None, outcome: Outcome) -> bool:
+    """Whether a run ending with ``outcome`` recovers from one that ended with ``previous``."""
+    return outcome is Outcome.SUCCESS and previous is not None and previous != Outcome.SUCCESS

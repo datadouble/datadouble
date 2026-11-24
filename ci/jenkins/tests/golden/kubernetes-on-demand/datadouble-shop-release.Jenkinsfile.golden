@@ -71,7 +71,7 @@ pipeline {
                         job: 'release',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['release', '--spec', 'datadouble/shop.yml', '--owner', params.OWNER],
+                        arguments: ['release', '--ci-record', '/srv/datadouble/staging/.datadouble-notify/shop.release.1.json', '--spec', 'datadouble/shop.yml', '--owner', params.OWNER],
                     )
                 }
             }
@@ -84,7 +84,7 @@ pipeline {
                         job: 'release',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['release', '--spec', 'datadouble/shop.yml', '--expired'],
+                        arguments: ['release', '--ci-record', '/srv/datadouble/staging/.datadouble-notify/shop.release.2.json', '--spec', 'datadouble/shop.yml', '--expired'],
                     )
                 }
             }
@@ -113,6 +113,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop release: unstable', body: 'Datadouble shop release: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop release: recovered', body: 'Datadouble shop release: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }
