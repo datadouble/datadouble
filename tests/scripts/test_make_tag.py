@@ -129,6 +129,10 @@ def test_prepare_opens_release_pull_request(repo: Path) -> None:
     assert code == 0
     assert ("make", "check") in runner.calls
     assert ("git", "switch", "--create", "release/v0.2.0") in runner.calls
+    assert runner.calls.index(("uv", "lock")) < runner.calls.index(("git", "add", "uv.lock"))
+    assert runner.calls.index(("git", "add", "uv.lock")) < runner.calls.index(
+        next(call for call in runner.calls if call[:2] == ("git", "commit"))
+    )
     assert runner.calls[-1][:3] == ("gh", "pr", "create")
     pyproject = (repo / "core" / "pyproject.toml").read_text(encoding="utf-8")
     assert make_tag.project_version(pyproject) == "0.2.0"
