@@ -111,10 +111,10 @@ def _yaml_off(value: object) -> object:
 
 
 class Strict(_Model):
-    """Strict mode's level for each kind of thing in the catalog.
+    """Strict mode's level for each kind of catalog object.
 
     Strict mode compares the source's catalog with the catalog lock, and warns
-    or fails on what differs. Each kind of thing has its own level. Kinds left
+    or fails on what differs. Each kind has its own level. Kinds left
     out take their defaults.
 
     Some differences fail the plan whatever the levels: a removed table or
@@ -245,7 +245,7 @@ class Unselected(StrEnum):
 
 
 class ImageFormat(StrEnum):
-    """The forms a golden image can take.
+    """The golden image formats.
 
     - ``physical``: the engine's own on-disk form. It is the fastest to clone
       and start, but it is tied to the server version.
@@ -572,7 +572,7 @@ class TransformHook(_Model):
 class Hooks(_Model):
     """Native scripts run around load and transform.
 
-    Each engine says whether it runs hooks. The plan fails if a spec gives
+    Not every engine supports hooks. The plan fails if a spec gives
     hooks to an engine that doesn't.
     """
 
@@ -657,7 +657,7 @@ class ImageGroup(_Model):
 
 
 class AccountPrivileges(StrEnum):
-    """What an account that copies carry may do.
+    """The privileges of a copy account.
 
     - ``all``: every privilege, with the grant option. On PostgreSQL, this is
       a superuser. This is the default.
@@ -683,15 +683,15 @@ class CopyAccount(_Model):
 
 
 class Package(_Model):
-    """Which image formats to produce, and the accounts physical images carry."""
+    """Which image formats to produce, and the database accounts built into physical images."""
 
     formats: tuple[ImageFormat, ...] | None = Field(default=None, min_length=1)
     """The image formats to produce: ``physical``, ``logical`` or both. If
     given, the list must not be empty. Defaults to every format the engine
     supports. The ``--format`` option overrides it."""
     accounts: tuple[CopyAccount, ...] = ()
-    """Accounts that physical images carry, for consumers that serve them with
-    the engine's own image. None by default."""
+    """Database accounts built into physical images, for consumers that serve
+    them with the engine's own image. None by default."""
 
 
 class PiiScan(_Model):
@@ -1006,7 +1006,7 @@ type NotifyTarget = Annotated[
 
 
 class Notify(_Model):
-    """Who hears about generated CI jobs that fail or warn (decision 125).
+    """Notifications for generated CI jobs that fail or warn (decision 125).
 
     Notifications live in the spec rather than in ``ci init``'s options, so
     generating the jobs again keeps them.
@@ -1034,7 +1034,7 @@ class Notify(_Model):
 
 
 class PathsFrom(_Model):
-    """How the source's chosen rows name files, as a template over a table's columns.
+    """A template that builds file paths from a table's columns.
 
     For example, ``path: "documents/{customer_id}/{file_name}"`` builds a path
     from two columns. ``match``, if given, is a regular expression applied to
@@ -1042,7 +1042,7 @@ class PathsFrom(_Model):
     """
 
     table: str
-    """The table whose chosen rows name the files."""
+    """The table whose selected rows hold the file paths."""
     path: str = Field(min_length=1)
     """A template that builds a value from the row's columns, such as
     ``documents/{customer_id}/{file_name}``. Without ``match``, the value is the
@@ -1075,7 +1075,7 @@ class Files(_Model):
     exclude: tuple[str, ...] = ()
     """Top-level directories to leave out."""
     paths_from: str | PathsFrom | None = None
-    """How the source's chosen rows name more files to copy, relative to the
+    """Which files the source's selected rows reference, relative to the
     tree's root. Either a ``table.column`` that holds paths, or a template
     with ``table``, ``path`` and optionally ``match``."""
     cleanup: tuple[str, ...] = ()
@@ -1088,7 +1088,7 @@ class Files(_Model):
 
 
 class Spec(_Model):
-    """A whole spec: one pipeline, from the sources it reads to the copies it makes."""
+    """A complete spec, which describes one pipeline."""
 
     model_config = ConfigDict(title="Datadouble spec")
 
@@ -1137,7 +1137,7 @@ class Spec(_Model):
     """Objects that code outside Datadouble expects in every image, such as
     ``{view: reporting.daily}``. They join each image's closure."""
     package: Package = Package()
-    """The image formats to produce, and the accounts physical images carry."""
+    """The image formats to produce, and the database accounts built into physical images."""
     verify: Verify = Verify()
     """Checks every image must pass. Each image must restore, its row counts
     and references must match, the PII scan must find nothing it doesn't
@@ -1147,10 +1147,10 @@ class Spec(_Model):
     """Where engine software runs, from extract on: ``{docker: {...}}`` or
     ``{kubernetes: {...}}``. Extract and the stages after it need it. The
     ``kubernetes`` runtime reaches another cluster through ``kubeconfig``, a
-    secret reference. It starts pods in the namespace that ``namespace``
-    names. Without it, pods start where ``kubectl`` would put them: inside a
-    cluster, the namespace of Datadouble's own pod, and otherwise the
-    kubeconfig context's namespace."""
+    secret reference. It starts pods in the namespace given by ``namespace``.
+    Without it, pods start where ``kubectl`` would put them: inside a cluster,
+    the namespace of Datadouble's own pod, and otherwise the kubeconfig
+    context's namespace."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     """Where the build stores images, one adapter each: ``{filesystem: ...}`` or
     ``{s3: ...}``. The filesystem store takes ``path``, a directory, and
@@ -1176,7 +1176,7 @@ class Spec(_Model):
     """Where copies are announced to consumers, one adapter each:
     ``{dotenv: ...}``, ``{ci-outputs: {}}``, ``{vault: ...}`` or
     ``{k8s-secret: {}}``. The ``k8s-secret`` adapter writes Secrets in the
-    namespace that ``namespace`` names, and otherwise where ``kubectl`` would
+    namespace given by ``namespace``, and otherwise where ``kubectl`` would
     put them, as the ``kubernetes`` runtime does."""
     prune: Retention = Retention()
     """What ``prune`` keeps: how many generations, for how many days, and how
@@ -1184,7 +1184,7 @@ class Spec(_Model):
     secrets: Secrets = Secrets()
     """Secrets the build needs, by reference."""
     notify: Notify | None = None
-    """Who hears when a generated CI job fails or warns: webhooks and email."""
+    """Notifications for generated CI jobs that fail or warn: webhooks and email."""
 
     @property
     def engine(self) -> EngineName:

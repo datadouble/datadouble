@@ -23,7 +23,7 @@ default is an object, and the field's description says what it holds.
 
 ## The spec
 
-A whole spec: one pipeline, from the sources it reads to the copies it makes.
+A complete spec, which describes one pipeline.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -39,23 +39,23 @@ A whole spec: one pipeline, from the sources it reads to the copies it makes.
 | `files` | [Files](#files) |  | A file tree copied with the rows, as a second source. |
 | `images` | map of [ImageGroup](#imagegroup) |  | The images built from one extract, by group name. Defaults to one group, `all`, that holds every table. Group names follow the same rules as the spec's name. |
 | `objects` | list of [ObjectRoot](#objectroot) |  | Objects that code outside Datadouble expects in every image, such as `{view: reporting.daily}`. They join each image's closure. |
-| `package` | [Package](#package) | see type | The image formats to produce, and the accounts physical images carry. |
+| `package` | [Package](#package) | see type | The image formats to produce, and the database accounts built into physical images. |
 | `verify` | [Verify](#verify) | see type | Checks every image must pass. Each image must restore, its row counts and references must match, the PII scan must find nothing it doesn't allow, and every assertion must return no rows. This section sets the PII scan's allowed values and the assertions. |
-| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs, from extract on: `{docker: {...}}` or `{kubernetes: {...}}`. Extract and the stages after it need it. The `kubernetes` runtime reaches another cluster through `kubeconfig`, a secret reference. It starts pods in the namespace that `namespace` names. Without it, pods start where `kubectl` would put them: inside a cluster, the namespace of Datadouble's own pod, and otherwise the kubeconfig context's namespace. |
+| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs, from extract on: `{docker: {...}}` or `{kubernetes: {...}}`. Extract and the stages after it need it. The `kubernetes` runtime reaches another cluster through `kubeconfig`, a secret reference. It starts pods in the namespace given by `namespace`. Without it, pods start where `kubectl` would put them: inside a cluster, the namespace of Datadouble's own pod, and otherwise the kubeconfig context's namespace. |
 | `store` | list of map of map of JSON |  | Where the build stores images, one adapter each: `{filesystem: ...}` or `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string that defaults to `"0640"`. Every file it writes gets `mode`, whatever the umask. Directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or that don't let the owner read and write, are refused. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |
 | `promote` | [Promote](#promote) |  | The export stores that `promote` copies verified images to, and what it requires of them. |
 | `fetch` | [Fetch](#fetch) |  | Where `fetch` reads promoted images, and the staging directory it fills. |
 | `replicate` | [Replicate](#replicate) |  | How copies are made: the adapter, the mode (pool or on-demand), and how many. |
-| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in the namespace that `namespace` names, and otherwise where `kubectl` would put them, as the `kubernetes` runtime does. |
+| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in the namespace given by `namespace`, and otherwise where `kubectl` would put them, as the `kubernetes` runtime does. |
 | `prune` | [Retention](#retention) | see type | What `prune` keeps: how many generations, for how many days, and how many engine versions. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
-| `notify` | [Notify](#notify) |  | Who hears when a generated CI job fails or warns: webhooks and email. |
+| `notify` | [Notify](#notify) |  | Notifications for generated CI jobs that fail or warn: webhooks and email. |
 
 ### AccountPrivileges
 
-What an account that copies carry may do.
+The privileges of a copy account.
 
 - `all`: every privilege, with the grant option. On PostgreSQL, this is a superuser. This is the default.
 - `read`: `SELECT` on the image's data, plus what the engine gives every user.
@@ -206,7 +206,7 @@ The `files` engine adapter reads the tree. Each top-level directory is a table, 
 | `connection` | map of JSON |  | Where the tree is and how to read it. The `files` adapter checks these settings. |
 | `select` | map of string |  | The `find` tests that choose each top-level directory's files, such as `-type f -mtime -30`. |
 | `exclude` | list of string |  | Top-level directories to leave out. |
-| `paths_from` | string or [PathsFrom](#pathsfrom) |  | How the source's chosen rows name more files to copy, relative to the tree's root. Either a `table.column` that holds paths, or a template with `table`, `path` and optionally `match`. |
+| `paths_from` | string or [PathsFrom](#pathsfrom) |  | Which files the source's selected rows reference, relative to the tree's root. Either a `table.column` that holds paths, or a template with `table`, `path` and optionally `match`. |
 | `cleanup` | list of string |  | Shell commands run in the root of the tree's working copy during `transform`, before the image is packaged and verified, such as one that removes EXIF data. |
 | `image` | string |  | The container image that the cleanup commands run in. Defaults to a Debian image. |
 
@@ -264,7 +264,7 @@ A native script run before load, such as one that sets server settings or adds e
 
 Native scripts run around load and transform.
 
-Each engine says whether it runs hooks. The plan fails if a spec gives hooks to an engine that doesn't.
+Not every engine supports hooks. The plan fails if a spec gives hooks to an engine that doesn't.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -273,7 +273,7 @@ Each engine says whether it runs hooks. The plan fails if a spec gives hooks to 
 
 ### ImageFormat
 
-The forms a golden image can take.
+The golden image formats.
 
 - `physical`: the engine's own on-disk form. It is the fastest to clone and start, but it is tied to the server version.
 - `logical`: a portable export, which restores into other server versions.
@@ -307,7 +307,7 @@ The Jailer compatibility page explains what Datadouble takes from it.
 
 ### Notify
 
-Who hears about generated CI jobs that fail or warn (decision 125).
+Notifications for generated CI jobs that fail or warn (decision 125).
 
 Notifications live in the spec rather than in `ci init`'s options, so generating the jobs again keeps them.
 
@@ -377,22 +377,22 @@ One of `null` or `stub` or `drop`.
 
 ### Package
 
-Which image formats to produce, and the accounts physical images carry.
+Which image formats to produce, and the database accounts built into physical images.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `formats` | list of [ImageFormat](#imageformat) |  | The image formats to produce: `physical`, `logical` or both. If given, the list must not be empty. Defaults to every format the engine supports. The `--format` option overrides it. |
-| `accounts` | list of [CopyAccount](#copyaccount) |  | Accounts that physical images carry, for consumers that serve them with the engine's own image. None by default. |
+| `accounts` | list of [CopyAccount](#copyaccount) |  | Database accounts built into physical images, for consumers that serve them with the engine's own image. None by default. |
 
 ### PathsFrom
 
-How the source's chosen rows name files, as a template over a table's columns.
+A template that builds file paths from a table's columns.
 
 For example, `path: "documents/{customer_id}/{file_name}"` builds a path from two columns. `match`, if given, is a regular expression applied to the result, whose first group is the path. Use it for values such as URLs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `table` (required) | string |  | The table whose chosen rows name the files. |
+| `table` (required) | string |  | The table whose selected rows hold the file paths. |
 | `path` (required) | string |  | A template that builds a value from the row's columns, such as `documents/{customer_id}/{file_name}`. Without `match`, the value is the path, relative to the tree's root. Must not be empty. |
 | `match` | string |  | A regular expression applied to the value `path` builds. Its first group is the path. Use it for values such as URLs. |
 
@@ -506,9 +506,9 @@ One of `auto` or `nested` or `keys`.
 
 ### Strict
 
-Strict mode's level for each kind of thing in the catalog.
+Strict mode's level for each kind of catalog object.
 
-Strict mode compares the source's catalog with the catalog lock, and warns or fails on what differs. Each kind of thing has its own level. Kinds left out take their defaults.
+Strict mode compares the source's catalog with the catalog lock, and warns or fails on what differs. Each kind has its own level. Kinds left out take their defaults.
 
 Some differences fail the plan whatever the levels: a removed table or column, a table whose keys changed, a removed requirement or one at another version, and any difference that breaks something.
 
