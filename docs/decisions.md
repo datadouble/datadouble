@@ -807,10 +807,12 @@ A report keyed by package-relative names (`__init__.py`) silently merged files a
 
 ### 72. Engine software runs in vendor images {#decision-72}
 
+*(Amended by [decision 129](#decision-129).)*
+
 **Decided:** Engine software runs in the engine vendor's container images, never beside Datadouble. This covers working databases, restores for verification, and tools such as `pg_dump` and `mongorestore`.
 
 - The default image is the vendor's official image of exactly the source's version (`postgres:<version>-trixie`, `mongo:<version>`). A dump from a newer minor release can hold what an older server rejects.
-- `source.image` overrides the default.
+- A source's `image` (`sources.<name>.image`) overrides the default.
 - The published `datadouble` image carries Datadouble, its adapters, the `docker` command, `kubectl` and cosign. It carries no engine software.
 
 **Why:** Engine binaries tied Datadouble to one host's packages and versions. SQL Server and Oracle ship only as images in practice. The vendor's image matches the source's version and carries its own tools.
@@ -818,6 +820,8 @@ A report keyed by package-relative names (`__init__.py`) silently merged files a
 This supersedes [decision 49](#decision-49)'s requirement that the build machine hold server binaries.
 
 ### 73. Container runtimes are adapters {#decision-73}
+
+*(Amended by [decisions 86](#decision-86), [124](#decision-124), [126](#decision-126) and [133](#decision-133).)*
 
 **Decided:** Container runtimes are adapters (`datadouble.runtimes`). The spec's `runtime:` chooses one:
 
@@ -829,6 +833,8 @@ Containers see their paths at the same absolute path as Datadouble does. That is
 **Why:** Builds must run on Kubernetes as well as on a host with Docker. Identical paths and one user let both sides share files without copying them or fixing ownership.
 
 ### 74. Working server credentials and network access {#decision-74}
+
+*(Amended by [decision 121](#decision-121).)*
 
 **Decided:**
 
@@ -859,7 +865,7 @@ Containers see their paths at the same absolute path as Datadouble does. That is
 
 ### 77. One place runs external programs {#decision-77}
 
-**Decided:** External programs run only through `datadouble.programs`. It uses no shell and passes arguments as a list. It holds the repository's one subprocess suppression.
+**Decided:** External programs run only through `datadouble.programs`. It uses no shell and passes arguments as a list. It holds the repository's only subprocess suppressions: one for a program that runs to the end, and one for a program that keeps running.
 
 The number of checker suppressions must equal a budget in `pyproject.toml`. Adding a suppression raises the budget in review, and removing one lowers it.
 
@@ -930,11 +936,13 @@ In version 1, these features fail the plan by name: restriction conditions, non-
 
 ### 83. SQL Server images, user and licence {#decision-83}
 
+*(Amended by [decisions 86](#decision-86) and [107](#decision-107).)*
+
 **Decided:** SQL Server working databases run in Microsoft's `mcr.microsoft.com/mssql/server` image.
 
-- **Image.** The image matches the source's release and cumulative update, for example `2022-CU28-ubuntu-22.04`, read from `SERVERPROPERTY`. The build must match the source's build. A source on a security update (GDR) names its image in `source.image`.
+- **Image.** The image matches the source's release and cumulative update, for example `2022-CU28-ubuntu-22.04`, read from `SERVERPROPERTY`. The build must match the source's build. A source on a security update (GDR) names its image in `sources.<name>.image`.
 - **User.** SQL Server in that image runs only as its own uid and gid, 10001. So Datadouble must run as 10001:10001 (its image and the test runner do), and the adapter refuses otherwise.
-- **`source.server`.** This is a new generic setting for working servers, and each engine adapter checks it. For SQL Server it carries `accept_eula: true`, without which the adapter refuses, and the edition (`Developer` by default). Other engines take no `source.server` settings yet.
+- **`server`.** A source's `server` (`sources.<name>.server`) is a generic setting for working servers, and each engine adapter checks it. For SQL Server it carries `accept_eula: true`, without which the adapter refuses, and the edition (`Developer` by default). Other engines define their own `server` settings ([decision 107](#decision-107)).
 
 **Why:** Microsoft tags images by update, not by build. The server will not start as another user, and running Datadouble as that user is simpler than changing ownership both ways. Accepting a licence is the operator's act, never Datadouble's.
 
@@ -971,6 +979,8 @@ Each working-database start is a new instance, whose system databases sit in a p
 
 ### 86. Each engine's image owner {#decision-86}
 
+*(Amended by [decision 121](#decision-121).)*
+
 **Decided:** Each engine adapter declares `owner`: the `uid:gid` that serves a copy of its images in its vendor's image.
 
 | Engine | `owner` |
@@ -1006,6 +1016,8 @@ Plugging moves only the PDB, a few hundred megabytes, where the container databa
 
 ### 88. Integration tests run in groups {#decision-88}
 
+*(Amended by [decision 89](#decision-89).)*
+
 **Decided:** The integration suite runs in groups, listed in `tests/integration-groups.txt`. Each group has its own user, Compose services and test paths, and each is its own CI job, run in parallel.
 
 - `make test-group` runs one group, and `make test-integration` runs all of them.
@@ -1019,6 +1031,8 @@ Plugging moves only the PDB, a few hundred megabytes, where the container databa
 Amends [decisions 64](#decision-64) and [71](#decision-71).
 
 ### 89. Sharding slow integration groups {#decision-89}
+
+*(Amended by [decision 90](#decision-90).)*
 
 **Decided:** A slow integration group is split into shards, and each shard is its own CI job. `tests/integration-groups.txt` sets how many shards a group has, and CI's job matrix is read from that table.
 
@@ -1066,7 +1080,7 @@ Amends [decision 89](#decision-89).
 
 - **Tables.** The Redis adapter's tables are key patterns in each database (`db0`, `db1`…). ID-like key segments are written `{}` (`user:{}:sessions`), and patterns can be declared for the rest.
 - **Columns.** `_key` holds the values the placeholders stand for, and it is the key. The other columns are what the keys hold: `value`, hash and stream fields, `members`, `scores`.
-- **Extract.** Extract reads only the selected keys: `SCAN` by pattern and type, then `DUMP` and `PTTL`. So each key is as it was when read. There is no point-in-time snapshot across keys, and the manifest records how long the extract took.
+- **Extract.** Extract reads only the selected keys: `SCAN` by pattern, then `TYPE` and `DUMP`. So each key is as it was when read. There is no point-in-time snapshot across keys, and the manifest records how long the extract took.
 - **Subsets.** Seeds and `when` clauses are globs over `_key`. Datadouble evaluates conditions itself. Only strategy B is available.
 - **Images.** A physical image is the RDB file the working server saves. There is no logical format. Copies keep no expiry.
 - **Catalog rules.** A segment is literal only if it is name-shaped and not ID-like. The catalog fails, naming no values, when a prefix has more than 64 distinct first segments, or 16 at a later position. A declared pattern is a table even before any key matches it.
@@ -1097,6 +1111,8 @@ Amends [decision 89](#decision-89).
 
 ### 95. Elasticsearch client and working nodes {#decision-95}
 
+*(The per-start password is amended by [decision 96](#decision-96).)*
+
 **Decided:**
 
 - The Elasticsearch adapter speaks the REST API through Elastic's `elastic-transport`, not the official client.
@@ -1124,7 +1140,7 @@ Everything else, from the catalog to images and rules, is the same code. Further
 
 OpenSearch keeps its users in the data directory, so a node cannot take a new password at each start. Its image refuses passwords without capitals and symbols, which the replicate adapters do not make, and the installer's test mode accepts them. OpenSearch's security index is an ordinary dot-named index.
 
-Refines [decision 34](#decision-34).
+Refines [decision 34](#decision-34), and amends [decision 95](#decision-95).
 
 ### 97. Files as a second source {#decision-97}
 
@@ -1152,6 +1168,8 @@ Text runs find EXIF and similar metadata, which the plan's example cleans with e
 Refines [decision 35](#decision-35).
 
 ### 98. The production boundary mark {#decision-98}
+
+*(Refined by [decision 123](#decision-123).)*
 
 **Decided:** Some commands run only on machines marked as inside the production boundary, by `DATADOUBLE_BOUNDARY=inside` in their environment. These are:
 
@@ -1183,6 +1201,8 @@ The first four are the Tier 1 systems, one per pull request. The nightly hosted 
 **Why:** Each system is large enough to review on its own, as engines were in M4 and M5 ([decisions 80](#decision-80) and [92](#decision-92)).
 
 ### 100. How `ci init` writes jobs {#decision-100}
+
+*(Refined by [decision 123](#decision-123). Amended by [decisions 126](#decision-126) and [127](#decision-127).)*
 
 **Decided:** `ci init` (`ci.init`) writes one side of the boundary per call.
 
@@ -1220,6 +1240,8 @@ A job holding only its own credentials keeps production secrets out of non-produ
 
 ### 102. Jenkins jobs {#decision-102}
 
+*(Amended by [decision 127](#decision-127).)*
+
 **Decided:**
 
 - Each Jenkins job is a declarative Jenkinsfile. It loads the shared library (`ci/jenkins`) from this repository at the release's tag, with `library` and `libraryPath`, so no global library needs setting up. The library has one `datadouble` step.
@@ -1233,6 +1255,8 @@ A job holding only its own credentials keeps production secrets out of non-produ
 An unstable build is a warning: its image is built and verified, so it must still be promoted. The suite runs the step in real Jenkins, which a unit-test harness for Groovy would only imitate.
 
 ### 103. Argo CD on Kubernetes {#decision-103}
+
+*(Amended by [decision 133](#decision-133).)*
 
 **Decided:** On Kubernetes, `ci init --system argocd` writes an Argo CD Application per side. The Application installs this repository's Helm chart (`ci/kubernetes/chart`) at the release's tag, with the jobs, the spec and its catalog lock as values. `--runner` names the namespace.
 
@@ -1289,13 +1313,15 @@ Refines the "never by hand" rule of [decision 25](#decision-25).
 - Each engine adapter reports, in the catalog, the extensions, plugins, modules or packages a source uses, with versions.
 - The lock records them, and strict mode treats them like tables.
 - Before it opens the snapshot, the build checks that the working image provides each one, at the source's version. Otherwise it fails with `requirement_unmet`, listing every gap.
-- `source.omit` leaves named add-ons out. Anything that uses them must be excluded.
-- `source.server` takes the settings add-ons need, such as PostgreSQL's `shared_preload_libraries`.
+- A source's `omit` (`sources.<name>.omit`) leaves named add-ons out. Anything that uses them must be excluded.
+- A source's `server` takes the settings add-ons need, such as PostgreSQL's `shared_preload_libraries`.
 - Requirements are part of a catalog's hash only when the catalog has some, so a lock of a catalog without requirements stays valid.
 
 PostgreSQL ships first. Redis, Elasticsearch, OpenSearch and MySQL follow, then SQL Server, Oracle and MongoDB. Salesforce's managed packages are part of M7.
 
 **Why:** A missing extension failed mid-build in a raw restore error, after the snapshot had been read. A change in a source's add-ons went unnoticed. And copies could run other versions than the source. Every engine has the same problem in its own terms, so the shape is shared and the details stay in adapters.
+
+Amends [decision 83](#decision-83).
 
 ### 108. Requirements for MySQL, Redis and search engines {#decision-108}
 
@@ -1400,7 +1426,7 @@ The second use is needed because GitHub starts no `workflow_run` follow-on (prom
 
 ### 117. Salesforce's SQL suppression {#decision-117}
 
-**Decided:** The Salesforce adapter's source has a per-file ignore of ruff's `S608` (SQL built from strings). It counts in the suppression budget ([decision 77](#decision-77)).
+**Decided:** The Salesforce adapter's source has a per-file ignore of ruff's `S608` (SQL built from strings), with its reason, in the root `pyproject.toml`. The suppression budget ([decision 77](#decision-77)) counts only comments in Python files, so it does not count this ignore.
 
 The adapter builds SOQL and SQLite statements whose object and field names come from the org's own descriptions, quoted. Every value is escaped (`soql.literal`) or bound as a parameter.
 
@@ -1418,7 +1444,7 @@ The adapter builds SOQL and SQLite statements whose object and field names come 
 
 ### 119. Tables that nothing selects {#decision-119}
 
-**Decided:** A kept table that gets rows from no seed, `follow: all` or followed edge fails the plan by default. `subset.unselected` changes that:
+**Decided:** A kept table that gets rows from no seed, `follow: all` or followed edge fails the plan by default (`subset.unselected: fail`). Two other values change that:
 
 - `none`: the table is copied without rows, with a warning.
 - `all`: every row is copied.
@@ -1476,7 +1502,7 @@ Amends [decision 22](#decision-22)'s "target engine version".
 - `ci init` gives the build job the references. Plain-text passwords never become mounts.
 - The image summary and build manifest name users and privileges, never passwords.
 
-MySQL and PostgreSQL support accounts first. Touches [decisions 54](#decision-54), [62](#decision-62), [74](#decision-74) and [86](#decision-86).
+MySQL and PostgreSQL support accounts first. Amends [decisions 54](#decision-54), [62](#decision-62), [74](#decision-74) and [86](#decision-86).
 
 **Why:** Consumers that serve a volume copy with the engine's official image can't set a password, since those images apply theirs only when they create a data directory. So nothing can connect over TCP. Instance copies carry the accounts too, but their start resets the engine's instance user: `datadouble` on MySQL, reserved for that reason, and `postgres` on PostgreSQL, documented.
 
@@ -1507,7 +1533,7 @@ Applications often also want a read-only account for reporting tools, and such a
 
 **The index.** Stores that cannot list keys raise `ListingUnsupportedError` from `list`. `image_lines` and `generations` then read `<spec>/<group>/index.json`.
 
-- `promote` rewrites the index from a listing of every export store, after each image's summary and channel.
+- `promote` rewrites each export store's index from a listing of that store, after each image's summary and channel.
 - `prune --target export` rewrites it after pruning, and removes it when a group has nothing left.
 - Because `promote` lists every export store, an S3 export store needs `s3:ListBucket` for `promote`'s credentials.
 - The index is written to export stores only. Build stores have none.
@@ -1536,7 +1562,7 @@ Rebuilding the index from a listing, rather than editing it, means any later pro
 
 The skills ([decision 105](#decision-105)) re-lock through this job where the person has no shell inside the boundary.
 
-**Why:** Strict mode needs a lock, and locking reads the source. Where the only machine inside the boundary is a CI runner, re-locking needed a shell there, which pushed teams toward `--no-strict`. Reviewing the diff before committing is the check strict mode exists for, so the job publishes the diff rather than committing it.
+**Why:** Strict mode needs a lock, and locking reads the source. Where the only machine inside the boundary is a CI runner, re-locking needed a shell there, which pushed teams toward turning strict mode off. Reviewing the diff before committing is the check strict mode exists for, so the job publishes the diff rather than committing it.
 
 Refines [decisions 10](#decision-10), [18](#decision-18), [98](#decision-98) and [100](#decision-100).
 
@@ -1622,6 +1648,8 @@ Starting the image on the daemon it drives keeps one daemon, and one set of path
 Amends [decisions 73](#decision-73) and [100](#decision-100).
 
 ### 127. Jenkins jobs on Kubernetes agents {#decision-127}
+
+*(Amended by [decision 133](#decision-133).)*
 
 **Decided:** `ci init --agent kubernetes` runs a system's jobs as Kubernetes pods, instead of `docker run` on an agent with Docker. Docker stays the default.
 
@@ -1767,7 +1795,7 @@ The MySQL adapter needs MySQL 8.0.13 or later.
 
 **Why:** Planning reads the live catalog, so a widened column breaks nothing. Failing on it everywhere taught people to turn strict mode off. What matters is whether a change breaks something.
 
-A changed trigger or function can change what a copy holds. But most object changes are routine, so they warn by default, and each kind can be made to fail. Only package planning (#79) knows everything an image needs, so the check is a hook it fills in.
+A changed trigger or function can change what a copy holds. But most object changes are routine, so they warn by default, and each kind can be made to fail. Only package planning ([decision 131](#decision-131)) knows everything an image needs, so the check is a hook it fills in.
 
 Amends [decision 10](#decision-10).
 
@@ -1836,13 +1864,13 @@ A table reached only through objects defaults to `none`, with a warning. Structu
 - Dropping objects without `CASCADE` makes a dependency the catalog missed fail loudly, naming what blocked it. PostgreSQL's aggregates, operators and casts are not in the catalog. Tables' index expressions and row-level security policies are.
 - Inferred edges stay warnings ([decision 130](#decision-130)).
 
-Extends [decision 41](#decision-41).
+Refines [decision 41](#decision-41).
 
 ### 133. Default namespace for the Kubernetes runtime {#decision-133}
 
 **Decided:** The `kubernetes` runtime's `namespace` is optional. Left out, pods start where `kubectl` would put them unasked:
 
-- **Inside a cluster** (no `KUBECONFIG`, and a service account namespace file in Datadouble's pod): the namespace of Datadouble's own pod, read from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`.
+- **Inside a cluster** (no kubeconfig in the runtime's settings, `KUBECONFIG` unset or empty, and a service account namespace file in Datadouble's pod): the namespace of Datadouble's own pod, read from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`.
 - **Outside a cluster:** the kubeconfig context's namespace, or `default`.
 
 When a spec names a namespace, `ci init` for Jenkins Kubernetes agents and Argo CD refuses a side whose `--runner` differs, for jobs that start engines (`runtime_namespace` in the core).
@@ -1958,7 +1986,7 @@ Images are pinned by digest, so the mirror cannot change what a job runs.
 
 **Decided:** Engine messages hide only data values, not every quoted string.
 
-**Data-bearing message shapes.** Each engine adapter lists, in one place, the message shapes its engine uses to report data values:
+**Data-bearing message shapes.** Each SQL engine adapter lists, in one place, the message shapes its engine uses to report data values:
 
 - PostgreSQL: `invalid input syntax for type integer: "…"`, `Key (email)=(…) already exists`, `Failing row contains (…)`.
 - MySQL: `Duplicate entry '…' for key`, `Incorrect integer value: '…' for column`, `near '…' at line 1`.
