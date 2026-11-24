@@ -545,6 +545,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`ci init` no longer mounts settings that name paths on other machines**
+  ([#121](https://github.com/datadouble/datadouble/issues/121)). It mounted
+  every absolute path in a job's spec sections, so `k8s-pv`'s `nfs.path`, the
+  export's path on the NFS server, became a `-v` mount on Docker agents and
+  made `--agent kubernetes` refuse the spec because the path was not on the
+  work claim. Adapters now declare such settings with
+  `datadouble.settings.remote` on their entry point, and `ci init` leaves them
+  out: `k8s-pv`'s `nfs.path`, an `s3` store's `prefix`, `vault`'s `mount` and
+  `path`, and a Redis source's `connection.patterns`. Of the `files` section,
+  only `connection` is searched for paths, so a `cleanup` command that runs in
+  the cleanup image is no longer mounted. The CI/CD design doc lists which
+  settings become mounts.
 - **Error messages hide only data values, and keep the objects they name**
   ([#107](https://github.com/datadouble/datadouble/issues/107)). Engine errors
   hid every quoted string, so `null value in column "…" of relation "…"`

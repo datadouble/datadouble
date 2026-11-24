@@ -17,10 +17,11 @@ from importlib.metadata import entry_points
 from pydantic import JsonValue
 
 from datadouble.announce import AnnouncerFactory
-from datadouble.ci import CiAdapter, CiFactory
+from datadouble.ci import CiAdapter, CiFactory, RemoteSettings
 from datadouble.engine import EngineAdapter
 from datadouble.replicate import ReplicatorFactory
 from datadouble.runtime import ContainerRuntime, RuntimeFactory
+from datadouble.settings import remote_keys
 from datadouble.storage import Store
 
 type EngineFactory = Callable[[], EngineAdapter]
@@ -85,6 +86,16 @@ class Registry:
             )
             raise RegistryError(message)
         return factory()
+
+    def remote_settings(self) -> RemoteSettings:
+        """The settings each adapter declares remote, which ``ci init`` never mounts."""
+        return RemoteSettings(
+            engines={name: remote_keys(factory) for name, factory in self.engines.items()},
+            stores={name: remote_keys(factory) for name, factory in self.stores.items()},
+            replicators={name: remote_keys(factory) for name, factory in self.replicators.items()},
+            announcers={name: remote_keys(factory) for name, factory in self.announcers.items()},
+            runtimes={name: remote_keys(factory) for name, factory in self.runtimes.items()},
+        )
 
 
 def installed() -> Registry:

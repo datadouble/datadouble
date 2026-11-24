@@ -16,7 +16,7 @@ from datadouble.engine import EngineError
 from datadouble.names import ColumnName, TableName
 from datadouble.programs import Completed
 from datadouble.runtime import Container, Server
-from datadouble.settings import parse_settings
+from datadouble.settings import parse_settings, remote_keys
 from datadouble.subset import (
     AllOf,
     AllRows,
@@ -214,6 +214,8 @@ def test_tools_and_servers_report_failures(tmp_path: Path) -> None:
     with pytest.raises(EngineError, match="not running"):
         _ = RedisServer(tools, tmp_path, tmp_path, 16).server
     assert engine().name == "redis"
+    # Key patterns are on the source, so `ci init` never mounts them.
+    assert remote_keys(engine) == (("connection", "patterns"),)
 
 
 @dataclass

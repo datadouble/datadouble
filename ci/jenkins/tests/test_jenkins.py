@@ -24,6 +24,7 @@ from datadouble.ci import (
     JobKind,
     Pipeline,
     PipelineOptions,
+    RemoteSettings,
     Report,
     Side,
     pipeline,
@@ -446,6 +447,70 @@ def test_kubernetes_paths_must_be_on_the_claim() -> None:
     elsewhere = replace(SCENARIOS["kubernetes-production"], runtime={"kubernetes": settings})
     with pytest.raises(CiError, match=r"mounted at /srv/datadouble/work; these are not under it"):
         Jenkins().generate(elsewhere)
+
+
+NFS = """
+name: shop
+sources:
+  app:
+    engine: postgres
+fetch:
+  from:
+    s3:
+      bucket: shop-export
+      prefix: /exports/images
+  staging: /srv/datadouble/staging
+runtime:
+  kubernetes:
+    claim: datadouble
+    mount: /srv/datadouble
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/datadouble/clones
+      nfs:
+        server: nfs.example.com
+        path: /exports/datadouble/clones
+  mode: pool
+  size: 1
+"""
+NFS_JOBS = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
+REMOTE = RemoteSettings(stores={"s3": (("prefix",),)}, replicators={"k8s-pv": (("nfs", "path"),)})
+
+
+def nfs_pipeline(agent: Agent, remote: RemoteSettings) -> Pipeline:
+    options = PipelineOptions(
+        kinds=NFS_JOBS,
+        spec_path="datadouble/shop.yml",
+        image="ghcr.io/datadouble/datadouble:v1.2.3",
+        version="1.2.3",
+        owner="999:999",
+        runner="shop-staging",
+        agent=agent,
+        remote=remote,
+    )
+    return pipeline(parse_spec(NFS), options)
+
+
+def test_kubernetes_agents_leave_remote_paths_off_the_claim() -> None:
+    # Unless k8s-pv declares nfs.path remote, it looks like a path the job opens.
+    with pytest.raises(CiError, match=r"these are not under it: /exports/datadouble/clones"):
+        Jenkins().generate(nfs_pipeline(Agent.KUBERNETES, RemoteSettings()))
+    planned = nfs_pipeline(Agent.KUBERNETES, REMOTE)
+    assert {job.kind: job.mounts for job in planned.jobs}[JobKind.PRUNE] == (
+        "/srv/datadouble/clones",
+        "/srv/datadouble/staging",
+    )
+    provision = Jenkins().generate(planned)[1].content
+    assert "mountPath: /srv/datadouble\n" in provision
+    assert "/exports" not in provision
+
+
+def test_docker_agents_leave_remote_paths_unmounted() -> None:
+    planned = nfs_pipeline(Agent.DOCKER, REMOTE)
+    prune = render(planned, planned.jobs[3])
+    assert "mounts: ['/srv/datadouble/clones', '/srv/datadouble/staging']," in prune
+    assert "/exports" not in prune
 
 
 def test_another_docker_command_and_socket() -> None:

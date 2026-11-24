@@ -15,3 +15,7 @@ store:
 
 Credentials come from the usual AWS sources (environment, shared files, an
 instance or workload role); they never appear in the spec.
+
+`prefix` is a key prefix inside the bucket, not a directory. Even a prefix
+that starts with `/` is never mounted into the jobs `ci init` writes
+([which settings become mounts](../../docs/ci-cd.md#which-settings-become-mounts)).

@@ -26,6 +26,29 @@ announce:
   - k8s-secret: {}                 # Secrets in Datadouble's own namespace
 ```
 
+Datadouble writes each copy into a directory under `path`, as the job's own
+machine sees it. With `local`, the volume points at that same directory on
+the node. With `nfs`, `path` must be where the export is mounted on the job's
+machine, and `nfs.path` is the export's own path on the NFS server, which the
+volumes point at. Datadouble never opens `nfs.path`, so `ci init` mounts only
+`path` into the jobs it writes, never `nfs.path`
+([which settings become mounts](../../docs/ci-cd.md#which-settings-become-mounts)).
+On a Kubernetes agent, only `path` has to be under the runtime's `mount`:
+
+```yaml
+runtime:
+  kubernetes:
+    claim: datadouble
+    mount: /srv/datadouble
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/datadouble/clones        # the export, mounted from the claim
+      nfs:
+        server: nfs.example.com
+        path: /exports/datadouble/clones  # the same directory on the server
+```
+
 Each volume carries `datadouble.dev/` labels: `spec`, `group`, `engine`,
 `engine-version`, `server-version`, `generation` and `copy`. `engine-version`
 is the engine's compatibility line (`17` for PostgreSQL, `8.4` for MySQL), not

@@ -649,8 +649,9 @@ Generated configuration:
 - **Pins the Datadouble version:** the native step at that release's tag, and
   the release's image.
 - **References secrets by name only.** Each job gets only the secrets named
-  in the spec sections it reads, and mounts only the absolute paths named
-  there:
+  in the spec sections it reads, and mounts only the absolute paths on its
+  own machine named there ([which settings become
+  mounts](#which-settings-become-mounts)):
     - `build` reads `sources`, `files`, `package` (only the password
       references of `package.accounts`), `store`, `signing`, `secrets` and
       `runtime`. It also gets `COSIGN_PASSWORD` for a build signed with a key;
@@ -694,6 +695,42 @@ its own. GitLab, Jenkins and Argo CD need `--runner` on both sides: runner
 tags, agent labels, or the side's namespace. On GitHub, a non-production call
 without it runs on any `self-hosted` runner. `build` also needs `--work`, an
 absolute work directory. See [where jobs run](#where-jobs-run).
+
+#### Which settings become mounts {#which-settings-become-mounts}
+
+A job's container sees only the paths `ci init` mounts into it. So `ci init`
+looks through the spec sections each job reads and mounts every string that
+looks like an absolute path: a store's `path`, `fetch.staging`, a copy
+directory, a Unix socket directory, a `file: ...` secret reference.
+
+Some settings look like paths but name something that is not on the job's
+machine. `k8s-pv`'s `nfs.path` is the export's path on the NFS server: the
+PersistentVolumes point at it, and Datadouble writes the copies through
+`path`. Mounting it would be wrong. On a Docker agent the job would refuse to
+start when the agent has no such directory, or mount an unrelated one when it
+has. On a Kubernetes agent `ci init` would refuse the spec, since the path is
+not on the work claim.
+
+So each adapter declares the settings that name places elsewhere, and `ci
+init` never mounts them (decision 140):
+
+| Adapter | Settings left out | What they name |
+|---|---|---|
+| `k8s-pv` (replicate) | `nfs.path` | the export's path on the NFS server |
+| `s3` (store) | `prefix` | a key prefix in the bucket |
+| `vault` (announce) | `mount`, `path` | the KV mount and the path inside Vault |
+| `redis` (engine) | `connection.patterns` | key patterns on the source |
+
+Of the `files` section, only `connection` is searched for paths. Its `select`
+tests, `exclude` names and `paths_from` paths are relative to the tree, and
+its `cleanup` commands run inside the cleanup image.
+
+Every other absolute path in a job's sections is mounted. URLs are not paths
+(`s3://`, `https://` and `unix://` values never match), and neither is a
+plain-text account password or user name. An adapter from outside this
+repository declares its own settings the same way, with
+`datadouble.settings.remote` on its entry point (see
+[adapters](architecture.md#adapters)).
 
 ### Supported systems {#supported-systems}
 
@@ -960,8 +997,9 @@ runner's Docker daemon (decision 100). The image runs:
   published ports, just as the runner would.
 
 The workspace is mounted at the same path inside the container. So is every
-absolute path the job's spec sections name: stores, staging, copies, a Unix
-socket directory, a secret file and the work directory. They must keep their
+absolute path on the runner that the job's spec sections name: stores,
+staging, copies, a Unix socket directory, a secret file and the work
+directory ([which settings become mounts](#which-settings-become-mounts)). They must keep their
 paths because the engine containers Datadouble starts mount them by those
 paths. A job's runner therefore needs Docker, with those paths owned by the
 engine's user.
@@ -1005,8 +1043,10 @@ The two sides need separate namespaces, ideally separate clusters, since each
 side's claim holds that side's data.
 
 **Engines and the claim.** Jobs that start engine software need the spec's
-`kubernetes` runtime on that claim, with every path in the spec under the
-runtime's `mount`. Those jobs' pods mount the claim at `mount`, the path the
+`kubernetes` runtime on that claim, with every path the job mounts under the
+runtime's `mount`. Settings that name paths elsewhere, such as `k8s-pv`'s
+`nfs.path`, need not be ([which settings become
+mounts](#which-settings-become-mounts)). Those jobs' pods mount the claim at `mount`, the path the
 engine pods use. Other jobs mount it at their paths' common directory.
 
 **The runtime's namespace.** It is best to leave the runtime's `namespace`

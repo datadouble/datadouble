@@ -1007,6 +1007,22 @@ group per type (`datadouble.engines`, `datadouble.stores`,
 `datadouble.replicators`, `datadouble.announcers`, `datadouble.runtimes` and
 `datadouble.ci`). So third-party adapters can be installed from anywhere.
 
+An adapter checks its own settings, so only it knows what they mean. One
+thing the core needs to know is which settings name paths that are not on
+the machine running a job, because `ci init` mounts every other absolute path
+into the job's container. An adapter declares those by wrapping its entry
+point in `datadouble.settings.remote`, with each setting as a dotted key:
+
+```python
+@remote("nfs.path")
+def pv_replicator(settings: Mapping[str, JsonValue]) -> Replicator:
+    return PvReplicator(parse_settings(PvSettings, settings, "k8s-pv replicate"))
+```
+
+An engine's keys are inside the source, such as `connection.patterns`. See
+[which settings become mounts](ci-cd.md#which-settings-become-mounts) and
+decision 140.
+
 Three concerns work the same way for every engine, so they live in the core
 rather than in adapters:
 

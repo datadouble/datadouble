@@ -19,7 +19,7 @@ import pytest
 
 from datadouble.announce import Announced, AnnounceError
 from datadouble.registry import installed
-from datadouble.settings import SettingsError
+from datadouble.settings import SettingsError, remote_keys
 from datadouble_vault import VaultAnnouncer, VaultSettings, vault_announcer
 
 COPY = Announced(
@@ -143,6 +143,9 @@ def test_connection_failures_are_announce_errors(
 def test_installed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VAULT_TOKEN", "t")
     assert "vault" in installed().announcers
+    # The mount and path are inside Vault, so `ci init` never mounts them.
+    assert installed().remote_settings().announcers["vault"] == (("mount",), ("path",))
+    assert remote_keys(vault_announcer) == (("mount",), ("path",))
     assert isinstance(vault_announcer({"address": "http://x"}), VaultAnnouncer)
 
 

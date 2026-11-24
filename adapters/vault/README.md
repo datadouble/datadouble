@@ -13,3 +13,7 @@ announce:
 ```
 
 The token comes from `VAULT_TOKEN`; it never appears in the spec.
+
+`mount` and `path` are inside Vault, not on the job's machine, so `ci init`
+never mounts them into a job, even when they start with `/`
+([which settings become mounts](../../docs/ci-cd.md#which-settings-become-mounts)).

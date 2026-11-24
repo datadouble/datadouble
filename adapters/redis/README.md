@@ -39,6 +39,8 @@ the keys under one prefix have more distinct literal segments than a name
 would (64 for a key's first segment, 16 after it), planning fails until a
 pattern is declared for them, since table names leave production in the
 catalog lock. Declare patterns for any key whose segments are data.
+Patterns are keys on the source, so `ci init` never mounts one into the
+build job, even one that starts with `/`.
 
 Anonymization rewrites hash fields, strings and the elements of lists, sets,
 sorted sets and streams; expression rules are Lua, run for each key with
