@@ -36,21 +36,21 @@ _SPEC_INTRO = """\
 
 # Spec reference
 
-This page lists every field a spec can hold. A spec is a YAML or JSON file
+This page documents all spec configuration options. A spec is a YAML or JSON file
 that describes one pipeline: what to copy from the sources, how to anonymize
 and check it, where the images go, and how copies are made. The
 [quickstart](quickstart.md) shows a small one.
 
 Datadouble checks every spec against a JSON Schema, and this page is generated
-from that schema. `datadouble schema` prints it. A spec may hold only the
-fields listed here: Datadouble refuses any other field.
+from that schema. `datadouble schema` prints it. Datadouble rejects any option
+not listed here.
 
 Some settings belong to an adapter rather than to Datadouble, such as a
 source's `connection` or a store's settings. The adapter named checks those,
 and its README lists them.
 
-The page starts with the spec's top-level fields. Then it describes each kind
-of object a field can hold, in alphabetical order. A link in the Type column
+The page starts with the spec's top-level options. Then it documents each
+object type, in alphabetical order. A link in the Type column
 leads to the object's section. The Default column is empty where a field has
 no default, or where its default is empty or unset. "See type" means the
 default is an object, and the field's description says what it holds.
@@ -60,7 +60,7 @@ _CLI_INTRO = """\
 
 # CLI reference
 
-This page lists every `datadouble` command and its options, in the order the
+This page documents every `datadouble` command and its options, in the order the
 command line defines them. The global options come first, since they work
 with every command.
 

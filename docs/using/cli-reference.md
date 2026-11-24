@@ -2,7 +2,7 @@
 
 # CLI reference
 
-This page lists every `datadouble` command and its options, in the order the
+This page documents every `datadouble` command and its options, in the order the
 command line defines them. The global options come first, since they work
 with every command.
 

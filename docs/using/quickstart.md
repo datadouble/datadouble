@@ -16,9 +16,8 @@ You will:
 
 You need Docker and a checkout of
 [datadouble/datadouble](https://github.com/datadouble/datadouble). Run every
-command from the root of the checkout. The commands assume Linux with a local
-Docker daemon, because Datadouble shares file paths and the network with the
-containers it starts. Step 4 explains why.
+command from the root of the checkout. The commands work on Linux, and on
+macOS with OrbStack.
 
 ## 1. Build the image
 
@@ -91,7 +90,8 @@ anonymize:
       unique: true
 store:
   - filesystem:
-      path: /var/tmp/shop/store
+      path: shop/out/store
+      mode: "0644"
 ```
 
 Here is what each section does:
@@ -102,12 +102,12 @@ Here is what each section does:
 | `runtime` | Start engine containers with Docker, on the `shop` network, so they can reach the source. |
 | `subset` | Start from the first five customers (`id <= 5`), then follow references down from `customer` to their `orders`. |
 | `anonymize` | Replace each customer's `name` and `email` with fake values. The fake emails are unique. |
-| `store` | Keep the finished image under `/var/tmp/shop/store`. |
+| `store` | Keep the finished image under `shop/out/store`, readable by everyone. The default, `"0640"`, keeps it from other users, which matters for real data but not for this example. |
 
 Notice that the connection names an environment variable. A spec never holds
 a password itself, so it is safe to commit.
 
-The [spec reference](spec-reference.md) lists every field a spec can hold.
+The [spec reference](spec-reference.md) documents all spec configuration options.
 
 ## 4. Lock, plan and build
 
@@ -123,28 +123,38 @@ A build takes three commands:
 
 Before you can run them, the Datadouble container needs a little setup.
 
-### Prepare the directories and the command
+### Prepare the output directory and the command
 
 Datadouble runs as the user that the engine's copies are served as. For
-PostgreSQL's official image, that user is `999:999`. Files Datadouble writes
-then belong to the server that will open them.
+PostgreSQL's official image, that user is `999:999`. The files Datadouble
+writes then belong to the server that will open them.
 
-The containers Datadouble starts see files at the same paths Datadouble does.
-So Datadouble needs the Docker socket, and every directory it writes must be
-mounted at the same path inside its container as on the host.
-
-Create the directories it writes, owned by that user:
+Datadouble writes everything for this example under `shop/out`. Create that
+directory, owned by user 999, so that Datadouble can write to it. A container
+does this, so the command needs no `sudo` and is the same on every system:
 
 ```
-sudo install -d -o 999 -g 999 /var/tmp/shop /var/tmp/shop/store /var/tmp/shop/work
+docker run --rm --user 0 -v "$PWD:$PWD" --entrypoint install datadouble \
+    -d -o 999 -g 999 "$PWD/shop/out"
+```
+
+On macOS, the directory still belongs to you, because Docker writes to your
+Mac's files as you. Either way, you can read everything Datadouble writes there.
+
+Datadouble's user also needs to start containers, so it needs the group that
+owns the Docker socket. Docker runs inside a virtual machine on macOS, so ask a
+container for that group rather than looking on your own machine:
+
+```
+DOCKER_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+    --entrypoint stat datadouble -c %g /var/run/docker.sock)
 ```
 
 Then define `datadouble` as an alias that runs the image:
 
 ```
 alias datadouble='docker run --rm --network host --user 999:999 \
-    --group-add $(stat -c %g /var/run/docker.sock) \
-    -v /var/run/docker.sock:/var/run/docker.sock -v /var/tmp/shop:/var/tmp/shop \
+    --group-add "$DOCKER_GID" -v /var/run/docker.sock:/var/run/docker.sock \
     -v "$PWD:$PWD" -w "$PWD" -e HOME=/tmp -e DATADOUBLE_BOUNDARY=inside \
     -e SHOP_DSN=postgresql://postgres:local-only@172.31.0.10:5432/postgres datadouble'
 ```
@@ -155,9 +165,8 @@ Each option has a reason:
 |---|---|
 | `--network host` | The working servers Datadouble starts publish their ports on the host, and Datadouble must reach them there. |
 | `--user 999:999` | Run as PostgreSQL's user, as described above. |
-| `--group-add ...` and the socket mount | Let that user start containers through the host's Docker daemon. |
-| `-v /var/tmp/shop:/var/tmp/shop` | The directories Datadouble writes, at the same path. |
-| `-v "$PWD:$PWD" -w "$PWD"` | The checkout, so Datadouble can read `shop/shop.yml`. |
+| `--group-add "$DOCKER_GID"` and the socket mount | Let that user start containers through the Docker daemon. |
+| `-v "$PWD:$PWD" -w "$PWD"` | The checkout, at the same path as outside the container. The containers Datadouble starts mount directories under `shop/out` by their full path, so the path must be the same everywhere. |
 | `-e HOME=/tmp` | User 999 has no home directory in the image. |
 | `-e DATADOUBLE_BOUNDARY=inside` | Mark this machine as inside the production boundary, explained next. |
 | `-e SHOP_DSN=...` | The connection string the spec refers to. |
@@ -170,20 +179,38 @@ test data, so it is fine to mark it for these commands.
 ### Run the three commands
 
 ```
-datadouble lock --spec shop/shop.yml --lock /var/tmp/shop/catalog.lock
-datadouble plan --spec shop/shop.yml --lock /var/tmp/shop/catalog.lock
+datadouble lock --spec shop/shop.yml --lock shop/out/catalog.lock
+datadouble plan --spec shop/shop.yml --lock shop/out/catalog.lock
 datadouble run plan,extract,load,transform,package,verify,store \
-    --spec shop/shop.yml --lock /var/tmp/shop/catalog.lock --work /var/tmp/shop/work
+    --spec shop/shop.yml --lock shop/out/catalog.lock --work shop/out/work
 ```
 
-By default the lock goes beside the spec, as `catalog.lock`. Here it goes in
-`/var/tmp/shop`, because Datadouble's user can't write to your checkout.
+By default the lock goes beside the spec, as `shop/catalog.lock`. Here it goes
+in `shop/out`, because on Linux Datadouble's user can't write to `shop` itself.
+
+`plan` doesn't write a file. It prints a summary of what a build would copy,
+or fails if the source no longer matches the spec and the lock. To see the
+full plan as JSON, put `--json` before the command:
+
+```
+datadouble --json plan --spec shop/shop.yml --lock shop/out/catalog.lock
+```
+
+`run` saves the same plan as `plan.json` in the build's work directory, under
+`shop/out/work/shop/<generation>/plan/`.
 
 When it finishes, `run` lists each stage it ran, then the verification
-result, then the image summary it stored, under
-`/var/tmp/shop/store/shop/all/postgres-18/`. In that path, `shop` is the
-spec's name and `all` is the default image group, which holds every table.
-`postgres-18` is the engine and the major version of the source's server.
+result, then the image summary it stored. Look at what it wrote:
+
+```
+cat shop/out/catalog.lock
+ls shop/out/store/shop/all/postgres-18/
+```
+
+In that path, `shop` is the spec's name and `all` is the default image group,
+which holds every table. `postgres-18` is the engine and the major version of
+the source's server. The directory holds the image itself (a physical and a
+logical archive), its summary, and the verification result.
 
 ### Why the lock matters
 
@@ -196,6 +223,19 @@ To accept a change, run `lock` again. It lists what changed since the last
 lock, so someone can check the new tables and columns for personal data. In
 CI, the `lock` job that `datadouble ci init` writes does this. It runs only by
 hand, and publishes the new lock and its changes for review.
+
+## Clean up
+
+To remove everything this page created:
+
+```
+docker rm --force shop-db
+docker network rm shop
+docker run --rm --user 0 -v "$PWD:$PWD" --entrypoint rm datadouble -rf "$PWD/shop"
+```
+
+The last command uses a container because on Linux the files under
+`shop/out` belong to user 999, so you can read them but not delete them.
 
 ## Next
 
