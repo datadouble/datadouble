@@ -1,0 +1,19 @@
+docs/decisions.md
+  s_ad63f2bf16b775::t_75d868d8f7c2f7 810-811,815,824-825,837-838,868,939-940,943,945,982-983,1019-1020,1035-1036,1083,1114-1115,1143,1172-1173,1205-1206,1243-1244,1259-1260,1316-1317,1324-1325,1429,1447,1505,1536,1565,1652-1653,1798,1867,1873,1989
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6a086a7f40d1859fdd9bfa1339a8f6497f8d4714",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
