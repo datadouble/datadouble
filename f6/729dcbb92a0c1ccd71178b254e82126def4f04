@@ -1,0 +1,23 @@
+WRITING.md
+  s_ad63f2bf16b775::t_d0673e0d41c1d9 1-138
+AGENTS.md
+  s_ad63f2bf16b775::t_9c1672762a5b36 28-30
+CONTRIBUTING.md
+  s_ad63f2bf16b775::t_e708dd0449f1cc 11-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f6729dcbb92a0c1ccd71178b254e82126def4f04",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
