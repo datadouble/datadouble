@@ -430,6 +430,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The documentation is rewritten to be read: each page explains the problem
+  before the mechanism, and says only how Datadouble works today. The
+  decision log has one section per decision, with a `decision-N` anchor. The
+  spec reference describes every setting, with its default and limits, and
+  `--help` is reworded to match. An old `source:` key gets the ordinary
+  unknown-setting error. [WRITING.md](WRITING.md) says how the docs are
+  written.
+
 - CI pulls Docker Hub images through Google's mirror, `mirror.gcr.io`, so
   runs no longer fail on Docker Hub's anonymous rate limit (`429 Too Many
   Requests`). Jobs still pull from Docker Hub when the mirror can't serve an
