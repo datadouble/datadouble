@@ -24,7 +24,7 @@ from datadouble import api
 from datadouble.ci import CiBridge, JobKind, Report
 from datadouble.notify import TIMEOUT_SECONDS, Notification, NotifyError, post, send, tls_context
 from datadouble.outcome import Outcome
-from datadouble.spec import EnvSecret, NotifyOn, SpecError, parse_spec
+from datadouble.spec import EnvSecret, NotifyOn, SpecError, WebhookFormat, parse_spec
 
 NOTIFY = """
 notify:
@@ -229,6 +229,52 @@ def test_proxies(receiver: Receiver, monkeypatch: pytest.MonkeyPatch) -> None:
     assert receiver.received[1].path == "/direct"
 
 
+def test_the_text_line() -> None:
+    assert notification().text == (
+        "Datadouble shop: build failed (store_failed), generation 0193a7c21b4e9f30"
+        " - https://ci.example.com/runs/7"
+    )
+    warned = Notification(
+        spec="shop", job=JobKind.BUILD, outcome=Outcome.WARNING, generation="0193a7c21b4e9f30"
+    )
+    assert warned.text == "Datadouble shop: build passed with warnings, generation 0193a7c21b4e9f30"
+    verified = Notification(spec="shop", job=JobKind.PROMOTE, outcome=Outcome.FAILURE)
+    assert verified.text == "Datadouble shop: promote failed"
+    succeeded = Notification(spec="shop", job=JobKind.FETCH, outcome=Outcome.SUCCESS)
+    assert succeeded.text == "Datadouble shop: fetch succeeded"
+    broken = Notification(
+        spec="shop", job=JobKind.FETCH, outcome=Outcome.FAILURE, run_url="https://x.example\n/7"
+    )
+    assert broken.text == "Datadouble shop: fetch failed - https://x.example /7"
+
+
+def test_chat_webhooks_get_only_text(receiver: Receiver) -> None:
+    chat = """
+notify:
+  to:
+    - webhook:
+        url:
+          env: CHAT_WEBHOOK
+        format: chat
+    - webhook:
+        url:
+          env: ALERTS_WEBHOOK
+"""
+    spec = parse_spec(BASE + chat)
+    assert spec.notify is not None
+    assert [w.format for w in spec.notify.webhooks()] == [WebhookFormat.CHAT, WebhookFormat.JSON]
+    dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)["notify"]
+    assert dumped["to"][0]["webhook"]["format"] == "chat"
+    with pytest.raises(SpecError):
+        parse_spec(BASE + chat.replace("format: chat", "format: slack"))
+    environ = {"CHAT_WEBHOOK": receiver.url + "/chat", "ALERTS_WEBHOOK": receiver.url + "/json"}
+    assert send(spec.notify, notification(), environ=environ) == ()
+    first, second = receiver.received
+    assert json.loads(first.body) == {"text": notification().text}
+    assert json.loads(second.body)["text"] == notification().text
+    assert set(json.loads(second.body)) > {"spec", "text"}
+
+
 def test_tls_is_verified() -> None:
     context = tls_context()
     assert context.verify_mode is ssl.CERT_REQUIRED
@@ -247,6 +293,8 @@ def test_sending(receiver: Receiver, monkeypatch: pytest.MonkeyPatch) -> None:
         "generation": "0193a7c21b4e9f30",
         "error": "store_failed",
         "run_url": "https://ci.example.com/runs/7",
+        "text": "Datadouble shop: build failed (store_failed), generation 0193a7c21b4e9f30"
+        " - https://ci.example.com/runs/7",
     }
     assert send(spec.notify, notification(Outcome.SUCCESS), environ=environ) == ()
     assert send(None, notification(), environ=environ) == ()
@@ -299,6 +347,7 @@ def test_requests_notify_for_their_job(tmp_path: Path, monkeypatch: pytest.Monke
         "generation": None,
         "error": "staging_failed",
         "run_url": "https://ci.example.com/7",
+        "text": "Datadouble shop: fetch failed (staging_failed) - https://ci.example.com/7",
     }
     unnamed = fetch.model_copy(update={"ci": CiBridge(system="fake-ci")})
     assert api.notify(unnamed, failed, None, poster=poster) == ()

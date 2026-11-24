@@ -12,13 +12,14 @@ adapter writes, or explains in ``ci init``'s instructions.
 
 A notification that fails never changes the job's outcome: the problem is
 returned for the caller to log, and the job ends as it would have. The
-payload carries names, codes and outcomes, never data values or secrets
-(decisions 18 and 54), and problems never quote the webhook's URL, which is
-a secret.
+payload, its ``text`` line included, carries names, codes and outcomes, never
+data values or secrets (decisions 18 and 54), and problems never quote the
+webhook's URL, which is a secret.
 """
 
 import base64
 import http.client
+import json
 import ssl
 import urllib.error
 import urllib.request
@@ -33,7 +34,7 @@ from datadouble import __version__
 from datadouble.ci import JobKind
 from datadouble.outcome import Outcome
 from datadouble.secrets import SecretError, resolve_secret
-from datadouble.spec import Notify
+from datadouble.spec import Notify, WebhookFormat
 
 TIMEOUT_SECONDS = 10
 """How long a webhook may take to answer; a job never waits on one for longer."""
@@ -55,6 +56,37 @@ class Notification(BaseModel):
     """The error code of a failed request, such as ``store_failed``."""
     run_url: str | None = None
     """The CI system's page for the run, where it has one."""
+
+    @property
+    def text(self) -> str:
+        """One line a person can read, built from the other fields.
+
+        Chat incoming webhooks (Slack, Mattermost, Rocket.Chat) show ``text``
+        and ignore the other keys, such as
+        ``Datadouble shop: build failed (store_failed) - https://ci.example.com/7``.
+        """
+        line = f"Datadouble {self.spec}: {self.job} {_SAID[self.outcome]}"
+        if self.error is not None:
+            line += f" ({self.error})"
+        if self.generation is not None:
+            line += f", generation {self.generation}"
+        if self.run_url is not None:
+            line += f" - {self.run_url}"
+        return " ".join(line.split())
+
+    def body(self, shape: WebhookFormat = WebhookFormat.JSON) -> bytes:
+        """The JSON posted: every field then ``text``, or for ``chat`` only ``text``."""
+        if shape is WebhookFormat.CHAT:
+            return json.dumps({"text": self.text}).encode()
+        return json.dumps({**self.model_dump(mode="json"), "text": self.text}).encode()
+
+
+_SAID = {
+    Outcome.FAILURE: "failed",
+    Outcome.WARNING: "passed with warnings",
+    Outcome.SUCCESS: "succeeded",
+}
+"""How ``text`` says each outcome."""
 
 
 class NotifyError(Exception):
@@ -152,11 +184,10 @@ def send(
     """
     if notify is None or not notify.sends(notification.outcome):
         return ()
-    body = notification.model_dump_json().encode()
     problems: list[str] = []
     for index, webhook in enumerate(notify.webhooks(), start=1):
         try:
-            poster(resolve_secret(webhook.url, environ), body)
+            poster(resolve_secret(webhook.url, environ), notification.body(webhook.format))
         except (
             NotifyError,
             SecretError,

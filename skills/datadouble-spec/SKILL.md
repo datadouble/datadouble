@@ -318,9 +318,17 @@ notify:
 - **A webhook's URL is a secret reference** (rule 6): it usually carries a
   token. Datadouble posts to it after each job's command, on every system,
   a JSON body with `spec`, `job`, `outcome`, `generation`, `error` (the
-  error code) and `run_url`. It never holds data values or secrets.
+  error code), `run_url` and `text`. It never holds data values or secrets.
+  `text` is one readable line built from the other fields, such as
+  `Datadouble shop: build failed (store_failed) - <run_url>`.
   Credentials in the URL need https://, and posts use the runner's proxy
   settings (`HTTPS_PROXY`, `NO_PROXY`).
+- **A webhook to a chat room takes `format: chat`**, under `webhook:` next
+  to `url:`. Datadouble then posts only `{"text": ...}`, which Google Chat,
+  Slack, Mattermost and Rocket.Chat incoming webhooks accept with no
+  service in between. Google Chat refuses any other key, so a Google Chat
+  URL always needs `chat`. Leave the default, `format: json`, for a
+  receiver written for Datadouble.
 - **Email is the CI system's own:** Jenkins mails from the Jenkinsfile;
   GitLab and GitHub need the manual setup `ci init` lists in
   `instructions`, and GitHub can only mail whoever started a run; Argo CD
