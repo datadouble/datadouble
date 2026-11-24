@@ -53,12 +53,16 @@ class _Model(BaseModel):
 
 
 class StrictLevel(StrEnum):
-    """How strict mode treats tables and columns that differ from the catalog lock.
+    """How strict mode treats tables, columns and requirements that differ from the catalog lock.
 
-    - ``off``: warn about new tables, new columns and changed columns.
-    - ``tables``: fail on new tables, and warn about new and changed columns.
-    - ``columns``: fail on new tables, new columns and changed columns. This
-      is the default.
+    - ``off``: warn about new tables, new columns, changed columns and new
+      requirements.
+    - ``tables``: fail on new tables and new requirements, and warn about new
+      and changed columns.
+    - ``columns``: fail on new tables, new columns, changed columns and new
+      requirements. This is the default.
+
+    Requirements are the extensions, plugins and modules a source uses.
     """
 
     OFF = "off"
@@ -113,16 +117,17 @@ class Strict(_Model):
     or fails on what differs. Each kind of thing has its own level. Kinds left
     out take their defaults.
 
-    Two differences fail the plan whatever the levels: one that breaks
-    something, and a removed table or column.
+    Some differences fail the plan whatever the levels: a removed table or
+    column, a table whose keys changed, a removed requirement or one at
+    another version, and any difference that breaks something.
     """
 
     data: StrictLevel = StrictLevel.COLUMNS
     """Strict mode's level for tables, columns and requirements: ``off``,
     ``tables`` or ``columns``. Defaults to ``columns``."""
     functions: ObjectLevel = ObjectLevel.WARN
-    """Strict mode's level for functions and procedures: ``off``, ``warn`` or
-    ``fail``. Defaults to ``warn``."""
+    """Strict mode's level for functions, procedures and packages of routines:
+    ``off``, ``warn`` or ``fail``. Defaults to ``warn``."""
     views: ObjectLevel = ObjectLevel.WARN
     """Strict mode's level for views and materialized views: ``off``, ``warn``
     or ``fail``. Defaults to ``warn``."""
@@ -212,7 +217,8 @@ def _strict_mapping(value: object) -> object:
 class Strategy(StrEnum):
     """How the planner computes the subset. The subsetting design explains both strategies.
 
-    - ``auto``: nested queries when the selection graph has no cycle, and keys
+    - ``auto``: nested queries when the selection graph has no cycle, the
+      engine can run them, and no reference joins two sources. Keys
       otherwise. This is the default.
     - ``nested``: strategy A. One nested query per table, pushed down to the
       source.
@@ -464,8 +470,9 @@ class Subset(_Model):
 class FakerRule(_Model):
     """Replace each value with a deterministic fake value, such as ``{faker: email}``.
 
-    The same input gets the same fake value in every table, so joins on the
-    column still match.
+    The same input gets the same fake value of a kind in every table, so joins
+    on the column still match. In a ``unique`` column, a value whose fake
+    collides with another's gets a different one.
     """
 
     faker: FakerKind
@@ -556,9 +563,10 @@ class TransformHook(_Model):
     sql: str = Field(min_length=1)
     """The script, in the engine's own language. Must not be empty."""
     rewrites: tuple[str, ...] = ()
-    """The columns the script rewrites, as ``table.column``. The anonymization
-    report and strict mode count them as covered. Datadouble takes the list on
-    trust, and ``verify`` checks the result."""
+    """The columns the script rewrites, as ``table.column``. The plan fails if
+    one names a column the source doesn't have, and the transform stage
+    records them. Datadouble takes the list on trust, and ``verify`` checks
+    the result."""
 
 
 class Hooks(_Model):
@@ -617,9 +625,12 @@ class ImageGroup(_Model):
     """The tables in the image, as globs matched from the right. At least one
     is needed."""
     requires: tuple[GroupName, ...] = ()
-    """Other groups whose images are provisioned along with each copy of this
-    one, for references into them. Each must be a group in ``images``. A
-    standalone group cannot have any."""
+    """Other groups that this group's references may point into. A reference
+    from this group to rows in another group fails the plan unless that group
+    is listed here, directly or through a listed group's own ``requires``, or
+    the reference has ``on_missing: null``. A reference with ``on_missing:
+    stub`` or ``drop`` cannot leave its group at all. Each listed group must
+    be a group in ``images``. A standalone group cannot have any."""
     standalone: bool = False
     """Whether the image must work on its own. If true, package planning pulls
     into the image whatever its tables and objects need from outside the
@@ -1068,10 +1079,12 @@ class Files(_Model):
     tree's root. Either a ``table.column`` that holds paths, or a template
     with ``table``, ``path`` and optionally ``match``."""
     cleanup: tuple[str, ...] = ()
-    """Shell commands run in the copy's root after it is made, such as one that
+    """Shell commands run in the root of the tree's working copy during
+    ``transform``, before the image is packaged and verified, such as one that
     removes EXIF data."""
     image: str | None = None
-    """The container image that the cleanup commands run in."""
+    """The container image that the cleanup commands run in. Defaults to a
+    Debian image."""
 
 
 class Spec(_Model):
@@ -1126,14 +1139,18 @@ class Spec(_Model):
     package: Package = Package()
     """The image formats to produce, and the accounts physical images carry."""
     verify: Verify = Verify()
-    """Checks every image must pass: the PII scan, row counts and assertions.
-    This section sets the PII scan's allowed values and the assertions."""
+    """Checks every image must pass. Each image must restore, its row counts
+    and references must match, the PII scan must find nothing it doesn't
+    allow, and every assertion must return no rows. This section sets the PII
+    scan's allowed values and the assertions."""
     runtime: AdapterSettings | None = None
     """Where engine software runs, from extract on: ``{docker: {...}}`` or
     ``{kubernetes: {...}}``. Extract and the stages after it need it. The
     ``kubernetes`` runtime reaches another cluster through ``kubeconfig``, a
-    secret reference. It starts pods in Datadouble's own namespace unless
-    ``namespace`` names one."""
+    secret reference. It starts pods in the namespace that ``namespace``
+    names. Without it, pods start where ``kubectl`` would put them: inside a
+    cluster, the namespace of Datadouble's own pod, and otherwise the
+    kubeconfig context's namespace."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
     """Where the build stores images, one adapter each: ``{filesystem: ...}`` or
     ``{s3: ...}``. The filesystem store takes ``path``, a directory, and
@@ -1158,8 +1175,9 @@ class Spec(_Model):
     announce: tuple[AdapterSettings, ...] = ()
     """Where copies are announced to consumers, one adapter each:
     ``{dotenv: ...}``, ``{ci-outputs: {}}``, ``{vault: ...}`` or
-    ``{k8s-secret: {}}``. The ``k8s-secret`` adapter writes Secrets in
-    Datadouble's own namespace unless ``namespace`` names one."""
+    ``{k8s-secret: {}}``. The ``k8s-secret`` adapter writes Secrets in the
+    namespace that ``namespace`` names, and otherwise where ``kubectl`` would
+    put them, as the ``kubernetes`` runtime does."""
     prune: Retention = Retention()
     """What ``prune`` keeps: how many generations, for how many days, and how
     many engine versions."""

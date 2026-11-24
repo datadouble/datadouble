@@ -115,8 +115,9 @@ A build takes three commands:
 
 - `datadouble lock` reads the source's catalog (its tables, columns and other
   objects) and records it in a file called the **catalog lock**.
-- `datadouble plan` checks the spec against the lock and works out what a
-  build would copy, without copying anything.
+- `datadouble plan` reads the source's catalog again, checks the spec
+  against it and the lock, and works out what a build would copy, without
+  copying anything.
 - `datadouble run` runs the build's stages: plan, extract, load, transform,
   package, verify and store.
 
@@ -178,10 +179,11 @@ datadouble run plan,extract,load,transform,package,verify,store \
 By default the lock goes beside the spec, as `catalog.lock`. Here it goes in
 `/var/tmp/shop`, because Datadouble's user can't write to your checkout.
 
-`run` prints each stage as it finishes, then the verification result, then
-where it stored the image: `/var/tmp/shop/store/shop/all/postgres-18/`. In
-that path, `shop` is the spec's name and `all` is the default image group,
-which holds every table.
+When it finishes, `run` lists each stage it ran, then the verification
+result, then the image summary it stored, under
+`/var/tmp/shop/store/shop/all/postgres-18/`. In that path, `shop` is the
+spec's name and `all` is the default image group, which holds every table.
+`postgres-18` is the engine and the major version of the source's server.
 
 ### Why the lock matters
 
@@ -192,7 +194,8 @@ do with the new data. This is called **strict mode**.
 
 To accept a change, run `lock` again. It lists what changed since the last
 lock, so someone can check the new tables and columns for personal data. In
-CI, the manual `lock` job does this and publishes the result for review.
+CI, the `lock` job that `datadouble ci init` writes does this. It runs only by
+hand, and publishes the new lock and its changes for review.
 
 ## Next
 

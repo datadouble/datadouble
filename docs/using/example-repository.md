@@ -11,7 +11,7 @@ your own.
 [datadouble/example-pipeline](https://github.com/datadouble/example-pipeline)
 is a complete pipeline for a small shop database. It holds:
 
-- the spec;
+- the spec and its catalog lock;
 - the GitHub Actions workflows that `datadouble ci init` wrote, for both sides
   of the production boundary;
 - a way to run them all on one machine from a fresh clone.
@@ -24,12 +24,19 @@ cd example-pipeline
 make demo
 ```
 
-`make demo` starts the source and builds the Datadouble image. Then it runs
-every workflow with `act`, on your machine, the way a self-hosted runner
-would. The workflows run in pipeline order:
+You need Docker, git and `act`.
+
+`make demo` builds the Datadouble image from a checkout of
+datadouble/datadouble, starts a throwaway source, and makes a signing key
+pair. Then it runs every workflow with `act`, on your machine, the way a
+self-hosted runner would. The workflows run in pipeline order:
 
 1. Inside the boundary: build an image, then promote it.
 2. Outside the boundary: fetch the image, make an on-demand copy for a pull
    request, then release that copy.
+3. On both sides: prune old images.
+
+Everything the demo makes goes under `/var/tmp/example-pipeline`, and the
+demo removes it at the end.
 
 The repository's README walks through each file.

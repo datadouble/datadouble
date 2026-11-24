@@ -8,10 +8,12 @@ and what the skills will and won't do. The design is in
 
 ## Install
 
-This repository is the plugin's marketplace:
+This repository is the plugin's marketplace. Add it, then install the
+plugin from it:
 
 ```
-/plugin install datadouble --marketplace datadouble/datadouble
+/plugin marketplace add datadouble/datadouble
+/plugin install datadouble@datadouble
 ```
 
 ## Ask for what you need
@@ -30,7 +32,8 @@ The agent picks the skill that fits:
 | `datadouble-spec` | The spec, checked with `datadouble plan`, and re-locking through the `lock` job with the changes reviewed for personal data |
 | `datadouble-files` | File trees, with each `find` expression explained and tried first |
 | `datadouble-build`, `datadouble-promote` | The production jobs, `lock` among them |
-| `datadouble-fetch`, `datadouble-provision`, `datadouble-release`, `datadouble-prune`, `datadouble-activate` | The non-production jobs |
+| `datadouble-fetch`, `datadouble-provision`, `datadouble-release`, `datadouble-activate` | The non-production jobs |
+| `datadouble-prune` | Retention, with a `prune` job on each side of the boundary |
 
 ## What the skills won't do
 

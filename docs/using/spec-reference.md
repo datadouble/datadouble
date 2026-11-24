@@ -40,15 +40,15 @@ A whole spec: one pipeline, from the sources it reads to the copies it makes.
 | `images` | map of [ImageGroup](#imagegroup) |  | The images built from one extract, by group name. Defaults to one group, `all`, that holds every table. Group names follow the same rules as the spec's name. |
 | `objects` | list of [ObjectRoot](#objectroot) |  | Objects that code outside Datadouble expects in every image, such as `{view: reporting.daily}`. They join each image's closure. |
 | `package` | [Package](#package) | see type | The image formats to produce, and the accounts physical images carry. |
-| `verify` | [Verify](#verify) | see type | Checks every image must pass: the PII scan, row counts and assertions. This section sets the PII scan's allowed values and the assertions. |
-| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs, from extract on: `{docker: {...}}` or `{kubernetes: {...}}`. Extract and the stages after it need it. The `kubernetes` runtime reaches another cluster through `kubeconfig`, a secret reference. It starts pods in Datadouble's own namespace unless `namespace` names one. |
+| `verify` | [Verify](#verify) | see type | Checks every image must pass. Each image must restore, its row counts and references must match, the PII scan must find nothing it doesn't allow, and every assertion must return no rows. This section sets the PII scan's allowed values and the assertions. |
+| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs, from extract on: `{docker: {...}}` or `{kubernetes: {...}}`. Extract and the stages after it need it. The `kubernetes` runtime reaches another cluster through `kubeconfig`, a secret reference. It starts pods in the namespace that `namespace` names. Without it, pods start where `kubectl` would put them: inside a cluster, the namespace of Datadouble's own pod, and otherwise the kubeconfig context's namespace. |
 | `store` | list of map of map of JSON |  | Where the build stores images, one adapter each: `{filesystem: ...}` or `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string that defaults to `"0640"`. Every file it writes gets `mode`, whatever the umask. Directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or that don't let the owner read and write, are refused. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |
 | `promote` | [Promote](#promote) |  | The export stores that `promote` copies verified images to, and what it requires of them. |
 | `fetch` | [Fetch](#fetch) |  | Where `fetch` reads promoted images, and the staging directory it fills. |
 | `replicate` | [Replicate](#replicate) |  | How copies are made: the adapter, the mode (pool or on-demand), and how many. |
-| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in Datadouble's own namespace unless `namespace` names one. |
+| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in the namespace that `namespace` names, and otherwise where `kubectl` would put them, as the `kubernetes` runtime does. |
 | `prune` | [Retention](#retention) | see type | What `prune` keeps: how many generations, for how many days, and how many engine versions. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
 | `notify` | [Notify](#notify) |  | Who hears when a generated CI job fails or warns: webhooks and email. |
@@ -166,7 +166,7 @@ One of `first_name` or `last_name` or `name` or `email` or `user_name` or `phone
 
 Replace each value with a deterministic fake value, such as `{faker: email}`.
 
-The same input gets the same fake value in every table, so joins on the column still match.
+The same input gets the same fake value of a kind in every table, so joins on the column still match. In a `unique` column, a value whose fake collides with another's gets a different one.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -207,8 +207,8 @@ The `files` engine adapter reads the tree. Each top-level directory is a table, 
 | `select` | map of string |  | The `find` tests that choose each top-level directory's files, such as `-type f -mtime -30`. |
 | `exclude` | list of string |  | Top-level directories to leave out. |
 | `paths_from` | string or [PathsFrom](#pathsfrom) |  | How the source's chosen rows name more files to copy, relative to the tree's root. Either a `table.column` that holds paths, or a template with `table`, `path` and optionally `match`. |
-| `cleanup` | list of string |  | Shell commands run in the copy's root after it is made, such as one that removes EXIF data. |
-| `image` | string |  | The container image that the cleanup commands run in. |
+| `cleanup` | list of string |  | Shell commands run in the root of the tree's working copy during `transform`, before the image is packaged and verified, such as one that removes EXIF data. |
+| `image` | string |  | The container image that the cleanup commands run in. Defaults to a Debian image. |
 
 ### Follow
 
@@ -289,7 +289,7 @@ The image holds the tables that the group's `include` patterns match.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `include` (required) | list of string |  | The tables in the image, as globs matched from the right. At least one is needed. |
-| `requires` | list of string |  | Other groups whose images are provisioned along with each copy of this one, for references into them. Each must be a group in `images`. A standalone group cannot have any. |
+| `requires` | list of string |  | Other groups that this group's references may point into. A reference from this group to rows in another group fails the plan unless that group is listed here, directly or through a listed group's own `requires`, or the reference has `on_missing: null`. A reference with `on_missing: stub` or `drop` cannot leave its group at all. Each listed group must be a group in `images`. A standalone group cannot have any. |
 | `standalone` | boolean | `false` | Whether the image must work on its own. If true, package planning pulls into the image whatever its tables and objects need from outside the group. Defaults to false. |
 | `objects` | list of [ObjectRoot](#objectroot) |  | Objects that code outside Datadouble expects in this image, such as `{function: public.uuid_generate_v4}`. They join the image's closure, the set of everything the image must contain. |
 | `rows` | map of [PulledRows](#pulledrows) |  | Which rows a standalone group pulls in, in place of the default `referenced`. Keys are a table name or glob, or a reference `child.column -> parent`, which wins over a table key. Values are `referenced`, `all` or `none`. Needs `standalone: true`. |
@@ -498,7 +498,7 @@ Datadouble checks the fields below. The engine adapter checks the settings insid
 
 How the planner computes the subset. The subsetting design explains both strategies.
 
-- `auto`: nested queries when the selection graph has no cycle, and keys otherwise. This is the default.
+- `auto`: nested queries when the selection graph has no cycle, the engine can run them, and no reference joins two sources. Keys otherwise. This is the default.
 - `nested`: strategy A. One nested query per table, pushed down to the source.
 - `keys`: strategy B. Collect keys, compute the closure of rows to copy, then fetch the rows by key.
 
@@ -510,12 +510,12 @@ Strict mode's level for each kind of thing in the catalog.
 
 Strict mode compares the source's catalog with the catalog lock, and warns or fails on what differs. Each kind of thing has its own level. Kinds left out take their defaults.
 
-Two differences fail the plan whatever the levels: one that breaks something, and a removed table or column.
+Some differences fail the plan whatever the levels: a removed table or column, a table whose keys changed, a removed requirement or one at another version, and any difference that breaks something.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `data` | [StrictLevel](#strictlevel) | `"columns"` | Strict mode's level for tables, columns and requirements: `off`, `tables` or `columns`. Defaults to `columns`. |
-| `functions` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for functions and procedures: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `functions` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for functions, procedures and packages of routines: `off`, `warn` or `fail`. Defaults to `warn`. |
 | `views` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for views and materialized views: `off`, `warn` or `fail`. Defaults to `warn`. |
 | `triggers` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for triggers: `off`, `warn` or `fail`. Defaults to `warn`. |
 | `types` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for user-defined types and domains: `off`, `warn` or `fail`. Defaults to `warn`. |
@@ -524,11 +524,13 @@ Two differences fail the plan whatever the levels: one that breaks something, an
 
 ### StrictLevel
 
-How strict mode treats tables and columns that differ from the catalog lock.
+How strict mode treats tables, columns and requirements that differ from the catalog lock.
 
-- `off`: warn about new tables, new columns and changed columns.
-- `tables`: fail on new tables, and warn about new and changed columns.
-- `columns`: fail on new tables, new columns and changed columns. This is the default.
+- `off`: warn about new tables, new columns, changed columns and new requirements.
+- `tables`: fail on new tables and new requirements, and warn about new and changed columns.
+- `columns`: fail on new tables, new columns, changed columns and new requirements. This is the default.
+
+Requirements are the extensions, plugins and modules a source uses.
 
 One of `off` or `tables` or `columns`.
 
@@ -556,7 +558,7 @@ A native script run after the column rules, which declares the columns it rewrit
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `sql` (required) | string |  | The script, in the engine's own language. Must not be empty. |
-| `rewrites` | list of string |  | The columns the script rewrites, as `table.column`. The anonymization report and strict mode count them as covered. Datadouble takes the list on trust, and `verify` checks the result. |
+| `rewrites` | list of string |  | The columns the script rewrites, as `table.column`. The plan fails if one names a column the source doesn't have, and the transform stage records them. Datadouble takes the list on trust, and `verify` checks the result. |
 
 ### Trust
 

@@ -151,7 +151,7 @@ Announce existing copies again.
 |---|---|
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
 | `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
-| `--owner` `OWNER` | Announce this owner's copies (default: the pool's copies). |
+| `--owner` `OWNER` | Announce this owner's copies (default: the pool's unclaimed copies). |
 
 ## `datadouble copies`
 
@@ -185,8 +185,8 @@ Write CI/CD configuration for a spec's jobs.
 | `--system` `SYSTEM` | The CI/CD system, such as github-actions (required). |
 | `--job` `JOBS` | The jobs to write, comma-separated or repeated, all on one side of the boundary: build,promote,fetch,provision,release,prune,activate,lock (required). |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
-| `--runner` `RUNNER` | The runner the jobs run on. Build, promote and lock need it. |
-| `--work` `WORK` | The build's work directory, in production scratch space. |
+| `--runner` `RUNNER` | The runner the jobs run on. Jobs on the production side (build, promote, lock, and prune there) need it. |
+| `--work` `WORK` | The build's work directory, an absolute path in production scratch space. Build needs it. |
 | `--side` `SIDE` | The side of the boundary prune runs on, when prune is the only job (one of production, non-production). |
 | `--output` `OUTPUT` | The repository root to write into (default: .). |
 | `--image` `IMAGE` | The Datadouble image the jobs run (default: this version's). |

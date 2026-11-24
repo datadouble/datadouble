@@ -24,7 +24,7 @@ jobs: subsetting (copying a consistent slice) and anonymizing.
 | [Jailer](https://github.com/Wisser/Jailer) | Apache-2.0, active | Any JDBC database | Yes, its core strength | No | Mature FK traversal and GUI; Datadouble reads its models natively |
 | [Neosync](https://github.com/nucleuscloud/neosync) | Archived Aug 2025 | PostgreSQL, MySQL | Yes | Yes | Acquired; repository no longer maintained |
 | [PostgreSQL Anonymizer](https://www.postgresql.org/about/news/postgresql-anonymizer-20-better-faster-safer-2993) | Open source | PostgreSQL | No | Yes | Runs inside PostgreSQL |
-| [SFDMU](https://www.github.com/forcedotcom/SFDX-Data-Move-Utility) | BSD-3, active | Salesforce | Related-record selection | Yes | Candidate to wrap for the Salesforce adapter |
+| [SFDMU](https://www.github.com/forcedotcom/SFDX-Data-Move-Utility) | BSD-3, active | Salesforce | Related-record selection | Yes | A candidate for loading copies back into an org. The Salesforce adapter calls the org's own APIs instead (decision 111) |
 | [DBLab Engine](https://github.com/postgres-ai/database-lab-engine) | Open source | PostgreSQL | No | No | Copy-on-write thin clones; candidate replication backend |
 | Small MongoDB anonymizers | Open source | MongoDB | No | Faker-based | Hobby-scale |
 | [Tonic Structural](https://www.tonic.ai/integrations) | Commercial | PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Db2; Salesforce on request | Yes, including MongoDB | Yes | Closest to the target coverage |
@@ -34,15 +34,18 @@ jobs: subsetting (copying a consistent slice) and anonymizing.
 
 ## What to reuse rather than rebuild
 
-Several of these tools do one job well. Datadouble should use them where they
-fit:
+Several of these tools do one job well. Datadouble uses them where they fit:
 
-- **Wrap** SFDMU (Salesforce), native dump tools, and DBLab Engine
-  (PostgreSQL thin clones) as adapters.
-- **Study** Greenmask's subset model and Jailer's traversal before finalizing
+- **Native dump tools.** Engine adapters wrap each engine's own dump and
+  restore tools, such as `pg_dump`, run in the vendor's image (decision 72).
+- **Jailer models.** Datadouble reads Jailer models natively, instead of
+  inventing a competing GUI (see [Jailer compatibility](jailer.md)).
+- **Greenmask and Jailer's traversal** were worth studying before designing
   the planner.
-- **Read** Jailer models natively, instead of inventing a competing GUI (see
-  [Jailer compatibility](jailer.md)).
+
+Two tools remain candidates rather than parts of Datadouble. SFDMU could load
+copies back into a Salesforce org, which Datadouble does not do. DBLab Engine
+could serve PostgreSQL thin clones as a replicate adapter.
 
 ## Lesson from Neosync
 

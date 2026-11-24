@@ -90,8 +90,9 @@ A failed check looks like this:
 }
 ```
 
-Each entry in `details` names one missing requirement. Its `location` names
-the source that uses it, such as `sources.app.image` or `sources.app.omit`.
+Each entry in `details` names one missing requirement. Its `location` is
+`sources.<name>.image` for the source that uses it, such as
+`sources.app.image`.
 
 There are three ways to fix it. Try them in this order.
 
@@ -163,7 +164,7 @@ gives these columns the kind `other`.
 Strict mode makes you decide what to do with such a column, like any other.
 But built-in strategies such as `faker` don't apply to it. Your choices are:
 
-- `null`;
+- `null`, if the column allows nulls;
 - `expression`;
 - an `after_transform` hook;
 - keeping it as it is, if it holds no personal data.

@@ -103,7 +103,7 @@ directory under `dev/`, and each is seeded with a well-known sample dataset:
 | Engine | Image | Sample data |
 |---|---|---|
 | PostgreSQL | `pgvector/pgvector`, the official `postgres` image with pgvector | Pagila |
-| MySQL | official `mysql` | Sakila (also Jailer's Demo-Sakila model) |
+| MySQL | official `mysql` | Sakila, with a Jailer extraction model of it (`dev/jailer/sakila.jm`) |
 | SQL Server | Microsoft `mssql/server` (Developer edition) | Sakila |
 | Oracle | Oracle Database Free (the full image, not `-lite`) | Sakila |
 | MongoDB | official `mongo`, as a one-member replica set | Generated cinema database (`dev/mongodb/seed.js`) |
@@ -232,7 +232,7 @@ would need a connected app. [External
 services](external-services.md#salesforce) describes how to set one up.
 
 Only re-recording needs a Salesforce org. Everything else runs offline.
-Loading a golden image into an org (`bulk_load`) comes later.
+Datadouble does not load images back into an org.
 
 ## CI/CD systems {#cicd-systems}
 
@@ -253,13 +253,19 @@ tests check.
 
 ## Conformance suite
 
-Every engine adapter must pass a shared suite under `conformance/`, run
-against its container (or, for Salesforce, its fake). The suite checks:
+Every database engine adapter must pass a shared suite under
+`conformance/`, run against its container (or, for Salesforce, its fake). The
+suite checks:
 
 - catalog introspection;
 - consistent snapshot behavior;
-- subset correctness on the sample data;
-- load round-trips;
-- excludes and strict-mode behavior.
+- subset correctness on the sample data, with both strategies choosing the
+  same rows;
+- a whole build, from plan through store, whose images pass verification;
+- excludes and strict-mode behavior;
+- that a killed run resumes.
+
+The `files` adapter, which copies a file tree beside a database (decision
+97), has its own tests instead.
 
 CI/CD adapters have their own suite, `datadouble_conformance.ci`.

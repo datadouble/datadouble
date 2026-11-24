@@ -214,7 +214,7 @@ def _operation_parsers(add: _Add) -> None:
     announce = add(api.Command.ANNOUNCE, "announce existing copies again")
     _group_arguments(announce)
     announce.add_argument(
-        "--owner", help="announce this owner's copies (default: the pool's copies)"
+        "--owner", help="announce this owner's copies (default: the pool's unclaimed copies)"
     )
     copies = add(api.Command.COPIES, "list copies")
     _group_arguments(copies)
@@ -254,9 +254,15 @@ def _ci_parsers(add: _Add) -> None:
     )
     init.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     init.add_argument(
-        "--runner", help="the runner the jobs run on. Build, promote and lock need it"
+        "--runner",
+        help="the runner the jobs run on. Jobs on the production side (build, promote, lock,"
+        " and prune there) need it",
     )
-    init.add_argument("--work", help="the build's work directory, in production scratch space")
+    init.add_argument(
+        "--work",
+        help="the build's work directory, an absolute path in production scratch space."
+        " Build needs it",
+    )
     init.add_argument(
         "--side",
         choices=[side.value for side in Side],

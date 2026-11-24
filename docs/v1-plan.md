@@ -28,8 +28,8 @@ Version 1 includes:
     - PostgreSQL, MySQL, SQL Server and Oracle;
     - MongoDB and Redis;
     - Elasticsearch and OpenSearch;
-    - a filesystem adapter;
-    - Salesforce, against an in-memory fake.
+    - a `files` adapter, for file trees beside a database;
+    - Salesforce, against a fake org.
 3. The core:
     - the spec and the catalog lock;
     - excludes and strict mode;
@@ -41,8 +41,8 @@ Version 1 includes:
 4. Anonymization as described in [anonymization](anonymization.md): faker
    (deterministic), hash, null, format-preserving, engine-native expressions,
    and hooks.
-5. Verify adapters: restore check, referential integrity, row counts, PII
-   scan (of databases and of files), and SQL assertions.
+5. Verification: restore check, referential integrity, row counts, PII
+   scan (of databases and of files), and native assertions.
 6. Storage and replication adapters, for sourcing, cloning and replication:
    `filesystem`, `s3`, `btrfs` and `k8s-pv`, plus `docker-volume` for local
    and CI use.
@@ -50,16 +50,16 @@ Version 1 includes:
    copies, as volumes or as connection parameters: `k8s-secret`,
    `ci-outputs`, `dotenv` and `vault`. A `k8s-pv` copy's PersistentVolume is
    its own announcement (decision 61).
-8. Operations: `promote`, `fetch`, `release`, `prune` and `activate`, in
-   pool and on-demand modes.
-9. Golden-image signing, with cosign keyless signing in `build`, checked by
-   `promote` and `fetch`.
+8. Operations: `promote`, `fetch`, `replicate`, `claim`, `release`, `prune`
+   and `activate`, in pool and on-demand modes.
+9. Golden-image signing with cosign in the build, keyless or with a key pair,
+   checked by `promote` and `fetch`.
 10. Tests in containers under Docker Compose, with groups that can be mixed
     and matched.
 11. GitHub CI that builds signed, attested runtime images (see [supply
     chain](#supply-chain)).
 12. Tier 1 CI/CD libraries: GitHub Actions, GitLab CI, Jenkins and Argo CD.
-13. All agent skills, including help with the filesystem adapter, and the
+13. All agent skills, including help with the `files` adapter, and the
     Claude Code plugin.
 14. Two public resources:
     - a GitHub Pages documentation site at
@@ -199,7 +199,7 @@ wall time and the physical image sizes are recorded in `TESTING.md`.
 **Done when:** each passes conformance, including strict mode on keys or
 mapping fields.
 
-### M6: Filesystem
+### M6: Files
 
 **Done when:**
 
@@ -289,10 +289,10 @@ relational ones:
 - **Strict mode** applies to mapping fields.
 - **A consistent view** across indices comes from point-in-time searches.
 
-### Filesystem
+### Files
 
 Many applications keep files beside their database, such as uploaded avatars
-and documents. The filesystem adapter copies those files, and only those that
+and documents. The `files` adapter copies those files, and only those that
 belong to the rows in the database subset. A spec describes them in a `files`
 section:
 
@@ -327,8 +327,8 @@ files:
   for the chosen rows, inside the database's snapshot, and those files are
   copied too. So only files for rows in the subset are copied.
 - **Cleanup is not proof.** A files PII scan stays mandatory in `verify`.
-- **Portability.** GNU findutils is pinned in the image. The filesystem
-  skill explains each `find` expression back in plain words, and dry-runs it
+- **Portability.** The `select` tests run with GNU find from the Datadouble
+  image's pinned Debian base. The `datadouble-files` skill explains each `find` expression back in plain words, and dry-runs it
   against a sample directory before writing it into the spec.
 
 ## Sample datasets
@@ -344,8 +344,8 @@ Every adapter is tested against a sample dataset:
 | MongoDB | Generated cinema database (`sample_mflix`'s licence is unclear) |
 | Redis | Generated keyspace with every data type and key-encoded references |
 | Elasticsearch, OpenSearch | Generated indices derived from Pagila, with join keys across indices |
-| Filesystem | Generated upload tree keyed by Pagila customer IDs, with EXIF metadata and text files containing fake personal data |
-| Salesforce | In-memory fake seeded from `describe` output |
+| Files | Generated upload tree keyed by customer IDs in a PostgreSQL table, with EXIF metadata and a text file containing fake personal data |
+| Salesforce | A fake org, a SQLite file of made-up records (`sample_org`) |
 
 Every dataset includes the awkward cases listed in [local
 development](local-development.md).
@@ -360,7 +360,7 @@ the integration suite is split into groups, listed in
 |---|---|---|
 | Test runner; PostgreSQL with Pagila; MongoDB; MySQL, SQL Server and Oracle Database Free with Sakila (and Jailer's export of it); Redis; single-node Elasticsearch and OpenSearch; S3 (SeaweedFS); Docker-in-Docker; OpenBao; an HTTPS export store | Core, engine, S3, Docker, HTTP and Vault tests (decisions 56, 64, 78) | The SQL Server and Oracle images are amd64-only |
 | `btrfs` profile: a privileged test runner with a loop-mounted btrfs volume | The btrfs adapter | Needs privileged Docker |
-| `k8s` profile: k3s in a container | The k8s-pv and k8s-secret adapters (decision 64) | Needs privileged Docker |
+| `k8s` profile: k3s in a container | The Kubernetes adapters: `k8s-pv`, `k8s-secret` and the `kubernetes` runtime (decision 64) | Needs privileged Docker |
 
 Every service except the two profiles starts on plain `docker compose up`,
 but you rarely want them all:
@@ -385,8 +385,8 @@ truth. No page is maintained as a separate copy.
 |---|---|---|
 | Home | The production-boundary diagram, overview and design principles | M0 |
 | Design | Every design document, rendered as is, in reading order | M0 |
-| Using Datadouble | Quickstart, spec reference generated from the JSON Schema, CLI reference generated from the CLI, CI/CD libraries, agent skills, the example repository | M10 |
-| Project | Decisions, the v1 plan, external services, changelog, contributing | M0 |
+| Using Datadouble | Quickstart, spec reference generated from the JSON Schema, CLI reference generated from the CLI, extensions and plugins, CI/CD libraries, agent skills, the example repository | M10 |
+| Project | Decisions, the v1 plan, external services, how our CI works, changelog, contributing | M0 |
 
 - **Generator:** Zensical, at the version `uv.lock` holds (decisions 46 and
   136).
@@ -401,8 +401,8 @@ Datadouble handles production data, so the code and images that do it must
 be trustworthy. The plan's controls:
 
 - **Workflows:** every action is pinned by commit SHA,
-  `step-security/harden-runner` runs on every job, and workflow tokens are
-  read-only by default.
+  `step-security/harden-runner` runs on every job on GitHub-hosted runners,
+  and workflow tokens are read-only by default.
 - **Scanning:** CodeQL, dependency review, OpenSSF Scorecard, Snyk, SonarQube
   Cloud and Codecov.
 - **SBOMs:** generated with Syft, with SBOM attestations and build provenance
