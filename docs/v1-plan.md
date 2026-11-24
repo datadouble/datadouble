@@ -141,7 +141,7 @@ page is maintained as a separate copy.
 | Using Datadouble | Quickstart, spec reference generated from the JSON Schema, CLI reference generated from the CLI, CI/CD libraries, agent skills, the example repository | M10 |
 | Project | Decisions, the v1 plan, external services, changelog, contributing | M0 |
 
-- **Generator:** Zensical, pinned to an exact version (decision 46).
+- **Generator:** Zensical, at the version `uv.lock` holds (decisions 46 and 136).
 - **Theme:** the colors, type and light and dark modes of the design book, with
   its production-boundary diagram as the home page figure.
 - **Publishing:** a workflow builds the site on every pull request (broken links
