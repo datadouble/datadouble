@@ -540,6 +540,7 @@ another namespace.
 
 Only `release` withdraws announcements. A copy that `replicate`, `claim` or
 `prune` removes, such as a recycled pool copy, keeps its announcements.
+[#104](https://github.com/datadouble/datadouble/issues/104) tracks this gap.
 
 So Datadouble's registry of copies records, for each copy, the targets each
 `announce` entry reported. `release` gives each entry back only its own
