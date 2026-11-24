@@ -36,6 +36,26 @@ paragraphs short. Readability never costs accuracy.
    `uv run python scripts/format_yaml.py` to rewrite flow mappings in place;
    `make lint` runs it with `--check`.
 
+## How pull requests merge
+
+Most pull requests fix one issue. They are squash-merged, so each becomes one
+commit on `main` whose message ends with `Fixes #N`.
+
+Sometimes several issues touch the same code, or would conflict in
+`CHANGELOG.md` and `docs/decisions.md` if they merged one at a time. Then one
+pull request can fix them all, with one commit per issue. Each commit's
+message ends with `Fixes #N` for its own issue. These pull requests are
+merged with **Rebase and merge**, never squashed, so each issue keeps its own
+commit on `main`.
+
+Before such a pull request merges:
+
+- Fold review fixes into the commit they belong to (`git commit --fixup`,
+  then `git rebase --autosquash`), so that no commit only repairs another.
+- Make each commit pass the check suite on its own, since `git bisect` can
+  land on any of them. `git rebase -x 'make check' origin/main` runs it on
+  every commit.
+
 ## Changelog
 
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
