@@ -41,7 +41,7 @@ joins like the `SALARY` one above, with no foreign key behind it.
 
 ### The extraction model
 
-The extraction model (a `*.jm` file) says what to extract. It holds:
+The extraction model (a `*.jm` file) defines what to extract. It contains:
 
 - **subjects**: a starting table and a condition, with an optional limit and
   order;

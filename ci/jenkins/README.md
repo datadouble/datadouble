@@ -63,7 +63,7 @@ re-locks after a schema change. It runs `datadouble lock --output
 datadouble-lock` and archives the new `catalog.lock` and `changes.txt` as the
 build's artifacts. It never commits: download them from the build's page,
 check every new or changed column in `changes.txt` for personal data, then
-commit `catalog.lock` beside the spec. A lock holds names, types and versions,
+commit `catalog.lock` beside the spec. A lock contains names, types and versions,
 never values (decision 123).
 
 ## What a job needs on its agent
@@ -72,7 +72,7 @@ never values (decision 123).
 - Docker, with its socket at `/var/run/docker.sock` unless the agent says
   otherwise (below), usable by the agent's user. The step runs the
   Datadouble image as the engine's user on the host's network, with the
-  workspace and every absolute path the spec names mounted at the same path.
+  workspace and every absolute path in the spec mounted at the same path.
 - Those paths, existing and owned by the engine's user (`999:999` for
   PostgreSQL).
 - On agents inside the production boundary, `DATADOUBLE_BOUNDARY=inside` in
@@ -110,7 +110,7 @@ Jenkins installations whose agents are pods of the Kubernetes plugin often
 have no Docker, and the spec's `kubernetes` runtime needs Datadouble itself
 in a pod that shares the engine pods' work claim. With `--agent kubernetes`
 each Jenkinsfile declares its own pod instead of a label. As for Argo CD
-(decision 103), `--runner` names the side's namespace; `--cloud` names the
+(decision 103), `--runner` sets the side's namespace; `--cloud` sets the
 plugin's cloud, and without it the pods start in the plugin's default cloud.
 Agents with Docker stay the default (`--agent docker`).
 
@@ -149,7 +149,7 @@ agent {
 - **The pod mounts its namespace's `datadouble` claim** where the side's paths
   are. Jobs that start engine software (`build`, `provision`, `release`) need
   the spec's `kubernetes` runtime on the claim `datadouble`, with every path
-  the spec names (stores, staging, the work directory) under its `mount`,
+  in the spec (stores, staging, the work directory) under its `mount`,
   which is where the pod mounts the claim, the same path the engine pods
   use. Other jobs mount the claim at their paths' common directory, as Argo
   CD does. `ci init` refuses anything else. The pod keeps to the runtime's
@@ -236,7 +236,7 @@ values.
 
 ## Notifications
 
-The spec's `notify` section says who hears about a job that fails or warns.
+The spec's `notify` section configures notifications for jobs that fail or warn.
 Each `datadouble` step names its job (`job: 'build'`), so Datadouble posts the
 spec's webhooks itself after the command, with the build's page
 (`BUILD_URL`, set when Jenkins knows its own URL) as `run_url`. Add the

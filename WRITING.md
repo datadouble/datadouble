@@ -63,6 +63,48 @@ now, here? If not, move it or set it up.
 - **No em dashes or en dashes as separators.** Use a period, a comma, or a
   colon.
 
+### Patterns that read as machine-written
+
+These patterns make text read as generated rather than written. Check a page
+for them before you finish. The list comes from
+[blader/humanizer](https://github.com/blader/humanizer), which is based on
+Wikipedia's "Signs of AI writing".
+
+- **Paraphrased terms.** The worst offender, covered above: a familiar
+  technical phrase replaced by a description of it.
+- **"Serves as" for "is".** Write "The lock is a record of the catalog," not
+  "serves as", "acts as", "stands as" or "functions as". Write "has," not
+  "features" or "boasts".
+- **Inflated significance.** Don't say a detail plays "a key role", "is
+  crucial", or "marks a shift". Say what it does.
+- **Tacked-on "-ing" phrases.** "..., ensuring that copies stay consistent"
+  adds a claim without explaining it. Make it its own sentence, or cut it.
+- **"Not X, but Y".** "Not just a cache, it's a store" and "no guessing" tails.
+  Say what the thing is.
+- **Forced threes.** Don't round a list up or down to three items for rhythm.
+- **Synonym cycling.** Use one term for one thing (section 4). Calling the same
+  object "the image", "the artifact" and "the package" in one paragraph makes
+  the reader wonder if they are three things.
+- **False ranges.** "From small test databases to large production clusters"
+  where the two ends are not on one scale. List the cases instead.
+- **Signposting.** "Let's look at", "here's what you need to know", "this
+  section will explore". A page's opening outline says what the page covers
+  (section 1); individual sentences don't announce themselves.
+- **Persuasive tropes.** "At its core", "fundamentally", "the real question
+  is", "in reality". Say the point.
+- **Filler.** "In order to" is "to". "Has the ability to" is "can". "It is
+  important to note that" is nothing.
+- **Stacked hedges.** "May potentially in some cases". Use one qualifier, or
+  name the case.
+- **Mechanical bold.** Bold a term where it is defined, or the label of a list
+  item that names a case. Not for emphasis scattered through prose.
+- **Bold-label lists where prose fits.** A list of "**Label:** sentence" items
+  that are really one connected explanation reads better as a paragraph.
+- **Generic conclusions.** A page or section ends when its content ends. No
+  closing summary of what it just said.
+- **Chat artifacts.** "Of course", "I hope this helps", "let me know". These
+  never belong in docs.
+
 ## 3. Paragraphs, lists and tables
 
 - **Short paragraphs.** Usually two to four sentences, each about one thing.

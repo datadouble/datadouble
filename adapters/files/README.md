@@ -33,7 +33,7 @@ or left out unnoticed. Selection tests are GNU `find` tests; tests that act
 regular files are copied. `:as_of` in a test stands for the plan's anchor
 time, as in `-newermt :as_of`.
 
-`paths_from` says how the source's chosen rows name files, by a path
+`paths_from` specifies how file paths come from the source's selected rows, by a path
 relative to the root. `path` is a template over a table's columns, such as
 `documents/{customer_id}/{file_name}`, and `match`, if given, a regular
 expression whose first group is the path, for values such as URLs or keys

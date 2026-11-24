@@ -46,7 +46,7 @@ datadouble-lock` and keeps the new `catalog.lock` and `changes.txt` in the
 job's artifacts with `datadouble.env`; start it by running a pipeline with
 `DATADOUBLE_JOB` set to `<spec>-lock`. It never commits: download the job's
 artifacts, check every new or changed column in `changes.txt` for personal
-data, then commit `catalog.lock` beside the spec. A lock holds names, types
+data, then commit `catalog.lock` beside the spec. A lock contains names, types
 and versions, never values (decision 123).
 
 ## What a job needs on its runner
@@ -55,7 +55,7 @@ and versions, never values (decision 123).
 - The shell executor, with Docker and its socket at `/var/run/docker.sock`,
   unless the runner says otherwise (below). The template runs the Datadouble
   image as the engine's user on the host's network, with the project
-  directory and every absolute path the spec names mounted at the same path.
+  directory and every absolute path in the spec mounted at the same path.
 - Those paths, existing and owned by the engine's user (`999:999` for
   PostgreSQL).
 - On runners inside the production boundary, `DATADOUBLE_BOUNDARY=inside` in
@@ -100,7 +100,7 @@ Datadouble cannot mask anything else at run time.
 
 ## Notifications
 
-The spec's `notify` section says who hears about a job that fails or warns.
+The spec's `notify` section configures notifications for jobs that fail or warn.
 Each job sets `DATADOUBLE_CI_JOB` to its job, so Datadouble posts the spec's
 webhooks itself after the command, with the job's page (`CI_JOB_URL`) as
 `run_url`. Define the webhook's variable as a masked CI/CD variable like the

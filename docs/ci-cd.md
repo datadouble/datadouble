@@ -129,7 +129,7 @@ started by a compatible server.
 ### Compatibility lines {#compatibility-lines}
 
 The **compatibility line** is the part of the server version that decides
-which servers can open a copy. Each engine adapter says how much of the
+which servers can open a copy. Each engine adapter documents how much of the
 version that is (decision 120):
 
 | Engine | Line | Example | Why |
@@ -191,7 +191,7 @@ The `index.json` file is explained under [export stores](#the-index).
 ### Channels {#channels}
 
 Images are addressed through **channels**: named, movable pointers such as
-`latest`. A channel says which generation is current.
+`latest`. A channel points at the current generation.
 
 - `promote` advances a channel in the export store.
 - `fetch` advances a channel in non-production staging.
@@ -370,7 +370,7 @@ inside the boundary. Where the only machine there is a CI runner, the manual
   column for personal data, and commits the lock. That review is the point of
   strict mode, so no job does it for them.
 
-Publishing the lock as a CI artifact is safe. A lock holds table, column and
+Publishing the lock as a CI artifact is safe. A lock contains table, column and
 key names, engine type names and requirement versions, never values, so it is
 consistent with [no data in CI storage](#no-data-in-ci-storage) (decision
 123). Type names can carry schema literals, such as a MySQL `enum` column's
@@ -494,13 +494,13 @@ each of them two settings:
 - optionally, `context`.
 
 This is never the runner's own kubeconfig file. The job's container sees only
-the paths the spec names, and runs as the engine's user, not the runner's. A
+the paths in the spec, and runs as the engine's user, not the runner's. A
 `file: /path` reference suits a secret file mounted for the purpose: `ci init`
 mounts it into the job, and the engine's user must be able to read it.
 
 The image has no exec credential plugins, so the kubeconfig must carry a token
 or a client certificate. As with any secret reference, `ci init` lists the
-variable for the jobs whose part of the spec names it, and each system binds
+variable for the jobs whose part of the spec references it, and each system binds
 it from its own secret store (decision 124).
 
 ## Operations on images and copies {#operations-on-images-and-copies}
@@ -767,7 +767,7 @@ job.
 ### Notifications {#notifications}
 
 A failed build is no use if nobody hears about it. A spec's `notify` section
-says who hears about a generated job that fails or ends with a warning
+configures notifications for generated jobs that fail or end with a warning
 (decision 125):
 
 ```yaml
@@ -1005,7 +1005,7 @@ The two sides need separate namespaces, ideally separate clusters, since each
 side's claim holds that side's data.
 
 **Engines and the claim.** Jobs that start engine software need the spec's
-`kubernetes` runtime on that claim, with every path the spec names under the
+`kubernetes` runtime on that claim, with every path in the spec under the
 runtime's `mount`. Those jobs' pods mount the claim at `mount`, the path the
 engine pods use. Other jobs mount it at their paths' common directory.
 

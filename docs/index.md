@@ -81,15 +81,15 @@ production and turns the image into copies:
 `promote` copies the image into an **export store**, the only storage
 non-production can read. On the other side, `fetch` brings the image in,
 `replicate` makes copies of it, and `announce` tells people where those
-copies are. Four more operations look after images and copies already
+copies are. Four more operations manage images and copies already
 made: `claim` takes a copy from a ready pool, `release` destroys copies,
 `prune` removes old images, and `activate` rolls back to an earlier image. The [architecture](architecture.md) page
 walks through every stage.
 
 ## How the pieces fit
 
-A team describes what it wants in a **spec**, a YAML file. The spec names
-the sources to read, which rows to keep, how to anonymize them and where to
+A team describes what it wants in a **spec**, a YAML file. The spec defines the
+sources to read, which rows to keep, how to anonymize them and where to
 put the result. Everything else works from that spec:
 
 - **The `datadouble` command** runs the stages. Its primary interface is JSON
