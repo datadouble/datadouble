@@ -656,12 +656,14 @@ class CiConformance:
         assert attempts
         sent = attempts[0]
         assert all(attempt == sent for attempt in attempts), attempts
-        assert set(sent) == {"spec", "job", "outcome", "generation", "error", "run_url"}
+        assert set(sent) == {"spec", "job", "outcome", "generation", "error", "run_url", "text"}
         assert sent["spec"] == "shop"
         assert sent["job"] == "build"
         assert sent["outcome"] == "failure"
         assert sent["error"] == "store_failed"
         assert sent["run_url"] is None or str(sent["run_url"]).startswith("http")
+        assert str(sent["text"]).startswith("Datadouble shop: build failed (store_failed)")
+        assert "\n" not in str(sent["text"])
         body = json.dumps(sent)
         for value in shop.secrets.values():
             assert value.splitlines()[0] not in body

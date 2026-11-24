@@ -207,8 +207,12 @@ notify:
 
 - **Webhooks** work on every system. Datadouble posts a JSON body with the
   spec's name, the job, its outcome, the generation, the error code and the
-  run's page, never data values or secrets. The URL is a secret reference,
-  so `ci init` lists its variable with the others.
+  run's page, never data values or secrets. Its `text` field puts those in
+  one line. For a chat room, add `format: chat` to the webhook, and
+  Datadouble posts only that line. Google Chat, Slack, Mattermost and
+  Rocket.Chat incoming webhooks accept it. Google Chat refuses any other
+  key, so it needs `chat`. The URL is a secret reference, so `ci init`
+  lists its variable with the others.
 - **Email** uses the system's own mechanism:
     - Jenkins: a `mail` step in the Jenkinsfile's `post` section;
     - GitLab: the Pipeline status emails integration, set up by hand as

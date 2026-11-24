@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Webhook notifications reach chat rooms**
+  ([#122](https://github.com/datadouble/datadouble/issues/122)). The body
+  posted to a `notify` webhook has a new `text` field: one line built from
+  the other fields, such as
+  `Datadouble shop: build failed (store_failed) - https://ci.example.com/42/`.
+  A webhook with the new `format: chat` gets only `{"text": ...}`, which
+  Google Chat, Slack, Mattermost and Rocket.Chat incoming webhooks accept
+  with no service in between. Google Chat refuses any other key, so it
+  needs `chat`. The default, `format: json`, keeps every other field.
 - **Accounts copies carry, for logins over TCP**
   ([#70](https://github.com/datadouble/datadouble/issues/70)).
   `package.accounts` lists users, each with a password (plain text, since

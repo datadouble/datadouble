@@ -813,7 +813,8 @@ The body is a JSON POST:
 ```json
 {"spec": "shop", "job": "build", "outcome": "failure",
  "generation": null, "error": "store_failed",
- "run_url": "https://github.com/example/shop/actions/runs/42"}
+ "run_url": "https://github.com/example/shop/actions/runs/42",
+ "text": "Datadouble shop: build failed (store_failed) - https://github.com/example/shop/actions/runs/42"}
 ```
 
 - `generation` is the generation a build made. It is given with a warning or
@@ -822,9 +823,29 @@ The body is a JSON POST:
   verification, whose report is in the job's log.
 - `run_url` is the system's page for the run. It is null on Argo CD, where a
   Job has no page.
+- `text` is one line for people, built from the other fields. It says
+  `failed` for a failure and `passed with warnings` for a warning, and
+  leaves out the fields that are null.
 
 The body carries names, codes and outcomes, never data values or secrets
-(decisions 18 and 54).
+(decisions 18 and 54). That holds for `text` too.
+
+A webhook to a chat room takes `format: chat`. Datadouble then posts only
+the line, as `{"text": "..."}`, which Google Chat, Slack, Mattermost and
+Rocket.Chat incoming webhooks all accept:
+
+```yaml
+notify:
+  to:
+    - webhook:
+        url:
+          env: CHAT_WEBHOOK
+        format: chat
+```
+
+Google Chat refuses a body with any key it doesn't know, so it needs
+`chat`. The default, `format: json`, posts the whole body above, for a
+receiver written for Datadouble.
 
 Each attempt at a job posts. So a system that runs a failed job again, such as
 a Kubernetes Job with a `backoffLimit`, notifies once per attempt. A follower
