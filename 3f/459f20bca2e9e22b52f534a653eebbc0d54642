@@ -1,0 +1,21 @@
+docs/architecture.md
+  s_ad63f2bf16b775::t_2d7a075d1ed0fa 212-214,495,614,744-745,981-984,986,988-990,992,995-1016
+docs/index.md
+  s_ad63f2bf16b775::t_3d0bf721b3890f 97-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3f459f20bca2e9e22b52f534a653eebbc0d54642",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
