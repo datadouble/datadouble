@@ -172,5 +172,11 @@ But built-in strategies such as `faker` don't apply to it. Your choices are:
 ## Configuration tables
 
 Some extensions keep their own settings in tables. For example, `pg_cron`
-keeps its jobs in `cron.job`. Those rows travel with the schema, and a job's
-command can hold credentials. Check them before you trust a copy.
+keeps its jobs in `cron.job`.
+
+Datadouble leaves out every table an extension owns, so these tables are not
+in the catalog, and their rows are not copied. A working database creates the
+extension fresh, so its configuration tables start empty. A copy of a database
+that relies on scheduled jobs arrives with none.
+[#117](https://github.com/datadouble/datadouble/issues/117) tracks copying
+these tables like any other.
