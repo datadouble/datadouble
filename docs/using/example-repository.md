@@ -24,11 +24,12 @@ cd example-pipeline
 make demo
 ```
 
-You need Docker, git and `act`.
+You need Docker, git and make. It works the same on Linux and macOS.
 
-`make demo` builds the Datadouble image from a checkout of
-datadouble/datadouble, starts a throwaway source, and makes a signing key
-pair. Then it runs every workflow with `act`, on your machine, the way a
+`make demo` runs inside a Linux container that plays the self-hosted runner,
+and that container brings `act`. The demo builds the Datadouble image from a
+checkout of datadouble/datadouble, starts a throwaway source, and makes a
+signing key pair. Then it runs every workflow with `act`, the way a
 self-hosted runner would. The workflows run in pipeline order:
 
 1. Inside the boundary: build an image, then promote it.
@@ -36,7 +37,8 @@ self-hosted runner would. The workflows run in pipeline order:
    request, then release that copy.
 3. On both sides: prune old images.
 
-Everything the demo makes goes under `/var/tmp/example-pipeline`, and the
-demo removes it at the end.
+Everything the demo makes goes under `/var/tmp/example-pipeline` on the
+Docker host, and the demo removes it at the end. On macOS, the Docker host is
+Docker's Linux virtual machine, not your Mac.
 
 The repository's README walks through each file.
