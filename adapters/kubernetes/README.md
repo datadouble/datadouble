@@ -132,7 +132,7 @@ announce:
 
 - **A secret reference to the content, not the runner's kubeconfig file.**
   `{env: NAME}` holds the kubeconfig itself, not a path to one: in CI jobs
-  Datadouble runs in its image, which sees only the paths the spec names,
+  Datadouble runs in its image, which sees only the paths in the spec,
   and as the engine's user (decision 86), who cannot read the runner user's
   `~/.kube/config`. `{file: /path}` is for a secret file mounted for this
   purpose, such as a Kubernetes Secret volume: `ci init` mounts that path
@@ -147,7 +147,7 @@ announce:
   not in files it names (`tokenFile`, `client-certificate`), since those
   paths are not mounted.
 - **`ci init` lists the variable** among the secrets of each job whose part
-  of the spec names it, and only those: the runtime's for `build`,
+  of the spec references it, and only those: the runtime's for `build`,
   `provision` and `release`; `k8s-pv`'s for `provision`, `release` and the
   non-production `prune`; `k8s-secret`'s for `provision` and `release`.
   Define it in each system's own secret store, as for any other secret

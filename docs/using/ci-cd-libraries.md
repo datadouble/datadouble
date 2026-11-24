@@ -40,11 +40,11 @@ The options:
   either side on GitLab, Jenkins and Argo CD.
 - `--work` is `build`'s work directory, an absolute path in production
   scratch space. It is kept between runs, so a retried build resumes.
-- `--side` names the side when you generate `prune` on its own, since `prune`
+- `--side` sets the side when you generate `prune` on its own, since `prune`
   runs on either side.
 
 Some jobs need a section of the spec: `promote` needs `promote`, `fetch` needs
-`fetch`, and `provision` and `release` need `replicate`. `replicate` also says
+`fetch`, and `provision` and `release` need `replicate`. `replicate` also sets
 whether copies are kept in a pool or made on demand.
 
 The response lists:
@@ -52,7 +52,7 @@ The response lists:
 - `files`: the files written;
 - `environment`: the environment variables to define as secrets on that side.
   Each job gets only its own;
-- `instructions`: anything the system's configuration cannot hold, such as
+- `instructions`: anything the system's configuration cannot express, such as
   GitLab's pipeline schedules. Do each step it lists.
 
 Commit the files. After changing the spec or the options, generate again
@@ -116,7 +116,7 @@ Jobs run the pinned Datadouble image with Docker, as the engine's user. So
 each runner needs:
 
 - Docker;
-- every path the spec names, existing and owned by the engine's user.
+- every path in the spec, existing and owned by the engine's user.
 
 On Kubernetes, one PersistentVolumeClaim holds those paths.
 
@@ -128,8 +128,8 @@ daemon on another socket, tell the jobs where to find it. Either:
 - set these in the runner's environment:
     - `DATADOUBLE_DOCKER`, the command (`docker` by default);
     - `DATADOUBLE_DOCKER_SOCKET`, the daemon's socket
-      (`/var/run/docker.sock` by default). A `unix://` `DOCKER_HOST` also
-      names it.
+      (`/var/run/docker.sock` by default). A `unix://` `DOCKER_HOST` also sets
+      it.
 - or pass `ci init --docker` and `--docker-socket`, which write them into the
   generated configuration (decision 126).
 
@@ -143,15 +143,15 @@ With `--agent` set to `kubernetes`, each job runs as a pod of the pinned image,
 as the engine's user, beside the engine pods. Only Jenkins supports this.
 It works like Argo CD:
 
-- `--runner` names the side's namespace, and the pod mounts that namespace's
+- `--runner` sets the side's namespace, and the pod mounts that namespace's
   `datadouble` claim.
-- `--cloud` names the Jenkins Kubernetes plugin's cloud. Without it, the
+- `--cloud` sets the Jenkins Kubernetes plugin's cloud. Without it, the
   plugin's default cloud is used.
 
 First, the spec. `ci init` refuses a spec that breaks either rule:
 
 - For jobs that start engines, use the spec's `kubernetes` runtime on the
-  `datadouble` claim, with every path the spec names under the runtime's
+  `datadouble` claim, with every path in the spec under the runtime's
   `mount`.
 - Leave the runtime's `namespace` out. Engine pods then start in the
   namespace of the job's own pod, so one spec serves both sides. If you do
@@ -178,19 +178,19 @@ When the source's schema changes, strict mode needs a new catalog lock. The
 source needs the boundary.
 
 1. Start the `lock` job by hand.
-2. Download the job's artifact. It holds the new `catalog.lock`, and
+2. Download the job's artifact. It contains the new `catalog.lock`, and
    `changes.txt`: what changed since the committed lock. On Argo CD, both are
    in the job's log instead.
 3. Check every new or changed column for personal data.
 4. Commit the new lock beside the spec.
 
-The job never commits for you. Publishing the lock is safe: a lock holds
+The job never commits for you. Publishing the lock is safe: a lock contains
 names, types and versions, never values (decision 123). See
 [the lock job](../ci-cd.md#the-lock-job) for the details.
 
 ## Get notified {#get-notified}
 
-The spec's `notify` section says who hears about a job that fails or warns.
+The spec's `notify` section configures notifications for jobs that fail or warn.
 It lives in the spec rather than in `ci init`'s options, so generating the
 jobs again keeps it:
 

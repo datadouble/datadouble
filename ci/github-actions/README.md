@@ -24,7 +24,7 @@ successful `build`, a pool's `provision` after `fetch`), pull request triggers
 for on-demand copies, and a concurrency group. The response lists the
 environment variables the jobs read secrets from; define each as a
 repository or environment secret. Each job receives only the ones its part of
-the spec names. Name credentials an adapter reads from the environment rather
+the spec references. Name credentials an adapter reads from the environment rather
 than the spec, such as `AWS_ACCESS_KEY_ID`, with `--env NAME`.
 
 `build`, `promote` and `lock` need `--runner`, a self-hosted runner's label
@@ -42,7 +42,7 @@ datadouble-lock` and uploads the new `catalog.lock` and `changes.txt` as the
 workflow run's artifact, `datadouble-<spec>-lock`, with
 `actions/upload-artifact`. It never commits: download the artifact from the
 run's page, check every new or changed column in `changes.txt` for personal
-data, then commit `catalog.lock` beside the spec. A lock holds names, types
+data, then commit `catalog.lock` beside the spec. A lock contains names, types
 and versions, never values (decision 123).
 
 ## What a job needs on its runner
@@ -51,7 +51,7 @@ and versions, never values (decision 123).
   inside the production boundary (decision 98).
 - Docker, with its socket at `/var/run/docker.sock` unless the runner says
   otherwise (below). The action runs the Datadouble image on the host's
-  network, with the workspace and every absolute path the spec names mounted
+  network, with the workspace and every absolute path in the spec mounted
   at the same path, so the engine containers Datadouble starts can mount
   them too.
 - Those paths, existing and owned by the engine's user (`999:999` for
@@ -99,7 +99,7 @@ the `lock` job's lock and changes hold no data values.
 
 ## Notifications
 
-The spec's `notify` section says who hears about a job that fails or warns.
+The spec's `notify` section configures notifications for jobs that fail or warn.
 Each step passes the action its job (`job: build`), so Datadouble posts the
 spec's webhooks itself after the command, with the run's page
 (`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID`) as

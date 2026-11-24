@@ -119,7 +119,7 @@ starts where a build starts: with the sources it reads.
 
 ## What a build reads: sources {#sources}
 
-A spec names its sources in `sources`, a map from a name to a source. It does
+A spec lists its sources under `sources`, a map from a name to a source. It does
 so even when there is only one:
 
 ```yaml
@@ -201,7 +201,7 @@ change what a copy holds or how it behaves. So the catalog lists them too
 - **Tables list the objects they need.** These are the sequences and
   functions their column defaults and check constraints use, and their
   columns' user-defined types, as far as each engine records them. Each
-  adapter's README says which. Package planning follows these edges (see
+  adapter's README documents which. Package planning follows these edges (see
   [images that work on their own](#images-that-work-on-their-own)).
 - **Edges are exact where the engine records them.** The engines that do
   are PostgreSQL (`pg_depend`), SQL Server
@@ -790,7 +790,7 @@ The generation also fixes two values, so a resumed run produces the same
 values as the first attempt:
 
 - the run's anchor time (`as_of`), when the spec gives none;
-- its anonymization key, when the spec names none in
+- its anonymization key, when the spec sets none in
   `secrets.anonymization_key`.
 
 !!! warning "The work directory holds real personal data"

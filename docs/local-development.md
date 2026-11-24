@@ -157,7 +157,7 @@ list, describes, SOQL queries and exports.
 The fake org (`datadouble_salesforce.fake`) is a SQLite file served over
 those same HTTP calls. So the whole adapter, client included, runs offline.
 
-- A spec names a fake org with a `connection` like this:
+- A spec points at a fake org with a `connection` like this:
 
     ```yaml
     connection:

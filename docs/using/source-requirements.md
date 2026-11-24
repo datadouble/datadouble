@@ -2,7 +2,7 @@
 
 Most production databases use something beyond the bare server: a PostgreSQL
 extension, a MySQL plugin, a Redis module, a search plugin. A golden image has
-to carry these too, or it won't work. This page explains how Datadouble finds
+to include these too, or it won't work. This page explains how Datadouble finds
 them, what it checks, and what to do when a build stops because one is
 missing.
 
@@ -20,7 +20,7 @@ Datadouble builds a golden image inside a **working database**: a throwaway
 server it starts from the engine vendor's container image. It loads the
 copied rows into that server, anonymizes them there, and packages the result.
 
-So the working database must be able to hold everything the copied data uses.
+So the working database must support everything the copied data uses.
 If the source has a `geometry` column from PostGIS, the working server needs
 PostGIS too. And it needs the version the source runs, since a different
 version can store or behave differently.
@@ -55,7 +55,7 @@ Three engines work differently:
   lock, where strict mode notices one installed, removed or upgraded. But the
   build does not check them.
 
-Each adapter's README says what it reports, and which images provide common
+Each adapter's README documents what it reports, and which images provide common
 add-ons.
 
 ## What Datadouble does

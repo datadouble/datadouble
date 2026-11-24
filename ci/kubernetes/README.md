@@ -13,14 +13,14 @@ datadouble ci init --system argocd --job fetch,provision,release,prune,activate 
     --spec datadouble/shop.yml --runner datadouble-dev
 ```
 
-`--runner` names the namespace the jobs run in. Each call writes one Argo CD
+`--runner` sets the namespace the jobs run in. Each call writes one Argo CD
 Application, `argocd/datadouble-<spec>-<side>.yaml`, which installs the chart
 from this repository at the release's tag. Its values hold the jobs and a
 copy of the spec and its catalog lock, so generate it again after changing
 either. The response lists what to set up:
 
 - **A PersistentVolumeClaim** named `datadouble` in the namespace. Every path
-  the spec names (stores, staging, copies, the work directory) lives on it,
+  in the spec (stores, staging, copies, the work directory) lives on it,
   mounted at the same path in every pod, as the `kubernetes` runtime needs,
   so they must share one directory, which `ci init` checks. Leave the spec's
   `runtime.kubernetes.namespace` out: the engine pods then start in the
@@ -62,7 +62,7 @@ after a `==> <path> <==` line, and its termination message carries
 `fingerprint` and `changes`, their number. It never commits: check every new
 or changed column for personal data, commit `catalog.lock` beside the spec,
 and generate the Application again so its values carry the new lock. A lock
-holds names, types and versions, never values (decision 123).
+contains names, types and versions, never values (decision 123).
 
 ## On-demand copies
 
@@ -104,7 +104,7 @@ which holds the outputs (`outcome`, `generation`, `error`; `fingerprint` and
 
 ## Notifications
 
-The spec's `notify` section says who hears about a job that fails or warns.
+The spec's `notify` section configures notifications for jobs that fail or warn.
 Each step names its job (`--ci-job`), so Datadouble posts the spec's webhooks
 itself after each step's command; a Job has no web page, so `run_url` is
 null. A Job runs a failed pod once more (`backoffLimit: 1`), and each attempt

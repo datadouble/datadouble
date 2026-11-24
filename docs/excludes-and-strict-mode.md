@@ -112,7 +112,7 @@ A newly installed one does too, unless `data` is `off`.
 
 Not every kind of change is equally risky. A new column might hold personal
 data. A rewritten view is usually routine. So `strict` is a mapping with a
-level for each kind of thing in the catalog. Kinds left out take their
+level for each kind of catalog object. Kinds left out take their
 defaults:
 
 ```yaml
@@ -263,7 +263,7 @@ trigger's body instead. The plan marks inferred edges.
 - **An inferred edge knows a name, not a signature.** So a routine whose
   arguments changed still satisfies it.
 
-Each adapter's README says which of its edges are exact.
+Each adapter's README documents which of its edges are exact.
 
 #### After an object change
 

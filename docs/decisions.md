@@ -639,7 +639,7 @@ so non-production can read it.
 - cosign signs the image's summary, without its signature field. The summary
   names every archive's SHA-256.
 - The Sigstore bundle is stored as `<generation>.sigstore.json`.
-- The spec names a key by reference (`{env: NAME}` or `{file: PATH}`), and
+- The spec gives a key as a secret reference (`{env: NAME}` or `{file: PATH}`), and
   cosign gets it as `env://NAME` or a path.
 - Keyless signing works through the CI system's identity.
 - The transparency log is on unless it is turned off.
@@ -813,7 +813,7 @@ A report keyed by package-relative names (`__init__.py`) silently merged files a
 
 - The default image is the vendor's official image of exactly the source's version (`postgres:<version>-trixie`, `mongo:<version>`). A dump from a newer minor release can hold what an older server rejects.
 - A source's `image` (`sources.<name>.image`) overrides the default.
-- The published `datadouble` image carries Datadouble, its adapters, the `docker` command, `kubectl` and cosign. It carries no engine software.
+- The published `datadouble` image contains Datadouble, its adapters, the `docker` command, `kubectl` and cosign. It contains no engine software.
 
 **Why:** Engine binaries tied Datadouble to one host's packages and versions. SQL Server and Oracle ship only as images in practice. The vendor's image matches the source's version and carries its own tools.
 
@@ -1262,9 +1262,9 @@ An unstable build is a warning: its image is built and verified, so it must stil
 
 *(Amended by [decision 133](#decision-133).)*
 
-**Decided:** On Kubernetes, `ci init --system argocd` writes an Argo CD Application per side. The Application installs this repository's Helm chart (`ci/kubernetes/chart`) at the release's tag, with the jobs, the spec and its catalog lock as values. `--runner` names the namespace.
+**Decided:** On Kubernetes, `ci init --system argocd` writes an Argo CD Application per side. The Application installs this repository's Helm chart (`ci/kubernetes/chart`) at the release's tag, with the jobs, the spec and its catalog lock as values. `--runner` sets the namespace.
 
-- **Pods.** Pods run the Datadouble image itself, as the engine's user. Every path the spec names must share one PersistentVolumeClaim, mounted at the same path.
+- **Pods.** Pods run the Datadouble image itself, as the engine's user. Every path in the spec must share one PersistentVolumeClaim, mounted at the same path.
 - **Jobs.** Each job is a CronJob, suspended when it has no schedule. A following job also runs as a later step of its leader's pod.
 - **Boundary mark.** The mark is a `datadouble-boundary` ConfigMap that the operator creates in production namespaces.
 - **On-demand copies.** These are Argo CD hooks on an Application that sets `owner`, one per request, from an ApplicationSet. That Application renders only those hooks, which use its side's service account and spec. PreSync hooks run before an Application's own resources exist, and PostDelete hooks run after they are gone.
@@ -1562,7 +1562,7 @@ Rebuilding the index from a listing, rather than editing it, means any later pro
 - `--output` naming the committed lock's own directory is refused, so the job can never overwrite it.
 - An earlier lock that cannot be read is reported as such (`unreadable`), not as no lock.
 
-**Why publishing a lock is safe.** A lock holds table, column and key names, engine type names and requirement versions, never data values. So publishing it as a CI artifact is consistent with [decision 18](#decision-18). Type names can carry schema literals, such as a MySQL `enum` or `set` column's labels. Those are part of the schema and already in the committed lock, so publishing adds no exposure.
+**Why publishing a lock is safe.** A lock contains table, column and key names, engine type names and requirement versions, never data values. So publishing it as a CI artifact is consistent with [decision 18](#decision-18). Type names can carry schema literals, such as a MySQL `enum` or `set` column's labels. Those are part of the schema and already in the committed lock, so publishing adds no exposure.
 
 The skills ([decision 105](#decision-105)) re-lock through this job where the person has no shell inside the boundary.
 
@@ -1593,7 +1593,7 @@ Refines [decisions 10](#decision-10), [16](#decision-16), [18](#decision-18), [9
 - Without it, `kubectl` uses the in-cluster service account or the ambient configuration.
 - Exec credential plugins are not in the image.
 
-**Why:** A CI job runs Datadouble in its image with only the paths the spec names, as the engine's user ([decision 86](#decision-86)). So a kubeconfig on the runner is neither visible nor readable. A secret reference travels like every other credential, from each system's own secret store.
+**Why:** A CI job runs Datadouble in its image with only the paths in the spec, as the engine's user ([decision 86](#decision-86)). So a kubeconfig on the runner is neither visible nor readable. A secret reference travels like every other credential, from each system's own secret store.
 
 A file per call, in its own directory, outside the paths pods mount, is never left behind by a failed or cancelled run. Masking a kubeconfig's structural lines would hide ordinary log text without protecting anything.
 
@@ -1673,7 +1673,7 @@ Each Jenkinsfile has an `agent { kubernetes { cloud; namespace; yaml } }` pod. T
 
 **Mounting the claim.**
 
-- Jobs that start engine software need the spec's `kubernetes` runtime to name that namespace and claim. Every path the spec names must be under the runtime's `mount`, where the pod mounts the claim.
+- Jobs that start engine software need the spec's `kubernetes` runtime to name that namespace and claim. Every path in the spec must be under the runtime's `mount`, where the pod mounts the claim.
 - Other jobs mount the claim at their paths' common directory.
 
 **Users in the pod.**
@@ -1736,7 +1736,7 @@ Amends [decisions 9](#decision-9) and [79](#decision-79).
 
 ### 129. Several sources in one spec {#decision-129}
 
-**Decided:** A spec names its sources in `sources`, a map from a name to a source, even with one server.
+**Decided:** A spec lists its sources under `sources`, a map from a name to a source, even with one server.
 
 **What the sources share.**
 
@@ -1877,7 +1877,7 @@ Refines [decision 41](#decision-41).
 - **Inside a cluster** (no kubeconfig in the runtime's settings, `KUBECONFIG` unset or empty, and a service account namespace file in Datadouble's pod): the namespace of Datadouble's own pod, read from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`.
 - **Outside a cluster:** the kubeconfig context's namespace, or `default`.
 
-When a spec names a namespace, `ci init` for Jenkins Kubernetes agents and Argo CD refuses a side whose `--runner` differs, for jobs that start engines (`runtime_namespace` in the core).
+When a spec sets a namespace, `ci init` for Jenkins Kubernetes agents and Argo CD refuses a side whose `--runner` differs, for jobs that start engines (`runtime_namespace` in the core).
 
 `instructions` give a Jenkins Kubernetes cloud's credentials the Role that the Kubernetes plugin documents: pods with `patch` and `update`, `pods/exec`, `pods/log`, and watching events. These rules are held as data, with the service account's rules (`CLOUD_RULES`, `ACCOUNT_RULES`, `VOLUME_RULES`).
 
