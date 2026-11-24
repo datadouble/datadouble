@@ -8,6 +8,12 @@ that your contributions are licensed the same way.
 Read [AGENTS.md](AGENTS.md) and [docs/decisions.md](docs/decisions.md). Decided
 items are settled unless a pull request makes the case for reopening one.
 
+## Writing documentation
+
+Documentation follows [WRITING.md](WRITING.md): explain the problem before the
+mechanism, set up every idea before using it, and keep sentences and
+paragraphs short. Readability never costs accuracy.
+
 ## Before opening a pull request
 
 1. Run the full check suite (typing, lint and tests, as described in
