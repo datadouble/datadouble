@@ -11,8 +11,8 @@ a tag:
 
 ``prepare`` refuses to run while ``[Unreleased]`` in ``CHANGELOG.md`` has no
 entries, runs ``make check``, sets every package to the new version (they share
-one version until 1.0), moves the unreleased entries into a dated section, and
-opens the release pull request. ``tag`` checks the merged result and pushes the
+one version until 1.0) and relocks, moves the unreleased entries into a dated
+section, and opens the release pull request. ``tag`` checks the merged result and pushes the
 ``v<version>`` tag, which starts the release workflow.
 """
 
@@ -207,6 +207,9 @@ def prepare(version: str, root: Path, runner: Runner, day: date) -> str:
         runner("git", "add", str(path))
     for path in set_released_versions(root, version):
         runner("git", "add", str(path))
+    # The lock records every workspace member's version.
+    runner("uv", "lock")
+    runner("git", "add", "uv.lock")
     # The nightly run's workflows name the version that wrote them.
     runner("uv", "run", "python", "scripts/nightly.py", "write")
     runner("git", "add", ".github/workflows")
