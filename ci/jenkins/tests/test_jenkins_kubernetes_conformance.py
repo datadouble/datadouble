@@ -473,6 +473,7 @@ def test_a_live_pod_may_add_but_not_change() -> None:
 
 def test_the_lock_job_runs_in_a_pod_like_build() -> None:
     lock = _golden("lock")
-    assert "['lock', '--spec', 'datadouble/shop.yml', '--output', 'datadouble-lock']" in lock
+    record = "'/srv/datadouble/work/.datadouble-notify/shop.lock.json'"
+    assert f"['lock', '--ci-record', {record}, '--spec', 'datadouble/shop.yml'," in lock
     assert "artifacts: 'datadouble-lock'," in lock
     assert generated_pod(lock)["spec"] == generated_pod(_golden("build"))["spec"]

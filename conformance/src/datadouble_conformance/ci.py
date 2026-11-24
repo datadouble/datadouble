@@ -114,7 +114,7 @@ replicate:
   mode: {mode}
   size: {size}
 notify:
-  when: [failure, warning]
+  when: [failure, warning, recovery]
   to:
     - webhook:
         url:
@@ -646,7 +646,10 @@ class CiConformance:
         assert refused.outputs["error"] in {str(n["error"]) for n in shop.notifications("promote")}
 
     def test_a_failing_job_notifies(self, ci_harness: CiHarness, shop: World) -> None:
-        """A failing job posts its outcome to the spec's webhook, never values or secrets."""
+        """A failing job posts its outcome to the spec's webhook, never values or secrets.
+
+        The first success after it posts one recovery, and later successes none.
+        """
         shop.as_root(f"chmod 0555 {shop.store}")
         failed = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="501"))
         assert failed.state is State.FAILURE, failed.log
@@ -656,7 +659,10 @@ class CiConformance:
         assert attempts
         sent = attempts[0]
         assert all(attempt == sent for attempt in attempts), attempts
-        assert set(sent) == {"spec", "job", "outcome", "generation", "error", "run_url", "text"}
+        assert set(sent) == {
+            "spec", "job", "outcome", "recovered", "generation", "error", "run_url", "text",
+        }  # fmt: skip
+        assert sent["recovered"] is False
         assert sent["spec"] == "shop"
         assert sent["job"] == "build"
         assert sent["outcome"] == "failure"
@@ -670,7 +676,14 @@ class CiConformance:
         shop.as_root(f"chmod 0755 {shop.store}")
         built = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="501"))
         assert built.state is State.SUCCESS, built.log
-        assert shop.notifications("build") == attempts
+        # The first success after a failure recovers, once.
+        (recovery,) = shop.notifications("build")[len(attempts) :]
+        assert recovery["outcome"] == "success"
+        assert recovery["recovered"] is True
+        assert str(recovery["text"]).startswith("Datadouble shop: build recovered")
+        again = ci_harness.run(shop.repository, "build", Event.MANUAL, shop.context(run_id="502"))
+        assert again.state is State.SUCCESS, again.log
+        assert shop.notifications("build") == [*attempts, recovery]
 
     def test_hosted_runners_are_refused(self, ci_harness: CiHarness, shop: World) -> None:
         """``build`` and ``lock`` are never generated for, nor run on, a vendor-hosted runner."""

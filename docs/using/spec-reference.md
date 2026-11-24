@@ -51,7 +51,7 @@ A complete spec, which describes one pipeline.
 | `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in the namespace given by `namespace`, and otherwise where `kubectl` would put them, as the `kubernetes` runtime does. |
 | `prune` | [Retention](#retention) | see type | What `prune` keeps: how many generations, for how many days, and how many engine versions. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
-| `notify` | [Notify](#notify) |  | Notifications for generated CI jobs that fail or warn: webhooks and email. |
+| `notify` | [Notify](#notify) |  | Notifications for generated CI jobs that fail, warn or recover: webhooks and email. |
 
 ### AccountPrivileges
 
@@ -307,13 +307,13 @@ The Jailer compatibility page explains what Datadouble takes from it.
 
 ### Notify
 
-Notifications for generated CI jobs that fail or warn (decision 125).
+Notifications for generated CI jobs that fail, warn or recover (decisions 125, 142).
 
 Notifications live in the spec rather than in `ci init`'s options, so generating the jobs again keeps them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `when` | list of [NotifyOn](#notifyon) | see type | The outcomes that send a notification: `failure`, `warning` or both. Defaults to `[failure]`. |
+| `when` | list of [NotifyOn](#notifyon) | see type | The outcomes that send a notification: `failure`, `warning`, `recovery`, or any of them together. Defaults to `[failure]`. |
 | `to` (required) | list of [NotifyTarget](#notifytarget) |  | Where notifications go, one target each: `{webhook: ...}` or `{email: ...}`. At least one is needed. |
 
 ### NotifyOn
@@ -322,10 +322,11 @@ The outcomes of a generated CI job that send a notification.
 
 - `failure`: the job failed.
 - `warning`: the job finished with warnings.
+- `recovery`: the job succeeded, and its previous run did not (it failed, warned or was aborted).
 
 `notify.when` is `[failure]` by default.
 
-One of `failure` or `warning`.
+One of `failure` or `warning` or `recovery`.
 
 ### NotifyTarget
 
@@ -610,7 +611,7 @@ A URL that Datadouble posts a JSON summary of the job's outcome to.
 
 The JSON body a webhook receives.
 
-- `json`: every field (`spec`, `job`, `outcome`, `generation`, `error`, `run_url`) and a `text` line built from them, for a receiver written for Datadouble.
+- `json`: every field (`spec`, `job`, `outcome`, `recovered`, `generation`, `error`, `run_url`) and a `text` line built from them, for a receiver written for Datadouble.
 - `chat`: only `{"text": ...}`, for chat incoming webhooks (Google Chat, Slack, Mattermost, Rocket.Chat). Google Chat refuses any other key, so it needs `chat`.
 
 `format` is `json` by default.

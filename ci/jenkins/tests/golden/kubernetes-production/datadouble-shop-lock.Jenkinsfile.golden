@@ -65,7 +65,7 @@ pipeline {
                         job: 'lock',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK', 'SHOP_SOURCE_DSN'],
-                        arguments: ['lock', '--spec', 'datadouble/shop.yml', '--output', 'datadouble-lock'],
+                        arguments: ['lock', '--ci-record', '/srv/datadouble/work/.datadouble-notify/shop.lock.json', '--spec', 'datadouble/shop.yml', '--output', 'datadouble-lock'],
                         artifacts: 'datadouble-lock',
                     )
                 }
@@ -95,6 +95,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop lock: unstable', body: 'Datadouble shop lock: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop lock: recovered', body: 'Datadouble shop lock: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

@@ -68,7 +68,7 @@ pipeline {
                         job: 'promote',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK', 'SHOP_COSIGN_PUB'],
-                        arguments: ['promote', '--spec', 'datadouble/shop.yml'],
+                        arguments: ['promote', '--ci-record', '/srv/datadouble/work/.datadouble-notify/shop.promote.json', '--spec', 'datadouble/shop.yml'],
                     )
                 }
             }
@@ -97,6 +97,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop promote: unstable', body: 'Datadouble shop promote: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop promote: recovered', body: 'Datadouble shop promote: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

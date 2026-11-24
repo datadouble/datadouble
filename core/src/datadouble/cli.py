@@ -46,6 +46,7 @@ class _Arguments(argparse.Namespace):
     ci: str | None
     ci_directory: str | None
     ci_job: str | None
+    ci_record: str | None
     spec: str | None
     lock: str | None
     strict: list[tuple[str, str]] | None
@@ -105,6 +106,20 @@ class CommandParser(argparse.ArgumentParser):
 
 
 type _Add = Callable[[str, str], CommandParser]
+
+_JOB_COMMANDS = frozenset(
+    {
+        api.Command.RUN,
+        api.Command.PROMOTE,
+        api.Command.LOCK,
+        api.Command.FETCH,
+        api.Command.REPLICATE,
+        api.Command.RELEASE,
+        api.Command.PRUNE,
+        api.Command.ACTIVATE,
+    }
+)
+"""The commands generated jobs run, which keep a record of their outcome when told to."""
 
 
 def _jobs(text: str) -> list[str]:
@@ -261,7 +276,8 @@ def _ci_parsers(add: _Add) -> None:
     init.add_argument(
         "--work",
         help="the build's work directory, an absolute path in production scratch space."
-        " Build needs it",
+        " Build needs it, and so does every production job when notify sends recoveries to a"
+        " webhook, since jobs record their last outcome there",
     )
     init.add_argument(
         "--side",
@@ -341,6 +357,13 @@ def build_parser() -> CommandParser:
         """A command, with its summary as both its help and its description."""
         child = commands.add_parser(name, help=summary, description=summary)
         parser.commands[name] = child
+        if name in _JOB_COMMANDS:
+            child.add_argument(
+                "--ci-record",
+                metavar="FILE",
+                help="with --ci-job, the file the generated job records its last outcome in, so"
+                " that a success after anything else notifies as a recovery. ci init names it",
+            )
         return child
 
     add(api.Command.VERSION, "show the installed version")
@@ -530,6 +553,8 @@ def build_request(arguments: _Arguments) -> str:
             bridge["directory"] = arguments.ci_directory
         if arguments.ci_job:
             bridge["job"] = arguments.ci_job
+        if getattr(arguments, "ci_record", None):
+            bridge["record"] = arguments.ci_record
         fields["ci"] = bridge
     return json.dumps({"command": command, **fields})
 
@@ -701,9 +726,11 @@ def _respond(raw: str) -> tuple[api.Response, ExitCode]:
         failed = api.ErrorResponse(error=api.ErrorCode.ADAPTER_MISSING, message=str(error))
         return failed, api.exit_code(failed)
     with masking(adapter.mask):
+        previous, recalled = api.previous_outcome(request)
         response = api.handle(request)
         report = api.ci_report(response, summarize(response))
-        problems = api.notify(request, report, adapter.run_url(os.environ))
+        notified = api.notify(request, report, adapter.run_url(os.environ), previous=previous)
+    problems = (*recalled, *notified)
     for problem in problems:
         sys.stderr.write(f"warning: a notification failed, {problem}\n")
     return response, adapter.report(report, request.ci.directory)

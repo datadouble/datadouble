@@ -962,20 +962,23 @@ class NotifyOn(StrEnum):
 
     - ``failure``: the job failed.
     - ``warning``: the job finished with warnings.
+    - ``recovery``: the job succeeded, and its previous run did not (it
+      failed, warned or was aborted).
 
     ``notify.when`` is ``[failure]`` by default.
     """
 
     FAILURE = "failure"
     WARNING = "warning"
+    RECOVERY = "recovery"
 
 
 class WebhookFormat(StrEnum):
     """The JSON body a webhook receives.
 
-    - ``json``: every field (``spec``, ``job``, ``outcome``, ``generation``,
-      ``error``, ``run_url``) and a ``text`` line built from them, for a
-      receiver written for Datadouble.
+    - ``json``: every field (``spec``, ``job``, ``outcome``, ``recovered``,
+      ``generation``, ``error``, ``run_url``) and a ``text`` line built from
+      them, for a receiver written for Datadouble.
     - ``chat``: only ``{"text": ...}``, for chat incoming webhooks (Google
       Chat, Slack, Mattermost, Rocket.Chat). Google Chat refuses any other
       key, so it needs ``chat``.
@@ -1026,22 +1029,29 @@ type NotifyTarget = Annotated[
 
 
 class Notify(_Model):
-    """Notifications for generated CI jobs that fail or warn (decision 125).
+    """Notifications for generated CI jobs that fail, warn or recover (decisions 125, 142).
 
     Notifications live in the spec rather than in ``ci init``'s options, so
     generating the jobs again keeps them.
     """
 
     when: tuple[NotifyOn, ...] = Field(default=(NotifyOn.FAILURE,), min_length=1)
-    """The outcomes that send a notification: ``failure``, ``warning`` or
-    both. Defaults to ``[failure]``."""
+    """The outcomes that send a notification: ``failure``, ``warning``,
+    ``recovery``, or any of them together. Defaults to ``[failure]``."""
     to: tuple[NotifyTarget, ...] = Field(min_length=1)
     """Where notifications go, one target each: ``{webhook: ...}`` or
     ``{email: ...}``. At least one is needed."""
 
-    def sends(self, outcome: str) -> bool:
-        """Whether a job ending with ``outcome`` notifies."""
+    def sends(self, outcome: str, *, recovered: bool = False) -> bool:
+        """Whether a job ending with ``outcome`` notifies; ``recovered`` for a recovery."""
+        if recovered and NotifyOn.RECOVERY in self.when:
+            return True
         return outcome in {str(kind) for kind in self.when}
+
+    @property
+    def recovers(self) -> bool:
+        """Whether a webhook hears of recoveries, so jobs record their outcomes (decision 142)."""
+        return NotifyOn.RECOVERY in self.when and bool(self.webhooks())
 
     def webhooks(self) -> tuple[Webhook, ...]:
         """The webhook targets, in order."""
@@ -1204,7 +1214,7 @@ class Spec(_Model):
     secrets: Secrets = Secrets()
     """Secrets the build needs, by reference."""
     notify: Notify | None = None
-    """Notifications for generated CI jobs that fail or warn: webhooks and email."""
+    """Notifications for generated CI jobs that fail, warn or recover: webhooks and email."""
 
     @property
     def engine(self) -> EngineName:

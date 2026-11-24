@@ -67,7 +67,7 @@ pipeline {
                         job: 'fetch',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK', 'SHOP_COSIGN_PUB'],
-                        arguments: ['fetch', '--spec', 'datadouble/shop.yml'],
+                        arguments: ['fetch', '--ci-record', '/srv/datadouble/staging/.datadouble-notify/shop.fetch.json', '--spec', 'datadouble/shop.yml'],
                     )
                 }
             }
@@ -96,6 +96,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop fetch: unstable', body: 'Datadouble shop fetch: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop fetch: recovered', body: 'Datadouble shop fetch: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

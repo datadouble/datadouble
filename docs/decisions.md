@@ -1601,7 +1601,7 @@ Amends [decisions 61](#decision-61) and [73](#decision-73).
 
 ### 125. Notifications in the spec {#decision-125}
 
-*(Amended by [decision 141](#decision-141).)*
+*(Amended by [decisions 141](#decision-141) and [142](#decision-142).)*
 
 **Decided:** Notifications are a spec section, `notify`, not a `ci init` option.
 
@@ -2083,6 +2083,32 @@ The other fields stay as they are. Datadouble builds `text` when it posts, so no
 - `chat` posts only `{"text": ...}`.
 
 **Why:** Teams want job failures in a chat room, and each needed a service in between to reshape a small JSON body. Slack, Mattermost and Rocket.Chat incoming webhooks show `text` and ignore other keys. Google Chat answers `400` to any key it doesn't know ("Unknown name ... Cannot find field"), so `text` alone can't reach it. `chat` reaches all four. Keeping `json` as the default keeps the structured body for receivers written for it. Building the line only from the other fields keeps it within [decisions 18](#decision-18) and [54](#decision-54).
+
+Amends [decision 125](#decision-125).
+
+### 142. Recovery notifications {#decision-142}
+
+**Decided:** `notify.when` takes `recovery`: the job succeeded, and its previous run did not (it failed, warned or was aborted).
+
+**Email.** Each system's own mechanism, as for failures:
+
+- Jenkins: `post { fixed { ... } }`, with a subject that says the job recovered. Jenkins judges `fixed` from the previous build: a success after a failed or unstable build, not an aborted one.
+- GitLab: its Pipeline status emails never mail a recovery. `instructions` points to GitLab's Fixed pipeline notification, which mails only the pipeline's author (for a schedule, its owner), and to a webhook for the listed addresses.
+- GitHub: none. `instructions` says so.
+- Argo CD: email is refused, as before.
+
+**Webhooks.** Datadouble posts them itself, so each generated job keeps a record of its last outcome:
+
+- `ci init` names the record on each command line with `--ci-record FILE` (`ci.record` in JSON), only when `when` lists `recovery` and `to` lists a webhook.
+- The production side records in the work directory (`ci init --work`), and the other side in staging (`fetch.staging`), both under `.datadouble-notify/`, as `<spec>.<job>.json`. A job with several command lines keeps one record per line (`<spec>.<job>.<n>.json`), since each line notifies on its own.
+- Production jobs other than `build` don't otherwise use the work directory. With a recovery webhook, every production job mounts it, and `ci init` refuses production jobs without `--work`. Every non-production job already needs the `fetch` section, and `ci init` refuses a spec without it.
+- Before its command, the job reads the record and marks it `running`. After the command, it writes the outcome. A success when the record held anything but `success`, `running` included, is a recovery. No record, as on the first run, is no recovery.
+- The record holds only the outcome. A record that can't be read or written is a warning line, and never changes the job's outcome.
+- The body gains `recovered`, true for a recovery and false otherwise. `outcome` is `success`, and `text` says `recovered`, in both `json` and `chat` formats.
+
+A run that never reaches Datadouble, such as one stopped while its image is pulled, can't be recorded. The record keeps the run before it.
+
+**Why:** Teams that get failure alerts want to know when a job is healthy again, without opening the CI system. CI systems know the previous run, but Datadouble's webhooks don't ask them, so the job keeps its own record on its own side, where the job already writes and which lasts between runs. The work directory and staging are those places. A separate record per command line keeps a job's lines from reading each other's outcomes. Marking the record `running` first counts a run stopped part-way, such as at its time limit, as one that did not succeed. Naming the record in the generated command line, rather than deriving it, gives `promote`, `lock` and `prune`, whose requests name no directory, a place too. Payloads stay within [decisions 18](#decision-18) and [54](#decision-54).
 
 Amends [decision 125](#decision-125).
 

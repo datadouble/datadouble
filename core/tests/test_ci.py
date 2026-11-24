@@ -846,3 +846,68 @@ def test_a_failed_notification_changes_nothing(
     assert "ftp://hooks.example.com/shop" in ci.masked
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(["--ci-job", "deploy", "version"])
+
+
+RECOVERY = "notify: {when: [failure, recovery], to: [{webhook: {url: {env: ALERTS_WEBHOOK}}}]}\n"
+
+
+def test_jobs_record_their_outcomes_for_recoveries(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path, RECOVERY)
+    production = pipeline(spec, options(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE))
+    build, promote, prune = production.jobs
+    records = "/srv/work/.datadouble-notify"
+    assert build.invocations[0].arguments[:3] == (
+        "run",
+        "--ci-record",
+        f"{records}/shop.build.json",
+    )
+    assert promote.invocations[0].arguments == (
+        "promote", "--ci-record", f"{records}/shop.promote.json", "--spec", "datadouble/shop.yml",
+    )  # fmt: skip
+    assert [i.arguments[2] for i in prune.invocations] == [
+        f"{records}/shop.prune.1.json",
+        f"{records}/shop.prune.2.json",
+    ]
+    assert "/srv/work" in promote.mounts
+    assert "/srv/work" in prune.mounts
+    staging = pipeline(spec, options(JobKind.FETCH, JobKind.ACTIVATE, runner=None))
+    fetch, activate = staging.jobs
+    assert spec.fetch is not None
+    assert fetch.invocations[0].arguments[2] == str(
+        spec.fetch.staging / ".datadouble-notify" / "shop.fetch.json"
+    )
+    assert activate.invocations[0].arguments[3] is Placeholder.GENERATION
+    with pytest.raises(CiError, match="production jobs record in the work directory"):
+        pipeline(spec, options(JobKind.PROMOTE, work=None))
+    unfetched = spec.model_copy(update={"fetch": None})
+    with pytest.raises(CiError, match="record in staging: add the spec's `fetch` section"):
+        pipeline(unfetched, options(JobKind.PROVISION, runner=None))
+    mailed = make_spec(tmp_path, "notify: {when: [recovery], to: [{email: {to: [a@example.com]}}]}")
+    assert (
+        "--ci-record"
+        not in pipeline(mailed, options(JobKind.PROMOTE)).jobs[0].invocations[0].arguments
+    )
+
+
+@pytest.mark.usefixtures("registry")
+def test_bridged_requests_keep_a_record(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = spec_with_secret(tmp_path)
+    spec.write_text(spec.read_text(encoding="utf-8") + RECOVERY, encoding="utf-8")
+    monkeypatch.setenv("SHOP_KEY", "key-material")
+    monkeypatch.setenv("ALERTS_WEBHOOK", "ftp://hooks.example.com/shop")
+    record = tmp_path / "records" / "shop.build.json"
+    arguments = (
+        "run", "--ci-record", str(record), "plan,extract", "--spec", str(spec),
+        "--strict", "data=off", "--work", str(tmp_path / "work"),
+    )  # fmt: skip
+    code, out = run("--dry-run", "--ci", "fake-ci", "--ci-job", "build", *arguments)
+    assert json.loads(out)["ci"] == {"system": "fake-ci", "job": "build", "record": str(record)}
+    record.parent.mkdir()
+    record.write_text('{"outcome": "failure"}', encoding="utf-8")
+    code, out = run("--ci", "fake-ci", "--ci-job", "build", *arguments)
+    assert code == ExitCode.SUCCESS, out
+    assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "warning"}
+    record.write_text("{}", encoding="utf-8")
+    code, out = run("--ci", "fake-ci", "--ci-job", "build", *arguments)
+    assert code == ExitCode.SUCCESS, out
+    assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "warning"}

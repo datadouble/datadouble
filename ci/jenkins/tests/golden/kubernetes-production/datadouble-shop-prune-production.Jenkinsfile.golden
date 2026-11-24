@@ -71,7 +71,7 @@ pipeline {
                         job: 'prune',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['prune', '--spec', 'datadouble/shop.yml', '--target', 'store', (params.DRY_RUN ? '--dry-run' : '')],
+                        arguments: ['prune', '--ci-record', '/srv/datadouble/work/.datadouble-notify/shop.prune.1.json', '--spec', 'datadouble/shop.yml', '--target', 'store', (params.DRY_RUN ? '--dry-run' : '')],
                     )
                 }
             }
@@ -83,7 +83,7 @@ pipeline {
                         job: 'prune',
                         container: 'datadouble',
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['prune', '--spec', 'datadouble/shop.yml', '--target', 'export', (params.DRY_RUN ? '--dry-run' : '')],
+                        arguments: ['prune', '--ci-record', '/srv/datadouble/work/.datadouble-notify/shop.prune.2.json', '--spec', 'datadouble/shop.yml', '--target', 'export', (params.DRY_RUN ? '--dry-run' : '')],
                     )
                 }
             }
@@ -112,6 +112,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: unstable', body: 'Datadouble shop prune: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: recovered', body: 'Datadouble shop prune: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

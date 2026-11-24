@@ -28,7 +28,7 @@ pipeline {
                         user: '999:999',
                         mounts: ['/srv/datadouble/staging'],
                         environment: ['ALERTS_WEBHOOK'],
-                        arguments: ['prune', '--spec', 'datadouble/shop.yml', '--target', 'staging', (params.DRY_RUN ? '--dry-run' : '')],
+                        arguments: ['prune', '--ci-record', '/srv/datadouble/staging/.datadouble-notify/shop.prune.json', '--spec', 'datadouble/shop.yml', '--target', 'staging', (params.DRY_RUN ? '--dry-run' : '')],
                     )
                 }
             }
@@ -57,6 +57,15 @@ pipeline {
             script {
                 try {
                     mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: unstable', body: 'Datadouble shop prune: unstable.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
+                } catch (err) {
+                    echo "notify's email could not be sent"
+                }
+            }
+        }
+        fixed {
+            script {
+                try {
+                    mail(to: 'data-team@example.com, oncall@example.com', subject: 'Datadouble shop prune: recovered', body: 'Datadouble shop prune: recovered.' + (env.BUILD_URL ? ' The run: ' + env.BUILD_URL : ''))
                 } catch (err) {
                     echo "notify's email could not be sent"
                 }

@@ -694,7 +694,9 @@ includes `build`, `promote` and `lock`, and also `prune --side production` on
 its own. GitLab, Jenkins and Argo CD need `--runner` on both sides: runner
 tags, agent labels, or the side's namespace. On GitHub, a non-production call
 without it runs on any `self-hosted` runner. `build` also needs `--work`, an
-absolute work directory. See [where jobs run](#where-jobs-run).
+absolute work directory, and so does every production job when `notify`
+sends recoveries to a webhook (see [recoveries](#recoveries)). See [where
+jobs run](#where-jobs-run).
 
 #### Which settings become mounts {#which-settings-become-mounts}
 
@@ -804,12 +806,12 @@ job.
 ### Notifications {#notifications}
 
 A failed build is no use if nobody hears about it. A spec's `notify` section
-configures notifications for generated jobs that fail or end with a warning
-(decision 125):
+configures notifications for generated jobs that fail, end with a warning,
+or succeed after a run that didn't (decisions 125 and 142):
 
 ```yaml
 notify:
-  when: [failure, warning]          # default: [failure]
+  when: [failure, warning, recovery]   # default: [failure]
   to:
     - webhook:
         url:
@@ -848,12 +850,14 @@ and never follow a redirect.
 The body is a JSON POST:
 
 ```json
-{"spec": "shop", "job": "build", "outcome": "failure",
+{"spec": "shop", "job": "build", "outcome": "failure", "recovered": false,
  "generation": null, "error": "store_failed",
  "run_url": "https://github.com/example/shop/actions/runs/42",
  "text": "Datadouble shop: build failed (store_failed) - https://github.com/example/shop/actions/runs/42"}
 ```
 
+- `recovered` is true for a recovery: a success after a run that did not
+  succeed (see [recoveries](#recoveries)), and false otherwise.
 - `generation` is the generation a build made. It is given with a warning or
   a failed verification, and is null with an error code.
 - `error` is the error code of a failed request. It is null for a failed
@@ -861,8 +865,8 @@ The body is a JSON POST:
 - `run_url` is the system's page for the run. It is null on Argo CD, where a
   Job has no page.
 - `text` is one line for people, built from the other fields. It says
-  `failed` for a failure and `passed with warnings` for a warning, and
-  leaves out the fields that are null.
+  `failed` for a failure, `passed with warnings` for a warning and
+  `recovered` for a recovery, and leaves out the fields that are null.
 
 The body carries names, codes and outcomes, never data values or secrets
 (decisions 18 and 54). That holds for `text` too.
@@ -891,6 +895,47 @@ never runs a pod again because its follower failed: a `podFailurePolicy` fails
 the Job instead. Running the pod again would run the leader again too, so a
 build that warned would build, and notify, a second time.
 
+#### Recoveries {#recoveries}
+
+`recovery` in `when` notifies when a job succeeds and its previous run did
+not: it failed, warned, or was stopped. Teams that hear about failures can
+then stop worrying without opening the CI system. One recovery post follows
+the first success; later successes post nothing.
+
+The CI system knows the previous run, but Datadouble posts webhooks itself,
+so each generated job keeps its own record of its last outcome (decision
+142). `ci init` names the record file with `--ci-record` (`ci.record` in
+JSON) on each command line, when the spec lists `recovery` and a webhook:
+
+- On the production side, records go in the work directory (`ci init
+  --work`), in `.datadouble-notify/`. Every production job then mounts the
+  work directory, and `ci init` refuses to generate production jobs without
+  it, even `promote` or `lock` alone.
+- On the other side, records go in staging (`fetch.staging`), in
+  `.datadouble-notify/`. Every non-production job needs the `fetch` section
+  already, so `ci init` refuses a spec without it.
+
+A record is a small file such as `shop.promote.json`, holding only
+`{"outcome": "failure"}`. A job with several command lines, such as
+`prune`, keeps one per line (`shop.prune.1.json`, `shop.prune.2.json`), since
+each line notifies on its own.
+
+Before its command starts, the job reads its record and marks it `running`.
+When the command ends, it writes its outcome there. A success is a recovery
+when the record held anything but `success`, so a run stopped part-way, which
+leaves `running`, counts as a run that did not succeed. With no record yet,
+as on the first run after `recovery` is added, there is nothing to recover
+from and no recovery is posted.
+
+A record that cannot be read or written is a warning line in the job's log,
+like a webhook that fails, and never changes the job's outcome.
+
+A run that never reaches Datadouble can't be recorded: one stopped while its
+image was pulled, or cancelled before it started, leaves the record as the
+run before it left it. So a job that succeeded, was then aborted before
+Datadouble started, and succeeds again posts no recovery. The system's own
+notifications cover runs like that.
+
 #### When a webhook fails {#when-a-webhook-fails}
 
 A notification that fails never changes the job's outcome. A webhook that
@@ -913,10 +958,15 @@ where there is one:
 
 | System | Email |
 |---|---|
-| GitHub Actions | None a workflow can send. GitHub mails a failed run only to whoever started it, and never mails a warning, so `ci init` says so in `instructions`. A webhook to a service that sends mail can reach a list |
-| GitLab CI | The project's Pipeline status emails integration, set up by hand and listed in `instructions`. It mails broken pipelines only, so warnings need a webhook. On-demand provision and release run in merge request pipelines, which see no protected variables, so `instructions` asks for the webhook's variable to be available there |
-| Jenkins | The `mail` step in each Jenkinsfile's `post` section: `failure` and `aborted` (a timed-out build) for failures, `unstable` for warnings. A mail that cannot be sent is logged and leaves the build's result alone |
+| GitHub Actions | None a workflow can send. GitHub mails a failed run only to whoever started it, and never mails a warning or a recovery, so `ci init` says so in `instructions`. A webhook to a service that sends mail can reach a list |
+| GitLab CI | The project's Pipeline status emails integration, set up by hand and listed in `instructions`. It mails broken pipelines only, so warnings need a webhook. It never mails a recovery: GitLab's own Fixed pipeline notification does, to the pipeline's author (for a schedule, its owner), when that person turns it on in their notification settings, and `instructions` says so. On-demand provision and release run in merge request pipelines, which see no protected variables, so `instructions` asks for the webhook's variable to be available there |
+| Jenkins | The `mail` step in each Jenkinsfile's `post` section: `failure` and `aborted` (a timed-out build) for failures, `unstable` for warnings, and `fixed` for recoveries. A mail that cannot be sent is logged and leaves the build's result alone |
 | Argo CD | None: `ci init` fails, naming email, since Kubernetes Jobs have no mail mechanism |
+
+Jenkins judges `fixed` from the previous build's result: a success after a
+failed or unstable build. Unlike Datadouble's record, it doesn't count a
+previous aborted build, so after an aborted build a webhook posts a recovery
+and Jenkins sends no recovery mail.
 
 #### Jobs that fail before Datadouble starts {#jobs-that-fail-before-datadouble-starts}
 
@@ -1187,8 +1237,9 @@ suite checks that:
   Argo CD in its log), leaves the committed lock as it is, and is refused on a
   vendor-hosted runner;
 - a failing job posts its outcome to the spec's webhook, a warning does too, a
-  succeeding job does not, and a webhook that cannot be reached leaves the
-  job's outcome alone;
+  succeeding job does not, the first success after the failure posts one
+  recovery, and a webhook that cannot be reached leaves the job's outcome
+  alone;
 - where jobs run as pods (Jenkins with Kubernetes agents), each job runs in a
   pod holding everything its Jenkinsfile declares, under the RBAC that
   `instructions` lists, and a namespace without the `datadouble-boundary`

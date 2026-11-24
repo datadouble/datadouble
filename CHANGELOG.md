@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Notifications when a failing job recovers**
+  ([#124](https://github.com/datadouble/datadouble/issues/124)).
+  `notify.when` takes `recovery`: the job succeeded, and its previous run
+  failed, warned or was aborted. Jenkinsfiles mail on `post { fixed }`,
+  with a subject saying the job recovered. GitLab and GitHub mail no
+  recoveries for a list of addresses, so `ci init`'s `instructions` say
+  what each offers. A webhook gets one post for the first success after
+  anything else, with `outcome: success`, a new `recovered: true` field
+  (false in every other post) and a `text` that says the job recovered.
+  For that, each generated job records its last outcome, and nothing else,
+  in a file `ci init` names with the new `--ci-record` option: under
+  `.datadouble-notify/` in the work directory on the production side and
+  in `fetch.staging` on the other. With a recovery webhook, every
+  production job mounts the work directory and `ci init` needs `--work`
+  for any production job. The first run has no record and posts no
+  recovery, and a run stopped before Datadouble starts can't be recorded.
 - **Webhook notifications reach chat rooms**
   ([#122](https://github.com/datadouble/datadouble/issues/122)). The body
   posted to a `notify` webhook has a new `text` field: one line built from

@@ -21,8 +21,9 @@ and its changes are archived as the build's artifacts.
 
 The spec's ``notify`` email is Jenkins' ``mail`` step in the Jenkinsfile's
 ``post`` section, for failed, aborted (timed-out) and, when asked, unstable
-builds; a mail that cannot be sent leaves the build's result alone. Its
-webhooks Datadouble posts itself, linking ``BUILD_URL``.
+builds, and for ``fixed`` builds (a success after a failed or unstable one)
+when ``recovery`` is listed; a mail that cannot be sent leaves the build's
+result alone. Its webhooks Datadouble posts itself, linking ``BUILD_URL``.
 
 Jobs run on agents with Docker by default: the step runs the pinned image
 with ``docker run``. With Kubernetes agents (``--agent kubernetes``) each job
@@ -404,8 +405,15 @@ def _block(name: str, lines: list[str]) -> list[str]:
     return [f"{name} {{", *(f"    {line}" for line in lines), "}"] if lines else []
 
 
-_CONDITIONS = {NotifyOn.FAILURE: ("failure", "aborted"), NotifyOn.WARNING: ("unstable",)}
-"""The build results each outcome is: a timed-out build is aborted, and a warning unstable."""
+_CONDITIONS = {
+    NotifyOn.FAILURE: ("failure", "aborted"),
+    NotifyOn.WARNING: ("unstable",),
+    NotifyOn.RECOVERY: ("fixed",),
+}
+"""The ``post`` conditions each outcome is: a timed-out build is aborted, a warning
+unstable, and a recovery fixed, which Jenkins judges from the previous build's result."""
+_SUBJECTS = {"fixed": "recovered"}
+"""How a mail's subject says a condition, where its name doesn't say it plainly."""
 
 
 def _post(pipeline: Pipeline, job: Job) -> list[str]:
@@ -419,7 +427,9 @@ def _post(pipeline: Pipeline, job: Job) -> list[str]:
         if outcome not in notify.when:
             continue
         for condition in _CONDITIONS[outcome]:
-            subject = f"Datadouble {pipeline.name} {job.kind}: {condition}"
+            subject = (
+                f"Datadouble {pipeline.name} {job.kind}: {_SUBJECTS.get(condition, condition)}"
+            )
             mail = (
                 f"mail(to: {_quote(', '.join(emails))}, subject: {_quote(subject)},"
                 f" body: {_quote(subject + '.')}"
