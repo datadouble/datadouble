@@ -94,9 +94,9 @@ put the result. Everything else works from that spec:
 
 - **The `datadouble` command** runs the stages. Its primary interface is JSON
   in, JSON out. The CLI is a thin layer that builds the same JSON requests.
-- **Adapters** do the engine-specific work: one per engine, plus adapters for
-  storage, replication, anonymization and the rest. The core contains no
-  engine-specific logic.
+- **Adapters** do the work that depends on one system: one per engine, plus
+  adapters for storage, replication, announcing copies, container runtimes
+  and CI/CD. The core contains no engine-specific logic.
 - **CI/CD integrations** for GitHub Actions, GitLab CI, Jenkins and Argo CD
   run the stages as ready-made jobs on a schedule or on demand.
 - **Agent skills** let a coding agent set up any part of a pipeline, or a

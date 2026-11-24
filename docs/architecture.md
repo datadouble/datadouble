@@ -209,9 +209,9 @@ change what a copy holds or how it behaves. So the catalog lists them too
   knows which ones to check. The plan's catalog keeps the marks, and only
   exact edges can fail a plan.
 - **The lock records them,** and strict mode compares them kind by kind (see
-  [strict mode](excludes-and-strict-mode.md#objects)). A catalog without
-  objects hashes as it did before objects existed, so locks of engines that
-  have none stay valid.
+  [strict mode](excludes-and-strict-mode.md#objects)). A catalog with no
+  objects leaves them out of its fingerprint altogether, as one with no
+  requirements leaves those out.
 - **Engines without such objects report none.** These are MongoDB, Redis,
   Elasticsearch, OpenSearch, Salesforce and file trees.
 
@@ -492,7 +492,7 @@ that the group does not already include. Objects come with their
 definitions, and tables come with their rows. A standalone group cannot also
 have `requires:`, since its image works alone.
 
-Other groups pull nothing in, and build as they always have:
+Other groups pull nothing in:
 
 - Their references into other groups need `requires:` or a fallback.
 - So do the objects they need that only another group's `include` patterns
@@ -611,7 +611,7 @@ whose edges were inferred warns too, so a person checks it.
 
 The PostgreSQL, MySQL and SQL Server adapters build standalone images. Other
 adapters refuse a standalone group, by name, when it pulls anything in or
-the source has objects. That means Oracle for now, and the engines without
+the source has objects. That means Oracle, and the engines without
 objects (MongoDB, Redis, Elasticsearch, OpenSearch and Salesforce), whose
 closures hold tables only.
 
@@ -741,8 +741,8 @@ as `postgres` without a password:
    under the run's anonymization key. So a retried or resumed build packages
    again when a password changes.
 
-MySQL and PostgreSQL support accounts so far. Their adapters' READMEs give
-the details.
+MySQL and PostgreSQL support accounts. Their adapters' READMEs give the
+details.
 
 ## How a run is carried out {#running}
 
@@ -978,35 +978,48 @@ out, and the rules for types and credentials.
 
 ### Adapters {#adapters}
 
-Each concern is an adapter type with a narrow interface. The core never
-contains engine-specific logic. Engine quirks stay inside the adapter.
+The core holds the general logic and never contains engine-specific logic.
+Everything that depends on one engine, one storage system or one CI/CD
+system lives in an **adapter**: a plugin with a narrow interface. Engine
+quirks stay inside the adapter.
 
-| Adapter type | Responsibility | Examples |
+| Adapter type | Responsibility | Adapters |
 |---|---|---|
-| Engine (dump/load) | Introspect the catalog, open a consistent snapshot, extract, load, package | postgres, mysql, mssql, oracle, mongodb, redis, salesforce |
-| Subset | Turn a subset spec into per-table extraction queries | FK-graph planner, Jailer `.jm` front end |
-| Anonymize | Rewrite values column by column (see [anonymization](anonymization.md)) | faker, hash, null, format-preserving, expression (e.g. SQL) |
-| Verify | Check a restored golden image | fk-integrity, row-counts, pii-scan |
-| Storage | Read and write immutable artifacts; a store that cannot list keys is read through the index `promote` writes | local, s3, http (read-only, for `fetch`), gcs, artifact repository, nfs |
-| Replicate | Turn a staged image into copies (volumes or instances), and destroy them | filesystem, docker-volume, btrfs, k8s-pv; later nfs-copy, csi-snapshot, zfs |
+| Engine (dump/load) | Introspect the catalog, open a consistent snapshot, extract, load, package | postgres, mysql, mssql, oracle, mongodb, redis, elasticsearch, opensearch, salesforce, files |
+| Storage | Read and write immutable artifacts; a store that cannot list keys is read through the index `promote` writes | filesystem, s3, http (read-only, for `fetch`) |
+| Replicate | Turn a staged image into copies (volumes or instances), and destroy them | filesystem, docker-volume, btrfs, k8s-pv |
 | Announce | Let consumers know where clones can be accessed, as volumes or connection parameters; never writes data | k8s-secret, ci-outputs, vault, dotenv (a `k8s-pv` copy announces itself) |
+| Container runtime | Start the containers engine software runs in ([described above](#container-runtimes)) | docker, kubernetes |
 | CI/CD | Package, generate and bridge jobs for a CI/CD system; no pipeline logic | github-actions, gitlab, jenkins, argocd |
 
-The container runtimes [described above](#container-runtimes) are adapters
-too.
+Adapters are discovered through standard Python plugin entry points, one
+group per type (`datadouble.engines`, `datadouble.stores`,
+`datadouble.replicators`, `datadouble.announcers`, `datadouble.runtimes` and
+`datadouble.ci`). So third-party adapters can be installed from anywhere.
 
-Adapters declare their **capabilities**, and the planner adapts to them.
-Capabilities include the formats an adapter supports, its tool versions, and
-whether it can share a snapshot across parallel workers.
+Three concerns work the same way for every engine, so they live in the core
+rather than in adapters:
+
+- **Subsetting:** the planner that turns a subset spec into per-table
+  extraction queries, and its Jailer `.jm` front end.
+- **Anonymization:** the strategies that rewrite values column by column:
+  faker, hash, null, format-preserving and expression (an engine-native
+  language such as SQL). See [anonymization](anonymization.md).
+- **Verification:** the checks run on a restored golden image: restore, row
+  counts, references, PII scan and assertions.
+
+An engine adapter declares its **capabilities**, and the planner adapts to
+them. Capabilities include the formats the adapter produces, whether the
+engine can evaluate nested selections (strategy A), whether it has an
+expression language, how much of a version names a compatibility line,
+whether it can give images accounts, build standalone images, or hold
+several sources on one working server.
 
 Where a mature tool already exists, an adapter wraps it rather than
 reimplementing it. For most engines that tool is the native dump tool.
 Salesforce has no tool that fits a subset of one consistent read, so its
 adapter calls the org's own APIs. SFDMU remains a candidate for loading
 copies back into an org (decision 111).
-
-Adapters are discovered through standard plugin entry points, so
-third-party adapters can be installed from anywhere.
 
 ### Interfaces {#interfaces}
 
