@@ -75,15 +75,15 @@ production and turns the image into copies:
 <span class="dd-stage">announce</span>
 </div>
 </div>
-<div class="dd-ops">Operations on existing images and copies: <span class="dd-stage">release</span> <span class="dd-stage">prune</span> <span class="dd-stage">activate</span></div>
+<div class="dd-ops">Operations on existing images and copies: <span class="dd-stage">claim</span> <span class="dd-stage">release</span> <span class="dd-stage">prune</span> <span class="dd-stage">activate</span></div>
 </div>
 
 `promote` copies the image into an **export store**, the only storage
 non-production can read. On the other side, `fetch` brings the image in,
 `replicate` makes copies of it, and `announce` tells people where those
-copies are. Three more operations look after images and copies already
-made: `release` destroys copies, `prune` removes old images, and `activate`
-rolls back to an earlier image. The [architecture](architecture.md) page
+copies are. Four more operations look after images and copies already
+made: `claim` takes a copy from a ready pool, `release` destroys copies,
+`prune` removes old images, and `activate` rolls back to an earlier image. The [architecture](architecture.md) page
 walks through every stage.
 
 ## How the pieces fit
@@ -106,8 +106,9 @@ A few features address the problems above directly:
 
 - **Subsetting happens during extract,** pushed down to the source, so
   multi-terabyte databases never have to be copied in full.
-- **Strict mode** refuses to copy tables or columns the subset model has never
-  seen. That is the usual way unmasked personal data leaks into test copies.
+- **Strict mode** refuses to copy tables or columns that the reviewed catalog
+  lock has never listed. That is the usual way unmasked personal data leaks
+  into test copies.
 - **Every stage writes an artifact with a manifest,** so runs are resumable
   and stages can be chained in a single command.
 - **Jailer extraction models** are supported natively, so subsets can be
@@ -140,8 +141,8 @@ odd, one of them is usually the reason.
   anything that could put real personal data into a copy.
 - **Real personal data stays in production.** Only a verified golden image
   crosses out, through `promote`.
-- **Wrap mature tools** rather than reimplementing them: native dump tools,
-  SFDMU, DBLab Engine, Jailer models.
+- **Wrap mature tools** rather than reimplementing them: native dump tools
+  such as `pg_dump` and `mongodump`, and Jailer extraction models.
 
 ## Where to go next
 

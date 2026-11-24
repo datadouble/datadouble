@@ -51,8 +51,8 @@ previous stage's output and writes its own. The full series is:
 plan → extract → load → transform → package → verify → store → promote → fetch → replicate → announce
 ```
 
-Three more **operations** act on images and copies that already exist:
-`release`, `prune` and `activate`.
+A few more **operations** act on images and copies that already exist:
+`claim`, `release`, `prune` and `activate`.
 
 ### Terms used on this page {#terms}
 
@@ -84,30 +84,32 @@ This table lists what each stage takes in and what it produces:
 
 | Stage | Input | Output |
 |---|---|---|
-| plan | Subset spec (native or Jailer `.jm`), live catalog, catalog lock | Execution plan: per-table extraction queries, resolved excludes, strict-mode result, size estimate |
+| plan | Subset spec (native or Jailer `.jm`), live catalog, catalog lock | Plan: each table's rule and edges, resolved excludes, strict-mode report, the image groups and their closures |
 | extract | Plan | Raw extract artifacts, each source's read from one consistent snapshot of its own |
 | load | Extract artifacts | One working database per image group (scratch space, never shared storage); `before_load` hooks run first |
 | transform | Working database | Anonymized working database; `after_transform` hooks run last |
 | package | Anonymized working databases | One golden image per group and engine, in each requested format, plus manifests |
 | verify | Golden image, restored to scratch space | Verification report; a failing report stops the pipeline |
 | store | Verified golden image | Image and its image summary written to one or more storage backends |
-| promote | Stored golden image | The image copied to the export store and a channel advanced; refused unless verification passed |
-| fetch | Image in the export store | The image unpacked into non-production staging and a staging channel advanced; skipped if nothing newer |
-| replicate | Staged image | Copies, as volumes or running instances, in pool or on-demand mode |
+| promote | Stored golden image | The image copied to the export store and a channel advanced; refused unless verification passed and the signature is trusted |
+| fetch | Image in the export store | The image unpacked into non-production staging and a staging channel advanced; skipped if that generation is already staged |
+| replicate | Staged image | Copies, as volumes or running instances, in pool or on-demand mode; in pool mode, fresh copies replace unclaimed copies of other generations |
 | announce | Copy descriptions | Consumers told where each clone can be accessed: a volume, or connection parameters |
 
 The operations work on what earlier runs left behind:
 
 | Operation | Effect |
 |---|---|
-| release | Destroys copies by ID, owner or expiry; recycles pool copies of old generations |
+| claim | Takes an unclaimed copy from the pool for an owner |
+| release | Destroys copies by ID, owner or expiry, and any copy that was never finished |
 | prune | Applies retention to images in stores and staging; never removes a channel's target |
 | activate | Points a channel at a chosen generation (rollback) |
 
 ### Jobs and the production boundary {#jobs}
 
 Not every run uses every stage. Stages group into **jobs**: build, promote,
-fetch, provision, release, prune and activate. The jobs run in different
+fetch, provision, release, prune, activate and lock (which re-locks the
+catalog). The jobs run in different
 places. Everything up to `store` runs inside production, and only a verified
 golden image leaves it, through `promote`. [CI/CD integration](ci-cd.md)
 describes each job and the boundary in detail.
@@ -154,7 +156,8 @@ calls each such add-on a **requirement**, and handles them like this:
   source runs.
 - **The lock records them.** Strict mode treats a new requirement like a new
   table. It treats a removed requirement, or one at another version, like a
-  changed table (see [strict mode](excludes-and-strict-mode.md#levels)).
+  removed table: the plan fails at every level (see
+  [strict mode](excludes-and-strict-mode.md#levels)).
 - **The build checks the image first.** Before it opens the snapshot, the
   build asks the working image what it provides (the adapter's
   `available()`). If anything is missing, the build fails with
@@ -407,9 +410,12 @@ other:
 4. **References between groups are checked at plan time.** A reference from
    one group into another fails the plan, unless:
 
-    - the edge has a fallback (`null` or `stub`), or
+    - the edge's fallback is `on_missing: null`, or
     - the group declares that it `requires:` the other group. `replicate`
       then provisions the required images alongside it.
+
+    The `stub` and `drop` fallbacks work only within a group. A reference
+    that uses one to leave its group fails the plan.
 
 5. **Independent life cycles.** Each image has its own manifest, identity and
    channels. So each can be promoted, fetched, rolled back and pruned on its
@@ -421,7 +427,7 @@ spec (see [table names](subsetting.md#table-names)):
 | Engine | Groups match on |
 |---|---|
 | Relational engines, MongoDB | Databases and schemas |
-| Redis | Database numbers or key prefixes |
+| Redis | Database numbers and key patterns |
 | Elasticsearch, OpenSearch | Index patterns |
 | Salesforce | Object sets |
 | Filesystem adapter | Top-level directories |
@@ -784,7 +790,8 @@ The generation also fixes two values, so a resumed run produces the same
 values as the first attempt:
 
 - the run's anchor time (`as_of`), when the spec gives none;
-- its anonymization key.
+- its anonymization key, when the spec names none in
+  `secrets.anonymization_key`.
 
 !!! warning "The work directory holds real personal data"
     From `extract` on, the work directory holds real personal data. It is
@@ -855,9 +862,12 @@ Datadouble runs as the `uid:gid` the engine's copies are served as (decision
 
 | Engine | `uid:gid` |
 |---|---|
-| PostgreSQL, MySQL, MongoDB (official images) | 999:999 |
+| PostgreSQL, MySQL, MongoDB, Redis (official images) | 999:999 |
+| Elasticsearch | 1000:0 |
+| OpenSearch | 1000:1000 |
 | SQL Server | 10001:10001 |
 | Oracle | 54321:54321 |
+| Salesforce, files | Whoever runs Datadouble, since no server opens their copies |
 
 This way a physical image's files belong to the server that will open them,
 on every replicate adapter. It also means the engine's containers and
@@ -1018,8 +1028,7 @@ several sources on one working server.
 Where a mature tool already exists, an adapter wraps it rather than
 reimplementing it. For most engines that tool is the native dump tool.
 Salesforce has no tool that fits a subset of one consistent read, so its
-adapter calls the org's own APIs. SFDMU remains a candidate for loading
-copies back into an org (decision 111).
+adapter calls the org's own APIs (decision 111).
 
 ### Interfaces {#interfaces}
 
@@ -1033,9 +1042,12 @@ copies back into an org (decision 111).
 
 ```
 datadouble run plan,extract --spec prod.yml --strict data=columns
-datadouble run plan,extract --spec prod.yml --dry-run --json   # print the request only
-datadouble plan --spec prod.yml --estimate --json               # machine-readable plan
+datadouble --dry-run run plan,extract --spec prod.yml   # print the request only
+datadouble --json plan --spec prod.yml                  # the whole plan, as JSON
 ```
+
+`--dry-run` and `--json` are global options, so they come before the
+command.
 
 Because the CLI only builds requests, the two interfaces cannot drift apart.
 
@@ -1048,28 +1060,38 @@ package, so users install only the drivers they need:
 datadouble/
   core/            # planner, manifest, JSON API, CLI → package "datadouble"
   adapters/
-    postgres/      # → "datadouble-postgres", own dependencies and version
+    postgres/      # → "datadouble-postgres", with its own dependencies
     mysql/
     mssql/
     oracle/
     mongodb/
     redis/
+    elasticsearch/
+    opensearch/
     salesforce/
+    files/
+    s3/            # store
+    http/          # store, read-only
+    btrfs/         # replicate
+    docker/        # replicate and container runtime
+    kubernetes/    # replicate, announce and container runtime
+    vault/         # announce
   ci/
-    github-actions/  # container actions and reusable workflows
-    gitlab/          # CI/CD Catalog components
-    jenkins/         # shared library
-    kubernetes/      # container image, Job templates, Helm chart (Argo CD)
+    github-actions/  # composite action, and the package that writes workflows
+    gitlab/          # job template, and the package that writes jobs
+    jenkins/         # shared library, and the package that writes Jenkinsfiles
+    kubernetes/      # Argo CD adapter and Helm chart
   .claude-plugin/  # Claude Code marketplace and plugin manifests
   skills/          # agent skills, one directory per skill
-  conformance/     # shared test suites (engine, CI/CD, agent skills)
-  dev/             # container profiles and sample data per engine and CI system
+  conformance/     # shared test suites (engine, CI/CD)
+  evals/           # evaluations of the agent skills
+  dev/             # container images and sample data per engine and CI system
   docs/
 ```
 
-`pip install datadouble[postgres,mongodb]` is a convenience over installing
-the adapter packages directly. Once the adapter interface is stable,
-adapters can move to their own repositories without users noticing.
+A user installs `datadouble` and then the adapter packages they need, such
+as `datadouble-postgres`. Once the adapter interface is stable, adapters can
+move to their own repositories without users noticing.
 
 ### Typing {#typing}
 
@@ -1105,6 +1127,6 @@ type, not a string's contents, says what it is.
 
 ### Credentials {#credentials}
 
-Configuration refers to secrets indirectly: environment variables, Vault
-paths or files. Resolved secrets are never written to manifests, artifacts
+Configuration refers to secrets indirectly, by environment variable
+(`env: NAME`) or by file (`file: PATH`). Resolved secrets are never written to manifests, artifacts
 or logs.

@@ -29,22 +29,34 @@ These requirements describe what a run does to data.
 
     Breadth is a core goal, not a stretch goal.
 
-2. **Pluggable adapters.** Each concern is handled by an adapter, so a team
-   can swap one implementation for another. The concerns are:
+2. **Pluggable adapters.** Work that depends on one outside system lives in
+   an adapter, so a team can add an implementation or swap one for another.
+   Datadouble finds adapters through Python entry points, one group per kind:
 
-    - **Dump and load:** native dump tools, ETL exports, CSV, APIs.
+    - **Engines,** which read a source and build its images, mostly by
+      wrapping the engine's native dump tools: one for each system above.
+    - **Stores,** which hold images: a local filesystem, S3 object storage,
+      and HTTP for reading only.
+    - **Replicators,** which turn a golden image into many copies: plain
+      directories, Docker volumes, btrfs copy-on-write snapshots and
+      Kubernetes persistent volumes.
+    - **Announcers,** which tell consumers where copies are: dotenv files,
+      CI/CD outputs, Kubernetes Secrets and Vault.
+    - **Container runtimes,** which start the engine software: Docker and
+      Kubernetes.
+    - **CI/CD systems:** GitHub Actions, GitLab CI, Jenkins and Argo CD.
+
+   Three concerns work the same way for every engine, so they are built into
+   the core instead:
+
     - **Subsetting.**
     - **Anonymization:** Faker-style generators, hashing, nulling,
       format-preserving replacement, engine-native expressions such as SQL,
       and hooks for changes that aren't column-shaped. See
       [anonymization](anonymization.md).
     - **Verification:** referential integrity, row counts, PII scanning
-      (looking for personally identifiable information).
-    - **Storage,** for both inputs and golden-image outputs: local disk,
-      object storage, artifact repositories, network shares.
-    - **Replication,** which turns a golden image into many copies: Docker
-      volumes, Kubernetes persistent volumes and CSI snapshots, copy-on-write
-      filesystems, plain restore.
+      (looking for personally identifiable information) and the spec's own
+      assertions.
 
 3. **Subsetting during extract.** Sources may hold hundreds of gigabytes or
    terabytes, so copying everything first is not an option. Datadouble must
@@ -72,15 +84,17 @@ These requirements describe what a run does to data.
    against that:
 
     - For tables and columns it uses its strictest level (`data: columns`).
-      The plan fails when the extract would contain a table or column the
-      subset model does not know.
+      The plan fails when the extract would contain a table or column that
+      the catalog lock, the reviewed copy of the source's catalog, does not
+      list.
     - For functions, views, triggers and other objects, a change only warns,
       unless it breaks something.
 
     See [excludes and strict mode](excludes-and-strict-mode.md).
 
 7. **Resumable, chainable stages.** One command can run several stages in a
-   row. If a run fails, it resumes from the last stage that completed.
+   row. If a run fails, resuming it skips every stage that completed with
+   the same inputs.
 
 ## Interfaces
 
@@ -100,11 +114,12 @@ Datadouble.
     - building the golden image inside production;
     - promoting it to an export store;
     - fetching it into non-production;
-    - provisioning copies, as a ready pool or on demand;
-    - announcing where the copies can be accessed;
+    - provisioning copies, as a ready pool or on demand, and announcing
+      where they can be accessed;
     - releasing copies;
     - pruning old images;
-    - rolling back to an earlier image.
+    - rolling back to an earlier image;
+    - re-locking the catalog after a schema change.
 
     See [CI/CD integration](ci-cd.md).
 
@@ -116,17 +131,18 @@ Datadouble.
 
 This requirement describes how the people who work on Datadouble test it.
 
-12. **Local development with containers.** Every engine runs in a container
-    with sample data. Salesforce cannot run in a container, so recorded API
-    interactions and an in-memory fake cover it instead. See
+12. **Local development with containers.** Every engine that has a server
+    runs in a container with sample data. Salesforce cannot run in a
+    container, so recorded API interactions cover it instead, along with a
+    fake org: a SQLite file served over the same HTTP APIs. See
     [local development](local-development.md).
 
 ## Non-functional
 
 These rules apply to every part of Datadouble, whatever it does.
 
-- **Credentials stay out of files and logs.** Credentials come from the
-  environment, Vault or files. They never appear in configuration files,
+- **Credentials stay out of files and logs.** Credentials come from
+  environment variables or files. They never appear in configuration files,
   artifacts, manifests or logs.
 - **Every run explains itself.** Any run's output can be explained from its
   manifest, which records the source versions, the subset rules, hashes of
