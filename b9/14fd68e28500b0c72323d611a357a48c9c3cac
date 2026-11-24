@@ -1,0 +1,611 @@
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_45fc6a0092e883 42-47,67,324
+  s_ad63f2bf16b775::t_e421067b974df6 59-66,68
+  s_ad63f2bf16b775::t_cc7e89e8267ff4 153
+  s_ad63f2bf16b775::t_f520425a9afd27 40,99-114,266-282,499-514
+  s_ad63f2bf16b775::t_7422ad6ad8f9ec 31,350
+adapters/postgres/tests/test_postgres.py
+  s_ad63f2bf16b775::t_c913ed19a4893e 15,18,28-35,56,351-352,370-374,389-390,405,434-439
+  s_ad63f2bf16b775::t_6845a4962a9358 12,41-46,48-50,353-369,375-388,391-404,406-433,440-441
+  s_ad63f2bf16b775::t_04812c2ca7b249 94-96,98-101,103-104,106-109,111-116,118-119,212-213,264-265,267
+  s_ad63f2bf16b775::t_d98b2bb906ad56 804-806
+  s_ad63f2bf16b775::t_de495cc3d52705 20-27,37-38,665-687,736-746,795-797
+  s_ad63f2bf16b775::t_f2e86b329f51fa 231
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_a808e7694169ea 332-335,339-340,352-359
+  s_ad63f2bf16b775::t_5af5105bd17339 223-225,227,229-249,599-615
+  s_ad63f2bf16b775::t_b5a5c7181bebf4 85-87,656-669,671-687
+  s_ad63f2bf16b775::t_43a55c87eb91b7 9,272-284,288-289,417-420,442-443
+  s_ad63f2bf16b775::t_a8f3f5de3f0a1b 228,308-310,312-316,341-351,544
+  s_ad63f2bf16b775::t_ff097a5dcd5471 226
+adapters/postgres/src/datadouble_postgres/working.py
+  s_ad63f2bf16b775::t_d5c0506223d9cd 32,58,836,838,847-851,867,880-883,885
+  s_ad63f2bf16b775::t_c9980b9d6c87b9 56,834-835,837,839-846,852-854,868-879,884,925-977,984-986,988
+  s_ad63f2bf16b775::t_a77db8d58a412a 855-866,978-983,987,989-1003
+  s_ad63f2bf16b775::t_f8eadf136bc67d 42,310-316,322,331,333,369-370,376-382,392,395,544
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_65d5ac50614e14 284
+  s_ad63f2bf16b775::t_36af489e175a62 346-353
+  s_ad63f2bf16b775::t_f9faeff82fdb25 48,121-124,204-206,276,314-315,496-505,523,586-587
+  s_ad63f2bf16b775::t_0f76dbbbc363ec 31,149-151,187-188,234-237,289-291,293-300,302-304,307-308,634
+  s_ad63f2bf16b775::t_003f2b9c854591 152-157,312,550-553,556-570,577,635-636
+adapters/postgres/src/datadouble_postgres/__init__.py
+  s_ad63f2bf16b775::t_83309b4e2b9503 42,119-124
+  s_ad63f2bf16b775::t_c12de9177f7f2b 116-118
+adapters/mysql/src/datadouble_mysql/working.py
+  s_ad63f2bf16b775::t_9e9d33ea1d3cfc 765,771-772,779
+  s_ad63f2bf16b775::t_c090588d0fe2cf 23,25,46,763-764,766-770,773-778,797-876
+  s_ad63f2bf16b775::t_8dd51659824da8 208,216-224
+adapters/mysql/src/datadouble_mysql/__init__.py
+  s_ad63f2bf16b775::t_8859b63b14c59b 120,123-125
+  s_ad63f2bf16b775::t_b517789f0d3292 43,49,55-56,127,181,194
+  s_ad63f2bf16b775::t_6ace07e0e3105b 77-84,90
+core/tests/test_planner.py
+  s_ad63f2bf16b775::t_4ed8a76f52ab82 875,881-883,885
+  s_ad63f2bf16b775::t_10a6b1a0ed5b8d 876-880,884,886-912
+  s_ad63f2bf16b775::t_d8eedfb25fdb69 873-874
+  s_ad63f2bf16b775::t_e2e4ec3d91bb17 95-98,100-105,107-108,110-116,325-330,358-363,389-396,414-415,459-464,476-479,492-496,499-500,522-534,537-538,555-560,562-571,573-576,606-607,620-625
+adapters/mysql/README.md
+  s_ad63f2bf16b775::t_c0cf86c2431a58 34-37,39-41,49-50,63
+  s_ad63f2bf16b775::t_57099089281b1f 38,42,51-62
+  s_ad63f2bf16b775::t_87c61824b8aff8 43-48
+  s_ad63f2bf16b775::t_269452de4f2926 25-28
+  s_ad63f2bf16b775::t_cf72b6466e8d22 29-33
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_af9160b09f8389 238-240,579-580
+  s_ad63f2bf16b775::t_218d3ea753e092 47-58,78-89,189-196
+  s_ad63f2bf16b775::t_1adcdc29fc548d 21,90-96,99-118,348-349,387-388,396-397,540-542,546-547,560-561,695-697
+  s_ad63f2bf16b775::t_fcb2e496d2f117 389-390,448-456,462-495,499-528,698-700
+  s_ad63f2bf16b775::t_8983b0c3d54d8c 496-498
+  s_ad63f2bf16b775::t_2a22550599afec 584-596
+  s_ad63f2bf16b775::t_feeb7fcc3fa4fb 457-461
+  s_ad63f2bf16b775::t_076f896d5e4036 58,69,76,129,131,136,187,203,208
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_08449ae80016e5 513-516,518,522-523,530
+  s_ad63f2bf16b775::t_8916775dd72868 504-512,517,519-521,528-529,951-952
+  s_ad63f2bf16b775::t_d3398dd2898006 655-657
+  s_ad63f2bf16b775::t_775acf1c84c71c 719-780
+  s_ad63f2bf16b775::t_52f0b96bfa11bd 895-896
+  s_ad63f2bf16b775::t_77893bf7b8dac8 618-622,872-876
+skills/datadouble-spec/SKILL.md
+  s_ad63f2bf16b775::t_a164aa21c1d715 262-297
+  s_ad63f2bf16b775::t_df19ab2847e734 48-49,124-127,132-147
+  s_ad63f2bf16b775::t_e85bf55e5e3e8a 299-310,316-330,336-337
+  s_ad63f2bf16b775::t_d3432a047f8129 331-335
+  s_ad63f2bf16b775::t_26ee3adba452a6 311-315
+  s_ad63f2bf16b775::t_ad71bbaa72c2a7 61-63
+docs/decisions.md
+  s_ad63f2bf16b775::t_2312cacdc42ca6 127
+  s_ad63f2bf16b775::t_6a97acdf7e5f50 128
+  s_ad63f2bf16b775::t_9d13b4b22cbe24 131
+  s_ad63f2bf16b775::t_34c361928d7895 132
+  s_ad63f2bf16b775::t_8e7fe04952df9e 142
+  s_ad63f2bf16b775::t_f482268f4e45e0 143
+  s_ad63f2bf16b775::t_8f0ea19621bdf3 139
+  s_ad63f2bf16b775::t_948f74ef581845 144
+adapters/postgres/README.md
+  s_ad63f2bf16b775::t_7c1f194a54b159 13-16,18-20,28-29,56
+  s_ad63f2bf16b775::t_4c8e37ccd8ca8b 17,21,30-52
+  s_ad63f2bf16b775::t_50e774551c63ee 53-55
+  s_ad63f2bf16b775::t_9fc3857d2c243b 22-27
+adapters/mysql/tests/test_mysql.py
+  s_ad63f2bf16b775::t_17ae3bb2dfbbbc 9,22-29,409-410,428-432,464,467-468,496
+  s_ad63f2bf16b775::t_b0503ddf8c3b49 11,13,19,35-36,42,411-427,433-463,465-466,469-495,497-509
+  s_ad63f2bf16b775::t_4b0b11bbd2cdc2 90-92,94-97,99-100,102-105,107-112,114-115,247-248,250,364-365
+  s_ad63f2bf16b775::t_a85bd3a12e5734 793
+  s_ad63f2bf16b775::t_b2a33b038ccc29 712-713,718-721,735-738,782,786-790,794-799,834-835
+  s_ad63f2bf16b775::t_c219a0d854d34e 393-394
+conformance/src/datadouble_conformance/engine.py
+  s_ad63f2bf16b775::t_8f0329c7361d08 21,503-506,508,510-512,517
+  s_ad63f2bf16b775::t_ed8541371d2fd2 507,509,513,515-516,518
+  s_ad63f2bf16b775::t_34e24348434908 256-299,302-303,305-313
+core/tests/test_spec.py
+  s_ad63f2bf16b775::t_fe15df4ed108d4 12,281-298,300-311
+  s_ad63f2bf16b775::t_ed0e32726434ec 277-280,299
+  s_ad63f2bf16b775::t_c269273fbfc595 63-66,68-73,75-76,79-89,91-92,97-103,105-110,112-113,115-116
+CHANGELOG.md
+  s_ad63f2bf16b775::t_0d17e0d68439be 12,14-31
+  s_ad63f2bf16b775::t_6b413f7483b8c0 13
+  s_ad63f2bf16b775::t_508ba5b2fba347 32-47
+  s_ad63f2bf16b775::t_834d2f4c149718 48
+  s_ad63f2bf16b775::t_7bd4ae2fc0676c 59
+  s_ad63f2bf16b775::t_45defa190ebf14 556-561
+  s_ad63f2bf16b775::t_ea7c3672160bae 72-83
+  s_ad63f2bf16b775::t_b63f2597b221eb 84
+  s_ad63f2bf16b775::t_30fad176bffccd 433-437
+  s_ad63f2bf16b775::t_dfbdbac779c1a5 440-452
+  s_ad63f2bf16b775::t_36597f88b36b5a 540-555
+core/src/datadouble/run.py
+  s_ad63f2bf16b775::t_928ddc64036162 265,694,702,708-709,737-739,752-753,817,825-838,895-896,982,1059-1065,1068
+  s_ad63f2bf16b775::t_e6a390dd1ab453 38-39,79-84,86,839,1057-1058,1066-1067,1069-1070
+core/src/datadouble/planner.py
+  s_ad63f2bf16b775::t_915d6b94950727 86-130,150-152,915,918-943
+  s_ad63f2bf16b775::t_5bf285d84cf72e 45
+core/tests/fake_engine.py
+  s_ad63f2bf16b775::t_23e5ff22cca305 15,317,319,343-345
+  s_ad63f2bf16b775::t_e2f6a162c77e24 24,315-316,318,320-321,346-348,378-379
+skills/datadouble-provision/SKILL.md
+  s_ad63f2bf16b775::t_80405ddbf1e366 62-88
+docs/architecture.md
+  s_ad63f2bf16b775::t_11c05aac7e1261 69-80,87-134
+  s_ad63f2bf16b775::t_988cb770be69ca 391
+  s_ad63f2bf16b775::t_32d930ff605360 81-86,141-147,573-574
+  s_ad63f2bf16b775::t_77c83a7af61cb5 466-485
+  s_ad63f2bf16b775::t_c3aab4fe52759d 384,395,402,405,407,409,416,485,487,491,514,517,519
+core/src/datadouble/engine.py
+  s_ad63f2bf16b775::t_82aa882911a0ef 27,266-267,269-271,273-276,278,281,287-290
+  s_ad63f2bf16b775::t_51393c31eb2d0d 23,35,268,272,277,279-280,282-286
+core/src/datadouble/images.py
+  s_ad63f2bf16b775::t_824d2815cd71b6 126-127
+  s_ad63f2bf16b775::t_cdd40b0a78e91e 16-19,29,33,164-204,208-219,229-241
+core/tests/test_run.py
+  s_ad63f2bf16b775::t_cb3589b09d0342 669-670,705-706,709,711-712,714,720,722,727,761-762,764-765,767,770
+  s_ad63f2bf16b775::t_d7ed9a52350c1b 6,31,693-694,701-704,707-708,710,713,715-719,721,723-726,728-760,763,766,768-769
+  s_ad63f2bf16b775::t_ecd553ca108605 91-92,95-99,101-104,106-114,116-117,273,302-305,322-327,330-335,356-359,370-371,381,447,476-479,512,695-700
+  s_ad63f2bf16b775::t_97c65dedcb2785 638-640
+skills/RULES.md
+  s_ad63f2bf16b775::t_3074fa70d01212 35-38
+Dockerfile
+  s_ad63f2bf16b775::t_7740ff47a0da6f 35,80
+sonar-project.properties
+  s_ad63f2bf16b775::t_039e009e05b087 8-9
+adapters/http/pyproject.toml
+  s_ad63f2bf16b775::t_27630f37b91f03 1-38
+skills/datadouble-fetch/SKILL.md
+  s_ad63f2bf16b775::t_de7c7566c49add 16-27,35-37
+  s_ad63f2bf16b775::t_b24a6a0600d09e 49-50
+  s_ad63f2bf16b775::t_1f07ad3280d141 28-34
+tests/scripts/test_integration_groups.py
+  s_ad63f2bf16b775::t_189f59c57423ee 84
+core/src/datadouble/storage.py
+  s_ad63f2bf16b775::t_69598e58ccc271 10,16-18,39-42,78-81
+  s_ad63f2bf16b775::t_8ae5139bb27943 11-15,24,30,89-101,108-126,132-133,135,144-156,160,168-172,220-222
+pyproject.toml
+  s_ad63f2bf16b775::t_6a965c8065bc4e 38,60,89,162,226-227,280-281,318,363
+compose.yaml
+  s_ad63f2bf16b775::t_80474d66342a05 44-50,57-58,209-227,357-358
+adapters/http/LICENSE
+  s_ad63f2bf16b775::t_5abd797e400710 1-21
+core/tests/test_operations.py
+  s_ad63f2bf16b775::t_9875f2630280ab 6,11-12,38,40,46,75-78,80,402-468,483-486,493-514
+  s_ad63f2bf16b775::t_710b6bf0ba8ffd 92-106,108-110,113-121,472-482,487-492
+  s_ad63f2bf16b775::t_53025255403866 321-333
+uv.lock
+  s_ad63f2bf16b775::t_dc32c1c9728359 20,561-575,769,809
+  s_ad63f2bf16b775::t_d13ca120e213b6 2,124,131,133,138,144,146,156,163,165,858,863,865,1359,1367,1369,1374,1379,1381-1459,1486,1491,1493-1542,1676,1678,1680-1725,1739,1741,1743-1759,1848,1850,1852,1857,1859,1861
+adapters/http/src/datadouble_http/__init__.py
+  s_ad63f2bf16b775::t_632e1175adc8fc 98-105
+  s_ad63f2bf16b775::t_c49ca8df12fd5b 1-12,20-97,106-250
+  s_ad63f2bf16b775::t_55a7fbdad20635 251-257
+  s_ad63f2bf16b775::t_eb16e1639006de 13-19
+core/src/datadouble/promote.py
+  s_ad63f2bf16b775::t_6487152a433e21 8-10,28-35,157
+dev/https/Dockerfile
+  s_ad63f2bf16b775::t_c0acc9e42a4cb0 1-14
+dev/https/start.sh
+  s_ad63f2bf16b775::t_1680e7a3f082ea 1-21
+adapters/http/tests/test_http.py
+  s_ad63f2bf16b775::t_d7e91c91c711e6 1-180,194,197
+  s_ad63f2bf16b775::t_73919e410798fd 181-182
+  s_ad63f2bf16b775::t_738d9cae58298f 183-193,195-196,198-212
+skills/datadouble-prune/SKILL.md
+  s_ad63f2bf16b775::t_4aa107621b8135 16,18-20
+core/tests/test_storage_images.py
+  s_ad63f2bf16b775::t_2c5795d0e5d853 14-23,25-27,29-32,34-36,226-227,236-258
+  s_ad63f2bf16b775::t_ef8a9da83f7d45 4,6-7,9,33,77-176
+adapters/http/README.md
+  s_ad63f2bf16b775::t_92fbe1e5177726 1-15,23-43,46-47,53-55,62-68,70-96
+  s_ad63f2bf16b775::t_f49de4b9ca179a 97-98
+  s_ad63f2bf16b775::t_33fbf449ca3b89 69
+  s_ad63f2bf16b775::t_20a169632302c8 16-22,44-45,48-52
+  s_ad63f2bf16b775::t_729e2d0cb2d444 56-61
+dev/https/Caddyfile
+  s_ad63f2bf16b775::t_2e567b9ebf621e 1-19
+TESTING.md
+  s_ad63f2bf16b775::t_b3e3a42caf79f4 104
+  s_ad63f2bf16b775::t_5b41297f858800 19
+  s_ad63f2bf16b775::t_8004bafe0fb172 248,261-276
+skills/datadouble-promote/SKILL.md
+  s_ad63f2bf16b775::t_09dd847d12f6a6 14-17
+  s_ad63f2bf16b775::t_b7746444fec94c 18-19
+  s_ad63f2bf16b775::t_80951b149975e5 36-38
+  s_ad63f2bf16b775::t_11f888fec2ebd9 20-26
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_ae3d6ff372d250 34-36
+  s_ad63f2bf16b775::t_4d5b2d759252a4 3,49-52,65
+  s_ad63f2bf16b775::t_61a3a172c08be2 39-42,64
+  s_ad63f2bf16b775::t_8f4276884cc7ba 29-33
+core/src/datadouble/prune.py
+  s_ad63f2bf16b775::t_bbf9638bafdfd9 11-13,26,146-154,241-247
+tests/integration-groups.txt
+  s_ad63f2bf16b775::t_20950a750df33d 13
+core/tests/fakes.py
+  s_ad63f2bf16b775::t_cf9e2c7b1332bf 4,16-17,21-22,230-241
+  s_ad63f2bf16b775::t_b95494537f0125 242-243
+docs/using/agent-skills.md
+  s_ad63f2bf16b775::t_664b062cc037e0 18,20
+docs/agent-skills.md
+  s_ad63f2bf16b775::t_bf830e462c2fc0 55-56
+ci/github-actions/src/datadouble_github_actions/__init__.py
+  s_ad63f2bf16b775::t_a2870b572d30e4 13-15,49-51,115,180-181,206-218,252
+  s_ad63f2bf16b775::t_cb2ae1dc74a1e0 42,171-175,292-304,312-319
+  s_ad63f2bf16b775::t_3a9c0df8e7600e 164-170
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_3ce0cfb3a9d860 32,34-41,186,189-193,325,422-427,643-649,652-661,664-669,673-686,975,991-997,1006
+  s_ad63f2bf16b775::t_a9e205f9dda92f 58,1008-1039
+  s_ad63f2bf16b775::t_519bea8492c196 337-342,818-819
+ci/kubernetes/tests/test_argocd.py
+  s_ad63f2bf16b775::t_915f1546ac0207 12,109,155,163-169,254-272
+  s_ad63f2bf16b775::t_aea387ce1f6c2f 60-61,73-74,79-80,210-211,213-214,218-219,222-234,240
+  s_ad63f2bf16b775::t_d5bd369f9a6427 288-294
+  s_ad63f2bf16b775::t_003d4c63f545cd 36-54,56-58,62-71,75-78,190-192,220-221
+docs/excludes-and-strict-mode.md
+  s_ad63f2bf16b775::t_e2ca5b20dd0de9 48,189-193,200-214
+  s_ad63f2bf16b775::t_bf1304e913bbf9 179,181
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_ad63f2bf16b775::t_b8400b15e4a560 21-23,30,34,123,132-133,153-159,229-235,237,321-325
+  s_ad63f2bf16b775::t_0fb35c5aa8dab0 24-27,103-107,251-256,296-303,311-315
+  s_ad63f2bf16b775::t_58fb39a978a74a 257-262
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_ad63f2bf16b775::t_f472e27e0b85ac 138-142,145-150,152
+  s_ad63f2bf16b775::t_dd46417b6592c8 61-62,85-86,96,101,107,118-119,126-129,136-137
+  s_ad63f2bf16b775::t_a3aa50ccb04bb8 57-59,63-72
+  s_ad63f2bf16b775::t_ccfdf217721b9b 34-55
+ci/jenkins/vars/datadouble.groovy
+  s_ad63f2bf16b775::t_b89668f143b8c1 40,58-60
+  s_ad63f2bf16b775::t_90b0d474911a8b 10,19-20,35
+  s_ad63f2bf16b775::t_59dbd09df0fad4 26-27,33,41-49
+ci/jenkins/resources/datadouble/run.sh
+  s_ad63f2bf16b775::t_01feb305d581d2 61-67
+  s_ad63f2bf16b775::t_e1a0d29fadb2fe 42,44-45
+  s_ad63f2bf16b775::t_196eec6c3b1952 9-13,22-34,37-39,57-59
+ci/jenkins/README.md
+  s_ad63f2bf16b775::t_16dfeee953533e 18,59-68,233-235
+  s_ad63f2bf16b775::t_b0dc5bdb4844c8 236-254
+  s_ad63f2bf16b775::t_f79e6531db1e29 72-75,81-106
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_ad63f2bf16b775::t_b426727da11f33 305,459-463
+  s_ad63f2bf16b775::t_79f49affb1d3fe 144,179-180,183,196,416-426
+  s_ad63f2bf16b775::t_41e3e87f301ea1 496-521,547-548
+ci/jenkins/src/datadouble_jenkins/__init__.py
+  s_ad63f2bf16b775::t_fc7388503373ea 19-20,385-386
+  s_ad63f2bf16b775::t_1c212ce30a6dfc 21-25,65,379,407-438,459,554-557
+ci/github-actions/tests/test_github_actions_conformance.py
+  s_ad63f2bf16b775::t_6ff6802f637679 21,170-183
+  s_ad63f2bf16b775::t_22ace2eca01e5e 12-13,28-29,40-41,195-203,206-237
+  s_ad63f2bf16b775::t_a20c57dc3266b1 238-240
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_150503bca9ce07 118
+  s_ad63f2bf16b775::t_b5babda245e984 32,70-72,179-206,239-245,257-260
+  s_ad63f2bf16b775::t_88ff0b5ade8715 449-456
+  s_ad63f2bf16b775::t_8bfa7ec923cc61 48-63,65-68,73-82
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_fed832fd8a6ceb 29,233-235,312,314-320,456,608-612
+  s_ad63f2bf16b775::t_cd6fc6859faf06 18,48,291-296,489-490,663-666
+  s_ad63f2bf16b775::t_260863eb424eb2 76-77,258-269
+  s_ad63f2bf16b775::t_67d939ab75ca96 235,237
+ci/gitlab/src/datadouble_gitlab/__init__.py
+  s_ad63f2bf16b775::t_6c00cdd750a979 19-21,120,194-197
+  s_ad63f2bf16b775::t_def6a2699ed55f 48,182,203-208,305-324,333-336
+  s_ad63f2bf16b775::t_828b8868d9779b 186-189
+core/tests/test_catalog.py
+  s_ad63f2bf16b775::t_736732b3857b45 12,14,16-17,23,25,31,278-365,367-376,414-424,426-438,440-443
+core/tests/test_commands.py
+  s_ad63f2bf16b775::t_8f14a722d0f35a 17,19,383-433
+  s_ad63f2bf16b775::t_c43ed7a1e0e31d 152,315
+ci/gitlab/tests/golden/production/datadouble-shop-production.yml.golden
+  s_ad63f2bf16b775::t_00315d83761338 13,121-133,135-137,139-146
+  s_ad63f2bf16b775::t_50143a3ab0e055 29,36,63,69,84,89-90,107,112-113
+ci/github-actions/tests/golden/production/datadouble-shop-lock.yml.golden
+  s_ad63f2bf16b775::t_193c3bbf738e11 1-24,26-27,29-31,33-46
+docs/using/cli-reference.md
+  s_ad63f2bf16b775::t_a3ea3084ae0f75 29,35,181,183
+  s_ad63f2bf16b775::t_b1eef87d200cc4 16
+  s_ad63f2bf16b775::t_54a5cc591958da 191-192
+ci/gitlab/README.md
+  s_ad63f2bf16b775::t_4e805e1f53cd69 11,41-51
+  s_ad63f2bf16b775::t_f41447d4db4b2e 100-119
+  s_ad63f2bf16b775::t_2c52388227fabf 55-58,64-88
+ci/kubernetes/chart/templates/_helpers.tpl
+  s_ad63f2bf16b775::t_f9d8555d6bcaf0 62-64,105,110,116-121
+  s_ad63f2bf16b775::t_351443aee49096 18-21
+  s_ad63f2bf16b775::t_264b75352607c7 67-82
+ci/kubernetes/README.md
+  s_ad63f2bf16b775::t_b9c150c8a82154 10,53-66,102-103
+  s_ad63f2bf16b775::t_a4f6044e81fe55 104-110,114-121
+  s_ad63f2bf16b775::t_e1b22339524415 42-46,111-113
+  s_ad63f2bf16b775::t_21c35eed600bc9 79-81,85-87
+ci/jenkins/tests/test_jenkins_conformance.py
+  s_ad63f2bf16b775::t_a0924f737952c8 432-435
+conformance/src/datadouble_conformance/ci.py
+  s_ad63f2bf16b775::t_016007307e8116 220-224,450-470,674,676-679,681-683,696-713,715-723
+  s_ad63f2bf16b775::t_a4aba3150f4d8f 116-117,123-149,266-280,341,343-346,348,350,381-385,400-404,410,507,614-618,622-628,632-634,642-671
+  s_ad63f2bf16b775::t_2c19378bc0cfb6 73-76,79-83,88-104,106-108,111-113,118-121
+ci/gitlab/tests/test_gitlab_conformance.py
+  s_ad63f2bf16b775::t_f4197fccf001d7 467-470
+  s_ad63f2bf16b775::t_a9db92e8b8b1a4 59,396-400,421-423
+docs/using/ci-cd-libraries.md
+  s_ad63f2bf16b775::t_1b07d932c76c18 16,20,31-38
+  s_ad63f2bf16b775::t_b55b911dc74ea7 54-62,68-83
+  s_ad63f2bf16b775::t_bd4ee12e018436 93-100
+  s_ad63f2bf16b775::t_a36260728e20dd 63-67
+ci/github-actions/action.yml
+  s_ad63f2bf16b775::t_0b3c72e087684e 37-57,63,72
+  s_ad63f2bf16b775::t_b6f8d7cbd33499 19-22,67
+ci/jenkins/tests/golden/production/datadouble-shop-lock.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_6695f919a4cf2d 1-17,19,21-23,25-31,61
+ci/github-actions/tests/test_github_actions.py
+  s_ad63f2bf16b775::t_1a02b5119a469b 110
+  s_ad63f2bf16b775::t_adb7427cd46977 11,14,21,78-79,273-284
+  s_ad63f2bf16b775::t_9db213a3182893 24,61-63,156,161,165-167,249-274,287-296
+  s_ad63f2bf16b775::t_8c7109567c8012 297-309
+  s_ad63f2bf16b775::t_782eb64db835c2 37-54,56-59,64-75
+ci/gitlab/src/datadouble_gitlab/datadouble.yml
+  s_ad63f2bf16b775::t_7731fd5c7d4aa0 80-84
+  s_ad63f2bf16b775::t_055b4917b11c73 61,63-64
+  s_ad63f2bf16b775::t_f8b6ee85cd8ad3 12-17,41-53,56-58,76-78
+docs/using/quickstart.md
+  s_ad63f2bf16b775::t_e18604cb10a354 86-89
+  s_ad63f2bf16b775::t_d2fbb89ad56a60 42-44,46-49,52-59
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_3beeeced0672a5 24,27,30-31
+  s_ad63f2bf16b775::t_d7bad514ae321a 60-65
+  s_ad63f2bf16b775::t_0dd8a50d50d2fe 79-87
+  s_ad63f2bf16b775::t_20734d7b06777a 88-89
+  s_ad63f2bf16b775::t_041b0abae4e129 90-97
+ci/gitlab/tests/test_gitlab.py
+  s_ad63f2bf16b775::t_b52652d2238847 99
+  s_ad63f2bf16b775::t_5e6b9a18b53e8e 24,63-65,171,173,204-209,217-221,224-236,238-250,253-257
+  s_ad63f2bf16b775::t_7349a5a933bf8a 304-314
+  s_ad63f2bf16b775::t_2677ca44e12beb 38-56,58-61,66-75
+ci/github-actions/README.md
+  s_ad63f2bf16b775::t_24652346154323 15,30-46,95-98
+  s_ad63f2bf16b775::t_1717423e583870 99-116
+  s_ad63f2bf16b775::t_0361d8b13c5b8c 52-56,61-85
+ci/kubernetes/chart/values.yaml
+  s_ad63f2bf16b775::t_b897031ee09d9a 46-48
+  s_ad63f2bf16b775::t_743f0b5e38eb7a 42-44
+  s_ad63f2bf16b775::t_bb5c6711241509 13-15,17-20,23-25
+core/src/datadouble/catalog.py
+  s_ad63f2bf16b775::t_64191c60ed9a30 362-371,374-387,389-417,419-421,423-431,433-439,441-458,460-473,475-478,480-484,486-500,502-512,514-518,520-527,529-544,546-550,552-559,561-567,598-605,607-612,624,626-629,631-638,640-641,643-674
+ci/github-actions/run.sh
+  s_ad63f2bf16b775::t_c841e51b6cb086 65-71
+  s_ad63f2bf16b775::t_1b5408da22c7dc 46,48-49
+  s_ad63f2bf16b775::t_5c758f41a832c9 9-13,23-35,38-40,61-63
+ci/github-actions/tests/golden/production/datadouble-shop-build.yml.golden
+  s_ad63f2bf16b775::t_c898de81ed1cca 28,32,39
+ci/jenkins/tests/golden/pool/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_db69967fe21864 22-60
+.github/workflows/datadouble-nightly-build.yml
+  s_ad63f2bf16b775::t_e56d1ec08a8b9c 31
+ci/jenkins/tests/golden/pool/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_41bf99773a8703 21-59
+ci/github-actions/tests/golden/production/datadouble-shop-promote.yml.golden
+  s_ad63f2bf16b775::t_410028e0bf06de 30-31,33,38-39
+ci/jenkins/tests/golden/production/datadouble-shop-build.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_183f5f7c454ae5 24,26,30,37-65
+ci/jenkins/tests/golden/on-demand/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_d012fed66f7669 21,23,27,34-62
+.github/workflows/datadouble-nightly-prune-non-production.yml
+  s_ad63f2bf16b775::t_2204f935858736 34
+core/src/datadouble/notify.py
+  s_ad63f2bf16b775::t_2c35c3584d6ca9 72-110
+  s_ad63f2bf16b775::t_3e5d40dd5685ad 62-71
+  s_ad63f2bf16b775::t_8b4efa574327f2 1-61
+  s_ad63f2bf16b775::t_e915b83078396b 111-168
+.github/workflows/datadouble-nightly-fetch.yml
+  s_ad63f2bf16b775::t_165449b606d49b 28
+ci/jenkins/tests/golden/pool/datadouble-shop-fetch.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_f4b53018145b6b 21,23,27,34-62
+ci/jenkins/tests/golden/on-demand/datadouble-shop-provision.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_4da71d093ca204 21-59
+ci/github-actions/tests/golden/on-demand/datadouble-shop-release.yml.golden
+  s_ad63f2bf16b775::t_60b655a62619f0 32-33,35,40-41,51-52,54,59-60
+ci/jenkins/tests/golden/on-demand/datadouble-shop-release.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_237129acf01f9e 25-34,40-78
+ci/github-actions/tests/golden/on-demand/datadouble-shop-fetch.yml.golden
+  s_ad63f2bf16b775::t_3f7c2314bcbe07 27-28,30,35-36
+.github/workflows/datadouble-nightly-provision.yml
+  s_ad63f2bf16b775::t_15b51e88bb6958 34
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_82e3ce42e07202 61-62,85-86,91,97-98,103-104,109-110,117-118,123-124,129-130,135-136,142-143,148-149,155-156
+  s_ad63f2bf16b775::t_5c1bda0ec0aaf0 57-59,63-72
+  s_ad63f2bf16b775::t_58654d12df5991 34-55
+ci/github-actions/tests/golden/pool/datadouble-shop-fetch.yml.golden
+  s_ad63f2bf16b775::t_99ea0e8e294285 24-25,27,32-33
+.github/workflows/datadouble-nightly-prune-production.yml
+  s_ad63f2bf16b775::t_7f4835552b7506 34,50
+ci/gitlab/tests/golden/pool/datadouble-shop-non-production.yml.golden
+  s_ad63f2bf16b775::t_88db9b6c2d2717 23,29,48,53-54,68,73-74
+ci/jenkins/tests/golden/on-demand/datadouble-shop-activate.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_9b5b6e5b2eae23 21-59
+ci/jenkins/tests/golden/production/datadouble-shop-prune-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_02ba80f46215dd 24-33,38-76
+ci/gitlab/tests/golden/on-demand/datadouble-shop-non-production.yml.golden
+  s_ad63f2bf16b775::t_72a53b42e9ff9d 34,40,59,64-65,87,92-93,110,115-116,132,137-138,156,161-162
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_ad63f2bf16b775::t_2d911af5e5335e 61-62,85-86,91,94,99-100,110-111,116-117
+  s_ad63f2bf16b775::t_171fd905681e16 57-59,63-72
+  s_ad63f2bf16b775::t_db803bc1f50678 34-55
+ci/jenkins/tests/golden/production/datadouble-shop-promote.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_2bc7ebe9cde90e 21,23,27,34-62
+ci/github-actions/tests/golden/on-demand/datadouble-shop-prune-non-production.yml.golden
+  s_ad63f2bf16b775::t_5f596318da9efa 33-34,36,41-42
+core/tests/test_notify.py
+  s_ad63f2bf16b775::t_9baa9520194962 177-249
+  s_ad63f2bf16b775::t_18a867c388c4f1 1-32,40,42-128,130-176
+  s_ad63f2bf16b775::t_542947f03c697d 250-330
+  s_ad63f2bf16b775::t_981dcdb03e2aea 33-39
+ci/github-actions/tests/golden/pool/datadouble-shop-provision.yml.golden
+  s_ad63f2bf16b775::t_262cab32170ad0 30-31,33,38-39
+ci/jenkins/tests/golden/on-demand/datadouble-shop-prune-non-production.Jenkinsfile.golden
+  s_ad63f2bf16b775::t_aea16b8cd19b9b 24-62
+ci/github-actions/tests/golden/on-demand/datadouble-shop-activate.yml.golden
+  s_ad63f2bf16b775::t_075bd3c4a8280b 30-31,33,38-39
+ci/github-actions/tests/golden/production/datadouble-shop-prune-production.yml.golden
+  s_ad63f2bf16b775::t_4e60f31435271e 32-33,35,40-41,51-52,54,59-60
+.github/workflows/datadouble-nightly-promote.yml
+  s_ad63f2bf16b775::t_14ccd34f7e6558 34
+ci/github-actions/tests/golden/on-demand/datadouble-shop-provision.yml.golden
+  s_ad63f2bf16b775::t_bb627ee1c2c993 29-30,32,37-38
+ci/kubernetes/chart/templates/jobs.yaml
+  s_ad63f2bf16b775::t_5a132733badafd 7-8,26-30,45-49
+conformance/tests/test_harness.py
+  s_ad63f2bf16b775::t_473179478c20a9 6,29-81
+  s_ad63f2bf16b775::t_b1f8ee20f33f35 82-102
+scripts/format_yaml.py
+  s_ad63f2bf16b775::t_f720ebcb7bf8cd 1-517
+  s_ad63f2bf16b775::t_7af141213cd76d 518-635
+tests/scripts/test_format_yaml.py
+  s_ad63f2bf16b775::t_382a9196f7507b 1-294
+  s_ad63f2bf16b775::t_0bb33934bf2a5b 295-312
+CONTRIBUTING.md
+  s_ad63f2bf16b775::t_d4bb9784103eb9 31-37
+  s_ad63f2bf16b775::t_e708dd0449f1cc 11-16
+Makefile
+  s_ad63f2bf16b775::t_ef1e8141664f8b 13
+  s_ad63f2bf16b775::t_b91aa7d1b3922e 99-100,102,104,108,110
+adapters/elasticsearch/tests/test_elasticsearch.py
+  s_ad63f2bf16b775::t_702c77b72ee36c 72-74,76-79,83-84,86-88,90-94,100-101
+adapters/elasticsearch/tests/test_elasticsearch_conformance.py
+  s_ad63f2bf16b775::t_db975ffb391a84 61-62,72-75,78-88,90-99,101-104,106-111,113-114,116-117
+adapters/files/tests/test_files_adapter.py
+  s_ad63f2bf16b775::t_0781ef7a6a3522 45-48,51-56,61-62
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_31b931fc113930 19-23,115-116,122-125,127-130
+adapters/kubernetes/src/datadouble_kubernetes/runtime.py
+  s_ad63f2bf16b775::t_d9899a8bce3862 16-17
+adapters/kubernetes/tests/test_kubernetes.py
+  s_ad63f2bf16b775::t_dd2d6a54b37fc5 583-594,596-600,605-608,612-616
+adapters/mongodb/tests/test_mongodb.py
+  s_ad63f2bf16b775::t_dbf5bab93c072a 52-54,56-59,63-64,66-74,80-81
+adapters/mongodb/tests/test_mongodb_conformance.py
+  s_ad63f2bf16b775::t_d17e0ab52d549c 54-55,62-63,66-74,76-78,80-81,83-85,87-88
+adapters/mssql/tests/test_mssql.py
+  s_ad63f2bf16b775::t_60607c07f62494 119-122,124-129,131-132,134-137,139-148,150-151,375-376,378
+adapters/mssql/tests/test_mssql_conformance.py
+  s_ad63f2bf16b775::t_e3d090c323dd92 59-64,66-67,70-76,78-91,93-100,102-104,106-107,109-110,116-117
+adapters/mysql/tests/test_mysql_conformance.py
+  s_ad63f2bf16b775::t_3e432554b8fb9d 74-79,81-82,85-91,93-106,108-115,117-119,121-122,128-129
+adapters/oracle/tests/test_oracle.py
+  s_ad63f2bf16b775::t_3b0d59c1c9e70f 91-93,95-100,102-103,105-108,110-115,117-118,301-302,304,455-456
+adapters/oracle/tests/test_oracle_conformance.py
+  s_ad63f2bf16b775::t_834e05cfad182d 58-63,65-66,69-75,77-90,92-99,101-103,105-106,112-113
+adapters/postgres/tests/test_conformance.py
+  s_ad63f2bf16b775::t_4c115927d95fbf 88-91,96-97,100-106,108-121,123-130,132-134,136-137,143-144
+adapters/redis/tests/test_redis.py
+  s_ad63f2bf16b775::t_669a2890845e4e 70-81,88-91,93-95,97-121,127-128,423-424
+adapters/redis/tests/test_redis_conformance.py
+  s_ad63f2bf16b775::t_4275f097f84b2e 72-78,80-81,83-84,86-87,89-90
+adapters/salesforce/README.md
+  s_ad63f2bf16b775::t_dd487d8713d7ea 30-34
+adapters/salesforce/src/datadouble_salesforce/__init__.py
+  s_ad63f2bf16b775::t_7fe85d6f1912f9 19-20
+adapters/salesforce/tests/test_salesforce_conformance.py
+  s_ad63f2bf16b775::t_1c7f5a6f8ab2c3 50-51,56-66,68-70,76-77
+ci/kubernetes/chart/templates/access.yaml
+  s_ad63f2bf16b775::t_b59dc48b7dda59 28-31,33-35,56-58
+docs/anonymization.md
+  s_ad63f2bf16b775::t_0e8b8e2aaab221 25-37,39-40
+  s_ad63f2bf16b775::t_ec376292dc6450 141-142
+docs/subsetting.md
+  s_ad63f2bf16b775::t_e860098d7e970b 30-33,35-36
+  s_ad63f2bf16b775::t_ea1aad91e264d7 108,151-153,175,204-208,215,222,227
+  s_ad63f2bf16b775::t_a726226e701838 206
+docs/v1-plan.md
+  s_ad63f2bf16b775::t_8f333845bb51ef 82-84
+  s_ad63f2bf16b775::t_1d0266a35cded4 207
+tests/nightly/nightly.yml
+  s_ad63f2bf16b775::t_e86fd67f8180a6 15-17,19-22,25-29,34-39,44-47,49-51,54-56
+tests/scripts/test_nightly.py
+  s_ad63f2bf16b775::t_e8e308663118dc 57-58
+adapters/mssql/src/datadouble_mssql/objects.py
+  s_ad63f2bf16b775::t_56549e05f21746 22-23,35-47
+adapters/mssql/src/datadouble_mssql/working.py
+  s_ad63f2bf16b775::t_b74002274a48be 26,28,34,251,256,265,342-351,355-371,373-376,378-398,642,644,849
+adapters/mssql/tests/test_mssql_units.py
+  s_ad63f2bf16b775::t_db1ea3bb98b88a 15-27,31,45,49-56,59,63,366-499
+  s_ad63f2bf16b775::t_1c59b21b7debc2 205-214
+  s_ad63f2bf16b775::t_a953b185d6d9db 139,148,153-204
+adapters/oracle/tests/test_oracle_units.py
+  s_ad63f2bf16b775::t_b8475973fe7fe3 8,12-13,17,34,44,355-416
+  s_ad63f2bf16b775::t_77f5a556d5c865 132-150
+  s_ad63f2bf16b775::t_9dbc07f1dd810b 151-156
+adapters/files/tests/test_files_units.py
+  s_ad63f2bf16b775::t_1ecd0ab086ac94 125-126
+.github/workflows/release.yml
+  s_ad63f2bf16b775::t_a08a9f3ccea866 103,125-130,133-134
+.github/workflows/ci.yml
+  s_ad63f2bf16b775::t_ea28ff42d17e6e 200-203,217,240-244,246-247,249-250,297-300,321,336-340,597-598,607,624-628,632
+.github/actions/docker-mirror/action.yml
+  s_ad63f2bf16b775::t_4a19f08555955e 1-46
+compose.mirror.yaml
+  s_ad63f2bf16b775::t_e2862cbecf1702 1-23
+docs/how-our-ci-works.md
+  s_ad63f2bf16b775::t_92663aad628130 128-135,178-179
+.github/workflows/pr-images.yml
+  s_ad63f2bf16b775::t_3b814aa19d6455 44,66-71,74-75
+.github/workflows/nightly.yml
+  s_ad63f2bf16b775::t_e3993bfb5ee19e 46-48,58,81-85
+.github/buildkitd.toml
+  s_ad63f2bf16b775::t_849b75e10fb34f 1-10
+core/src/datadouble/staging.py
+  s_ad63f2bf16b775::t_c6667d1dc317f0 77-78
+adapters/mysql/tests/test_mysql_units.py
+  s_ad63f2bf16b775::t_986def0324bed3 148,153,158,169,173,177,181,192,198,204,227,236,239-249
+  s_ad63f2bf16b775::t_a903615484bbeb 182-184,186-191,193-197,199-203,205-226,228-229
+  s_ad63f2bf16b775::t_01e24f3bd7675a 100,110-147,185,237-238
+  s_ad63f2bf16b775::t_49dac615ec13b4 149-152,154-157,232-235,267-271
+  s_ad63f2bf16b775::t_c3c62050997641 159-168,170-172,174-176,178-180,230-231
+core/src/datadouble/redaction.py
+  s_ad63f2bf16b775::t_54181d9bb61dfe 109-131
+  s_ad63f2bf16b775::t_1923c5fdf7f2f8 1-108
+core/src/datadouble/runtime.py
+  s_ad63f2bf16b775::t_38da869452a036 44,122-139
+adapters/postgres/tests/test_cluster.py
+  s_ad63f2bf16b775::t_a6a3945ed59cef 11,116-140
+adapters/postgres/tests/test_render.py
+  s_ad63f2bf16b775::t_9a385e3fecf17d 209-262,287
+  s_ad63f2bf16b775::t_062eefc0addb85 283-286,288-290
+  s_ad63f2bf16b775::t_83f7a6cee4f03d 263-267,269-270,273-275,277-281,291-293
+  s_ad63f2bf16b775::t_5e18c1825c1163 276,282,294,309-326
+adapters/mysql/src/datadouble_mysql/errors.py
+  s_ad63f2bf16b775::t_5527090273a4fb 18,22-48,50-134,142-143,147-153,155
+  s_ad63f2bf16b775::t_c576dc1682de0d 8-9,17
+adapters/oracle/src/datadouble_oracle/errors.py
+  s_ad63f2bf16b775::t_701f3530f83754 6-12,18,23-42,47,53
+core/tests/test_runtime.py
+  s_ad63f2bf16b775::t_1e86df79e5304c 10-17,30-33
+adapters/mssql/src/datadouble_mssql/errors.py
+  s_ad63f2bf16b775::t_a98b48c2ace1cd 8-10,16
+  s_ad63f2bf16b775::t_a9c833484e0343 17,21-46,48-49,59-60,65-76
+adapters/postgres/src/datadouble_postgres/errors.py
+  s_ad63f2bf16b775::t_d8315fddf523e0 16,20-67,69-70,76-77,94-100,102
+  s_ad63f2bf16b775::t_82c94d64d36929 8-9,15
+core/tests/test_redaction.py
+  s_ad63f2bf16b775::t_746f10019f3dee 1-39
+WRITING.md
+  s_ad63f2bf16b775::t_d0673e0d41c1d9 1-138
+AGENTS.md
+  s_ad63f2bf16b775::t_9c1672762a5b36 28-30
+docs/index.md
+  s_ad63f2bf16b775::t_d2919806bf3ec4 46,48
+docs/external-services.md
+  s_ad63f2bf16b775::t_4e3cd389732ade 102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b914fd68e28500b0c72323d611a357a48c9c3cac",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
