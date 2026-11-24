@@ -817,7 +817,7 @@ A report keyed by package-relative names (`__init__.py`) silently merged files a
 
 **Why:** Engine binaries tied Datadouble to one host's packages and versions. SQL Server and Oracle ship only as images in practice. The vendor's image matches the source's version and carries its own tools.
 
-This supersedes [decision 49](#decision-49)'s requirement that the build machine hold server binaries.
+This supersedes [decision 49](#decision-49)'s requirement that the build machine hold server binaries. It also amends [decision 69](#decision-69): the test image carries no MongoDB server or tools.
 
 ### 73. Container runtimes are adapters {#decision-73}
 
@@ -845,6 +845,8 @@ Containers see their paths at the same absolute path as Datadouble does. That is
 - Build-only credentials are removed before packaging.
 
 **Why:** Working databases hold real personal data, so they are never open without authentication. Passwords never reach a command line or a pod spec.
+
+Amends [decision 49](#decision-49): PostgreSQL's working clusters listen on the network, with a password, and have no Unix socket.
 
 ### 75. Cleaning up leftover containers {#decision-75}
 
@@ -927,6 +929,8 @@ The translation works like this:
 In version 1, these features fail the plan by name: restriction conditions, non-equality joins, subject limits, parameters and column filters.
 
 **Why:** Running a different subset from the one designed would be worse than refusing. The translated features cover the Sakila model the milestone compares, and each missing feature needs a native equivalent first.
+
+Refines [decision 8](#decision-8).
 
 ### 82. Timeouts for CI jobs and tests {#decision-82}
 
@@ -1564,7 +1568,7 @@ The skills ([decision 105](#decision-105)) re-lock through this job where the pe
 
 **Why:** Strict mode needs a lock, and locking reads the source. Where the only machine inside the boundary is a CI runner, re-locking needed a shell there, which pushed teams toward turning strict mode off. Reviewing the diff before committing is the check strict mode exists for, so the job publishes the diff rather than committing it.
 
-Refines [decisions 10](#decision-10), [18](#decision-18), [98](#decision-98) and [100](#decision-100).
+Refines [decisions 10](#decision-10), [16](#decision-16), [18](#decision-18), [98](#decision-98) and [100](#decision-100).
 
 ### 124. Kubeconfig as a secret reference {#decision-124}
 
