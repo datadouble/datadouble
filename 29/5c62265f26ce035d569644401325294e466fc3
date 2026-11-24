@@ -1,0 +1,25 @@
+docs/anonymization.md
+  s_ad63f2bf16b775::t_ec376292dc6450 60-69,132-135,141,153,155-157,162,175,205-207,224-227,253-255
+docs/excludes-and-strict-mode.md
+  s_ad63f2bf16b775::t_6d195f18e2a141 45-46,64-68,70-71,89-95,98-100,107-109,222-224,261-262
+docs/jailer.md
+  s_ad63f2bf16b775::t_a5d1146cfc982d 79-81,93-94,96-101,110,116,126-128,146-149
+docs/subsetting.md
+  s_ad63f2bf16b775::t_f4c860c1a38121 83-84,226-230,329,396-399,418-419,491-493,580
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "295c62265f26ce035d569644401325294e466fc3",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
