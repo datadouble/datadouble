@@ -19,7 +19,7 @@ import re
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -28,7 +28,8 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.names import SpecName
 from datadouble.outcome import ExitCode, Outcome
-from datadouble.spec import Notify, ReplicateMode, Spec
+from datadouble.settings import SettingKey
+from datadouble.spec import FILES, AdapterSettings, Notify, ReplicateMode, Spec
 
 
 class CiError(Exception):
@@ -341,7 +342,87 @@ def sections(kind: JobKind, side: Side) -> tuple[str, ...]:
     return _SECTIONS[kind, side]
 
 
-def _sections(spec: Spec, kind: JobKind, side: Side) -> list[JsonValue]:
+@dataclass(frozen=True, slots=True)
+class RemoteSettings:
+    """The settings each installed adapter declares remote, by adapter name (decision 140).
+
+    A remote setting names a path that is not on the machine running the job,
+    such as ``k8s-pv``'s ``nfs.path`` on the NFS server. Adapters declare them
+    with :func:`datadouble.settings.remote`, and :func:`host_paths` leaves them
+    out, so they never become mounts. Engines' keys are inside the source.
+    """
+
+    engines: Mapping[str, tuple[SettingKey, ...]] = field(
+        default_factory=dict[str, tuple[SettingKey, ...]]
+    )
+    stores: Mapping[str, tuple[SettingKey, ...]] = field(
+        default_factory=dict[str, tuple[SettingKey, ...]]
+    )
+    replicators: Mapping[str, tuple[SettingKey, ...]] = field(
+        default_factory=dict[str, tuple[SettingKey, ...]]
+    )
+    announcers: Mapping[str, tuple[SettingKey, ...]] = field(
+        default_factory=dict[str, tuple[SettingKey, ...]]
+    )
+    runtimes: Mapping[str, tuple[SettingKey, ...]] = field(
+        default_factory=dict[str, tuple[SettingKey, ...]]
+    )
+
+
+type _Location = tuple[str | int, ...]
+
+
+def _remote_engines(spec: Spec, remote: RemoteSettings) -> Iterator[_Location]:
+    """Where each engine setting declared remote is: in each source, and in ``files``."""
+    engines: list[tuple[_Location, str]] = [
+        (("sources", name), source.engine) for name, source in spec.sources.items()
+    ]
+    if spec.files is not None:
+        engines.append((("files",), FILES))
+    for at, engine in engines:
+        for key in remote.engines.get(engine, ()):
+            yield (*at, *key)
+
+
+def _remote(spec: Spec, remote: RemoteSettings) -> Iterator[_Location]:
+    """Where, in the dumped spec, each setting an installed adapter declared remote is."""
+    yield from _remote_engines(spec, remote)
+    adapters: list[tuple[_Location, AdapterSettings, Mapping[str, tuple[SettingKey, ...]]]] = [
+        *((("store", i), store, remote.stores) for i, store in enumerate(spec.store)),
+        *((("announce", i), each, remote.announcers) for i, each in enumerate(spec.announce)),
+    ]
+    if spec.promote is not None:
+        adapters += [
+            (("promote", "to", i), to, remote.stores) for i, to in enumerate(spec.promote.to)
+        ]
+    if spec.fetch is not None:
+        adapters.append((("fetch", "from"), spec.fetch.source, remote.stores))
+    if spec.replicate is not None:
+        adapters.append((("replicate", "using"), spec.replicate.using, remote.replicators))
+    if spec.runtime is not None:
+        adapters.append((("runtime",), spec.runtime, remote.runtimes))
+    for at, adapter, declared in adapters:
+        for name in adapter:
+            for key in declared.get(name, ()):
+                yield (*at, name, *key)
+
+
+def _leave_out(value: JsonValue, location: _Location) -> None:
+    """Remove what is at ``location`` inside ``value``, if it is there."""
+    step, *rest = location
+    if isinstance(value, dict) and isinstance(step, str):
+        if rest:
+            _leave_out(value.get(step), tuple(rest))
+        else:
+            value.pop(step, None)
+    elif isinstance(value, list) and isinstance(step, int):
+        _leave_out(value[step], tuple(rest))
+
+
+def _sections(
+    spec: Spec, kind: JobKind, side: Side, remote: RemoteSettings | None = None
+) -> list[JsonValue]:
+    """The job's spec sections; with ``remote``, without settings naming paths elsewhere."""
     dumped = spec.model_dump(mode="json", by_alias=True, exclude_none=True)
     # Of package, only accounts' password references name secrets or files: a
     # plain-text password or a user name that looks like a path must never become
@@ -351,6 +432,14 @@ def _sections(spec: Spec, kind: JobKind, side: Side) -> list[JsonValue]:
         for account in spec.package.accounts
         if not isinstance(account.password, str)
     ]
+    if remote is not None:
+        # Of files, only the connection names paths here: the find tests, the
+        # excluded directories and the referenced paths are relative to the
+        # tree, and the cleanup commands run in the cleanup image.
+        if spec.files is not None:
+            dumped["files"] = {"connection": spec.files.connection}
+        for location in _remote(spec, remote):
+            _leave_out(dumped, location)
     return [dumped[name] for name in _SECTIONS[kind, side] if name in dumped]
 
 
@@ -377,13 +466,22 @@ def secret_names(spec: Spec, kind: JobKind, side: Side) -> tuple[str, ...]:
 
 
 def host_paths(
-    spec: Spec, kind: JobKind, side: Side, extra: Iterable[Path] = ()
+    spec: Spec,
+    kind: JobKind,
+    side: Side,
+    extra: Iterable[Path] = (),
+    remote: RemoteSettings | None = None,
 ) -> tuple[str, ...]:
-    """Absolute paths a job's spec sections name, with none inside another."""
+    """Absolute paths a job's spec sections name, with none inside another.
+
+    Settings the installed adapters declare remote (``remote``) and the
+    ``files`` settings other than its connection name paths that are not on
+    the job's machine, so they are left out.
+    """
     found = {str(path) for path in extra}
     found |= {
         value.rstrip("/")
-        for section in _sections(spec, kind, side)
+        for section in _sections(spec, kind, side, remote or RemoteSettings())
         for value in _walk(section)
         if isinstance(value, str) and _HOST_PATH.fullmatch(value) and value != "/"
     }
@@ -553,6 +651,8 @@ class PipelineOptions:
     """The Docker daemon's socket native steps use, written into the configuration."""
     agent: Agent = Agent.DOCKER
     cloud: str | None = None
+    remote: RemoteSettings = field(default_factory=RemoteSettings)
+    """The settings the installed adapters declare remote, which never become mounts."""
 
 
 def _docker(options: PipelineOptions) -> tuple[str | None, str | None]:
@@ -607,7 +707,9 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     jobs = tuple(
         replace(
             _JOBS[kind](context),
-            mounts=host_paths(spec, kind, side, extra if kind is JobKind.BUILD else ()),
+            mounts=host_paths(
+                spec, kind, side, extra if kind is JobKind.BUILD else (), options.remote
+            ),
             environment=tuple(
                 sorted(
                     {*secret_names(spec, kind, side), *_implicit(spec, kind), *options.environment}

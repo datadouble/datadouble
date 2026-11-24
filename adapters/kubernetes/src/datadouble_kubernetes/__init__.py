@@ -50,7 +50,7 @@ from datadouble.images import ImageSummary
 from datadouble.programs import Completed, locate, run_program, start_program
 from datadouble.replicate import ClaimState, Copy, CopyKind, Made, ReplicateError, Replicator
 from datadouble.secrets import SecretError, resolve_secret
-from datadouble.settings import parse_settings
+from datadouble.settings import parse_settings, remote
 from datadouble.spec import EnvSecret, FileSecret, SecretRef
 
 if TYPE_CHECKING:
@@ -539,8 +539,13 @@ class SecretAnnouncer:
         return tuple(removed)
 
 
+@remote("nfs.path")
 def pv_replicator(settings: Mapping[str, JsonValue]) -> Replicator:
-    """The ``k8s-pv`` entry point."""
+    """The ``k8s-pv`` entry point.
+
+    ``nfs.path`` is the export's path on the NFS server, which the volumes point
+    at; Datadouble writes copies through ``path``, so only ``path`` is mounted.
+    """
     return PvReplicator(parse_settings(PvSettings, settings, "k8s-pv replicate"))
 
 

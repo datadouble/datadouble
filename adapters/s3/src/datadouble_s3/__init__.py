@@ -24,7 +24,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from datadouble.settings import parse_settings
+from datadouble.settings import parse_settings, remote
 from datadouble.storage import Store, StoreError, check_key
 
 if TYPE_CHECKING:
@@ -134,8 +134,12 @@ class S3Store:
         return sorted(keys)
 
 
+@remote("prefix")
 def s3_store(settings: Mapping[str, JsonValue]) -> Store:
-    """The entry point named in ``datadouble.stores``."""
+    """The entry point named in ``datadouble.stores``.
+
+    ``prefix`` is a key prefix in the bucket, never a path on the job's machine.
+    """
     parsed = parse_settings(S3Settings, settings, "s3 store")
     # boto3-stubs overloads client() for every AWS service; only S3's stubs are installed.
     client: S3Client = boto3.client(  # pyright: ignore[reportUnknownMemberType] - see above

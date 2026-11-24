@@ -28,7 +28,7 @@ from urllib.parse import quote
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from datadouble.announce import Announced, AnnounceError, Announcer
-from datadouble.settings import parse_settings
+from datadouble.settings import parse_settings, remote
 
 _TIMEOUT_SECONDS = 30
 
@@ -121,6 +121,10 @@ class VaultAnnouncer:
         return tuple(removed)
 
 
+@remote("mount", "path")
 def vault_announcer(settings: Mapping[str, JsonValue]) -> Announcer:
-    """The entry point named in ``datadouble.announcers``."""
+    """The entry point named in ``datadouble.announcers``.
+
+    ``mount`` and ``path`` are inside Vault, not on the job's machine.
+    """
     return VaultAnnouncer(parse_settings(VaultSettings, settings, "vault announce"), os.environ)

@@ -23,6 +23,13 @@ Docker volume or container, a Kubernetes PersistentVolume), and `announce`
 where consumers learn about it. Only `dotenv`, `k8s-secret` and `vault`
 receive a copy's credentials.
 
+A `k8s-pv` copy on NFS takes two paths. `path` is where the job writes
+copies: the export, mounted on the job's machine, and on a Kubernetes agent
+under the runtime's `mount`. `nfs.path` is the same directory on the NFS
+server, which the volumes point at. `ci init` mounts `path` into the job and
+never `nfs.path`, so `nfs.path` need not exist on the runner or the claim.
+Likewise `vault`'s `mount` and `path` are inside Vault and never mounted.
+
 `k8s-pv` and `k8s-secret` reach the cluster the job runs in by its service
 account and need nothing more. For jobs, leave `k8s-secret`'s `namespace`
 out: its Secrets then go to the namespace the job's pod runs in, so one spec

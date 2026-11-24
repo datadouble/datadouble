@@ -21,8 +21,11 @@ Inspect first (rule 3), then ask in one round for what is missing:
   Docker or are Kubernetes pods (`--agent kubernetes`): then each side's
   runner is its own namespace (never shared, ideally a separate cluster) and
   `--cloud` the plugin's cloud; jobs that start engines need the spec's
-  `kubernetes` runtime on the claim `datadouble`, every path under its
-  `mount`, and RBAC for engine pods. Leave the runtime's `namespace` out, so
+  `kubernetes` runtime on the claim `datadouble`, every path the jobs mount
+  under its `mount`, and RBAC for engine pods. Settings that name places off
+  the job's machine are never mounted, so they need not be under it:
+  `k8s-pv`'s `nfs.path`, an `s3` `prefix`, `vault`'s `mount` and `path`
+  (the CI/CD design doc lists them). Leave the runtime's `namespace` out, so
   one spec serves both sides: engine pods start in the namespace of the
   job's own pod. A namespace that is set must be the side's `--runner`.
 - The build's work directory in production scratch space.

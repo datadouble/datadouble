@@ -819,6 +819,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         docker_socket=request.docker_socket,
         agent=agent,
         cloud=request.cloud,
+        remote=registry.remote_settings(),
         spec_text=request.spec.read_text(encoding="utf-8"),
         lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
     )

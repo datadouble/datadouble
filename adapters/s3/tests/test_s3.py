@@ -14,7 +14,7 @@ from botocore.stub import Stubber
 from mypy_boto3_s3 import S3Client
 
 from datadouble.registry import installed
-from datadouble.settings import SettingsError
+from datadouble.settings import SettingsError, remote_keys
 from datadouble.storage import StoreError
 from datadouble_s3 import S3Settings, S3Store, s3_store
 
@@ -38,6 +38,9 @@ def test_settings() -> None:
     with pytest.raises(SettingsError, match="s3 store settings are invalid: bucket"):
         s3_store({"bucket": "x"})
     assert "s3" in installed().stores
+    # The prefix is a key in the bucket, so `ci init` never mounts it.
+    assert installed().remote_settings().stores["s3"] == (("prefix",),)
+    assert remote_keys(s3_store) == (("prefix",),)
 
 
 def test_errors_name_the_code_not_the_request(tmp_path: Path) -> None:

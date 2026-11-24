@@ -39,9 +39,11 @@ otherwise). The namespace must be production's alone, never shared with the
 non-production side. `build` needs the spec's `runtime: kubernetes` on the
 claim `datadouble`, with no `namespace` (engine pods then start in the job's
 own namespace, so the same spec serves the non-production side) or this one,
-and every path the spec names
+and every path on the job's machine the spec names
 (stores, the work directory) under the runtime's `mount`, since the job's pod
 mounts that claim there as the engine pods do; `ci init` refuses otherwise.
+Settings that name places elsewhere are never mounted and need not be under
+it: an `s3` store's `prefix`, a Redis source's `patterns`.
 Change the spec with `datadouble-spec` first if it uses Docker. Without
 `--agent`, Jenkins jobs use agents with Docker.
 

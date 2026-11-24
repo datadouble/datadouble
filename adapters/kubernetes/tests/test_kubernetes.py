@@ -16,13 +16,13 @@ import pytest
 
 import datadouble_kubernetes as kubernetes_module
 from datadouble.announce import Announced, AnnounceError
-from datadouble.ci import JobKind, PipelineOptions, masking, pipeline
+from datadouble.ci import JobKind, PipelineOptions, Side, masking, pipeline
 from datadouble.images import ImageIdentity, ImageSummary, Verification
 from datadouble.names import EngineName, Generation, GroupName, SpecName
 from datadouble.registry import installed
 from datadouble.replicate import ClaimState, Copy, CopyKind, CopyState, ReplicateError
 from datadouble.secrets import SecretError
-from datadouble.settings import SettingsError
+from datadouble.settings import SettingsError, remote_keys
 from datadouble.spec import EnvSecret, FileSecret, ReplicateMode, Strict, parse_spec
 from datadouble_kubernetes import (
     Kubectl,
@@ -208,6 +208,37 @@ def test_nfs_volumes_and_failures(tmp_path: Path, cluster: Path) -> None:
         replicator.claim_state(record("def"))
     with pytest.raises(SettingsError, match="exactly one of `local` or `nfs`"):
         pv_replicator({"path": "/x"})
+
+
+def test_nfs_path_is_not_mounted() -> None:
+    # nfs.path is on the NFS server; the job writes copies through path.
+    assert remote_keys(pv_replicator) == (("nfs", "path"),)
+    spec = parse_spec(
+        """
+name: shop
+sources:
+  app:
+    engine: postgres
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/clones
+      nfs:
+        server: nfs.example.com
+        path: /exports/clones
+"""
+    )
+    options = PipelineOptions(
+        kinds=(JobKind.PRUNE,),
+        spec_path="datadouble/shop.yml",
+        image="datadouble:test",
+        version="1.2.3",
+        owner="999:999",
+        side=Side.NON_PRODUCTION,
+        remote=installed().remote_settings(),
+    )
+    (job,) = pipeline(spec, options).jobs
+    assert job.mounts == ("/srv/clones",)
 
 
 def test_secrets(cluster: Path) -> None:

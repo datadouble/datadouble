@@ -1206,7 +1206,7 @@ The first four are the Tier 1 systems, one per pull request. The nightly hosted 
 
 ### 100. How `ci init` writes jobs {#decision-100}
 
-*(Refined by [decision 123](#decision-123). Amended by [decisions 126](#decision-126) and [127](#decision-127).)*
+*(Refined by [decisions 123](#decision-123) and [140](#decision-140). Amended by [decisions 126](#decision-126) and [127](#decision-127).)*
 
 **Decided:** `ci init` (`ci.init`) writes one side of the boundary per call.
 
@@ -1653,7 +1653,7 @@ Amends [decisions 73](#decision-73) and [100](#decision-100).
 
 ### 127. Jenkins jobs on Kubernetes agents {#decision-127}
 
-*(Amended by [decision 133](#decision-133).)*
+*(Amended by [decision 133](#decision-133). Refined by [decision 140](#decision-140).)*
 
 **Decided:** `ci init --agent kubernetes` runs a system's jobs as Kubernetes pods, instead of `docker run` on an agent with Docker. Docker stays the default.
 
@@ -2034,6 +2034,31 @@ A trigger that reproduces a server message word for word keeps its names. That r
 - The engines' own tools exit with small statuses, so a program's own failure is not mistaken for the runtime's.
 
 Amends [decision 54](#decision-54).
+
+### 140. Adapters declare their remote settings {#decision-140}
+
+**Decided:** An adapter declares the settings that name paths not on the machine running the job. `ci init` never mounts them.
+
+**Declaring.** The adapter wraps its entry point in `datadouble.settings.remote`, giving each setting as a dotted key inside its settings, such as `@remote("nfs.path")`. An engine's keys are inside the source, such as `connection.patterns`. A key covers its whole value, list or mapping included. The wrapped entry point still builds the adapter as before.
+
+**Using it.** `ci init` asks every installed adapter for its declared settings. Where an adapter is named in the spec (a source's engine, `files`, each store, `replicate.using`, each announcer, `runtime`), its declared settings are left out before the job's sections are searched for absolute paths. Secrets are still found in them.
+
+**The declared settings:**
+
+- `k8s-pv`: `nfs.path`, the export's path on the NFS server.
+- `s3`: `prefix`, a key prefix in the bucket.
+- `vault`: `mount` and `path`, inside Vault.
+- `redis`: `connection.patterns`, key patterns on the source.
+
+**The `files` section.** The core searches only its `connection`. The `select` tests, `exclude` names and `paths_from` paths are relative to the tree, and the `cleanup` commands run in the cleanup image.
+
+**Why:** `ci init` mounts every absolute path a job's sections name, since only the adapter knows what its settings mean. A path on another machine then became a mount. On a Docker agent the job refused to start, or mounted an unrelated directory. On a Kubernetes agent `ci init` refused the spec, because the path was not on the work claim.
+
+- Only the adapter knows which of its settings are elsewhere. A declaration on its entry point lets an adapter from outside this repository say so too, without the core knowing its name.
+- Declaring the few remote settings keeps every existing local path mounted. Declaring the local ones instead would have every adapter list them, and a forgotten one would break a job at run time.
+- Settings that are URLs (`s3://`, `https://`) never looked like paths, so they need no declaration.
+
+Refines [decisions 100](#decision-100) and [127](#decision-127).
 
 ## Open
 

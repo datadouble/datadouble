@@ -10,10 +10,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 import pytest
+from pydantic import JsonValue
 from test_operations import make_spec
 from test_run import SPEC, dataset
 
 from datadouble import __version__, api, cli
+from datadouble.announce import dotenv_announcer
 from datadouble.api import ErrorCode
 from datadouble.boundary import BoundaryError, require_inside
 from datadouble.ci import (
@@ -40,8 +42,10 @@ from datadouble.ci import (
 )
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.registry import Registry
+from datadouble.replicate import filesystem_replicator
 from datadouble.runtime import identity
 from datadouble.secrets import resolve_secret
+from datadouble.settings import remote, remote_keys
 from datadouble.spec import EnvSecret, Spec, parse_spec
 from datadouble.storage import filesystem_store
 from fake_engine import FakeEngine, FakeRuntime, check_protocols
@@ -327,6 +331,163 @@ files:
         "WAREHOUSE_PASSWORD",
     )
     assert secret_names(spec, JobKind.FETCH, Side.NON_PRODUCTION) == ()
+
+
+REMOTE_SPEC = """
+name: shop
+sources:
+  app:
+    engine: fake
+    connection:
+      host: /var/run/shop
+      patterns: [/sessions/main]
+files:
+  connection:
+    root: /srv/uploads
+  cleanup: [/opt/strip-exif]
+store:
+  - filesystem:
+      path: /srv/store
+  - s3:
+      bucket: shop-builds
+      prefix: /images
+promote:
+  to:
+    - s3:
+        bucket: shop-export
+        prefix: /exports
+fetch:
+  from:
+    s3:
+      bucket: shop-export
+      prefix: /exports
+  staging: /srv/staging
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/clones
+      nfs:
+        server: nfs.example.com
+        path: /exports/clones
+announce:
+  - vault:
+      address: https://vault.example.com
+      mount: /secret
+      path: /datadouble
+  - dotenv:
+      path: /srv/clone.env
+runtime:
+  fake:
+    work: /srv/work
+    server:
+      data: /var/lib/engine
+"""
+
+
+def fake_runtime(_settings: Mapping[str, JsonValue]) -> FakeRuntime:
+    return FakeRuntime()
+
+
+def remote_registry() -> Registry:
+    """Adapters that declare their remote settings, as the real ones do."""
+    engine = FakeEngine(catalog=shop(), source=dataset())
+    return Registry(
+        engines={"fake": remote("connection.patterns")(lambda: engine)},
+        stores={"filesystem": filesystem_store, "s3": remote("prefix")(filesystem_store)},
+        replicators={
+            "filesystem": filesystem_replicator,
+            "k8s-pv": remote("nfs.path")(filesystem_replicator),
+        },
+        announcers={"dotenv": dotenv_announcer, "vault": remote("mount", "path")(dotenv_announcer)},
+        runtimes={"fake": remote("server.data")(fake_runtime)},
+    )
+
+
+def test_remote_settings_are_never_mounted() -> None:
+    spec = parse_spec(REMOTE_SPEC)
+    registry = remote_registry()
+    assert remote_keys(registry.replicators["k8s-pv"]) == (("nfs", "path"),)
+    assert remote_keys(filesystem_store) == ()
+    declared = registry.remote_settings()
+    assert declared.stores == {"filesystem": (), "s3": (("prefix",),)}
+    assert declared.announcers["vault"] == (("mount",), ("path",))
+    # A declared entry point still builds its adapter.
+    assert isinstance(registry.engine("fake"), FakeEngine)
+    build = (
+        "/srv/store",
+        "/srv/uploads",
+        "/srv/work",
+        "/var/run/shop",
+    )
+    assert host_paths(spec, JobKind.BUILD, Side.PRODUCTION, [Path("/srv/work")], declared) == build
+    assert host_paths(spec, JobKind.PROMOTE, Side.PRODUCTION, (), declared) == ("/srv/store",)
+    on_this_machine = ("/srv/clone.env", "/srv/clones", "/srv/staging", "/srv/work")
+    assert host_paths(spec, JobKind.PROVISION, Side.NON_PRODUCTION, (), declared) == (
+        on_this_machine
+    )
+    # Undeclared, the same settings look like paths here; the files settings
+    # other than its connection never do.
+    assert host_paths(spec, JobKind.PROVISION, Side.NON_PRODUCTION) == (
+        "/datadouble",
+        "/exports",
+        "/secret",
+        "/srv/clone.env",
+        "/srv/clones",
+        "/srv/staging",
+        "/srv/work",
+        "/var/lib/engine",
+    )
+    assert "/opt/strip-exif" not in host_paths(spec, JobKind.BUILD, Side.PRODUCTION)
+    # Leaving settings out of the mounts never hides a secret.
+    assert secret_names(spec, JobKind.PROVISION, Side.NON_PRODUCTION) == ()
+
+
+def test_remote_settings_the_adapter_would_refuse_are_left_alone() -> None:
+    declared = remote_registry().remote_settings()
+    for nfs in ("", "\n      nfs: nfs.example.com", "\n      nfs:\n        - /exports/clones"):
+        spec = parse_spec(
+            f"""
+name: shop
+sources:
+  app:
+    engine: fake
+replicate:
+  using:
+    k8s-pv:
+      path: /srv/clones{nfs}
+"""
+        )
+        found = host_paths(spec, JobKind.PROVISION, Side.NON_PRODUCTION, (), declared)
+        assert "/srv/clones" in found
+
+
+def test_ci_init_leaves_out_remote_settings(
+    tmp_path: Path, ci: FakeCi, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = replace(remote_registry(), ci={"fake-ci": lambda: ci})
+    monkeypatch.setattr(api, "installed", lambda: registry)
+    spec = make_spec(tmp_path).model_copy(update={"replicate": parse_spec(REMOTE_SPEC).replicate})
+    path = write_spec(tmp_path, spec)
+    code, out = run(
+        "ci", "init", "--system", "fake-ci", "--job", "fetch,provision,release,prune",
+        "--spec", str(path), "--runner", "shop-staging", "--output", str(tmp_path / "repo"),
+    )  # fmt: skip
+    assert code == ExitCode.SUCCESS, out
+    (planned,) = ci.pipelines
+    assert planned.agent is Agent.DOCKER
+    for job in planned.jobs:
+        assert "/exports/clones" not in job.mounts
+    provision = next(job for job in planned.jobs if job.kind is JobKind.PROVISION)
+    assert provision.mounts == tuple(
+        sorted(
+            (
+                str(tmp_path / "clone.env"),
+                str(tmp_path / "export"),
+                str(tmp_path / "staging"),
+                "/srv/clones",
+            )
+        )
+    )
 
 
 def test_build_jobs_get_account_passwords() -> None:

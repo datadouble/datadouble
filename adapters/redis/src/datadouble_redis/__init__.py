@@ -31,7 +31,7 @@ from datadouble.engine import ServerPlan, SourceSession, Tooling, WorkingDatabas
 from datadouble.names import EngineName
 from datadouble.planner import Capabilities
 from datadouble.secrets import resolve_secret
-from datadouble.settings import NoSettings, parse_settings
+from datadouble.settings import NoSettings, parse_settings, remote
 from datadouble.spec import ImageFormat, SecretRef
 from datadouble_redis.driver import Client, Error, failure
 from datadouble_redis.keys import Pattern
@@ -133,6 +133,11 @@ class RedisEngine:
         )
 
 
+@remote("connection.patterns")
 def engine() -> RedisEngine:
-    """The entry point named in ``datadouble.engines``."""
+    """The entry point named in ``datadouble.engines``.
+
+    ``connection.patterns`` are key patterns on the source, never paths, even
+    when one starts with ``/``.
+    """
     return RedisEngine()
