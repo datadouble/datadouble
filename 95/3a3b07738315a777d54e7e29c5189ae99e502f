@@ -1,0 +1,67 @@
+CHANGELOG.md
+  s_ad63f2bf16b775::t_f9b166e7bd84e7 548-559
+adapters/kubernetes/README.md
+  s_ad63f2bf16b775::t_2ebf7249178ba3 29-51
+adapters/kubernetes/src/datadouble_kubernetes/__init__.py
+  s_ad63f2bf16b775::t_92c5bb4f6667ff 53,542,544-548
+adapters/kubernetes/tests/test_kubernetes.py
+  s_ad63f2bf16b775::t_ad64fe4c5f7428 19,25,213-243
+adapters/redis/README.md
+  s_ad63f2bf16b775::t_5cddd45303788e 42-43
+adapters/redis/src/datadouble_redis/__init__.py
+  s_ad63f2bf16b775::t_503037937b908f 34,136,138-142
+adapters/redis/tests/test_redis_units.py
+  s_ad63f2bf16b775::t_db58109d5a7017 19,217-218
+adapters/s3/README.md
+  s_ad63f2bf16b775::t_ee8f7b8ce9ce10 18-21
+adapters/s3/src/datadouble_s3/__init__.py
+  s_ad63f2bf16b775::t_b59c535a119369 27,137,139-142
+adapters/s3/tests/test_s3.py
+  s_ad63f2bf16b775::t_47099a4ec3d36b 17,41-43
+adapters/vault/README.md
+  s_ad63f2bf16b775::t_5852d96ce5e1f6 16-19
+adapters/vault/src/datadouble_vault/__init__.py
+  s_ad63f2bf16b775::t_6ad8b0c21b41da 31,124,126-129
+adapters/vault/tests/test_vault.py
+  s_ad63f2bf16b775::t_6cad1dfd4fa1c8 22,146-148
+ci/jenkins/tests/test_jenkins.py
+  s_ad63f2bf16b775::t_905fcc8f52f2ae 27,452-515
+core/src/datadouble/api.py
+  s_ad63f2bf16b775::t_fe79b0c054ea71 822
+core/src/datadouble/ci.py
+  s_ad63f2bf16b775::t_86a24d5e672e4d 22,31-32,345-425,435-442,469-473,475-480,484,654-655,710-712
+core/src/datadouble/registry.py
+  s_ad63f2bf16b775::t_b7d0148a2a30ca 20,24,90-99
+core/src/datadouble/settings.py
+  s_ad63f2bf16b775::t_ef5317c0094e1a 9-14,18-19,45-81
+core/tests/test_ci.py
+  s_ad63f2bf16b775::t_f9e47a280f865f 13,18,45,48,336-492
+docs/architecture.md
+  s_ad63f2bf16b775::t_8eb78861e1f4fa 1010-1025
+docs/ci-cd.md
+  s_ad63f2bf16b775::t_0a3d8ee5ad043e 652-654,699-734,1000-1002,1046-1049
+docs/decisions.md
+  s_ad63f2bf16b775::t_b48b767df51577 1209,1656,2038-2062
+skills/datadouble-build/SKILL.md
+  s_ad63f2bf16b775::t_908056787a8dce 42,45-46
+skills/datadouble-pipeline/SKILL.md
+  s_ad63f2bf16b775::t_ac4aead4134b6c 24-28
+skills/datadouble-provision/SKILL.md
+  s_ad63f2bf16b775::t_0c33c6628ceb1a 26-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "953a3b07738315a777d54e7e29c5189ae99e502f",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
