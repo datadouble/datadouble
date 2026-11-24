@@ -89,7 +89,8 @@ when the subset model was built. That record comes from one of two places:
   `column.csv`).
 - **Native specs** get a `catalog.lock`. `datadouble lock` writes it, and you
   commit it next to the spec. It lists tables, columns, primary keys and
-  foreign keys, with a fingerprint. The Jailer converter writes one too.
+  foreign keys, with a fingerprint. `datadouble import-jailer` writes one too
+  (see [Jailer](jailer.md#design)).
 
 At plan time, Datadouble takes the live catalog, removes the excludes, and
 compares the result against the lock.
@@ -167,7 +168,7 @@ it breaks.
 
 Most changes to a known column break nothing, because planning reads the live
 catalog. If `customers.email` widens from `varchar(100)` to `varchar(255)`, it
-is copied as it now is.
+is copied as a `varchar(255)`.
 
 A change does break the column's anonymization rule when the rule no longer
 fits it. For example:
@@ -262,9 +263,8 @@ Each adapter's README says which of its edges are exact.
 #### After an object change
 
 - **Re-lock** with `datadouble lock` once you have reviewed the change.
-- **Older locks have no objects.** Locks written before objects were listed
-  have none, so every object of a PostgreSQL, MySQL, SQL Server or Oracle
-  source warns as new until you re-lock.
+- **A lock that lists no objects** makes every object of a PostgreSQL,
+  MySQL, SQL Server or Oracle source warn as new. Re-lock to record them.
 - **The extract checks again.** The catalog is read again inside the
   extract's snapshot and must match the plan's. So an object changed between
   planning and extracting stops the extract, as a changed table does. Plan

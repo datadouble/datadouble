@@ -6,9 +6,9 @@ which references to follow. What it doesn't do is run that subset on a
 schedule, anonymize it and package it. Datadouble does.
 
 So Datadouble supports Jailer models **natively**. A team can design a subset
-in Jailer, then have Datadouble run it over and over as the data changes. A
-converter to Datadouble's own format also exists. It fails if the schema
-doesn't match.
+in Jailer, then have Datadouble run it over and over as the data changes.
+A command, `import-jailer`, also converts a Jailer model to Datadouble's own
+format. Either way, a Jailer model that doesn't match the schema fails.
 
 This page covers:
 
@@ -71,13 +71,29 @@ Jailer .jm + datamodel ┘
 
 There are two ways in:
 
-- **Read it on every run.** `datadouble run --subset jailer:model.jm …` reads
-  the Jailer files each time. Jailer stays the design tool. Edits committed to
-  the `.jm` take effect on the next run, with no regeneration step.
-- **Convert it once.** `datadouble subset import-jailer model.jm --datamodel
-  dir/` writes a native spec plus a `catalog.lock`. It also writes a JSON
-  report of anything it mapped approximately or dropped. It fails if the data
-  model does not match the live schema.
+- **Read it on every run.** Name the model in the spec, under
+  `subset.jailer`, with the extraction model and the data model folder it was
+  designed against. Datadouble then reads the Jailer files on every run.
+  Jailer stays the design tool. Edits committed to the `.jm` take effect on
+  the next run, with no regeneration step. A spec with `subset.jailer` cannot
+  also set `seeds`, `follow`, `edges`, `virtual_fks` or `unselected`.
+
+    ```yaml
+    subset:
+      jailer:
+        model: jailer/shop.jm
+        datamodel: jailer/datamodel/shop
+    ```
+
+- **Convert it once.** `datadouble import-jailer --spec prod.yml --model
+  model.jm --datamodel dir/ --output subset.yml` writes the native `subset`
+  and `exclude` settings, as YAML, to the `--output` file, for you to copy
+  into the spec. It also writes a `catalog.lock`, and its response reports
+  anything it mapped approximately or dropped.
+
+Either way, the data model is checked against the live catalog. A table or
+column the Jailer model has and the catalog doesn't, or a primary key that
+differs, fails.
 
 ## Mapping {#mapping}
 

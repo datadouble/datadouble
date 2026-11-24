@@ -74,7 +74,7 @@ a whole pipeline:
 | Skill | Sets up | Main commands it drives |
 |---|---|---|
 | `datadouble-pipeline` | A complete pipeline, end to end, by running the skills below in order | All of them |
-| `datadouble-spec` | The spec: sources, subset (native or from a Jailer model), excludes, anonymization, hooks, verification checks, and re-locking through the `lock` job with its changes reviewed for personal data | `plan --estimate`, Jailer conversion, `lock` |
+| `datadouble-spec` | The spec: sources, subset (native or from a Jailer model), excludes, anonymization, hooks, verification checks, and re-locking through the `lock` job with its changes reviewed for personal data | `plan`, `import-jailer`, `lock` |
 | `datadouble-files` | A spec's `files` section, which copies file trees alongside a database, with each `find` expression explained and tried on a sample first | `plan` |
 | `datadouble-build` | The `build` job on a production runner, with its scratch work directory and storage, and the manual `lock` job | `ci init --job build,lock` |
 | `datadouble-promote` | The export store and the `promote` job, with its verification and strict-mode requirements | `ci init --job promote` |
@@ -139,10 +139,11 @@ A skill must not:
 
 - Generated configuration refers to secrets by name. The skill tells the user
   which secrets to create, and where.
-- A skill does not connect to production systems. When planning needs the
-  live catalog, the skill either uses a catalog export the user supplies, or
-  generates the `build` job with `plan --estimate` as its first step, so
-  planning runs on the production runner.
+- A skill does not connect to production systems. Planning reads the source,
+  so it runs only on a machine the operator marked inside the production
+  boundary. Elsewhere, the skill generates the `build` job and lets its first
+  run plan on the production runner. The person can then share the plan's
+  output, which names tables and columns but never values.
 
 ### Skills check version compatibility
 

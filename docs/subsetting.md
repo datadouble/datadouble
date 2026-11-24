@@ -159,8 +159,9 @@ Everything so far follows foreign keys the database declares. Many
 application schemas declare few or none: the application knows that
 `orders.customer_id` points at `customers`, but the database was never told.
 So **virtual foreign keys** are a primary input, not an edge case. They
-describe relationships the schema doesn't declare, including polymorphic ones
-and arbitrary join expressions.
+describe relationships the schema doesn't declare, including polymorphic
+ones. Each is written `child.column -> parent`, pointing at the parent's
+primary key, or `child.column -> parent.column` to point at another column.
 
 Suppose the shop also has an `events` table. Its `subject_id` column points
 at an order when `subject_type` is `'Order'`, and at other tables otherwise.
@@ -175,9 +176,7 @@ subset:
 ```
 
 Once declared, a virtual foreign key works like a declared one. You can follow
-it down (`orders -> events`), give it a policy under `edges`, and so on. A
-helper can propose candidates from naming conventions (columns named `*_id`)
-for a human to confirm.
+it down (`orders -> events`), give it a policy under `edges`, and so on.
 
 ### The whole spec
 
@@ -344,9 +343,10 @@ it from the source. There are two strategies.
 
 ### A. Nested subqueries pushed to the source
 
-The planner generates SQL like the hand-written filters at the top of this
-page. For `order_items`, that is a query nested inside a query for `orders`,
-nested inside one for `customers`.
+The planner generates one query per table, like the hand-written filters at
+the top of this page. Each table's query has the selections it depends on
+built into it. For `order_items`, that means the selection of `orders`, which
+in turn holds the selection of `customers`.
 
 This strategy needs one pass and no extra state. It is fast when the paths
 through the graph are short and indexed.
@@ -358,18 +358,18 @@ one level deeper.
 
 ### B. Collect keys first, then fetch rows
 
-1. Read only primary and foreign key columns. These are narrow index scans.
-2. Compute the closure of rows to include on Datadouble's side, in an
-   embedded database or as compressed in-memory ID sets. Repeat until nothing
-   new is added. This handles cycles.
-3. Fetch the full rows by key, in chunks.
+1. Read only the key columns that references use: primary and foreign keys.
+   These are narrow reads.
+2. Work out the closure of rows to include on Datadouble's side, holding the
+   keys in memory. Repeat until nothing new is added. This handles cycles.
+3. Fetch each table's full rows by the keys chosen for it.
 
 Strategy B has three advantages:
 
 - it scales to terabyte sources;
 - it never needs temporary tables on the source, which read replicas usually
   forbid;
-- it lets the planner estimate size before any heavy reads.
+- it knows exactly which rows it will fetch before any heavy reads.
 
 So B is the engine, and A is a shortcut the planner may choose when the graph
 is shallow. Both must produce identical row sets.
@@ -380,7 +380,12 @@ is shallow. Both must produce identical row sets.
 (B). The `--strategy` option does the same on the command line.
 
 `auto` picks A when the tables' selections depend on each other without a
-cycle, and B otherwise. What counts as a cycle needs care (decision 51):
+cycle, and B otherwise. It also picks B when the adapter cannot run A (as for
+the non-relational engines [below](#non-relational-sources)), and when a
+reference joins two sources, since no one query can read two servers.
+Asking for `nested` where it cannot run fails the plan.
+
+What counts as a cycle needs care (decision 51):
 
 - **A followed child edge does not by itself make a cycle.** Take
   `customers -> orders`. Orders reached through it already have their
@@ -395,15 +400,22 @@ cycle, and B otherwise. What counts as a cycle needs care (decision 51):
 Before running a subset for real, you can ask what it would do:
 
 ```
-datadouble plan --spec prod.yml --estimate
+datadouble plan --spec prod.yml
 ```
 
-This prints each table's derived query, its estimated row count, and the
-edges that inflate the subset most, such as "following `reviews.customer_id`
-adds 4.1M customers". There are two estimates:
+`plan` reads only the catalog and checks the spec against it and
+the lock. It takes the same `--strategy` and `--strict` overrides as `run`.
+By default it prints a summary: how many tables are extracted and excluded,
+the strategy chosen, the anchor time, each image group's table count, and any
+warnings. With the global `--json` option (`datadouble --json plan …`), it
+prints the whole plan, which is also what the
+plan stage records in its manifest. That includes:
 
-- the cheap one uses the engine's query planner;
-- the precise one runs step 1 of strategy B.
+- each table's rule and every edge, with the policy that applies to it;
+- what each seed key and exclude pattern matched;
+- the tables `unselected` handled;
+- the strict-mode report;
+- references between sources (`between_sources`).
 
 ## One consistent snapshot
 
@@ -419,7 +431,6 @@ transaction and calls `pg_export_snapshot()`.
   transaction.
 - `pg_dump --schema-only --snapshot=` writes the schema from the same point
   in time.
-- Parallel workers can attach with `SET TRANSACTION SNAPSHOT`.
 - The catalog is read again inside the snapshot, and the extract fails if it
   changed since planning.
 
@@ -457,8 +468,16 @@ connection.
   schema separately, and the catalog fingerprint is checked again inside the
   snapshot.
 
-**SQL Server and Oracle.** Snapshot isolation and flashback (SCN-based) reads
-respectively. The details are to be designed per adapter.
+**SQL Server.** A transaction under `SNAPSHOT` isolation, which the source
+database must allow (`ALLOW_SNAPSHOT_ISOLATION ON`). Its first read fixes the
+snapshot. Key reads, the schema script and every table's rows are read in it.
+A table whose definition changes while the snapshot is open fails the read,
+and the catalog is checked against the plan's fingerprint.
+
+**Oracle.** A `READ ONLY` transaction on a connection of its own. Key reads,
+the catalog check against the plan's fingerprint, and every table's rows all
+see the same data. The schema is scripted with `DBMS_METADATA` just before the
+snapshot opens, since that cannot run in a read-only transaction.
 
 **MongoDB.** A snapshot session (read concern `snapshot`, pinned to one
 cluster time), which needs a replica set or sharded cluster. Collection and
@@ -475,8 +494,8 @@ document the consistency they can offer.
 
 Long snapshots are not free. On a primary, they hold back cleanup. On a
 replica, they conflict with replication. The manifest records how long the
-snapshot was held, and the docs recommend extracting from a replica configured
-for it.
+snapshot was held (`snapshot_seconds`). Extract from a replica configured
+for long reads where you can.
 
 ## Subset planning and package planning
 
