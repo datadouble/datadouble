@@ -82,7 +82,18 @@ now, here? If not, move it or set it up.
   variety.
 - Spell out what an abbreviation means the first time a page uses it.
 
-## 5. Accuracy
+## 5. Describe what exists now
+
+Documentation says how Datadouble works today. It does not tell the story of
+how it got here.
+
+- Don't describe removed options, old defaults, renamed settings or earlier
+  behaviour. No "previously", "used to", "no longer", "was renamed", "the old
+  default". A reader who never saw the old behaviour gains nothing from it.
+- History belongs in the changelog and the decision log. A decision may say
+  which earlier decision it amends; that is the log's job.
+
+## 6. Accuracy
 
 Readability never costs correctness. When rewriting:
 
