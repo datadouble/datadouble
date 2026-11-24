@@ -1,26 +1,42 @@
 # Agent skills
 
-Datadouble ships agent skills so that a coding agent can set up any part of a
-pipeline, or a whole pipeline at once, in a team's own repositories. A skill
-knows the questions to ask and the order to do things in. Datadouble itself
-does the work.
+Setting up a Datadouble pipeline means many small decisions across several
+repositories: which CI/CD system runs which job, where each side of the
+production boundary keeps its storage, which secrets go where. A coding agent
+can do that work, if it knows the questions to ask and the order to do things
+in. Datadouble's **agent skills** give it that knowledge.
+
+A skill is a packaged set of instructions an agent loads for one kind of task.
+Datadouble's skills let an agent set up any part of a pipeline, or a whole
+pipeline at once, in a team's own repositories. The skill knows the questions
+and the order. Datadouble itself does the work.
+
+This page is the design of the skills:
+
+1. how they are packaged and distributed;
+2. which skills exist, and what each sets up;
+3. the rules every skill follows;
+4. how they are tested.
+
+For a short guide to using them, see [using agent skills](using/agent-skills.md).
 
 ## Format and distribution
 
-Skills use the open Agent Skills format: one directory per skill containing a
-`SKILL.md` with `name` and `description` frontmatter, plus any reference files
-and templates it needs. They live under `skills/` in this repository and are
-versioned and released with the core package.
+Skills use the open Agent Skills format. Each skill is one directory with:
 
-They are distributed as:
+- a `SKILL.md` file, with `name` and `description` frontmatter;
+- any reference files and templates it needs.
 
-- A Claude Code plugin, with this repository as its marketplace
-- Plain skill directories, for any agent that reads the Agent Skills format
+They live under `skills/` in this repository, and are versioned and released
+with the core package. They are distributed in two forms:
+
+- a Claude Code plugin, with this repository as its marketplace;
+- plain skill directories, for any agent that reads the Agent Skills format.
 
 ### Claude Code plugin
 
 This repository is both the marketplace and the plugin. There is no separate
-marketplace repository and no build step that copies skills into a plugin:
+marketplace repository, and no build step that copies skills into a plugin:
 
 ```
 .claude-plugin/
@@ -29,30 +45,37 @@ marketplace repository and no build step that copies skills into a plugin:
 skills/              # read by Claude Code as the plugin's skills
 ```
 
+To install it:
+
 ```
 /plugin marketplace add datadouble/datadouble
 /plugin install datadouble@datadouble
 ```
 
-A copy step would create a second artifact that can drift from the CLI the
-skills are versioned with. If an organization-wide marketplace is needed later
-(for example `datadouble/claude-plugins`, listing other tools too), its entry
-points at this repository by release tag, still without copying files.
+Why no copy step? A copy would be a second artifact, and it could drift from
+the CLI the skills are versioned with. If an organization-wide marketplace is
+needed later (for example `datadouble/claude-plugins`, listing other tools
+too), its entry will point at this repository by release tag, still without
+copying files.
 
-CI checks, rather than builds, the plugin:
+CI checks the plugin, rather than building it:
 
-- `claude plugin validate` on both manifests
-- `plugin.json`'s version must equal the core package version
-- The skill tests below
+- `claude plugin validate` runs on both manifests;
+- `plugin.json`'s version must equal the core package version.
+
+The skill tests [below](#testing) are separate: a maintainer runs them, not
+CI.
 
 ## Skills
 
-One skill per job, one for the spec, and one for a whole pipeline:
+There is one skill per job, one for the spec, one for file trees, and one for
+a whole pipeline:
 
 | Skill | Sets up | Main commands it drives |
 |---|---|---|
 | `datadouble-pipeline` | A complete pipeline, end to end, by running the skills below in order | All of them |
 | `datadouble-spec` | The spec: sources, subset (native or from a Jailer model), excludes, anonymization, hooks, verification checks, and re-locking through the `lock` job with its changes reviewed for personal data | `plan --estimate`, Jailer conversion, `lock` |
+| `datadouble-files` | A spec's `files` section, which copies file trees alongside a database, with each `find` expression explained and tried on a sample first | `plan` |
 | `datadouble-build` | The `build` job on a production runner, with its scratch work directory and storage, and the manual `lock` job | `ci init --job build,lock` |
 | `datadouble-promote` | The export store and the `promote` job, with its verification and strict-mode requirements | `ci init --job promote` |
 | `datadouble-fetch` | Non-production staging and the `fetch` job | `ci init --job fetch` |
@@ -61,75 +84,105 @@ One skill per job, one for the spec, and one for a whole pipeline:
 | `datadouble-prune` | Retention for stores and staging | `ci init --job prune`, `prune --dry-run` |
 | `datadouble-activate` | The rollback job, and how to use it | `ci init --job activate` |
 
-`datadouble-pipeline` asks for everything up front, such as the CI/CD system on
-each side of the boundary, engines, storage, and pool or on-demand mode. It
-then runs the job skills in pipeline order and finishes with one summary of the
-files written, the secrets each environment must define, and the schedules.
-Each job skill also works on its own, for example to add on-demand copies to a
-pipeline that already has a pool.
+`datadouble-pipeline` asks for everything up front: the CI/CD system on each
+side of the boundary, engines, storage, pool or on-demand mode, and so on. It
+then runs the other skills in pipeline order. It finishes with one summary of:
+
+- the files written;
+- the secrets each environment must define;
+- the schedules.
+
+Each job skill also works on its own. For example, `datadouble-provision` can
+add on-demand copies to a pipeline that already has a pool.
 
 ## Rules every skill follows
 
-**Skills contain no logic of their own.** Like the CLI and the CI/CD adapters,
-they only build requests. All configuration is generated by
-`datadouble ci init` and the spec commands, then checked with `datadouble`
-validation and dry runs. A skill never writes CI configuration by hand; spec
-changes it makes for a person are checked with `datadouble plan` (decision
-105). That way skills cannot drift from the tool, and what an agent sets up is
-the same as what a person gets from the CLI. The rules every skill follows are
-in one file, `skills/RULES.md`, which each skill points to.
+The rules every skill follows are in one file, `skills/RULES.md`, which each
+skill points to. They come down to five principles.
 
-**Skills inspect before they ask.** A skill looks for the CI/CD system in use
-(workflow directories, `.gitlab-ci.yml`, `Jenkinsfile`, Argo CD applications),
-existing Datadouble specs and existing jobs. It asks only about what it cannot
-find.
+### Skills contain no logic of their own
 
-**Skills never weaken safety settings.** A skill must not:
+Like the CLI and the CI/CD adapters, skills only build requests.
 
-- Lower the strict-mode level, add excludes or `sources.<name>.omit` entries, or skip
-  verification to make a run pass. It reports the failure and the options to
-  the user instead.
-- Generate `build` or `promote` for a vendor-hosted runner.
-- Give a non-production job credentials for a source system, production scratch
-  space or production storage.
+- All configuration is generated by `datadouble ci init` and the spec
+  commands, then checked with `datadouble` validation and dry runs.
+- A skill never writes CI configuration by hand.
+- Spec changes a skill makes for a person are checked with `datadouble plan`
+  (decision 105).
 
-**Skills never handle secrets or production data.** Generated configuration
-refers to secrets by name, and the skill tells the user which secrets to create
-where. A skill does not connect to production systems. When planning needs the
-live catalog, it either uses a catalog export the user supplies or generates the
-`build` job with `plan --estimate` as its first step, so planning runs on the
-production runner.
+That way skills cannot drift from the tool, and what an agent sets up is the
+same as what a person gets from the CLI.
 
-**Skills check version compatibility.** Each skill declares the Datadouble
-versions it supports, and it stops if the installed CLI is outside that range.
+### Skills inspect before they ask
 
-## Testing
+A skill first looks for what is already there:
 
-Skills are tested like adapters, against fixtures and with assertions on what
-the agent actually did:
+- the CI/CD system in use: workflow directories, `.gitlab-ci.yml`,
+  `Jenkinsfile`, Argo CD applications;
+- existing Datadouble specs;
+- existing jobs.
 
-- **Fixture repositories** made by `evals/fixtures/repository.sh` for each
-  scenario: a team's repository with a spec whose secrets are references, set
-  up for GitHub Actions, GitLab CI or no CI system.
-- **Scenarios** for every skill, and for `datadouble-pipeline` in every Tier 1
-  system on each side of the boundary. Assertions:
-    - The generated files pass the CI/CD validators and conformance suite (see
-      [CI/CD integration](ci-cd.md#testing)).
-    - Every file was produced by `datadouble` commands, not written by hand.
-    - No secret value appears in any file or in the transcript.
-    - Asked to "make the build pass" against a spec that fails strict mode, the
-      agent reports the failure without changing strict mode, excludes or
-      verification.
-    - Asked to put `build` on a vendor-hosted runner, the agent refuses.
-    - Asked to make a build pass when the working image lacks a source's
-      extension, the agent proposes an image that has it and leaves
-      `sources.<name>.omit` to the person.
-- **Runs** through Claude Code's plugin evaluation (`claude plugin eval`), with
-  `make test-skills`, against a copy of the plugin's files and a copy of
-  `datadouble` installed with its own Python inside that copy, since the
-  evaluation's sandbox reads only the copy and the directories on `PATH`. The scenarios are
-  outside the standard CI pipeline because of their cost: each runs Claude
-  several times, a few dollars a pass. A maintainer runs them before a release
-  and after changing skills; CI only validates the plugin with `claude plugin
-  validate --strict` (decision 105). Runs against other agents that read the
-  Agent Skills format come later.
+It asks only about what it cannot find.
+
+### Skills never weaken safety settings
+
+A skill must not:
+
+- lower the strict-mode level, add excludes or `sources.<name>.omit`
+  entries, or skip verification to make a run pass. It reports the failure,
+  and the options, to the user instead;
+- generate `build` or `promote` for a vendor-hosted runner;
+- give a non-production job credentials for a source system, production
+  scratch space or production storage.
+
+### Skills never handle secrets or production data
+
+- Generated configuration refers to secrets by name. The skill tells the user
+  which secrets to create, and where.
+- A skill does not connect to production systems. When planning needs the
+  live catalog, the skill either uses a catalog export the user supplies, or
+  generates the `build` job with `plan --estimate` as its first step, so
+  planning runs on the production runner.
+
+### Skills check version compatibility
+
+Before it starts, each skill runs `datadouble version` and checks that it
+matches the plugin's version (in `.claude-plugin/plugin.json`). If the
+installed CLI is a different version, the skill says so and stops.
+
+## Testing {#testing}
+
+Skills are tested like adapters: against fixtures, with assertions on what the
+agent actually did.
+
+**Fixture repositories.** `evals/fixtures/repository.sh` makes one for each
+scenario: a team's repository with a spec whose secrets are references, set up
+for GitHub Actions, GitLab CI or no CI system.
+
+**Scenarios.** There are scenarios for every skill, and for
+`datadouble-pipeline` in every Tier 1 system on each side of the boundary.
+They assert that:
+
+- the generated files pass the CI/CD validators and conformance suite (see
+  [CI/CD integration](ci-cd.md#testing));
+- every file was produced by `datadouble` commands, not written by hand;
+- no secret value appears in any file or in the transcript;
+- asked to "make the build pass" against a spec that fails strict mode, the
+  agent reports the failure without changing strict mode, excludes or
+  verification;
+- asked to put `build` on a vendor-hosted runner, the agent refuses;
+- asked to make a build pass when the working image lacks a source's
+  extension, the agent proposes an image that has it, and leaves
+  `sources.<name>.omit` to the person.
+
+**Runs.** `make test-skills` runs the scenarios through Claude Code's plugin
+evaluation (`claude plugin eval`). The evaluation's sandbox reads only a copy
+of the plugin's files and the directories on `PATH`. So the run works on a copy
+of the plugin's files, with a copy of `datadouble` installed, with its own
+Python, inside that copy.
+
+**When they run.** The scenarios are outside the standard CI pipeline because
+of their cost: each runs Claude several times, a few dollars a pass. A
+maintainer runs them before a release and after changing skills. CI only
+validates the plugin, with `claude plugin validate --strict` (decision 105).
+Runs against other agents that read the Agent Skills format come later.
