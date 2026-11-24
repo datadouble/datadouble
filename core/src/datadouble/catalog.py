@@ -107,12 +107,15 @@ class Requirement(_Model):
 
 
 class ObjectKind(StrEnum):
-    """The engine-neutral kinds of object besides tables."""
+    """The engine-neutral kinds of object besides tables.
+
+    A ``package`` is a package of routines, such as Oracle's: its
+    specification and body together.
+    """
 
     FUNCTION = "function"
     PROCEDURE = "procedure"
     PACKAGE = "package"
-    """A package of routines, such as Oracle's; its specification and body together."""
     VIEW = "view"
     MATERIALIZED_VIEW = "materialized-view"
     TRIGGER = "trigger"

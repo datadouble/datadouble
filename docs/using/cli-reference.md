@@ -2,19 +2,24 @@
 
 # CLI reference
 
-Every `datadouble` command and option. Each command builds a JSON request;
-`--dry-run` prints it instead of running it, and `datadouble api` reads one
-from standard input, so everything here is also available as JSON.
+This page lists every `datadouble` command and its options, in the order the
+command line defines them. The global options come first, since they work
+with every command.
+
+The command line is a thin layer over Datadouble's JSON interface. Each
+command builds a JSON request and sends it. `--dry-run` prints that request
+instead of running it, and `datadouble api` reads a request from standard
+input. So anything on this page can also be done in JSON.
 
 ## Global options
 
 | Argument | Description |
 |---|---|
-| `--json` | print the JSON response instead of a summary |
-| `--dry-run` | print the JSON request without running it |
-| `--ci` `SYSTEM` | report to this CI/CD system and mask secrets in its logs |
-| `--ci-job` `JOB` | the generated job this runs for, which notifies as the spec's `notify` says (one of build, promote, fetch, provision, release, prune, activate, lock) |
-| `--ci-directory` `DIR` | where the CI/CD adapter writes outputs for the native step to pick up |
+| `--json` | Print the JSON response instead of a summary. |
+| `--dry-run` | Print the JSON request instead of running it. |
+| `--ci` `SYSTEM` | The CI/CD system to report to, such as github-actions. Datadouble masks secrets in its logs. |
+| `--ci-job` `JOB` | The generated job this command runs for. It sends notifications as the spec's `notify` section says (one of build, promote, fetch, provision, release, prune, activate, lock). |
+| `--ci-directory` `DIR` | The directory where the CI/CD adapter writes outputs, for the native step to pick up. |
 
 ## `datadouble version`
 
@@ -22,17 +27,17 @@ Show the installed version.
 
 ## `datadouble schema`
 
-Print the spec JSON Schema.
+Print the JSON Schema that specs are checked against.
 
 ## `datadouble lock`
 
-Write the catalog lock for a spec, listing what changed.
+Write the catalog lock for a spec, and list what changed since the last one.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--output` `OUTPUT` | a directory for the new lock (catalog.lock) and its changes (changes.txt), leaving the current lock as it is |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--output` `OUTPUT` | A directory to write the new lock (catalog.lock) and its changes (changes.txt) to, leaving the current lock as it is. |
 
 ## `datadouble import-jailer`
 
@@ -40,23 +45,23 @@ Translate a Jailer subset into native spec settings, and lock the catalog.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--model` `MODEL` | the Jailer extraction model (.jm) (required) |
-| `--datamodel` `DATAMODEL` | the Jailer data model folder (required) |
-| `--output` `OUTPUT` | where to write the native subset settings (YAML) (required) |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--model` `MODEL` | The Jailer extraction model, a .jm file (required). |
+| `--datamodel` `DATAMODEL` | The Jailer data model folder (required). |
+| `--output` `OUTPUT` | The file to write the native subset settings to, as YAML (required). |
 
 ## `datadouble plan`
 
-Plan a build without extracting.
+Plan a build without extracting anything.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--strict` `KIND=LEVEL` | override strict mode for one kind, such as data=tables or functions=fail (repeatable) |
-| `--strategy` `STRATEGY` | override the subset strategy (one of auto, nested, keys) |
-| `--format` `FORMATS` | an image format to produce (repeatable); overrides package.formats (one of physical, logical) |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--strict` `KIND=LEVEL` | Override strict mode's level for one kind, such as data=tables or functions=fail (repeatable). |
+| `--strategy` `STRATEGY` | Override the spec's subset strategy (one of auto, nested, keys). |
+| `--format` `FORMATS` | An image format to produce, in place of the spec's package.formats (repeatable) (one of physical, logical). |
 
 ## `datadouble run`
 
@@ -64,15 +69,15 @@ Run build stages, or resume a generation.
 
 | Argument | Description |
 |---|---|
-| `STAGES` | comma-separated stages: plan,extract,load,transform,package,verify,store (required) |
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--lock` `LOCK` | the catalog lock (default: catalog.lock beside the spec) |
-| `--strict` `KIND=LEVEL` | override strict mode for one kind, such as data=tables or functions=fail (repeatable) |
-| `--strategy` `STRATEGY` | override the subset strategy (one of auto, nested, keys) |
-| `--format` `FORMATS` | an image format to produce (repeatable); overrides package.formats (one of physical, logical) |
-| `--work` `WORK` | the work directory (default: .datadouble) |
-| `--resume` `GENERATION` | resume this generation |
-| `--retry-key` `KEY` | the CI system's ID for this run; a retry resumes the generation it started |
+| `STAGES` | The stages to run, comma-separated: plan,extract,load,transform,package,verify,store (required). |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--strict` `KIND=LEVEL` | Override strict mode's level for one kind, such as data=tables or functions=fail (repeatable). |
+| `--strategy` `STRATEGY` | Override the spec's subset strategy (one of auto, nested, keys). |
+| `--format` `FORMATS` | An image format to produce, in place of the spec's package.formats (repeatable) (one of physical, logical). |
+| `--work` `WORK` | The work directory (default: .datadouble). |
+| `--resume` `GENERATION` | Resume this generation. |
+| `--retry-key` `KEY` | The CI system's ID for this run. A retry of the run resumes the generation it started. |
 
 ## `datadouble promote`
 
@@ -80,9 +85,9 @@ Copy verified, signed images to the export stores.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
-| `--generation` `GENERATION` | the generation to promote (default: newest) |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
+| `--generation` `GENERATION` | The generation to promote (default: the newest). |
 
 ## `datadouble fetch`
 
@@ -90,18 +95,18 @@ Bring new promoted images into staging.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 
 ## `datadouble activate`
 
-Point the staging channel at a staged generation.
+Point the staging channel at a staged generation, such as an older one to roll back.
 
 | Argument | Description |
 |---|---|
-| `GENERATION` | the generation to activate (required) |
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
+| `GENERATION` | The staged generation to point the channel at (required). |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 
 ## `datadouble replicate`
 
@@ -109,34 +114,34 @@ Fill the pool, or make on-demand copies, and announce them.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
-| `--owner` `OWNER` | who on-demand copies are for |
-| `--all-at-once` | replace stale pool copies before refilling |
-| `--no-announce` | make copies only |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
+| `--owner` `OWNER` | Who on-demand copies are for. |
+| `--all-at-once` | Replace stale pool copies before refilling the pool. |
+| `--no-announce` | Make copies without announcing them. |
 
 ## `datadouble claim`
 
-Take an unclaimed pool copy.
+Take an unclaimed copy from the pool.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
-| `--owner` `OWNER` | who is taking the copy (required) |
-| `--no-announce` | claim only |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
+| `--owner` `OWNER` | Who is taking the copy (required). |
+| `--no-announce` | Claim the copy without announcing it. |
 
 ## `datadouble release`
 
-Destroy copies by ID, owner or expiry.
+Destroy copies, chosen by ID, owner or expiry.
 
 | Argument | Description |
 |---|---|
-| `COPY_ID` | copies to release |
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
-| `--owner` `OWNER` | release every copy this owner has |
-| `--expired` | release expired copies |
+| `COPY_ID` | The IDs of copies to release. |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
+| `--owner` `OWNER` | Release every copy this owner has. |
+| `--expired` | Release every copy past its expiry time. |
 
 ## `datadouble announce`
 
@@ -144,9 +149,9 @@ Announce existing copies again.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
-| `--owner` `OWNER` | announce this owner's copies (default: the pool) |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
+| `--owner` `OWNER` | Announce this owner's copies (default: the pool's copies). |
 
 ## `datadouble copies`
 
@@ -154,22 +159,22 @@ List copies.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--group` `GROUPS` | an image group to work on (repeatable); every group by default |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--group` `GROUPS` | An image group to work on (repeatable; default: every group). |
 
 ## `datadouble prune`
 
-Apply retention.
+Remove old images, as the spec's prune settings say.
 
 | Argument | Description |
 |---|---|
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--target` `TARGET` | the build's stores, the export stores, or staging (one of store, export, staging) (required) |
-| `--dry-run` | report what would be removed, and the space recovered |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--target` `TARGET` | Where to prune: the build's stores, the export stores, or staging (one of store, export, staging) (required). |
+| `--dry-run` | Report what would be removed, and the space it would recover, without removing it. |
 
 ## `datadouble ci`
 
-CI/CD configuration.
+Work with CI/CD configuration.
 
 ## `datadouble ci init`
 
@@ -177,20 +182,20 @@ Write CI/CD configuration for a spec's jobs.
 
 | Argument | Description |
 |---|---|
-| `--system` `SYSTEM` | the CI/CD system, such as github-actions (required) |
-| `--job` `JOBS` | jobs, comma-separated or repeated, on one side of the boundary: build,promote,fetch,provision,release,prune,activate,lock (required) |
-| `--spec` `SPEC` | the spec file (YAML or JSON) (required) |
-| `--runner` `RUNNER` | the runner jobs run on; required for build, promote and lock |
-| `--work` `WORK` | the build's work directory in production scratch space |
-| `--side` `SIDE` | the side prune alone runs on (one of production, non-production) |
-| `--output` `OUTPUT` | the repository root to write into (default: .) |
-| `--image` `IMAGE` | the Datadouble image jobs run (default: this version's) |
-| `--agent` `AGENT` | where jobs run Datadouble: a runner with Docker, or a Kubernetes pod (default: the system's own) (one of docker, kubernetes) |
-| `--cloud` `CLOUD` | the Kubernetes cloud Kubernetes agents start in (default: the system's) |
-| `--env` `NAME` | another environment variable every job passes on (repeatable) |
-| `--docker` `COMMAND` | the Docker command steps run the image with (default: the runner's DATADOUBLE_DOCKER, or docker) |
-| `--docker-socket` `PATH` | the Docker daemon's socket on the runner, an absolute path (default: the runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock) |
+| `--system` `SYSTEM` | The CI/CD system, such as github-actions (required). |
+| `--job` `JOBS` | The jobs to write, comma-separated or repeated, all on one side of the boundary: build,promote,fetch,provision,release,prune,activate,lock (required). |
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+| `--runner` `RUNNER` | The runner the jobs run on. Build, promote and lock need it. |
+| `--work` `WORK` | The build's work directory, in production scratch space. |
+| `--side` `SIDE` | The side of the boundary prune runs on, when prune is the only job (one of production, non-production). |
+| `--output` `OUTPUT` | The repository root to write into (default: .). |
+| `--image` `IMAGE` | The Datadouble image the jobs run (default: this version's). |
+| `--agent` `AGENT` | Where jobs run Datadouble: on a runner with Docker, or in a Kubernetes pod (default: the system's own) (one of docker, kubernetes). |
+| `--cloud` `CLOUD` | The Kubernetes cloud that Kubernetes agents start in (default: the system's). |
+| `--env` `NAME` | Another environment variable that every job passes on (repeatable). |
+| `--docker` `COMMAND` | The Docker command that steps run the image with (default: the runner's DATADOUBLE_DOCKER, or docker). |
+| `--docker-socket` `PATH` | The Docker daemon's socket on the runner, as an absolute path (default: the runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock). |
 
 ## `datadouble api`
 
-Read a JSON request from standard input.
+Read a JSON request from standard input, and run it.

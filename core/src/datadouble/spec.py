@@ -53,25 +53,30 @@ class _Model(BaseModel):
 
 
 class StrictLevel(StrEnum):
-    """How strict mode treats tables and columns that differ from the catalog lock."""
+    """How strict mode treats tables and columns that differ from the catalog lock.
+
+    - ``off``: warn about new tables, new columns and changed columns.
+    - ``tables``: fail on new tables, and warn about new and changed columns.
+    - ``columns``: fail on new tables, new columns and changed columns. This
+      is the default.
+    """
 
     OFF = "off"
-    """Warn about new tables and columns and changed columns."""
     TABLES = "tables"
-    """Fail on new tables; warn about new and changed columns."""
     COLUMNS = "columns"
-    """Fail on new tables, new columns and changed columns."""
 
 
 class ObjectLevel(StrEnum):
-    """How strict mode treats one kind of object that differs from the catalog lock."""
+    """How strict mode treats one kind of object that differs from the catalog lock.
+
+    - ``off``: compare nothing, unless a difference breaks something.
+    - ``warn``: name each new, changed or removed object. This is the default.
+    - ``fail``: fail the plan on any difference.
+    """
 
     OFF = "off"
-    """Compare nothing, unless a difference breaks something."""
     WARN = "warn"
-    """Name each new, changed or removed object."""
     FAIL = "fail"
-    """Fail the plan on any difference."""
 
 
 class StrictKind(StrEnum):
@@ -102,26 +107,37 @@ def _yaml_off(value: object) -> object:
 
 
 class Strict(_Model):
-    """Strict mode's level for each kind of thing in the catalog; kinds left out take defaults.
+    """Strict mode's level for each kind of thing in the catalog.
 
-    Whatever the levels, a difference that breaks something fails the plan,
-    and a removed table or column always fails.
+    Strict mode compares the source's catalog with the catalog lock, and warns
+    or fails on what differs. Each kind of thing has its own level. Kinds left
+    out take their defaults.
+
+    Two differences fail the plan whatever the levels: one that breaks
+    something, and a removed table or column.
     """
 
     data: StrictLevel = StrictLevel.COLUMNS
-    """Tables, columns and requirements: ``off``, ``tables`` or ``columns``."""
+    """Strict mode's level for tables, columns and requirements: ``off``,
+    ``tables`` or ``columns``. Defaults to ``columns``."""
     functions: ObjectLevel = ObjectLevel.WARN
-    """Functions and procedures: ``off``, ``warn`` or ``fail``."""
+    """Strict mode's level for functions and procedures: ``off``, ``warn`` or
+    ``fail``. Defaults to ``warn``."""
     views: ObjectLevel = ObjectLevel.WARN
-    """Views and materialized views."""
+    """Strict mode's level for views and materialized views: ``off``, ``warn``
+    or ``fail``. Defaults to ``warn``."""
     triggers: ObjectLevel = ObjectLevel.WARN
-    """Triggers."""
+    """Strict mode's level for triggers: ``off``, ``warn`` or ``fail``.
+    Defaults to ``warn``."""
     types: ObjectLevel = ObjectLevel.WARN
-    """User-defined types and domains."""
+    """Strict mode's level for user-defined types and domains: ``off``,
+    ``warn`` or ``fail``. Defaults to ``warn``."""
     sequences: ObjectLevel = ObjectLevel.WARN
-    """Sequences."""
+    """Strict mode's level for sequences: ``off``, ``warn`` or ``fail``.
+    Defaults to ``warn``."""
     events: ObjectLevel = ObjectLevel.WARN
-    """Scheduled events, such as MySQL's."""
+    """Strict mode's level for scheduled events, such as MySQL's: ``off``,
+    ``warn`` or ``fail``. Defaults to ``warn``."""
 
     @field_validator("*", mode="before")
     @classmethod
@@ -194,47 +210,62 @@ def _strict_mapping(value: object) -> object:
 
 
 class Strategy(StrEnum):
-    """How the subset is computed (see the subsetting design)."""
+    """How the planner computes the subset. The subsetting design explains both strategies.
+
+    - ``auto``: nested queries when the selection graph has no cycle, and keys
+      otherwise. This is the default.
+    - ``nested``: strategy A. One nested query per table, pushed down to the
+      source.
+    - ``keys``: strategy B. Collect keys, compute the closure of rows to copy,
+      then fetch the rows by key.
+    """
 
     AUTO = "auto"
-    """Nested queries when the selection graph is acyclic, otherwise keys."""
     NESTED = "nested"
-    """Strategy A: one nested query per table, pushed to the source."""
     KEYS = "keys"
-    """Strategy B: collect keys, compute the closure, then fetch rows by key."""
 
 
 class Unselected(StrEnum):
-    """What happens to a kept table that no seed or followed reference selects."""
+    """What happens to a kept table that no seed or followed reference selects.
+
+    - ``fail``: fail the plan, naming each such table. This is the default.
+    - ``none``: copy none of the table's rows, and warn.
+    - ``all``: copy every row of the table.
+    """
 
     FAIL = "fail"
-    """Fail the plan, naming each such table (the default)."""
     NONE = "none"
-    """Copy none of its rows, and warn."""
     ALL = "all"
-    """Copy every row."""
 
 
 class ImageFormat(StrEnum):
-    """The forms a golden image can take."""
+    """The forms a golden image can take.
+
+    - ``physical``: the engine's own on-disk form. It is the fastest to clone
+      and start, but it is tied to the server version.
+    - ``logical``: a portable export, which restores into other server
+      versions.
+    """
 
     PHYSICAL = "physical"
     LOGICAL = "logical"
 
 
 class OnMissing(StrEnum):
-    """What to do with a reference whose parent row is not followed."""
+    """What to do with a reference whose parent row is not followed.
+
+    - ``null``: set the referencing columns to null.
+    - ``stub``: insert a placeholder parent row.
+    - ``drop``: leave the referencing row out.
+    """
 
     NULL = "null"
-    """Set the referencing columns to null."""
     STUB = "stub"
-    """Insert a placeholder parent row."""
     DROP = "drop"
-    """Leave the referencing row out."""
 
 
 class FakerKind(StrEnum):
-    """The kinds of value the faker strategy generates."""
+    """The kinds of fake value the ``faker`` strategy generates."""
 
     FIRST_NAME = "first_name"
     LAST_NAME = "last_name"
@@ -256,54 +287,83 @@ class FakerKind(StrEnum):
 
 
 class EnvSecret(_Model):
-    """A secret read from an environment variable."""
+    """A secret read from an environment variable, written ``{env: NAME}``."""
 
     env: str = Field(min_length=1)
+    """The environment variable that holds the secret. Must not be empty."""
 
 
 class FileSecret(_Model):
-    """A secret read from a file, such as a mounted Kubernetes Secret."""
+    """A secret read from a file, such as a mounted Kubernetes Secret, written ``{file: PATH}``."""
 
     file: Path
+    """The path of the file that holds the secret."""
 
 
-type SecretRef = EnvSecret | FileSecret
+type SecretRef = Annotated[
+    EnvSecret | FileSecret,
+    Field(
+        description=(
+            "A reference to a secret, so that the spec never holds the secret itself. "
+            "`{env: NAME}` reads it from an environment variable, and `{file: PATH}` "
+            "reads it from a file."
+        )
+    ),
+]
 
 
 class Source(_Model):
-    """One server to extract from.
+    """One server to copy from.
 
-    ``connection`` is checked by the engine adapter, which knows its fields.
+    Datadouble checks the fields below. The engine adapter checks the settings
+    inside ``connection`` and ``server``, since only it knows their fields. Its
+    README lists them.
     """
 
     engine: EngineName
-    """The engine adapter; every source of a spec has the same one."""
+    """The engine adapter that reads this source, such as ``postgres``. Every
+    source of a spec must use the same one."""
     connection: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
-    """Where the server is and what to read, checked by the engine adapter."""
+    """Where the server is and what to read. The engine adapter checks these
+    settings."""
     image: str | None = None
-    """The vendor image working databases and engine tools run in; by default
-    the engine adapter picks the official image of the newest source's version.
-    Every source gives the same image, or none does."""
+    """The vendor image that working databases and engine tools run in. By
+    default, the engine adapter picks the official image for the newest
+    source's version. Either every source gives the same image, or none does."""
     server: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
-    """Settings for the engine's working servers, checked by the engine adapter.
-    Every source gives the same settings, since one working server holds them all."""
+    """Settings for the engine's working servers, such as PostgreSQL's
+    ``shared_preload_libraries``. The engine adapter checks them. Every source
+    must give the same settings, because one working server holds every source."""
     omit: tuple[str, ...] = ()
-    """Requirements (extensions, plugins, modules) this source uses that copies
-    leave out, by name. Anything that uses one must be excluded too, or the
-    build fails."""
+    """Requirements this source uses that copies leave out, by name.
+    Requirements are extensions, plugins and modules. Anything that uses an
+    omitted requirement must be excluded too, or the build fails."""
 
 
 class Follow(_Model):
-    """Child edges to follow, as ``parent -> child`` or ``parent -> child.column``."""
+    """Which references to follow down, from parent rows to their child rows.
+
+    Parents of copied rows are always copied. Children are copied only along
+    the edges listed here.
+    """
 
     down: tuple[str, ...] = ()
+    """Child edges to follow, each written ``parent -> child``. Write
+    ``parent -> child.column`` to name the referencing column."""
 
 
 class EdgePolicy(_Model):
-    """What to do with one reference: follow it to all parents, or a fallback."""
+    """What to do with one reference, keyed ``child.column -> parent`` in ``subset.edges``.
+
+    Give exactly one of ``follow: all`` or ``on_missing``.
+    """
 
     follow: Literal["all"] | None = None
+    """``all`` copies every row of the parent table, not only the referenced
+    ones. Give this or ``on_missing``, not both."""
     on_missing: OnMissing | None = None
+    """What to do when the referenced parent row is not followed: ``null``,
+    ``stub`` or ``drop``. Give this or ``follow: all``, not both."""
 
     @field_validator("on_missing", mode="before")
     @classmethod
@@ -321,35 +381,67 @@ class EdgePolicy(_Model):
 
 
 class VirtualForeignKey(_Model):
-    """A reference the schema does not declare, optionally only for some rows."""
+    """A reference the schema does not declare.
+
+    In ``subset.virtual_fks``, each is keyed ``child.column -> parent``.
+    Subsetting follows it like a declared foreign key, for every row or only
+    for the rows ``when`` selects.
+    """
 
     when: str | None = None
+    """A condition on the child row, in the source's own query language. The
+    reference holds only for rows that match it, such as
+    ``subject_type = 'Post'`` for a polymorphic reference. Without it, the
+    reference holds for every row."""
 
 
 class JailerSubset(_Model):
-    """A subset designed in Jailer, read on every run (see :mod:`datadouble.jailer`)."""
+    """A subset designed in Jailer's GUI, which Datadouble reads again on every run.
+
+    The Jailer compatibility page explains what Datadouble takes from it.
+    """
 
     model: Path
-    """The extraction model, a ``.jm`` file."""
+    """The Jailer extraction model, a ``.jm`` file."""
     datamodel: Path
-    """The data model folder it was designed against."""
+    """The Jailer data model folder that the model was designed against."""
 
 
 class Subset(_Model):
-    """Starting filters and the policy for deriving everything else."""
+    """Which rows to copy.
+
+    You give starting conditions, called seeds, and say which references to
+    follow. The planner derives every other table's rows from them. Instead,
+    ``jailer`` can name a subset designed in Jailer.
+    """
 
     as_of: AwareDatetime | None = None
+    """The anchor time that conditions refer to as ``:as_of``, with a time
+    zone. The plan resolves it once, so every query uses the same time.
+    Defaults to the time the plan runs."""
     strategy: Strategy = Strategy.AUTO
+    """How the planner computes the subset: ``auto``, ``nested`` or ``keys``.
+    Defaults to ``auto``. The ``--strategy`` option overrides it."""
     seeds: dict[str, str] = Field(default_factory=dict[str, str])
-    """Starting conditions; keys are table names or globs, such as `"*": "TRUE"`."""
+    """Starting conditions, in the source's own query language, by table. Keys
+    are table names or globs, such as ``"*": "TRUE"``. A table's own name wins
+    over a glob."""
     follow: Follow = Follow()
+    """Which references to follow down from parent rows to child rows, listed
+    under ``down``. Parents of copied rows are always copied."""
     edges: dict[str, EdgePolicy] = Field(default_factory=dict[str, EdgePolicy])
+    """What to do with particular references, keyed ``child.column -> parent``:
+    copy every parent row with ``follow: all``, or fall back with
+    ``on_missing``."""
     virtual_fks: dict[str, VirtualForeignKey] = Field(default_factory=dict[str, VirtualForeignKey])
+    """References the schema does not declare, keyed ``child.column -> parent``.
+    Subsetting follows them like declared foreign keys."""
     unselected: Unselected | None = None
-    """Kept tables that no seed or followed reference selects: `fail` (the
-    default), `none` or `all`."""
+    """What happens to a kept table that no seed or followed reference selects:
+    ``fail``, ``none`` or ``all``. Defaults to ``fail``."""
     jailer: JailerSubset | None = None
-    """A Jailer subset instead of seeds, follow, edges, virtual_fks and unselected."""
+    """A subset designed in Jailer. It replaces ``seeds``, ``follow``,
+    ``edges``, ``virtual_fks`` and ``unselected``, so a spec cannot give both."""
 
     @model_validator(mode="after")
     def _one_source(self) -> "Subset":
@@ -370,78 +462,117 @@ class Subset(_Model):
 
 
 class FakerRule(_Model):
-    """Replace with a deterministic fake value."""
+    """Replace each value with a deterministic fake value, such as ``{faker: email}``.
+
+    The same input gets the same fake value in every table, so joins on the
+    column still match.
+    """
 
     faker: FakerKind
+    """The kind of fake value to generate, such as ``name`` or ``email``."""
     unique: bool = False
+    """Whether every fake value in the column must be different. The generator
+    retries until it finds an unused value, or fails the run. Defaults to
+    false."""
 
 
 class HashOptions(_Model):
-    """Options for the hash strategy."""
+    """Options for the ``hash`` strategy."""
 
     length: int = Field(default=16, ge=8, le=64)
+    """How many hexadecimal characters the hash has, from 8 to 64. Defaults to
+    16. In integer columns, the hash is a 32-bit integer instead."""
 
 
 class HashRule(_Model):
-    """Replace with a keyed hash, so equal inputs stay equal."""
+    """Replace each value with a keyed hash, so equal inputs stay equal."""
 
     hash: HashOptions
+    """Options for the hash. Write ``{}`` to take the defaults."""
 
 
 class NullOptions(_Model):
-    """The null strategy has no options."""
+    """The ``null`` strategy has no options, so it is written ``null: {}``."""
 
 
 class NullRule(_Model):
-    """Set to null."""
+    """Set each value to null."""
 
     null: NullOptions
+    """No options: write ``{}``."""
 
 
 class FormatPreservingOptions(_Model):
-    """Options for the format-preserving strategy."""
+    """Options for the ``format_preserving`` strategy."""
 
     luhn: bool = False
-    """Keep the Luhn check digit valid, for card numbers."""
+    """Whether to keep the Luhn check digit valid, as card numbers need.
+    Defaults to false."""
 
 
 class FormatPreservingRule(_Model):
-    """Replace digits with digits and letters with letters, keeping the shape."""
+    """Replace digits with digits and letters with letters, so each value keeps its shape."""
 
     format_preserving: FormatPreservingOptions
+    """Options for the strategy. Write ``{}`` to take the defaults."""
 
 
 class ExpressionRule(_Model):
-    """Replace with an engine-native expression, optionally only where a condition holds."""
+    """Replace each value with an engine-native expression over the row.
+
+    A ``where`` condition can limit the change to some rows.
+    """
 
     expression: str = Field(min_length=1)
+    """The new value, as an expression in the engine's own language, such as
+    SQL for PostgreSQL. Must not be empty."""
     where: str | None = None
+    """A condition in the engine's own language. Only rows that match it
+    change. Without it, every row changes."""
 
 
 type Rule = Annotated[
     FakerRule | HashRule | NullRule | FormatPreservingRule | ExpressionRule,
-    Field(union_mode="left_to_right"),
+    Field(
+        union_mode="left_to_right",
+        description=(
+            "One column's anonymization rule. It names exactly one strategy: `faker`, "
+            "`hash`, `null`, `format_preserving` or `expression`."
+        ),
+    ),
 ]
 
 
 class Hook(_Model):
-    """A native script run before load (server settings, extensions)."""
+    """A native script run before load, such as one that sets server settings or adds extensions."""
 
     sql: str = Field(min_length=1)
+    """The script, in the engine's own language. Must not be empty."""
 
 
 class TransformHook(_Model):
-    """A native script run after the column rules, declaring what it rewrites."""
+    """A native script run after the column rules, which declares the columns it rewrites."""
 
     sql: str = Field(min_length=1)
+    """The script, in the engine's own language. Must not be empty."""
     rewrites: tuple[str, ...] = ()
+    """The columns the script rewrites, as ``table.column``. The anonymization
+    report and strict mode count them as covered. Datadouble takes the list on
+    trust, and ``verify`` checks the result."""
 
 
 class Hooks(_Model):
-    """Hooks around load and transform."""
+    """Native scripts run around load and transform.
+
+    Each engine says whether it runs hooks. The plan fails if a spec gives
+    hooks to an engine that doesn't.
+    """
 
     before_load: tuple[Hook, ...] = ()
+    """Scripts run in each working database before the copied data is loaded."""
     after_transform: tuple[TransformHook, ...] = ()
+    """Scripts run after every column rule, and before ``package`` and
+    ``verify``, so verification covers what they change."""
 
 
 type ObjectRoot = Annotated[
@@ -450,45 +581,58 @@ type ObjectRoot = Annotated[
         min_length=1,
         max_length=1,
         description=(
-            "An object code outside Datadouble expects, as its kind and its name matched "
-            "from the right like a table's: `{function: public.uuid_generate_v4}`, with "
-            "argument types as the catalog spells them where routines are overloaded "
-            '(`{function: "public.total(integer)"}`), or `{trigger: orders.audit}` '
-            "(a PostgreSQL trigger's name is `table.trigger`)."
+            "An object that code outside Datadouble expects in an image, written as its "
+            "kind and its name: `{function: public.uuid_generate_v4}`. Names match from "
+            "the right, like table names. Where routines are overloaded, add the argument "
+            'types as the catalog spells them: `{function: "public.total(integer)"}`. '
+            "A PostgreSQL trigger's name is `table.trigger`, as in "
+            "`{trigger: orders.audit}`."
         ),
     ),
 ]
 
 
 class PulledRows(StrEnum):
-    """Which rows of a table a standalone group pulls into its image."""
+    """Which rows of a table a standalone group pulls into its image.
+
+    - ``referenced``: the rows that the image's rows reference, plus the rows
+      that reference them where the spec follows references down. This is the
+      default.
+    - ``all``: every row of the source table.
+    - ``none``: no rows, only the table's structure.
+    """
 
     REFERENCED = "referenced"
-    """The rows the image's rows reference, and those referencing them where
-    the spec follows references down (the default)."""
     ALL = "all"
-    """Every row of the source table."""
     NONE = "none"
-    """None: the table's structure only."""
 
 
 class ImageGroup(_Model):
-    """One image's share of the extract."""
+    """One image built from the shared extract.
+
+    The image holds the tables that the group's ``include`` patterns match.
+    """
 
     include: tuple[str, ...] = Field(min_length=1)
-    """The tables in the image, as globs matched from the right."""
+    """The tables in the image, as globs matched from the right. At least one
+    is needed."""
     requires: tuple[GroupName, ...] = ()
-    """Groups whose images a copy of this one is provisioned with, for references into them."""
+    """Other groups whose images are provisioned along with each copy of this
+    one, for references into them. Each must be a group in ``images``. A
+    standalone group cannot have any."""
     standalone: bool = False
-    """Whether the image must work on its own: what its tables and objects
-    need from outside the group is pulled into it (package planning)."""
+    """Whether the image must work on its own. If true, package planning pulls
+    into the image whatever its tables and objects need from outside the
+    group. Defaults to false."""
     objects: tuple[ObjectRoot, ...] = ()
-    """Objects code outside Datadouble expects in this image, such as
-    ``{function: public.uuid_generate_v4}``; they join the image's closure."""
+    """Objects that code outside Datadouble expects in this image, such as
+    ``{function: public.uuid_generate_v4}``. They join the image's closure,
+    the set of everything the image must contain."""
     rows: dict[str, PulledRows] = Field(default_factory=dict[str, PulledRows])
-    """Which rows a standalone group pulls in, overriding ``referenced``: keys
-    are a table name or glob, or a reference ``child.column -> parent`` (which
-    wins over a table key), and values ``referenced``, ``all`` or ``none``."""
+    """Which rows a standalone group pulls in, in place of the default
+    ``referenced``. Keys are a table name or glob, or a reference
+    ``child.column -> parent``, which wins over a table key. Values are
+    ``referenced``, ``all`` or ``none``. Needs ``standalone: true``."""
 
     @model_validator(mode="after")
     def _alone(self) -> "ImageGroup":
@@ -502,56 +646,82 @@ class ImageGroup(_Model):
 
 
 class AccountPrivileges(StrEnum):
-    """What an account copies carry may do."""
+    """What an account that copies carry may do.
+
+    - ``all``: every privilege, with the grant option. On PostgreSQL, this is
+      a superuser. This is the default.
+    - ``read``: ``SELECT`` on the image's data, plus what the engine gives
+      every user.
+    """
 
     ALL = "all"
-    """Every privilege, with the grant option; a PostgreSQL superuser."""
     READ = "read"
-    """``SELECT`` on the image's data, plus what the engine gives every user."""
 
 
 class CopyAccount(_Model):
-    """An account every copy of a physical image carries, for logins over TCP."""
+    """An account that every copy of a physical image carries, so consumers can log in over TCP."""
 
     user: str = Field(min_length=1)
+    """The account's user name. Must not be empty."""
     password: Annotated[str, Field(min_length=1)] | SecretRef
-    """Plain text, since copies hold no personal data, or a secret reference."""
+    """The account's password: plain text, since copies hold no personal
+    data, or a secret reference."""
     privileges: AccountPrivileges = AccountPrivileges.ALL
-    """``all``: every privilege, with the grant option (a PostgreSQL superuser);
-    ``read``: ``SELECT`` on the image's data, plus what the engine gives every user."""
+    """What the account may do: ``all`` (every privilege, with the grant
+    option) or ``read`` (``SELECT`` on the image's data). Defaults to ``all``."""
 
 
 class Package(_Model):
-    """Which image formats to produce; all the engine supports when omitted."""
+    """Which image formats to produce, and the accounts physical images carry."""
 
     formats: tuple[ImageFormat, ...] | None = Field(default=None, min_length=1)
+    """The image formats to produce: ``physical``, ``logical`` or both. If
+    given, the list must not be empty. Defaults to every format the engine
+    supports. The ``--format`` option overrides it."""
     accounts: tuple[CopyAccount, ...] = ()
-    """Accounts physical images carry for consumers that serve them with the
-    engine's own image; none when omitted."""
+    """Accounts that physical images carry, for consumers that serve them with
+    the engine's own image. None by default."""
 
 
 class PiiScan(_Model):
-    """Values the PII scan accepts on purpose, as ``LIKE`` patterns per column."""
+    """Values the PII scan accepts on purpose."""
 
     allow: dict[str, tuple[str, ...]] = Field(default_factory=dict[str, tuple[str, ...]])
+    """``LIKE`` patterns of values the scan accepts, by column, such as
+    ``users.email: ["%@company.com"]``. A value that a detector flags and no
+    pattern covers still fails verification."""
 
 
 class Assertion(_Model):
-    """A native query that must return no rows."""
+    """A native query that must return no rows for the image to pass verification."""
 
     name: str = Field(min_length=1)
+    """The assertion's name, as the verification report shows it. Must not be
+    empty."""
     sql: str = Field(min_length=1)
+    """The query, in the engine's own language. Any row it returns fails
+    verification. Must not be empty."""
 
 
 class Verify(_Model):
-    """Verification settings beyond the checks that always run."""
+    """Verification settings, beyond the checks that always run."""
 
     pii_scan: PiiScan = PiiScan()
+    """Values the PII scan accepts on purpose, listed under ``allow``."""
     assertions: tuple[Assertion, ...] = ()
+    """Native queries that must return no rows."""
 
 
-type AdapterSettings = dict[str, dict[str, JsonValue]]
-"""One adapter, as a mapping with a single key naming it: ``{s3: {bucket: ...}}``."""
+type AdapterSettings = Annotated[
+    dict[str, dict[str, JsonValue]],
+    Field(
+        description=(
+            "One adapter and its settings, as a mapping with a single key that names the "
+            "adapter, such as `{s3: {bucket: ...}}`. The adapter checks its own settings, "
+            "and its README lists them."
+        )
+    ),
+]
 
 
 def _one_adapter(value: AdapterSettings) -> AdapterSettings:
@@ -562,13 +732,21 @@ def _one_adapter(value: AdapterSettings) -> AdapterSettings:
 
 
 class CosignSigning(_Model):
-    """Signing with cosign: a key pair, or keyless through the CI system's identity."""
+    """Signing with cosign.
+
+    Give exactly one of ``key``, to sign with a key pair, or ``keyless: true``,
+    to sign with the CI system's identity.
+    """
 
     key: SecretRef | None = None
-    """The private key, in cosign's encrypted format; its password is COSIGN_PASSWORD."""
+    """The private key, in cosign's encrypted format, as a secret reference.
+    Its password comes from the ``COSIGN_PASSWORD`` environment variable."""
     keyless: bool = False
+    """Whether to sign without a key, through the CI system's identity.
+    Defaults to false."""
     transparency_log: bool = True
-    """Record signatures in the transparency log; off only where it cannot be reached."""
+    """Whether to record signatures in the transparency log. Defaults to true.
+    Turn it off only where the log cannot be reached."""
 
     @model_validator(mode="after")
     def _one_way(self) -> "CosignSigning":
@@ -582,18 +760,28 @@ class Signing(_Model):
     """How ``store`` signs images."""
 
     cosign: CosignSigning
+    """Sign with cosign, using a key pair or the CI system's identity."""
 
 
 class CosignTrust(_Model):
-    """Which signatures ``promote`` and ``fetch`` accept."""
+    """Which cosign signatures ``promote`` and ``fetch`` accept.
+
+    Give either ``public_key``, for key-pair signatures, or both ``identity``
+    and ``issuer``, for keyless signatures.
+    """
 
     public_key: SecretRef | None = None
+    """For key-pair signatures: the public key that signatures must verify
+    against, as a secret reference."""
     identity: str | None = None
-    """For keyless signatures: the signer's certificate identity, matched exactly."""
+    """For keyless signatures: the signer's certificate identity, matched
+    exactly. Give ``issuer`` with it."""
     issuer: str | None = None
-    """For keyless signatures: the OIDC issuer, matched exactly."""
+    """For keyless signatures: the OpenID Connect (OIDC) issuer, matched
+    exactly. Give ``identity`` with it."""
     transparency_log: bool = True
-    """Require a transparency log entry; turn off only for signatures made without one."""
+    """Whether to require a transparency log entry. Defaults to true. Turn it
+    off only for signatures made without one."""
 
     @model_validator(mode="after")
     def _one_way(self) -> "CosignTrust":
@@ -609,20 +797,27 @@ class Trust(_Model):
     """The signatures images must carry to cross into non-production."""
 
     cosign: CosignTrust
+    """Accept cosign signatures made with a given key or identity."""
 
 
 class Promote(_Model):
     """Where ``promote`` copies verified images, and what it requires of them."""
 
     to: tuple[AdapterSettings, ...] = Field(min_length=1)
-    """The export stores, one adapter each, such as ``{filesystem: ...}`` or ``{s3: ...}``;
-    a filesystem store's ``mode`` (``"0640"`` by default) decides who can read the files,
-    such as a web server serving them. Each also gets an index of its images per group
-    (``<spec>/<group>/index.json``), which stores that cannot list keys, like ``http``, are
-    read through."""
+    """The export stores, one adapter each, such as ``{filesystem: ...}`` or
+    ``{s3: ...}``. At least one is needed. A filesystem store's ``mode``
+    (``"0640"`` by default) decides who can read the files, such as a web
+    server that serves them. Each store also gets an index of its images per
+    group, ``<spec>/<group>/index.json``. Stores that cannot list keys, like
+    ``http``, are read through that index."""
     channel: str = "latest"
+    """The channel ``promote`` points at each image it copies to the export
+    stores. Defaults to ``latest``. A channel name is 1 to 63 lowercase
+    letters, digits, ``-`` or ``_``, starting with a letter or digit."""
     strict: Strict = Strict()
-    """The least strict level, per kind, an image may have been built with."""
+    """The least strict level, per kind, that an image may have been built
+    with. ``promote`` refuses an image built with a lower level. By default,
+    ``data: columns`` and ``warn`` for each kind of object."""
 
     @field_validator("strict", mode="before")
     @classmethod
@@ -641,7 +836,7 @@ class Promote(_Model):
 
 
 class Fetch(_Model):
-    """Where ``fetch`` reads images from and keeps them."""
+    """Where ``fetch`` reads images from, and where it keeps them."""
 
     model_config = ConfigDict(
         strict=True,
@@ -652,18 +847,30 @@ class Fetch(_Model):
     )
 
     source: AdapterSettings = Field(alias="from")
-    """The export store to read, one adapter: ``{filesystem: ...}``, ``{s3: ...}``, or
-    ``{http: ...}``, a web server serving it, which is read-only and reads the index
-    ``promote`` writes."""
+    """The export store to read, as one adapter: ``{filesystem: ...}``,
+    ``{s3: ...}`` or ``{http: ...}``. The ``http`` store reads from a web
+    server that serves the export store. It is read-only, and reads the index
+    that ``promote`` writes."""
     staging: Path
+    """The staging directory that ``fetch`` unpacks images into, for
+    ``replicate`` to copy from."""
     channel: str = "latest"
+    """The export stores' channel to fetch. Defaults to ``latest``. A channel
+    name is 1 to 63 lowercase letters, digits, ``-`` or ``_``, starting with a
+    letter or digit."""
     staging_channel: str = "active"
+    """The channel in staging that ``fetch`` points at each new image.
+    ``replicate`` copies from it, and ``activate`` moves it. Defaults to
+    ``active``. It follows the same naming rules as ``channel``."""
     format: ImageFormat = ImageFormat.PHYSICAL
+    """Which image format to fetch: ``physical`` or ``logical``. Defaults to
+    ``physical``."""
     engine_version: str | None = None
-    """Which compatibility line's images to fetch, such as ``8.4`` (not ``8.4.13``);
-    the newest line when omitted."""
+    """Which compatibility line's images to fetch, such as ``8.4`` (not
+    ``8.4.13``). Defaults to the newest line."""
     keep: int = Field(default=3, ge=1)
-    """How many generations staging keeps, for ``activate`` to roll back to."""
+    """How many generations staging keeps, so ``activate`` can roll back to
+    them. At least 1. Defaults to 3."""
 
     @field_validator("source")
     @classmethod
@@ -677,23 +884,32 @@ class Fetch(_Model):
 
 
 class ReplicateMode(StrEnum):
-    """How ``replicate`` decides how many copies to make."""
+    """How ``replicate`` decides how many copies to make.
+
+    - ``pool``: keep a number of unclaimed copies of the active generation
+      ready. This is the default.
+    - ``on-demand``: make copies for a named requester.
+    """
 
     POOL = "pool"
-    """Keep a number of unclaimed copies of the active generation ready."""
     ON_DEMAND = "on-demand"
-    """Make copies for a named requester."""
 
 
 class Replicate(_Model):
     """How copies are made from staging."""
 
     using: AdapterSettings
+    """The replicate adapter that makes the copies, such as
+    ``{docker-volume: {...}}``. Its README lists its settings."""
     mode: ReplicateMode = ReplicateMode.POOL
+    """How ``replicate`` decides how many copies to make: ``pool`` or
+    ``on-demand``. Defaults to ``pool``."""
     size: int = Field(default=2, ge=1)
-    """Unclaimed copies to keep ready (pool), or copies per owner (on-demand)."""
+    """In pool mode, how many unclaimed copies to keep ready. In on-demand
+    mode, how many copies each owner gets. At least 1. Defaults to 2."""
     expires_hours: int = Field(default=24, ge=1)
-    """How long an on-demand copy lives before ``release --expired`` removes it."""
+    """How many hours an on-demand copy lives before ``release --expired``
+    removes it. At least 1. Defaults to 24."""
 
     @field_validator("using")
     @classmethod
@@ -702,67 +918,95 @@ class Replicate(_Model):
 
 
 class Retention(_Model):
-    """What ``prune`` keeps."""
+    """What ``prune`` keeps.
+
+    An image line is one image group's images for one engine version, such as
+    ``postgres-18``. For each image line, ``prune`` keeps the newest ``keep``
+    generations, anything built within ``keep_days``, and whatever a channel
+    points at. It never removes a channel's target.
+    """
 
     keep: int = Field(default=3, ge=1)
+    """How many of the newest generations each image line keeps. At least 1.
+    Defaults to 3. In staging, ``fetch.keep`` applies instead."""
     keep_days: int = Field(default=7, ge=0)
+    """Keep every generation built within this many days. 0 or more. Defaults
+    to 7."""
     keep_versions: int = Field(default=2, ge=1)
+    """How many of a group's newest engine versions keep their generations.
+    Older versions keep only their channels' targets, and lose their unclaimed
+    pool copies. At least 1. Defaults to 2."""
 
 
 class Secrets(_Model):
     """Secrets the run needs, by reference."""
 
     anonymization_key: SecretRef | None = None
-    """Seeds deterministic anonymization; a random key per run when omitted."""
+    """The key that seeds deterministic anonymization, as a secret reference.
+    Without it, Datadouble generates a random key for each generation."""
 
 
 class NotifyOn(StrEnum):
-    """Outcomes of a generated CI job that notify; ``notify.when`` is ``[failure]`` by default."""
+    """The outcomes of a generated CI job that send a notification.
+
+    - ``failure``: the job failed.
+    - ``warning``: the job finished with warnings.
+
+    ``notify.when`` is ``[failure]`` by default.
+    """
 
     FAILURE = "failure"
     WARNING = "warning"
 
 
 class Webhook(_Model):
-    """A URL Datadouble posts a JSON summary of the job's outcome to."""
+    """A URL that Datadouble posts a JSON summary of the job's outcome to."""
 
     url: SecretRef
-    """A secret reference, since a webhook's URL usually carries its credential."""
+    """The webhook's URL, as a secret reference, since the URL usually carries
+    its credential."""
 
 
 class WebhookTarget(_Model):
-    """``{webhook: {url: {env: ALERTS_WEBHOOK}}}``."""
+    """A webhook target, such as ``{webhook: {url: {env: ALERTS_WEBHOOK}}}``."""
 
     webhook: Webhook
+    """The webhook to post to."""
 
 
 class Email(_Model):
     """Mail sent by the CI system's own mechanism, where it has one."""
 
     to: tuple[Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+$")], ...] = Field(min_length=1)
-    """The addresses to mail."""
+    """The addresses to mail. At least one is needed."""
 
 
 class EmailTarget(_Model):
-    """``{email: {to: [data-team@example.com]}}``."""
+    """An email target, such as ``{email: {to: [data-team@example.com]}}``."""
 
     email: Email
+    """The mail to send."""
 
 
-type NotifyTarget = WebhookTarget | EmailTarget
+type NotifyTarget = Annotated[
+    WebhookTarget | EmailTarget,
+    Field(description="Where one notification goes: `{webhook: ...}` or `{email: ...}`."),
+]
 
 
 class Notify(_Model):
     """Who hears about generated CI jobs that fail or warn (decision 125).
 
-    It lives in the spec rather than in ``ci init``'s options, so generating
-    the jobs again keeps it.
+    Notifications live in the spec rather than in ``ci init``'s options, so
+    generating the jobs again keeps them.
     """
 
     when: tuple[NotifyOn, ...] = Field(default=(NotifyOn.FAILURE,), min_length=1)
-    """The outcomes that notify: ``failure``, ``warning`` or both; ``[failure]`` by default."""
+    """The outcomes that send a notification: ``failure``, ``warning`` or
+    both. Defaults to ``[failure]``."""
     to: tuple[NotifyTarget, ...] = Field(min_length=1)
-    """Where notifications go, one target each: ``{webhook: ...}`` or ``{email: ...}``."""
+    """Where notifications go, one target each: ``{webhook: ...}`` or
+    ``{email: ...}``. At least one is needed."""
 
     def sends(self, outcome: str) -> bool:
         """Whether a job ending with ``outcome`` notifies."""
@@ -779,16 +1023,22 @@ class Notify(_Model):
 
 
 class PathsFrom(_Model):
-    """How the source's chosen rows name files: a template over a table's columns.
+    """How the source's chosen rows name files, as a template over a table's columns.
 
-    ``path: "documents/{customer_id}/{file_name}"`` builds a path from two
-    columns; ``match``, if given, is a regular expression applied to the
-    result whose first group is the path, for values such as URLs.
+    For example, ``path: "documents/{customer_id}/{file_name}"`` builds a path
+    from two columns. ``match``, if given, is a regular expression applied to
+    the result, whose first group is the path. Use it for values such as URLs.
     """
 
     table: str
+    """The table whose chosen rows name the files."""
     path: str = Field(min_length=1)
+    """A template that builds a value from the row's columns, such as
+    ``documents/{customer_id}/{file_name}``. Without ``match``, the value is the
+    path, relative to the tree's root. Must not be empty."""
     match: str | None = None
+    """A regular expression applied to the value ``path`` builds. Its first
+    group is the path. Use it for values such as URLs."""
 
 
 FILES = EngineName("files")
@@ -798,98 +1048,121 @@ FILES_SOURCE = SourceName("files")
 
 
 class Files(_Model):
-    """A file tree the source's rows refer to, copied beside it (decision 97).
+    """A file tree that the source's rows refer to, copied beside them (decision 97).
 
-    The ``files`` engine adapter reads it: each top-level directory is a
+    The ``files`` engine adapter reads the tree. Each top-level directory is a
     table, and ``select`` gives each one ``find`` tests. Every top-level
     directory must be selected or excluded.
     """
 
     connection: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
-    """Where the tree is and how to read it, checked by the ``files`` adapter."""
+    """Where the tree is and how to read it. The ``files`` adapter checks these
+    settings."""
     select: dict[str, str] = Field(default_factory=dict[str, str])
-    """Each top-level directory's ``find`` tests, such as ``-type f -mtime -30``."""
+    """The ``find`` tests that choose each top-level directory's files, such as
+    ``-type f -mtime -30``."""
     exclude: tuple[str, ...] = ()
     """Top-level directories to leave out."""
     paths_from: str | PathsFrom | None = None
-    """How the source's chosen rows name files to copy too, relative to the root:
-    a ``table.column`` holding paths, or a template and pattern (:class:`PathsFrom`)."""
+    """How the source's chosen rows name more files to copy, relative to the
+    tree's root. Either a ``table.column`` that holds paths, or a template
+    with ``table``, ``path`` and optionally ``match``."""
     cleanup: tuple[str, ...] = ()
-    """Shell commands run in the copy's root after it is made, such as removing EXIF data."""
+    """Shell commands run in the copy's root after it is made, such as one that
+    removes EXIF data."""
     image: str | None = None
-    """The image the cleanup commands run in."""
+    """The container image that the cleanup commands run in."""
 
 
 class Spec(_Model):
-    """A whole spec."""
+    """A whole spec: one pipeline, from the sources it reads to the copies it makes."""
 
     model_config = ConfigDict(title="Datadouble spec")
 
     name: SpecName
-    """The spec's name: the first part of its images' identity."""
+    """The spec's name, the first part of every image's identity. It is 1 to
+    63 lowercase letters, digits, ``-`` or ``_``, starting with a letter or
+    digit."""
     sources: dict[SourceName, Source] = Field(min_length=1)
-    """The servers to copy from, by name: one engine, each with its connection.
-    Every source's databases go into one working server, so their names must
-    not collide; each source is read under its own snapshot."""
+    """The servers to copy from, by name. At least one is needed, and every
+    source uses the same engine. All sources' databases go into one working
+    server, so their names must not collide. Each source is read under its own
+    snapshot. Source names follow the same rules as the spec's name."""
     exclude: tuple[str, ...] = ()
-    """Tables left out of every image, as globs matched from the right: ``audit.*``
-    is every table in a namespace ``audit``, ``shop.*.*`` every table in
-    PostgreSQL's database ``shop``."""
+    """Tables left out of every image, as globs matched from the right. For
+    example, ``audit.*`` is every table in a namespace ``audit``, and
+    ``shop.*.*`` is every table in PostgreSQL's database ``shop``."""
     structure_only: tuple[str, ...] = ()
-    """Tables copied without their rows, as globs."""
+    """Tables copied without their rows, as globs matched from the right."""
     case_sensitive: bool = False
-    """Whether table and column names match case-sensitively."""
+    """Whether table and column names match case-sensitively. Defaults to
+    false."""
     strict: Strict = Strict()
-    """How differences from the catalog lock warn or fail, per kind: ``data`` (``off``,
-    ``tables`` or ``columns``), and ``functions``, ``views``, ``triggers``, ``types``,
-    ``sequences`` and ``events`` (``off``, ``warn`` or ``fail``)."""
+    """How strict mode treats differences from the catalog lock, as a mapping
+    of levels per kind. ``data`` takes ``off``, ``tables`` or ``columns``.
+    ``functions``, ``views``, ``triggers``, ``types``, ``sequences`` and
+    ``events`` take ``off``, ``warn`` or ``fail``. Kinds left out take their
+    defaults."""
     subset: Subset = Subset()
-    """Which rows to copy: seeds, followed references and conditions."""
+    """Which rows to copy: seeds, the references to follow, and what to do
+    with the references not followed."""
     anonymize: dict[str, dict[str, Rule]] = Field(default_factory=dict[str, dict[str, Rule]])
-    """Rules per table and column: ``faker``, ``hash``, ``null``, ``format_preserving``
-    or ``expression``."""
+    """Anonymization rules, by table and then by column. Each rule uses one
+    strategy: ``faker``, ``hash``, ``null``, ``format_preserving`` or
+    ``expression``."""
     hooks: Hooks = Hooks()
-    """Commands run before load and after transform."""
+    """Native scripts run before load and after transform."""
     files: Files | None = None
-    """File trees copied with the rows, as a second source."""
+    """A file tree copied with the rows, as a second source."""
     images: dict[GroupName, ImageGroup] = Field(
         default_factory=lambda: {DEFAULT_GROUP: ImageGroup(include=("*",))}
     )
-    """Named images built from one extract; one image of every table by default."""
+    """The images built from one extract, by group name. Defaults to one
+    group, ``all``, that holds every table. Group names follow the same rules
+    as the spec's name."""
     objects: tuple[ObjectRoot, ...] = ()
-    """Objects code outside Datadouble expects in every image, such as
-    ``{view: reporting.daily}``; they join each image's closure."""
+    """Objects that code outside Datadouble expects in every image, such as
+    ``{view: reporting.daily}``. They join each image's closure."""
     package: Package = Package()
-    """The image formats to produce."""
+    """The image formats to produce, and the accounts physical images carry."""
     verify: Verify = Verify()
-    """Checks every image must pass: PII scan, row counts, assertions."""
+    """Checks every image must pass: the PII scan, row counts and assertions.
+    This section sets the PII scan's allowed values and the assertions."""
     runtime: AdapterSettings | None = None
-    """Where engine software runs from extract on: ``{docker: {...}}`` or ``{kubernetes: ...}``,
-    which reaches another cluster through ``kubeconfig``, a secret reference, and starts pods
-    in Datadouble's own namespace unless ``namespace`` names one."""
+    """Where engine software runs, from extract on: ``{docker: {...}}`` or
+    ``{kubernetes: {...}}``. Extract and the stages after it need it. The
+    ``kubernetes`` runtime reaches another cluster through ``kubeconfig``, a
+    secret reference. It starts pods in Datadouble's own namespace unless
+    ``namespace`` names one."""
     store: tuple[dict[str, dict[str, JsonValue]], ...] = ()
-    """Where images are stored after the build, one adapter each: ``{filesystem: ...}``,
-    ``{s3: ...}``. The filesystem store takes ``path``, a directory, and ``mode``, an octal
-    string (``"0640"`` by default) every file it writes gets whatever the umask; directories
-    it creates get ``mode`` plus the search bit wherever it has the read bit (``0750``).
-    Modes that let anyone but the owner write, or the owner not read and write, are
+    """Where the build stores images, one adapter each: ``{filesystem: ...}`` or
+    ``{s3: ...}``. The filesystem store takes ``path``, a directory, and
+    ``mode``, an octal string that defaults to ``"0640"``. Every file it writes
+    gets ``mode``, whatever the umask. Directories it creates get ``mode`` plus
+    the search bit wherever it has the read bit (``0750``). Modes that let
+    anyone but the owner write, or that don't let the owner read and write, are
     refused."""
     signing: Signing | None = None
     """How the build signs its images."""
     trust: Trust | None = None
     """Which signatures ``promote`` and ``fetch`` accept."""
     promote: Promote | None = None
-    """The export stores ``promote`` copies verified images to."""
+    """The export stores that ``promote`` copies verified images to, and what
+    it requires of them."""
     fetch: Fetch | None = None
-    """Where ``fetch`` reads promoted images, and the staging directory it fills."""
+    """Where ``fetch`` reads promoted images, and the staging directory it
+    fills."""
     replicate: Replicate | None = None
-    """How copies are made: the adapter, pool or on-demand, and how many."""
+    """How copies are made: the adapter, the mode (pool or on-demand), and how
+    many."""
     announce: tuple[AdapterSettings, ...] = ()
-    """Where copies are announced to consumers, one adapter each: ``{dotenv: ...}``,
-    ``{ci-outputs: {}}``, ``{vault: ...}`` or ``{k8s-secret: {}}``, which writes Secrets
-    in Datadouble's own namespace unless ``namespace`` names one."""
+    """Where copies are announced to consumers, one adapter each:
+    ``{dotenv: ...}``, ``{ci-outputs: {}}``, ``{vault: ...}`` or
+    ``{k8s-secret: {}}``. The ``k8s-secret`` adapter writes Secrets in
+    Datadouble's own namespace unless ``namespace`` names one."""
     prune: Retention = Retention()
-    """How many images and how much time ``prune`` keeps."""
+    """What ``prune`` keeps: how many generations, for how many days, and how
+    many engine versions."""
     secrets: Secrets = Secrets()
     """Secrets the build needs, by reference."""
     notify: Notify | None = None

@@ -2,99 +2,124 @@
 
 # Spec reference
 
-Every field a spec can hold, from the JSON Schema specs are checked against
-(`datadouble schema` prints it). A spec is YAML or JSON; fields not listed are
-refused. Adapter settings, such as a source's `connection` or a store's, are
-checked by the adapter named, and its README lists them.
+This page lists every field a spec can hold. A spec is a YAML or JSON file
+that describes one pipeline: what to copy from the sources, how to anonymize
+and check it, where the images go, and how copies are made. The
+[quickstart](quickstart.md) shows a small one.
+
+Datadouble checks every spec against a JSON Schema, and this page is generated
+from that schema. `datadouble schema` prints it. A spec may hold only the
+fields listed here: Datadouble refuses any other field.
+
+Some settings belong to an adapter rather than to Datadouble, such as a
+source's `connection` or a store's settings. The adapter named checks those,
+and its README lists them.
+
+The page starts with the spec's top-level fields. Then it describes each kind
+of object a field can hold, in alphabetical order. A link in the Type column
+leads to the object's section. The Default column is empty where a field has
+no default, or where its default is empty or unset. "See type" means the
+default is an object, and the field's description says what it holds.
 
 ## The spec
 
-A whole spec.
+A whole spec: one pipeline, from the sources it reads to the copies it makes.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `name` (required) | string |  | The spec's name: the first part of its images' identity. |
-| `sources` (required) | map of [Source](#source) |  | The servers to copy from, by name: one engine, each with its connection. Every source's databases go into one working server, so their names must not collide; each source is read under its own snapshot. |
-| `exclude` | list of string |  | Tables left out of every image, as globs matched from the right: `audit.*` is every table in a namespace `audit`, `shop.*.*` every table in PostgreSQL's database `shop`. |
-| `structure_only` | list of string |  | Tables copied without their rows, as globs. |
-| `case_sensitive` | boolean | `false` | Whether table and column names match case-sensitively. |
-| `strict` | [Strict](#strict) | see type | How differences from the catalog lock warn or fail, per kind: `data` (`off`, `tables` or `columns`), and `functions`, `views`, `triggers`, `types`, `sequences` and `events` (`off`, `warn` or `fail`). |
-| `subset` | [Subset](#subset) | see type | Which rows to copy: seeds, followed references and conditions. |
-| `anonymize` | map of map of [Rule](#rule) |  | Rules per table and column: `faker`, `hash`, `null`, `format_preserving` or `expression`. |
-| `hooks` | [Hooks](#hooks) | see type | Commands run before load and after transform. |
-| `files` | [Files](#files) |  | File trees copied with the rows, as a second source. |
-| `images` | map of [ImageGroup](#imagegroup) |  | Named images built from one extract; one image of every table by default. |
-| `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in every image, such as `{view: reporting.daily}`; they join each image's closure. |
-| `package` | [Package](#package) | see type | The image formats to produce. |
-| `verify` | [Verify](#verify) | see type | Checks every image must pass: PII scan, row counts, assertions. |
-| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs from extract on: `{docker: {...}}` or `{kubernetes: ...}`, which reaches another cluster through `kubeconfig`, a secret reference, and starts pods in Datadouble's own namespace unless `namespace` names one. |
-| `store` | list of map of map of JSON |  | Where images are stored after the build, one adapter each: `{filesystem: ...}`, `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string (`"0640"` by default) every file it writes gets whatever the umask; directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or the owner not read and write, are refused. |
+| `name` (required) | string |  | The spec's name, the first part of every image's identity. It is 1 to 63 lowercase letters, digits, `-` or `_`, starting with a letter or digit. |
+| `sources` (required) | map of [Source](#source) |  | The servers to copy from, by name. At least one is needed, and every source uses the same engine. All sources' databases go into one working server, so their names must not collide. Each source is read under its own snapshot. Source names follow the same rules as the spec's name. |
+| `exclude` | list of string |  | Tables left out of every image, as globs matched from the right. For example, `audit.*` is every table in a namespace `audit`, and `shop.*.*` is every table in PostgreSQL's database `shop`. |
+| `structure_only` | list of string |  | Tables copied without their rows, as globs matched from the right. |
+| `case_sensitive` | boolean | `false` | Whether table and column names match case-sensitively. Defaults to false. |
+| `strict` | [Strict](#strict) | see type | How strict mode treats differences from the catalog lock, as a mapping of levels per kind. `data` takes `off`, `tables` or `columns`. `functions`, `views`, `triggers`, `types`, `sequences` and `events` take `off`, `warn` or `fail`. Kinds left out take their defaults. |
+| `subset` | [Subset](#subset) | see type | Which rows to copy: seeds, the references to follow, and what to do with the references not followed. |
+| `anonymize` | map of map of [Rule](#rule) |  | Anonymization rules, by table and then by column. Each rule uses one strategy: `faker`, `hash`, `null`, `format_preserving` or `expression`. |
+| `hooks` | [Hooks](#hooks) | see type | Native scripts run before load and after transform. |
+| `files` | [Files](#files) |  | A file tree copied with the rows, as a second source. |
+| `images` | map of [ImageGroup](#imagegroup) |  | The images built from one extract, by group name. Defaults to one group, `all`, that holds every table. Group names follow the same rules as the spec's name. |
+| `objects` | list of [ObjectRoot](#objectroot) |  | Objects that code outside Datadouble expects in every image, such as `{view: reporting.daily}`. They join each image's closure. |
+| `package` | [Package](#package) | see type | The image formats to produce, and the accounts physical images carry. |
+| `verify` | [Verify](#verify) | see type | Checks every image must pass: the PII scan, row counts and assertions. This section sets the PII scan's allowed values and the assertions. |
+| `runtime` | [AdapterSettings](#adaptersettings) |  | Where engine software runs, from extract on: `{docker: {...}}` or `{kubernetes: {...}}`. Extract and the stages after it need it. The `kubernetes` runtime reaches another cluster through `kubeconfig`, a secret reference. It starts pods in Datadouble's own namespace unless `namespace` names one. |
+| `store` | list of map of map of JSON |  | Where the build stores images, one adapter each: `{filesystem: ...}` or `{s3: ...}`. The filesystem store takes `path`, a directory, and `mode`, an octal string that defaults to `"0640"`. Every file it writes gets `mode`, whatever the umask. Directories it creates get `mode` plus the search bit wherever it has the read bit (`0750`). Modes that let anyone but the owner write, or that don't let the owner read and write, are refused. |
 | `signing` | [Signing](#signing) |  | How the build signs its images. |
 | `trust` | [Trust](#trust) |  | Which signatures `promote` and `fetch` accept. |
-| `promote` | [Promote](#promote) |  | The export stores `promote` copies verified images to. |
+| `promote` | [Promote](#promote) |  | The export stores that `promote` copies verified images to, and what it requires of them. |
 | `fetch` | [Fetch](#fetch) |  | Where `fetch` reads promoted images, and the staging directory it fills. |
-| `replicate` | [Replicate](#replicate) |  | How copies are made: the adapter, pool or on-demand, and how many. |
-| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`, which writes Secrets in Datadouble's own namespace unless `namespace` names one. |
-| `prune` | [Retention](#retention) | see type | How many images and how much time `prune` keeps. |
+| `replicate` | [Replicate](#replicate) |  | How copies are made: the adapter, the mode (pool or on-demand), and how many. |
+| `announce` | list of [AdapterSettings](#adaptersettings) |  | Where copies are announced to consumers, one adapter each: `{dotenv: ...}`, `{ci-outputs: {}}`, `{vault: ...}` or `{k8s-secret: {}}`. The `k8s-secret` adapter writes Secrets in Datadouble's own namespace unless `namespace` names one. |
+| `prune` | [Retention](#retention) | see type | What `prune` keeps: how many generations, for how many days, and how many engine versions. |
 | `secrets` | [Secrets](#secrets) | see type | Secrets the build needs, by reference. |
 | `notify` | [Notify](#notify) |  | Who hears when a generated CI job fails or warns: webhooks and email. |
 
 ### AccountPrivileges
 
-What an account copies carry may do.
+What an account that copies carry may do.
+
+- `all`: every privilege, with the grant option. On PostgreSQL, this is a superuser. This is the default.
+- `read`: `SELECT` on the image's data, plus what the engine gives every user.
 
 One of `all` or `read`.
 
 ### AdapterSettings
 
+One adapter and its settings, as a mapping with a single key that names the adapter, such as `{s3: {bucket: ...}}`. The adapter checks its own settings, and its README lists them.
+
 ### Assertion
 
-A native query that must return no rows.
+A native query that must return no rows for the image to pass verification.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `name` (required) | string |  |  |
-| `sql` (required) | string |  |  |
+| `name` (required) | string |  | The assertion's name, as the verification report shows it. Must not be empty. |
+| `sql` (required) | string |  | The query, in the engine's own language. Any row it returns fails verification. Must not be empty. |
 
 ### CopyAccount
 
-An account every copy of a physical image carries, for logins over TCP.
+An account that every copy of a physical image carries, so consumers can log in over TCP.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `user` (required) | string |  |  |
-| `password` (required) | string or [SecretRef](#secretref) |  | Plain text, since copies hold no personal data, or a secret reference. |
-| `privileges` | [AccountPrivileges](#accountprivileges) | `"all"` | `all`: every privilege, with the grant option (a PostgreSQL superuser); `read`: `SELECT` on the image's data, plus what the engine gives every user. |
+| `user` (required) | string |  | The account's user name. Must not be empty. |
+| `password` (required) | string or [SecretRef](#secretref) |  | The account's password: plain text, since copies hold no personal data, or a secret reference. |
+| `privileges` | [AccountPrivileges](#accountprivileges) | `"all"` | What the account may do: `all` (every privilege, with the grant option) or `read` (`SELECT` on the image's data). Defaults to `all`. |
 
 ### CosignSigning
 
-Signing with cosign: a key pair, or keyless through the CI system's identity.
+Signing with cosign.
+
+Give exactly one of `key`, to sign with a key pair, or `keyless: true`, to sign with the CI system's identity.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `key` | [SecretRef](#secretref) |  | The private key, in cosign's encrypted format; its password is COSIGN_PASSWORD. |
-| `keyless` | boolean | `false` |  |
-| `transparency_log` | boolean | `true` | Record signatures in the transparency log; off only where it cannot be reached. |
+| `key` | [SecretRef](#secretref) |  | The private key, in cosign's encrypted format, as a secret reference. Its password comes from the `COSIGN_PASSWORD` environment variable. |
+| `keyless` | boolean | `false` | Whether to sign without a key, through the CI system's identity. Defaults to false. |
+| `transparency_log` | boolean | `true` | Whether to record signatures in the transparency log. Defaults to true. Turn it off only where the log cannot be reached. |
 
 ### CosignTrust
 
-Which signatures `promote` and `fetch` accept.
+Which cosign signatures `promote` and `fetch` accept.
+
+Give either `public_key`, for key-pair signatures, or both `identity` and `issuer`, for keyless signatures.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `public_key` | [SecretRef](#secretref) |  |  |
-| `identity` | string |  | For keyless signatures: the signer's certificate identity, matched exactly. |
-| `issuer` | string |  | For keyless signatures: the OIDC issuer, matched exactly. |
-| `transparency_log` | boolean | `true` | Require a transparency log entry; turn off only for signatures made without one. |
+| `public_key` | [SecretRef](#secretref) |  | For key-pair signatures: the public key that signatures must verify against, as a secret reference. |
+| `identity` | string |  | For keyless signatures: the signer's certificate identity, matched exactly. Give `issuer` with it. |
+| `issuer` | string |  | For keyless signatures: the OpenID Connect (OIDC) issuer, matched exactly. Give `identity` with it. |
+| `transparency_log` | boolean | `true` | Whether to require a transparency log entry. Defaults to true. Turn it off only for signatures made without one. |
 
 ### EdgePolicy
 
-What to do with one reference: follow it to all parents, or a fallback.
+What to do with one reference, keyed `child.column -> parent` in `subset.edges`.
+
+Give exactly one of `follow: all` or `on_missing`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `follow` | string |  |  |
-| `on_missing` | [OnMissing](#onmissing) |  |  |
+| `follow` | string |  | `all` copies every row of the parent table, not only the referenced ones. Give this or `on_missing`, not both. |
+| `on_missing` | [OnMissing](#onmissing) |  | What to do when the referenced parent row is not followed: `null`, `stub` or `drop`. Give this or `follow: all`, not both. |
 
 ### Email
 
@@ -102,199 +127,227 @@ Mail sent by the CI system's own mechanism, where it has one.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `to` (required) | list of string |  | The addresses to mail. |
+| `to` (required) | list of string |  | The addresses to mail. At least one is needed. |
 
 ### EmailTarget
 
-`{email: {to: [data-team@example.com]}}`.
+An email target, such as `{email: {to: [data-team@example.com]}}`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `email` (required) | [Email](#email) |  |  |
+| `email` (required) | [Email](#email) |  | The mail to send. |
 
 ### EnvSecret
 
-A secret read from an environment variable.
+A secret read from an environment variable, written `{env: NAME}`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `env` (required) | string |  |  |
+| `env` (required) | string |  | The environment variable that holds the secret. Must not be empty. |
 
 ### ExpressionRule
 
-Replace with an engine-native expression, optionally only where a condition holds.
+Replace each value with an engine-native expression over the row.
+
+A `where` condition can limit the change to some rows.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `expression` (required) | string |  |  |
-| `where` | string |  |  |
+| `expression` (required) | string |  | The new value, as an expression in the engine's own language, such as SQL for PostgreSQL. Must not be empty. |
+| `where` | string |  | A condition in the engine's own language. Only rows that match it change. Without it, every row changes. |
 
 ### FakerKind
 
-The kinds of value the faker strategy generates.
+The kinds of fake value the `faker` strategy generates.
 
 One of `first_name` or `last_name` or `name` or `email` or `user_name` or `phone_number` or `street_address` or `city` or `postcode` or `company` or `ipv4` or `url` or `text` or `date_of_birth`.
 
 ### FakerRule
 
-Replace with a deterministic fake value.
+Replace each value with a deterministic fake value, such as `{faker: email}`.
+
+The same input gets the same fake value in every table, so joins on the column still match.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `faker` (required) | [FakerKind](#fakerkind) |  |  |
-| `unique` | boolean | `false` |  |
+| `faker` (required) | [FakerKind](#fakerkind) |  | The kind of fake value to generate, such as `name` or `email`. |
+| `unique` | boolean | `false` | Whether every fake value in the column must be different. The generator retries until it finds an unused value, or fails the run. Defaults to false. |
 
 ### Fetch
 
-Where `fetch` reads images from and keeps them.
+Where `fetch` reads images from, and where it keeps them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `from` (required) | [AdapterSettings](#adaptersettings) |  | The export store to read, one adapter: `{filesystem: ...}`, `{s3: ...}`, or `{http: ...}`, a web server serving it, which is read-only and reads the index `promote` writes. |
-| `staging` (required) | string |  |  |
-| `channel` | string | `"latest"` |  |
-| `staging_channel` | string | `"active"` |  |
-| `format` | [ImageFormat](#imageformat) | `"physical"` |  |
-| `engine_version` | string |  | Which compatibility line's images to fetch, such as `8.4` (not `8.4.13`); the newest line when omitted. |
-| `keep` | integer | `3` | How many generations staging keeps, for `activate` to roll back to. |
+| `from` (required) | [AdapterSettings](#adaptersettings) |  | The export store to read, as one adapter: `{filesystem: ...}`, `{s3: ...}` or `{http: ...}`. The `http` store reads from a web server that serves the export store. It is read-only, and reads the index that `promote` writes. |
+| `staging` (required) | string |  | The staging directory that `fetch` unpacks images into, for `replicate` to copy from. |
+| `channel` | string | `"latest"` | The export stores' channel to fetch. Defaults to `latest`. A channel name is 1 to 63 lowercase letters, digits, `-` or `_`, starting with a letter or digit. |
+| `staging_channel` | string | `"active"` | The channel in staging that `fetch` points at each new image. `replicate` copies from it, and `activate` moves it. Defaults to `active`. It follows the same naming rules as `channel`. |
+| `format` | [ImageFormat](#imageformat) | `"physical"` | Which image format to fetch: `physical` or `logical`. Defaults to `physical`. |
+| `engine_version` | string |  | Which compatibility line's images to fetch, such as `8.4` (not `8.4.13`). Defaults to the newest line. |
+| `keep` | integer | `3` | How many generations staging keeps, so `activate` can roll back to them. At least 1. Defaults to 3. |
 
 ### FileSecret
 
-A secret read from a file, such as a mounted Kubernetes Secret.
+A secret read from a file, such as a mounted Kubernetes Secret, written `{file: PATH}`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `file` (required) | string |  |  |
+| `file` (required) | string |  | The path of the file that holds the secret. |
 
 ### Files
 
-A file tree the source's rows refer to, copied beside it (decision 97). The `files` engine adapter reads it: each top-level directory is a table, and `select` gives each one `find` tests. Every top-level directory must be selected or excluded.
+A file tree that the source's rows refer to, copied beside them (decision 97).
+
+The `files` engine adapter reads the tree. Each top-level directory is a table, and `select` gives each one `find` tests. Every top-level directory must be selected or excluded.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `connection` | map of JSON |  | Where the tree is and how to read it, checked by the `files` adapter. |
-| `select` | map of string |  | Each top-level directory's `find` tests, such as `-type f -mtime -30`. |
+| `connection` | map of JSON |  | Where the tree is and how to read it. The `files` adapter checks these settings. |
+| `select` | map of string |  | The `find` tests that choose each top-level directory's files, such as `-type f -mtime -30`. |
 | `exclude` | list of string |  | Top-level directories to leave out. |
-| `paths_from` | string or [PathsFrom](#pathsfrom) |  | How the source's chosen rows name files to copy too, relative to the root: a `table.column` holding paths, or a template and pattern (:class:`PathsFrom`). |
-| `cleanup` | list of string |  | Shell commands run in the copy's root after it is made, such as removing EXIF data. |
-| `image` | string |  | The image the cleanup commands run in. |
+| `paths_from` | string or [PathsFrom](#pathsfrom) |  | How the source's chosen rows name more files to copy, relative to the tree's root. Either a `table.column` that holds paths, or a template with `table`, `path` and optionally `match`. |
+| `cleanup` | list of string |  | Shell commands run in the copy's root after it is made, such as one that removes EXIF data. |
+| `image` | string |  | The container image that the cleanup commands run in. |
 
 ### Follow
 
-Child edges to follow, as `parent -> child` or `parent -> child.column`.
+Which references to follow down, from parent rows to their child rows.
+
+Parents of copied rows are always copied. Children are copied only along the edges listed here.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `down` | list of string |  |  |
+| `down` | list of string |  | Child edges to follow, each written `parent -> child`. Write `parent -> child.column` to name the referencing column. |
 
 ### FormatPreservingOptions
 
-Options for the format-preserving strategy.
+Options for the `format_preserving` strategy.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `luhn` | boolean | `false` | Keep the Luhn check digit valid, for card numbers. |
+| `luhn` | boolean | `false` | Whether to keep the Luhn check digit valid, as card numbers need. Defaults to false. |
 
 ### FormatPreservingRule
 
-Replace digits with digits and letters with letters, keeping the shape.
+Replace digits with digits and letters with letters, so each value keeps its shape.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `format_preserving` (required) | [FormatPreservingOptions](#formatpreservingoptions) |  |  |
+| `format_preserving` (required) | [FormatPreservingOptions](#formatpreservingoptions) |  | Options for the strategy. Write `{}` to take the defaults. |
 
 ### HashOptions
 
-Options for the hash strategy.
+Options for the `hash` strategy.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `length` | integer | `16` |  |
+| `length` | integer | `16` | How many hexadecimal characters the hash has, from 8 to 64. Defaults to 16. In integer columns, the hash is a 32-bit integer instead. |
 
 ### HashRule
 
-Replace with a keyed hash, so equal inputs stay equal.
+Replace each value with a keyed hash, so equal inputs stay equal.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `hash` (required) | [HashOptions](#hashoptions) |  |  |
+| `hash` (required) | [HashOptions](#hashoptions) |  | Options for the hash. Write `{}` to take the defaults. |
 
 ### Hook
 
-A native script run before load (server settings, extensions).
+A native script run before load, such as one that sets server settings or adds extensions.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `sql` (required) | string |  |  |
+| `sql` (required) | string |  | The script, in the engine's own language. Must not be empty. |
 
 ### Hooks
 
-Hooks around load and transform.
+Native scripts run around load and transform.
+
+Each engine says whether it runs hooks. The plan fails if a spec gives hooks to an engine that doesn't.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `before_load` | list of [Hook](#hook) |  |  |
-| `after_transform` | list of [TransformHook](#transformhook) |  |  |
+| `before_load` | list of [Hook](#hook) |  | Scripts run in each working database before the copied data is loaded. |
+| `after_transform` | list of [TransformHook](#transformhook) |  | Scripts run after every column rule, and before `package` and `verify`, so verification covers what they change. |
 
 ### ImageFormat
 
 The forms a golden image can take.
 
+- `physical`: the engine's own on-disk form. It is the fastest to clone and start, but it is tied to the server version.
+- `logical`: a portable export, which restores into other server versions.
+
 One of `physical` or `logical`.
 
 ### ImageGroup
 
-One image's share of the extract.
+One image built from the shared extract.
+
+The image holds the tables that the group's `include` patterns match.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `include` (required) | list of string |  | The tables in the image, as globs matched from the right. |
-| `requires` | list of string |  | Groups whose images a copy of this one is provisioned with, for references into them. |
-| `standalone` | boolean | `false` | Whether the image must work on its own: what its tables and objects need from outside the group is pulled into it (package planning). |
-| `objects` | list of [ObjectRoot](#objectroot) |  | Objects code outside Datadouble expects in this image, such as `{function: public.uuid_generate_v4}`; they join the image's closure. |
-| `rows` | map of [PulledRows](#pulledrows) |  | Which rows a standalone group pulls in, overriding `referenced`: keys are a table name or glob, or a reference `child.column -> parent` (which wins over a table key), and values `referenced`, `all` or `none`. |
+| `include` (required) | list of string |  | The tables in the image, as globs matched from the right. At least one is needed. |
+| `requires` | list of string |  | Other groups whose images are provisioned along with each copy of this one, for references into them. Each must be a group in `images`. A standalone group cannot have any. |
+| `standalone` | boolean | `false` | Whether the image must work on its own. If true, package planning pulls into the image whatever its tables and objects need from outside the group. Defaults to false. |
+| `objects` | list of [ObjectRoot](#objectroot) |  | Objects that code outside Datadouble expects in this image, such as `{function: public.uuid_generate_v4}`. They join the image's closure, the set of everything the image must contain. |
+| `rows` | map of [PulledRows](#pulledrows) |  | Which rows a standalone group pulls in, in place of the default `referenced`. Keys are a table name or glob, or a reference `child.column -> parent`, which wins over a table key. Values are `referenced`, `all` or `none`. Needs `standalone: true`. |
 
 ### JailerSubset
 
-A subset designed in Jailer, read on every run (see :mod:`datadouble.jailer`).
+A subset designed in Jailer's GUI, which Datadouble reads again on every run.
+
+The Jailer compatibility page explains what Datadouble takes from it.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `model` (required) | string |  | The extraction model, a `.jm` file. |
-| `datamodel` (required) | string |  | The data model folder it was designed against. |
+| `model` (required) | string |  | The Jailer extraction model, a `.jm` file. |
+| `datamodel` (required) | string |  | The Jailer data model folder that the model was designed against. |
 
 ### Notify
 
-Who hears about generated CI jobs that fail or warn (decision 125). It lives in the spec rather than in `ci init`'s options, so generating the jobs again keeps it.
+Who hears about generated CI jobs that fail or warn (decision 125).
+
+Notifications live in the spec rather than in `ci init`'s options, so generating the jobs again keeps them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `when` | list of [NotifyOn](#notifyon) | see type | The outcomes that notify: `failure`, `warning` or both; `[failure]` by default. |
-| `to` (required) | list of [NotifyTarget](#notifytarget) |  | Where notifications go, one target each: `{webhook: ...}` or `{email: ...}`. |
+| `when` | list of [NotifyOn](#notifyon) | see type | The outcomes that send a notification: `failure`, `warning` or both. Defaults to `[failure]`. |
+| `to` (required) | list of [NotifyTarget](#notifytarget) |  | Where notifications go, one target each: `{webhook: ...}` or `{email: ...}`. At least one is needed. |
 
 ### NotifyOn
 
-Outcomes of a generated CI job that notify; `notify.when` is `[failure]` by default.
+The outcomes of a generated CI job that send a notification.
+
+- `failure`: the job failed.
+- `warning`: the job finished with warnings.
+
+`notify.when` is `[failure]` by default.
 
 One of `failure` or `warning`.
 
 ### NotifyTarget
 
+Where one notification goes: `{webhook: ...}` or `{email: ...}`.
+
 ### NullOptions
 
-The null strategy has no options.
+The `null` strategy has no options, so it is written `null: {}`.
 
 ### NullRule
 
-Set to null.
+Set each value to null.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `null` (required) | [NullOptions](#nulloptions) |  |  |
+| `null` (required) | [NullOptions](#nulloptions) |  | No options: write `{}`. |
 
 ### ObjectKind
 
 The engine-neutral kinds of object besides tables.
+
+A `package` is a package of routines, such as Oracle's: its specification and body together.
 
 One of `function` or `procedure` or `package` or `view` or `materialized-view` or `trigger` or `type` or `sequence` or `event`.
 
@@ -302,44 +355,54 @@ One of `function` or `procedure` or `package` or `view` or `materialized-view` o
 
 How strict mode treats one kind of object that differs from the catalog lock.
 
+- `off`: compare nothing, unless a difference breaks something.
+- `warn`: name each new, changed or removed object. This is the default.
+- `fail`: fail the plan on any difference.
+
 One of `off` or `warn` or `fail`.
 
 ### ObjectRoot
 
-An object code outside Datadouble expects, as its kind and its name matched from the right like a table's: `{function: public.uuid_generate_v4}`, with argument types as the catalog spells them where routines are overloaded (`{function: "public.total(integer)"}`), or `{trigger: orders.audit}` (a PostgreSQL trigger's name is `table.trigger`).
+An object that code outside Datadouble expects in an image, written as its kind and its name: `{function: public.uuid_generate_v4}`. Names match from the right, like table names. Where routines are overloaded, add the argument types as the catalog spells them: `{function: "public.total(integer)"}`. A PostgreSQL trigger's name is `table.trigger`, as in `{trigger: orders.audit}`.
 
 ### OnMissing
 
 What to do with a reference whose parent row is not followed.
 
+- `null`: set the referencing columns to null.
+- `stub`: insert a placeholder parent row.
+- `drop`: leave the referencing row out.
+
 One of `null` or `stub` or `drop`.
 
 ### Package
 
-Which image formats to produce; all the engine supports when omitted.
+Which image formats to produce, and the accounts physical images carry.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `formats` | list of [ImageFormat](#imageformat) |  |  |
-| `accounts` | list of [CopyAccount](#copyaccount) |  | Accounts physical images carry for consumers that serve them with the engine's own image; none when omitted. |
+| `formats` | list of [ImageFormat](#imageformat) |  | The image formats to produce: `physical`, `logical` or both. If given, the list must not be empty. Defaults to every format the engine supports. The `--format` option overrides it. |
+| `accounts` | list of [CopyAccount](#copyaccount) |  | Accounts that physical images carry, for consumers that serve them with the engine's own image. None by default. |
 
 ### PathsFrom
 
-How the source's chosen rows name files: a template over a table's columns. `path: "documents/{customer_id}/{file_name}"` builds a path from two columns; `match`, if given, is a regular expression applied to the result whose first group is the path, for values such as URLs.
+How the source's chosen rows name files, as a template over a table's columns.
+
+For example, `path: "documents/{customer_id}/{file_name}"` builds a path from two columns. `match`, if given, is a regular expression applied to the result, whose first group is the path. Use it for values such as URLs.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `table` (required) | string |  |  |
-| `path` (required) | string |  |  |
-| `match` | string |  |  |
+| `table` (required) | string |  | The table whose chosen rows name the files. |
+| `path` (required) | string |  | A template that builds a value from the row's columns, such as `documents/{customer_id}/{file_name}`. Without `match`, the value is the path, relative to the tree's root. Must not be empty. |
+| `match` | string |  | A regular expression applied to the value `path` builds. Its first group is the path. Use it for values such as URLs. |
 
 ### PiiScan
 
-Values the PII scan accepts on purpose, as `LIKE` patterns per column.
+Values the PII scan accepts on purpose.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `allow` | map of list of string |  |  |
+| `allow` | map of list of string |  | `LIKE` patterns of values the scan accepts, by column, such as `users.email: ["%@company.com"]`. A value that a detector flags and no pattern covers still fails verification. |
 
 ### Promote
 
@@ -347,13 +410,17 @@ Where `promote` copies verified images, and what it requires of them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`; a filesystem store's `mode` (`"0640"` by default) decides who can read the files, such as a web server serving them. Each also gets an index of its images per group (`<spec>/<group>/index.json`), which stores that cannot list keys, like `http`, are read through. |
-| `channel` | string | `"latest"` |  |
-| `strict` | [Strict](#strict) | see type | The least strict level, per kind, an image may have been built with. |
+| `to` (required) | list of [AdapterSettings](#adaptersettings) |  | The export stores, one adapter each, such as `{filesystem: ...}` or `{s3: ...}`. At least one is needed. A filesystem store's `mode` (`"0640"` by default) decides who can read the files, such as a web server that serves them. Each store also gets an index of its images per group, `<spec>/<group>/index.json`. Stores that cannot list keys, like `http`, are read through that index. |
+| `channel` | string | `"latest"` | The channel `promote` points at each image it copies to the export stores. Defaults to `latest`. A channel name is 1 to 63 lowercase letters, digits, `-` or `_`, starting with a letter or digit. |
+| `strict` | [Strict](#strict) | see type | The least strict level, per kind, that an image may have been built with. `promote` refuses an image built with a lower level. By default, `data: columns` and `warn` for each kind of object. |
 
 ### PulledRows
 
 Which rows of a table a standalone group pulls into its image.
+
+- `referenced`: the rows that the image's rows reference, plus the rows that reference them where the spec follows references down. This is the default.
+- `all`: every row of the source table.
+- `none`: no rows, only the table's structure.
 
 One of `referenced` or `all` or `none`.
 
@@ -363,14 +430,17 @@ How copies are made from staging.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `using` (required) | [AdapterSettings](#adaptersettings) |  |  |
-| `mode` | [ReplicateMode](#replicatemode) | `"pool"` |  |
-| `size` | integer | `2` | Unclaimed copies to keep ready (pool), or copies per owner (on-demand). |
-| `expires_hours` | integer | `24` | How long an on-demand copy lives before `release --expired` removes it. |
+| `using` (required) | [AdapterSettings](#adaptersettings) |  | The replicate adapter that makes the copies, such as `{docker-volume: {...}}`. Its README lists its settings. |
+| `mode` | [ReplicateMode](#replicatemode) | `"pool"` | How `replicate` decides how many copies to make: `pool` or `on-demand`. Defaults to `pool`. |
+| `size` | integer | `2` | In pool mode, how many unclaimed copies to keep ready. In on-demand mode, how many copies each owner gets. At least 1. Defaults to 2. |
+| `expires_hours` | integer | `24` | How many hours an on-demand copy lives before `release --expired` removes it. At least 1. Defaults to 24. |
 
 ### ReplicateMode
 
 How `replicate` decides how many copies to make.
+
+- `pool`: keep a number of unclaimed copies of the active generation ready. This is the default.
+- `on-demand`: make copies for a named requester.
 
 One of `pool` or `on-demand`.
 
@@ -378,15 +448,21 @@ One of `pool` or `on-demand`.
 
 What `prune` keeps.
 
+An image line is one image group's images for one engine version, such as `postgres-18`. For each image line, `prune` keeps the newest `keep` generations, anything built within `keep_days`, and whatever a channel points at. It never removes a channel's target.
+
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `keep` | integer | `3` |  |
-| `keep_days` | integer | `7` |  |
-| `keep_versions` | integer | `2` |  |
+| `keep` | integer | `3` | How many of the newest generations each image line keeps. At least 1. Defaults to 3. In staging, `fetch.keep` applies instead. |
+| `keep_days` | integer | `7` | Keep every generation built within this many days. 0 or more. Defaults to 7. |
+| `keep_versions` | integer | `2` | How many of a group's newest engine versions keep their generations. Older versions keep only their channels' targets, and lose their unclaimed pool copies. At least 1. Defaults to 2. |
 
 ### Rule
 
+One column's anonymization rule. It names exactly one strategy: `faker`, `hash`, `null`, `format_preserving` or `expression`.
+
 ### SecretRef
+
+A reference to a secret, so that the spec never holds the secret itself. `{env: NAME}` reads it from an environment variable, and `{file: PATH}` reads it from a file.
 
 ### Secrets
 
@@ -394,7 +470,7 @@ Secrets the run needs, by reference.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `anonymization_key` | [SecretRef](#secretref) |  | Seeds deterministic anonymization; a random key per run when omitted. |
+| `anonymization_key` | [SecretRef](#secretref) |  | The key that seeds deterministic anonymization, as a secret reference. Without it, Datadouble generates a random key for each generation. |
 
 ### Signing
 
@@ -402,69 +478,85 @@ How `store` signs images.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `cosign` (required) | [CosignSigning](#cosignsigning) |  |  |
+| `cosign` (required) | [CosignSigning](#cosignsigning) |  | Sign with cosign, using a key pair or the CI system's identity. |
 
 ### Source
 
-One server to extract from. `connection` is checked by the engine adapter, which knows its fields.
+One server to copy from.
+
+Datadouble checks the fields below. The engine adapter checks the settings inside `connection` and `server`, since only it knows their fields. Its README lists them.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `engine` (required) | string |  | The engine adapter; every source of a spec has the same one. |
-| `connection` | map of JSON |  | Where the server is and what to read, checked by the engine adapter. |
-| `image` | string |  | The vendor image working databases and engine tools run in; by default the engine adapter picks the official image of the newest source's version. Every source gives the same image, or none does. |
-| `server` | map of JSON |  | Settings for the engine's working servers, checked by the engine adapter. Every source gives the same settings, since one working server holds them all. |
-| `omit` | list of string |  | Requirements (extensions, plugins, modules) this source uses that copies leave out, by name. Anything that uses one must be excluded too, or the build fails. |
+| `engine` (required) | string |  | The engine adapter that reads this source, such as `postgres`. Every source of a spec must use the same one. |
+| `connection` | map of JSON |  | Where the server is and what to read. The engine adapter checks these settings. |
+| `image` | string |  | The vendor image that working databases and engine tools run in. By default, the engine adapter picks the official image for the newest source's version. Either every source gives the same image, or none does. |
+| `server` | map of JSON |  | Settings for the engine's working servers, such as PostgreSQL's `shared_preload_libraries`. The engine adapter checks them. Every source must give the same settings, because one working server holds every source. |
+| `omit` | list of string |  | Requirements this source uses that copies leave out, by name. Requirements are extensions, plugins and modules. Anything that uses an omitted requirement must be excluded too, or the build fails. |
 
 ### Strategy
 
-How the subset is computed (see the subsetting design).
+How the planner computes the subset. The subsetting design explains both strategies.
+
+- `auto`: nested queries when the selection graph has no cycle, and keys otherwise. This is the default.
+- `nested`: strategy A. One nested query per table, pushed down to the source.
+- `keys`: strategy B. Collect keys, compute the closure of rows to copy, then fetch the rows by key.
 
 One of `auto` or `nested` or `keys`.
 
 ### Strict
 
-Strict mode's level for each kind of thing in the catalog; kinds left out take defaults. Whatever the levels, a difference that breaks something fails the plan, and a removed table or column always fails.
+Strict mode's level for each kind of thing in the catalog.
+
+Strict mode compares the source's catalog with the catalog lock, and warns or fails on what differs. Each kind of thing has its own level. Kinds left out take their defaults.
+
+Two differences fail the plan whatever the levels: one that breaks something, and a removed table or column.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `data` | [StrictLevel](#strictlevel) | `"columns"` | Tables, columns and requirements: `off`, `tables` or `columns`. |
-| `functions` | [ObjectLevel](#objectlevel) | `"warn"` | Functions and procedures: `off`, `warn` or `fail`. |
-| `views` | [ObjectLevel](#objectlevel) | `"warn"` | Views and materialized views. |
-| `triggers` | [ObjectLevel](#objectlevel) | `"warn"` | Triggers. |
-| `types` | [ObjectLevel](#objectlevel) | `"warn"` | User-defined types and domains. |
-| `sequences` | [ObjectLevel](#objectlevel) | `"warn"` | Sequences. |
-| `events` | [ObjectLevel](#objectlevel) | `"warn"` | Scheduled events, such as MySQL's. |
+| `data` | [StrictLevel](#strictlevel) | `"columns"` | Strict mode's level for tables, columns and requirements: `off`, `tables` or `columns`. Defaults to `columns`. |
+| `functions` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for functions and procedures: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `views` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for views and materialized views: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `triggers` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for triggers: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `types` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for user-defined types and domains: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `sequences` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for sequences: `off`, `warn` or `fail`. Defaults to `warn`. |
+| `events` | [ObjectLevel](#objectlevel) | `"warn"` | Strict mode's level for scheduled events, such as MySQL's: `off`, `warn` or `fail`. Defaults to `warn`. |
 
 ### StrictLevel
 
 How strict mode treats tables and columns that differ from the catalog lock.
 
+- `off`: warn about new tables, new columns and changed columns.
+- `tables`: fail on new tables, and warn about new and changed columns.
+- `columns`: fail on new tables, new columns and changed columns. This is the default.
+
 One of `off` or `tables` or `columns`.
 
 ### Subset
 
-Starting filters and the policy for deriving everything else.
+Which rows to copy.
+
+You give starting conditions, called seeds, and say which references to follow. The planner derives every other table's rows from them. Instead, `jailer` can name a subset designed in Jailer.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `as_of` | string |  |  |
-| `strategy` | [Strategy](#strategy) | `"auto"` |  |
-| `seeds` | map of string |  | Starting conditions; keys are table names or globs, such as `"*": "TRUE"`. |
-| `follow` | [Follow](#follow) | see type |  |
-| `edges` | map of [EdgePolicy](#edgepolicy) |  |  |
-| `virtual_fks` | map of [VirtualForeignKey](#virtualforeignkey) |  |  |
-| `unselected` | [Unselected](#unselected) |  | Kept tables that no seed or followed reference selects: `fail` (the default), `none` or `all`. |
-| `jailer` | [JailerSubset](#jailersubset) |  | A Jailer subset instead of seeds, follow, edges, virtual_fks and unselected. |
+| `as_of` | string |  | The anchor time that conditions refer to as `:as_of`, with a time zone. The plan resolves it once, so every query uses the same time. Defaults to the time the plan runs. |
+| `strategy` | [Strategy](#strategy) | `"auto"` | How the planner computes the subset: `auto`, `nested` or `keys`. Defaults to `auto`. The `--strategy` option overrides it. |
+| `seeds` | map of string |  | Starting conditions, in the source's own query language, by table. Keys are table names or globs, such as `"*": "TRUE"`. A table's own name wins over a glob. |
+| `follow` | [Follow](#follow) | see type | Which references to follow down from parent rows to child rows, listed under `down`. Parents of copied rows are always copied. |
+| `edges` | map of [EdgePolicy](#edgepolicy) |  | What to do with particular references, keyed `child.column -> parent`: copy every parent row with `follow: all`, or fall back with `on_missing`. |
+| `virtual_fks` | map of [VirtualForeignKey](#virtualforeignkey) |  | References the schema does not declare, keyed `child.column -> parent`. Subsetting follows them like declared foreign keys. |
+| `unselected` | [Unselected](#unselected) |  | What happens to a kept table that no seed or followed reference selects: `fail`, `none` or `all`. Defaults to `fail`. |
+| `jailer` | [JailerSubset](#jailersubset) |  | A subset designed in Jailer. It replaces `seeds`, `follow`, `edges`, `virtual_fks` and `unselected`, so a spec cannot give both. |
 
 ### TransformHook
 
-A native script run after the column rules, declaring what it rewrites.
+A native script run after the column rules, which declares the columns it rewrites.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `sql` (required) | string |  |  |
-| `rewrites` | list of string |  |  |
+| `sql` (required) | string |  | The script, in the engine's own language. Must not be empty. |
+| `rewrites` | list of string |  | The columns the script rewrites, as `table.column`. The anonymization report and strict mode count them as covered. Datadouble takes the list on trust, and `verify` checks the result. |
 
 ### Trust
 
@@ -472,43 +564,49 @@ The signatures images must carry to cross into non-production.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `cosign` (required) | [CosignTrust](#cosigntrust) |  |  |
+| `cosign` (required) | [CosignTrust](#cosigntrust) |  | Accept cosign signatures made with a given key or identity. |
 
 ### Unselected
 
 What happens to a kept table that no seed or followed reference selects.
 
+- `fail`: fail the plan, naming each such table. This is the default.
+- `none`: copy none of the table's rows, and warn.
+- `all`: copy every row of the table.
+
 One of `fail` or `none` or `all`.
 
 ### Verify
 
-Verification settings beyond the checks that always run.
+Verification settings, beyond the checks that always run.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `pii_scan` | [PiiScan](#piiscan) | see type |  |
-| `assertions` | list of [Assertion](#assertion) |  |  |
+| `pii_scan` | [PiiScan](#piiscan) | see type | Values the PII scan accepts on purpose, listed under `allow`. |
+| `assertions` | list of [Assertion](#assertion) |  | Native queries that must return no rows. |
 
 ### VirtualForeignKey
 
-A reference the schema does not declare, optionally only for some rows.
+A reference the schema does not declare.
+
+In `subset.virtual_fks`, each is keyed `child.column -> parent`. Subsetting follows it like a declared foreign key, for every row or only for the rows `when` selects.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `when` | string |  |  |
+| `when` | string |  | A condition on the child row, in the source's own query language. The reference holds only for rows that match it, such as `subject_type = 'Post'` for a polymorphic reference. Without it, the reference holds for every row. |
 
 ### Webhook
 
-A URL Datadouble posts a JSON summary of the job's outcome to.
+A URL that Datadouble posts a JSON summary of the job's outcome to.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `url` (required) | [SecretRef](#secretref) |  | A secret reference, since a webhook's URL usually carries its credential. |
+| `url` (required) | [SecretRef](#secretref) |  | The webhook's URL, as a secret reference, since the URL usually carries its credential. |
 
 ### WebhookTarget
 
-`{webhook: {url: {env: ALERTS_WEBHOOK}}}`.
+A webhook target, such as `{webhook: {url: {env: ALERTS_WEBHOOK}}}`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `webhook` (required) | [Webhook](#webhook) |  |  |
+| `webhook` (required) | [Webhook](#webhook) |  | The webhook to post to. |
