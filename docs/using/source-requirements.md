@@ -46,8 +46,9 @@ records for each engine, and how it lists what the working image has:
 
 Three engines work differently:
 
-- **SQL Server** refuses tables that would need an add-on, such as tables with
-  CLR types or full-text indexes. It reports them as not supported yet.
+- **SQL Server** doesn't copy tables that would need an add-on, such as
+  tables with CLR types or full-text indexes. Extract refuses them and names
+  each one, and you exclude them from the spec.
 - **MongoDB** loads nothing into its server, so it has no requirements.
 - **Salesforce** copies hold a package's objects and fields as ordinary
   tables and columns. So Datadouble records the installed packages in the
