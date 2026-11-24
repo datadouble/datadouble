@@ -80,7 +80,8 @@ subset:
 
 `as_of` is the run's **anchor time**. Datadouble resolves it once, and every
 query that says `:as_of` uses that same value. That fixes the `NOW()` problem:
-all tables agree on what "the last ten days" means.
+all tables agree on what "the last ten days" means. Without `as_of` in the
+spec, the anchor time is the moment the generation started, to the second.
 
 ### Parents always, children by choice
 
@@ -222,6 +223,11 @@ into the working database:
 - `drop` is different: it is part of the selection itself, so the dropped
   rows are never read.
 
+The plan checks that each fallback can work. `null` needs the referencing
+columns to be nullable. `stub` needs the parent table in the image with its
+rows, and fails when the parent's own references can't be null, since a
+placeholder row has nothing to put in them.
+
 **A reference to an excluded or structure-only table must have a fallback.**
 That table copies no rows, so there is no parent to pull in (see
 [excludes and strict mode](excludes-and-strict-mode.md)).
@@ -320,7 +326,7 @@ reference selects:
 
 | Value | Effect |
 |---|---|
-| `fail` (default) | The plan fails. It names each such table and the ways out: seed it, make it structure-only, exclude it, or change `unselected`. |
+| `fail` (default) | The plan fails. It names each such table and the ways out: seed it, follow a reference to it, make it structure-only, exclude it, or change `unselected`. |
 | `none` | The table is copied without rows, and the plan warns. |
 | `all` | Every row of each such table is copied. |
 
@@ -387,9 +393,10 @@ Asking for `nested` where it cannot run fails the plan.
 
 What counts as a cycle needs care (decision 51):
 
-- **A followed child edge does not by itself make a cycle.** Take
-  `customers -> orders`. Orders reached through it already have their
-  customer, so customers only depend on orders chosen some other way.
+- **A followed child edge does not by itself make a cycle,** as long as the
+  reference points at the parent's key. Take `customers -> orders`. Orders
+  reached through it already have their customer, so customers only depend
+  on orders chosen some other way.
 - **True recursions run with B.** These are cycles in the schema,
   self-references, and children that pull in further parents. The shop's
   reviews, without the `null` policy, are the last kind: reviews reached from
@@ -408,8 +415,8 @@ the lock. It takes the same `--strategy` and `--strict` overrides as `run`.
 By default it prints a summary: how many tables are extracted and excluded,
 the strategy chosen, the anchor time, each image group's table count, and any
 warnings. With the global `--json` option (`datadouble --json plan …`), it
-prints the whole plan, which is also what the
-plan stage records in its manifest. That includes:
+prints the whole plan, the same one the `plan` stage of a run writes to
+its `plan.json`. That includes:
 
 - each table's rule and every edge, with the policy that applies to it;
 - what each seed key and exclude pattern matched;
@@ -481,8 +488,9 @@ snapshot opens, since that cannot run in a read-only transaction.
 
 **MongoDB.** A snapshot session (read concern `snapshot`, pinned to one
 cluster time), which needs a replica set or sharded cluster. Collection and
-index listings are not allowed inside it. So they run first, and the catalog
-fingerprint is checked again inside the session.
+index listings are not allowed inside it. So once the session is open, the
+extract lists the collections outside it and checks the catalog fingerprint
+against the plan's.
 
 **Elasticsearch and OpenSearch.** A point in time, opened over every index the
 source's patterns match. Every search pages through it, so the extract sees
@@ -569,6 +577,6 @@ only strategy B.
 - References in key names are then ordinary references,
   `user:{}:sessions._key -> user:{}`, and so are references in values,
   `order:{}.user_id -> user:{}`.
-- Seeds and `when` clauses are globs over `_key`, such as `{where: "1*"}`.
+- Seeds and `when` clauses are globs over `_key`, such as `"1*"`.
 - Datadouble evaluates the planner's conditions itself, against each key it
   reads. So only strategy B is available.

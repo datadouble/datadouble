@@ -57,6 +57,16 @@ secrets:
     env: ANONYMIZATION_KEY
 ```
 
+The plan checks that each rule fits its column:
+
+- `faker` needs a text column, except `date_of_birth`, which also takes date
+  and timestamp columns;
+- `hash` and `format_preserving` need a text or integer column;
+- `null` needs a column that can be null.
+
+Rules on primary key columns, or on columns a reference uses (declared or
+virtual), are refused, whatever the strategy (decision 52).
+
 ### Faker values are deterministic
 
 A naive faker would give `alice@example.com` a different fake address every
@@ -100,8 +110,6 @@ The faker, hash and format-preserving strategies work value by value. Each
 distinct value of the column is read once and mapped in the Datadouble
 process. The engine then applies the mapping.
 
-Rules on primary or foreign key columns are refused for now (decision 52).
-
 ## Expressions
 
 Many anonymization needs are easiest to state as an expression over the row
@@ -121,15 +129,16 @@ anonymize:
 
 ### How rules become one update
 
-Datadouble turns each table's rules into one native update in the working
-database. For SQL engines, that is a single `UPDATE` per table. So
-expressions run at the speed of the database, not of a client loop.
+On the SQL engines, Datadouble turns each table's rules into a single
+`UPDATE` in the working database. Other engines use their own bulk updates
+(see [engines without SQL](#engines-without-sql)). So expressions run at the
+speed of the database, not of a client loop.
 
 An update changes only the columns its rules name. On MySQL, that has some
 consequences worth knowing:
 
 - `ON UPDATE CURRENT_TIMESTAMP` columns keep their values.
-- Triggers are set aside while the rules run.
+- Triggers are set aside while the rules and hooks run.
 - Hooks (below) are SQL as written. So a hook's `UPDATE` on MySQL stamps such
   columns unless it assigns them itself:
   `SET label = 'done', changed = changed`.
@@ -141,16 +150,16 @@ consequences worth knowing:
 
 Expressions could have been free-form scripts. They are column rules instead,
 because then Datadouble knows which columns each rule rewrites. That matters
-in three places:
+in two places:
 
-- The manifest records a strategy hash per column. So changing one rule
-  re-runs only from `transform`.
+- The `transform` stage's manifest records each covered column with a
+  fingerprint of its rule. Changing a rule redoes `transform` and the stages
+  after it, and reuses the extract and load.
 - Resolving a strict-mode failure by adding an anonymization rule works the
   same way for expressions as for any other strategy (see
   [strict mode](excludes-and-strict-mode.md#failure-output)).
-- The anonymization report lists, per column, which rule covered it.
 
-### Engines without SQL
+### Engines without SQL {#engines-without-sql}
 
 The expression strategy uses whatever server-side expression language the
 engine has. An adapter that has none doesn't offer the strategy, and the plan
@@ -163,7 +172,7 @@ fails if a spec uses it there.
 | Elasticsearch, OpenSearch | Painless | `_update_by_query` |
 | Redis | Lua | A script run per matching key |
 | Salesforce | None (the working copy is not a server Datadouble can run code in) | Not offered; use the other strategies |
-| Filesystem | Shell | The adapter's cleanup commands |
+| Files (`files:`) | None | Not offered; `files.cleanup` runs shell commands in the copy instead |
 
 For MongoDB, a rule's `expression` is an aggregation expression, and its
 `where` is a query filter. Both are written in Extended JSON:
@@ -193,8 +202,9 @@ Those go in hooks. There are two hook points:
 ### Declaring what a hook rewrites
 
 Datadouble cannot see inside a hook's SQL. So an `after_transform` hook that
-rewrites personal data declares which columns it rewrites. Then the
-anonymization report and strict-mode resolution can count it:
+rewrites personal data declares which columns it rewrites, under `rewrites`.
+The plan checks that each one is a column in the catalog, and the `transform`
+stage's manifest records them beside the columns the rules cover:
 
 ```yaml
 hooks:
@@ -211,9 +221,10 @@ result.
 ### Engines that don't run hooks
 
 Engines say whether they run hooks, and the plan fails if a spec gives hooks
-to one that doesn't. MongoDB doesn't (decision 68). Its column rules cover
-what hooks would, and a script language there would be a second anonymizer
-that Datadouble cannot see into.
+to one that doesn't. MongoDB, Elasticsearch, OpenSearch, Redis and Salesforce
+don't. For MongoDB, decision 68 gives the reason: its column rules cover what
+hooks would, and a script language there would be a second anonymizer that
+Datadouble cannot see into.
 
 ## Values kept on purpose
 
@@ -239,5 +250,6 @@ verify:
       customers.email: ["%@company.com"]
 ```
 
-Allowed patterns are recorded in the manifest. A value that matches a
-detector, and that no allow pattern covers, still fails verification.
+The patterns are SQL `LIKE` patterns, and each must match the whole value.
+The plan records them (`pii_allow`). A value that matches a detector, and
+that no allow pattern covers, still fails verification.

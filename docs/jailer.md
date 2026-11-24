@@ -76,7 +76,9 @@ There are two ways in:
   designed against. Datadouble then reads the Jailer files on every run.
   Jailer stays the design tool. Edits committed to the `.jm` take effect on
   the next run, with no regeneration step. A spec with `subset.jailer` cannot
-  also set `seeds`, `follow`, `edges`, `virtual_fks` or `unselected`.
+  also set `seeds`, `follow`, `edges`, `virtual_fks` or `unselected`. Strict
+  mode still compares the catalog with `catalog.lock`, so commit one beside
+  the spec (see [strict mode](excludes-and-strict-mode.md#strict-mode)).
 
     ```yaml
     subset:
@@ -88,12 +90,15 @@ There are two ways in:
 - **Convert it once.** `datadouble import-jailer --spec prod.yml --model
   model.jm --datamodel dir/ --output subset.yml` writes the native `subset`
   and `exclude` settings, as YAML, to the `--output` file, for you to copy
-  into the spec. It also writes a `catalog.lock`, and its response reports
-  anything it mapped approximately or dropped.
+  into the spec. It also writes a `catalog.lock`, and its response lists
+  the settings it ignored because they don't choose rows.
 
-Either way, the data model is checked against the live catalog. A table or
-column the Jailer model has and the catalog doesn't, or a primary key that
-differs, fails.
+Either way, the data model is checked against the live catalog. A table the
+data model lists and the catalog doesn't, a column an association joins on
+that the catalog doesn't have, or a primary key that differs, fails.
+Datadouble reads the data model's `table.csv`, `association.csv`,
+`exclude-tables.csv` and `exclude-associations.csv`. It doesn't read
+`column.csv`.
 
 ## Mapping {#mapping}
 
@@ -102,13 +107,13 @@ What version 1 translates (decision 81):
 | Jailer | Datadouble |
 |---|---|
 | Subject + condition (`T.` alias), additional subjects | Seed filter; several subjects on one table are joined with `OR` |
-| Association with an equality join, `first-insert` side or `n:1` | A declared foreign key when the catalog has one with those columns, otherwise a virtual one |
+| Association with an equality join, its direction given by the `first-insert` side or by `n:1` / `1:n` | A declared foreign key when the catalog has one with those columns, otherwise a virtual one |
 | Child direction (`inverse-<name>` of an `n:1` association), unrestricted | A followed child edge (Jailer follows every association unless restricted) |
 | Restriction `ignore` on a child direction | Not followed |
 | Restriction `ignore` on a parent direction, or an excluded association | `on_missing: null` (Jailer exports the row with the reference dangling; the key sets agree) |
 | `exclude-tables.csv` | Excludes, added to the spec's own |
 | A table no subject or association reaches | No rows, with a warning, as `subset.unselected: none`; `import-jailer` writes that setting, and a spec cannot set `unselected` beside `subset.jailer` |
-| Data model `table.csv` | Checked against the catalog: a primary key that differs fails the plan |
+| Data model `table.csv` | Checked against the catalog: a missing table or a primary key that differs fails the plan |
 | Layout, XML mapping, export mode, version and other display settings | Ignored, listed in the report |
 
 ### Not yet supported
@@ -118,7 +123,9 @@ fails the plan, naming the feature, instead of running a different subset:
 
 - restriction conditions (`A.` / `B.` SQL);
 - joins other than column equality;
-- subject limits and orders;
+- associations with no direction (no `first-insert` side, and a cardinality
+  other than `n:1` or `1:n`);
+- subject limits;
 - `${param}` placeholders;
 - column filters.
 
@@ -136,8 +143,10 @@ Each would need a native equivalent first.
    [two execution strategies](subsetting.md#two-execution-strategies)). Any
    shortcut the planner takes must produce identical row sets.
 3. **Schema drift.** The data model is a snapshot of the schema. The planner
-   compares it to the live catalog. Removed or changed objects fail, and new
-   ones are handled by [strict mode](excludes-and-strict-mode.md).
+   checks the parts it uses against the live catalog: tables, primary keys
+   and the columns associations join on. Everything else, new tables and
+   columns included, is [strict mode](excludes-and-strict-mode.md)'s job,
+   against the catalog lock.
 4. **Raw SQL conditions.** A subject's condition, in the source's dialect,
    is passed through with its `T.` alias removed. Restriction conditions,
    which use `A.` and `B.`, are not supported yet (see

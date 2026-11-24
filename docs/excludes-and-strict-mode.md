@@ -42,8 +42,8 @@ How the patterns work:
 - **They are case-insensitive by default.** Engines fold identifier case
   differently: PostgreSQL to lower case, Oracle to upper case, SQL Server by
   collation. Set `case_sensitive: true` to match case exactly.
-- **They are resolved once, at plan time.** The plan and the manifest record
-  exactly which objects each pattern matched.
+- **They are resolved once, at plan time.** The plan records exactly which
+  tables each pattern matched.
 - **They work the same way for other engines:** MongoDB collections,
   Salesforce objects, Redis key patterns.
 - **Jailer adds to them.** When a `.jm` model is used, Jailer's
@@ -61,11 +61,14 @@ copy will have none.
   unless that edge has an explicit fallback: `null`, `stub` or `drop` (see
   [subsetting](subsetting.md#when-a-reference-costs-too-much)). So
   `orders.customer_id -> customers` needs one.
-- **Child edges into excluded tables are cut.** If the shop excluded
-  `reviews` instead, the `follow.down` entry `products -> reviews` would
-  simply bring in nothing.
+- **An excluded table's own references are gone.** They are not part of the
+  subset graph. If the shop excluded `reviews` instead, the `follow.down`
+  entry `products -> reviews` would fail the plan as a reference that doesn't
+  exist. Remove such entries, and `edges` policies on such references, when
+  you exclude a table.
 - **In the restored schema, foreign-key constraints and views that reference
-  excluded tables are left out**, and the report lists each one.
+  excluded tables are left out.** The plan lists each left-out reference
+  under its image group's `omitted_references`.
 
 ## Strict mode
 
@@ -83,26 +86,27 @@ safe behaviour is the default, and relaxing it is explicit.
 ### The lock: a record of the schema
 
 To notice a change, strict mode needs to know what the schema looked like
-when the subset model was built. That record comes from one of two places:
-
-- **Jailer models** already carry one: the data model folder (`table.csv`,
-  `column.csv`).
-- **Native specs** get a `catalog.lock`. `datadouble lock` writes it, and you
-  commit it next to the spec. It lists tables, columns, primary keys and
-  foreign keys, with a fingerprint. `datadouble import-jailer` writes one too
-  (see [Jailer](jailer.md#design)).
+when the subset model was built. That record is the **catalog lock**, a file
+called `catalog.lock`. `datadouble lock` writes it, and you commit it next to
+the spec. It lists tables, columns, primary keys and foreign keys, with a
+fingerprint. `datadouble import-jailer` writes one too (see
+[Jailer](jailer.md#design)). A spec that reads a Jailer model on every run
+needs a lock as well: Datadouble checks Jailer's data model folder against
+the catalog, but strict mode compares only with the lock.
 
 At plan time, Datadouble takes the live catalog, removes the excludes, and
-compares the result against the lock.
+compares the result against the lock. Without a lock there is nothing to
+compare, so the plan fails, unless `data` is `off` and no kind is set to
+`fail`. Then it only warns.
 
 ### Requirements
 
 Besides tables, the lock records **requirements**: the add-ons a source uses
 beyond the server itself, such as PostgreSQL extensions (see
 [architecture](architecture.md#source-requirements)). The lock records each
-one at the source's version. So an extension installed or upgraded on the
-source stops the build until someone checks that the working image has it and
-re-locks.
+one at the source's version. So an extension upgraded on the source stops
+the build until someone checks that the working image has it and re-locks.
+A newly installed one does too, unless `data` is `off`.
 
 ### Levels {#levels}
 
@@ -215,9 +219,9 @@ The lock records them, and each kind has its own level:
 | `fail` | **Fail** |
 
 **What counts as changed.** A changed definition means a different
-fingerprint. The definition counts as written. Only line endings and spaces at
-the ends of lines are ignored, since whitespace inside a string or an indented
-PL/Python body is a real edit.
+fingerprint. The definition counts as written. Only line endings, spaces at
+the ends of lines and blank lines at the start and end are ignored, since
+whitespace inside a string or an indented PL/Python body is a real edit.
 
 **Why the default is `warn`.** Most object changes are routine, but a person
 should still look. A rewritten trigger or function can change what a copy
@@ -254,7 +258,8 @@ the engine's own records. Some are **inferred**: parsed from a routine's or
 trigger's body instead. The plan marks inferred edges.
 
 - **Only exact edges can fail the plan.** A removal that only inferred edges
-  point at warns, at every level, naming what may still need it.
+  point at warns, naming what may still need it. It warns even at `off`, and
+  fails only at `fail`, where every difference fails.
 - **An inferred edge knows a name, not a signature.** So a routine whose
   arguments changed still satisfies it.
 
