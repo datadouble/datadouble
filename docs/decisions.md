@@ -43,8 +43,17 @@ name is also free on PyPI, npm and GitHub.
 
 ### 2. Pluggable adapters for every step {#decision-2}
 
-**Decided:** Each step of the work is done by a pluggable adapter: dump and
-load, subset, anonymize, verify, storage and replicate.
+**Decided:** Every step's work that is specific to one system is done by a
+pluggable adapter. The core holds the general logic, such as subset planning,
+anonymization rules and verification checks. There are six kinds of adapter:
+
+- engine adapters, which extract, load, transform, package and restore for
+  one engine;
+- storage adapters;
+- replicate adapters;
+- announce adapters;
+- container runtime adapters;
+- CI/CD adapters.
 
 **Why:** Breadth of engines is a core goal.
 
@@ -94,6 +103,8 @@ chainable.
 
 ### 8. Jailer `.jm` support {#decision-8}
 
+*Refined by [decision 81](#decision-81).*
+
 **Decided:** Datadouble supports Jailer's `.jm` files natively. It also has a
 converter, which fails on a schema mismatch.
 
@@ -124,7 +135,7 @@ leaks.
 ### 11. Containers and sample data for every engine {#decision-11}
 
 **Decided:** Every engine has containers and sample data. Salesforce uses
-recorded interactions plus an in-memory fake.
+recorded interactions plus a fake org.
 
 **Why:** Local development needs them.
 
@@ -158,7 +169,8 @@ and Argo CD. Each one is tested end to end.
 
 ### 16. Lifecycle split into jobs {#decision-16}
 
-*The `announce` stage's name is set by [decision 44](#decision-44).*
+*The `announce` stage's name is set by [decision 44](#decision-44). The
+`lock` job is added by [decision 123](#decision-123).*
 
 **Decided:** The lifecycle is split into jobs, and the jobs use new stages and
 operations:
@@ -334,8 +346,8 @@ licence. Every source file carries a copyright line and
 
 ### 33. Signed golden images {#decision-33}
 
-**Decided:** `build` signs golden images with cosign keyless signing. `promote`
-and `fetch` verify the signature.
+**Decided:** `build` signs golden images with cosign. `promote` and `fetch`
+verify the signature. [Decision 58](#decision-58) says how.
 
 **Why:** Non-production can check that an image came from the production
 pipeline.
@@ -362,12 +374,13 @@ separate adapters.
 **Why:** Rows often refer to file trees. Those files are needed alongside the
 databases, and they may hold personal data.
 
-### 36. Salesforce against the in-memory fake {#decision-36}
+### 36. Salesforce tests against the fake org {#decision-36}
 
-**Decided:** In version 1, Salesforce works against the in-memory fake.
-Cassettes are recorded later, outside the run, against a development org.
+**Decided:** Datadouble's tests run the Salesforce adapter against a fake org
+and recorded cassettes. Cassettes are recorded separately, outside the test
+run, against a development org.
 
-**Why:** The run never holds org credentials.
+**Why:** The test run never holds org credentials.
 
 ### 37. The changelog {#decision-37}
 
@@ -413,7 +426,8 @@ silently falls back to another format.
 
 ### 41. Several images from one build {#decision-41}
 
-*Amended by [decision 129](#decision-129).*
+*Amended by [decision 129](#decision-129). Refined by
+[decision 131](#decision-131).*
 
 **Decided:** One build can produce several images, through named groups in
 the spec:
@@ -503,14 +517,15 @@ actively maintained, but still before 1.0.
 
 ### 49. Working databases as throwaway servers {#decision-49}
 
-*The binaries requirement is superseded by [decision 72](#decision-72).*
+*The binaries requirement is superseded by [decision 72](#decision-72). How
+working servers are reached is set by [decision 74](#decision-74).*
 
 **Decided:**
 
 - Working databases are throwaway database servers. The engine adapter starts
   them in scratch space, one per image group.
-- For PostgreSQL, a working database is a local cluster that listens only on a
-  Unix socket.
+- For PostgreSQL, a working database is a cluster of its own in scratch
+  space.
 - The machine that builds images needs the server binaries of the version the
   images are built for, and the source's extensions.
 
@@ -570,7 +585,7 @@ directory is production scratch space and never leaves production.
 
 ### 54. No data values in messages {#decision-54}
 
-*Amended by [decision 139](#decision-139).*
+*Amended by [decisions 121](#decision-121) and [139](#decision-139).*
 
 **Decided:** Messages from engines and stores name objects, codes and states,
 but never data values. PostgreSQL messages have quoted strings redacted. S3
@@ -624,7 +639,8 @@ so non-production can read it.
 - cosign signs the image's summary, without its signature field. The summary
   names every archive's SHA-256.
 - The Sigstore bundle is stored as `<generation>.sigstore.json`.
-- Keys are passed by reference: `env://` or a path.
+- The spec names a key by reference (`{env: NAME}` or `{file: PATH}`), and
+  cosign gets it as `env://NAME` or a path.
 - Keyless signing works through the CI system's identity.
 - The transparency log is on unless it is turned off.
 
@@ -663,6 +679,8 @@ there is no separate `k8s-pv` announce adapter.
 the volume's phase is how claims are seen.
 
 ### 62. Instance copies {#decision-62}
+
+*Amended by [decision 121](#decision-121).*
 
 **Decided:**
 
@@ -721,7 +739,8 @@ sees every field in use.
   needs a replica set or a sharded cluster.
 - Collection and index listings run outside the session, because sessions do
   not support them.
-- The catalog fingerprint is compared again inside the session.
+- Once the session is open, extract lists the collections again and compares
+  the catalog's fingerprint with the plan's.
 
 **Why:** A snapshot session is MongoDB's consistent point-in-time read.
 Checking the fingerprint catches a schema change between the listing and the
@@ -751,17 +770,19 @@ query. A script language for hooks would be a second, unverified anonymizer.
 
 ### 69. MongoDB in the test image {#decision-69}
 
+*Where MongoDB's server and tools run is set by
+[decision 72](#decision-72).*
+
 **Decided:**
 
-- The test image runs MongoDB's own Debian 13 server and database-tools
-  tarballs, pinned by version and SHA-256.
-- The Compose `mongodb` service is a one-member replica set, seeded with a
-  generated cinema database.
+- The test image holds no MongoDB software. The server and its tools run in
+  the official `mongo` image.
+- The Compose `mongodb` service runs that image, pinned by digest, as a
+  one-member replica set. It is seeded with a generated cinema database.
 
 **Why:**
 
-- MongoDB's apt repository lags new releases.
-- The tarballs run on older x86-64 CPUs, where the packaged tools do not.
+- Snapshot reads need a replica set ([decision 66](#decision-66)).
 - Generating the data keeps its licence clear.
 
 ### 70. Hash replacements the PII scan would flag {#decision-70}
