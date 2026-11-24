@@ -1601,6 +1601,8 @@ Amends [decisions 61](#decision-61) and [73](#decision-73).
 
 ### 125. Notifications in the spec {#decision-125}
 
+*(Amended by [decision 141](#decision-141).)*
+
 **Decided:** Notifications are a spec section, `notify`, not a `ci init` option.
 
 - `when` is `failure` or `warning`. The default is failures only.
@@ -1615,7 +1617,8 @@ The JSON body holds:
 - the outcome;
 - the generation;
 - the error code;
-- the run's page (`run_url`, from each CI/CD adapter; null on Argo CD).
+- the run's page (`run_url`, from each CI/CD adapter; null on Argo CD);
+- a line for people (`text`, from [decision 141](#decision-141)).
 
 One webhook serves both sides of the boundary. A `{file:}` webhook becomes a mounted path in every job. Posts use the environment's proxy settings, verify TLS, follow no redirects, and send URL credentials only over https.
 
@@ -2059,6 +2062,29 @@ Amends [decision 54](#decision-54).
 - Settings that are URLs (`s3://`, `https://`) never looked like paths, so they need no declaration.
 
 Refines [decisions 100](#decision-100) and [127](#decision-127).
+
+### 141. A text line in webhook notifications {#decision-141}
+
+**Decided:** A webhook notification's body has a `text` field. It is one line built only from the body's other fields:
+
+```text
+Datadouble shop: build failed (store_failed), generation 0193a7c21b4e9f30 - https://ci.example.com/job/datadouble-shop-build/42/
+```
+
+- The outcome reads `failed`, `passed with warnings` or `succeeded`.
+- The error code, the generation and the run's page follow when they are set, and are left out when they are null.
+- Whitespace in a field, such as a line break in a run's URL, becomes one space, so the line stays one line.
+
+The other fields stay as they are. Datadouble builds `text` when it posts, so nothing can set it apart from them.
+
+**Format.** A webhook target has a `format`:
+
+- `json`, the default, posts every field and `text`.
+- `chat` posts only `{"text": ...}`.
+
+**Why:** Teams want job failures in a chat room, and each needed a service in between to reshape a small JSON body. Slack, Mattermost and Rocket.Chat incoming webhooks show `text` and ignore other keys. Google Chat answers `400` to any key it doesn't know ("Unknown name ... Cannot find field"), so `text` alone can't reach it. `chat` reaches all four. Keeping `json` as the default keeps the structured body for receivers written for it. Building the line only from the other fields keeps it within [decisions 18](#decision-18) and [54](#decision-54).
+
+Amends [decision 125](#decision-125).
 
 ## Open
 

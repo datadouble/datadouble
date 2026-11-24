@@ -970,12 +970,32 @@ class NotifyOn(StrEnum):
     WARNING = "warning"
 
 
+class WebhookFormat(StrEnum):
+    """The JSON body a webhook receives.
+
+    - ``json``: every field (``spec``, ``job``, ``outcome``, ``generation``,
+      ``error``, ``run_url``) and a ``text`` line built from them, for a
+      receiver written for Datadouble.
+    - ``chat``: only ``{"text": ...}``, for chat incoming webhooks (Google
+      Chat, Slack, Mattermost, Rocket.Chat). Google Chat refuses any other
+      key, so it needs ``chat``.
+
+    ``format`` is ``json`` by default.
+    """
+
+    JSON = "json"
+    CHAT = "chat"
+
+
 class Webhook(_Model):
     """A URL that Datadouble posts a JSON summary of the job's outcome to."""
 
     url: SecretRef
     """The webhook's URL, as a secret reference, since the URL usually carries
     its credential."""
+    format: WebhookFormat = WebhookFormat.JSON
+    """The body to post: ``json`` (every field and a ``text`` line) or
+    ``chat`` (only ``text``, for chat incoming webhooks)."""
 
 
 class WebhookTarget(_Model):
