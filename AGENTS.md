@@ -90,3 +90,6 @@ CLI help, read [WRITING.md](WRITING.md).
   scalars stay. `uv run python scripts/format_yaml.py` rewrites the
   repository and `make lint` checks it.
 - Commit messages: a short imperative subject line, then a body explaining why.
+- One issue per pull request, squash-merged. Related issues may share a pull
+  request with one commit per issue, each ending `Fixes #N`, merged with
+  Rebase and merge (CONTRIBUTING.md, "How pull requests merge").
