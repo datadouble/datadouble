@@ -117,8 +117,10 @@ def _jobs(text: str) -> list[str]:
 
 
 def _spec_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
-    parser.add_argument("--lock", help="the catalog lock (default: catalog.lock beside the spec)")
+    parser.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
+    parser.add_argument(
+        "--lock", help="the catalog lock file (default: catalog.lock beside the spec)"
+    )
 
 
 def _strict_setting(text: str) -> tuple[str, str]:
@@ -141,39 +143,45 @@ def _override_arguments(parser: argparse.ArgumentParser) -> None:
         type=_strict_setting,
         action="append",
         help=(
-            "override strict mode for one kind, such as data=tables or functions=fail (repeatable)"
+            "override strict mode's level for one kind, such as data=tables or functions=fail"
+            " (repeatable)"
         ),
     )
     parser.add_argument(
-        "--strategy", choices=[s.value for s in Strategy], help="override the subset strategy"
+        "--strategy",
+        choices=[s.value for s in Strategy],
+        help="override the spec's subset strategy",
     )
     parser.add_argument(
         "--format",
         dest="formats",
         action="append",
         choices=[f.value for f in ImageFormat],
-        help="an image format to produce (repeatable); overrides package.formats",
+        help="an image format to produce, in place of the spec's package.formats (repeatable)",
     )
 
 
 def _group_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    parser.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     parser.add_argument(
         "--group",
         dest="groups",
         action="append",
-        help="an image group to work on (repeatable); every group by default",
+        help="an image group to work on (repeatable; default: every group)",
     )
 
 
 def _operation_parsers(add: _Add) -> None:
     promote = add(api.Command.PROMOTE, "copy verified, signed images to the export stores")
     _group_arguments(promote)
-    promote.add_argument("--generation", help="the generation to promote (default: newest)")
+    promote.add_argument("--generation", help="the generation to promote (default: the newest)")
     fetch = add(api.Command.FETCH, "bring new promoted images into staging")
     _group_arguments(fetch)
-    activate = add(api.Command.ACTIVATE, "point the staging channel at a staged generation")
-    activate.add_argument("generation", help="the generation to activate")
+    activate = add(
+        api.Command.ACTIVATE,
+        "point the staging channel at a staged generation, such as an older one to roll back",
+    )
+    activate.add_argument("generation", help="the staged generation to point the channel at")
     _group_arguments(activate)
     replicate = add(
         api.Command.REPLICATE, "fill the pool, or make on-demand copies, and announce them"
@@ -181,41 +189,53 @@ def _operation_parsers(add: _Add) -> None:
     _group_arguments(replicate)
     replicate.add_argument("--owner", help="who on-demand copies are for")
     replicate.add_argument(
-        "--all-at-once", action="store_true", help="replace stale pool copies before refilling"
+        "--all-at-once",
+        action="store_true",
+        help="replace stale pool copies before refilling the pool",
     )
-    replicate.add_argument("--no-announce", action="store_true", help="make copies only")
-    claim = add(api.Command.CLAIM, "take an unclaimed pool copy")
+    replicate.add_argument(
+        "--no-announce", action="store_true", help="make copies without announcing them"
+    )
+    claim = add(api.Command.CLAIM, "take an unclaimed copy from the pool")
     _group_arguments(claim)
     claim.add_argument("--owner", required=True, help="who is taking the copy")
-    claim.add_argument("--no-announce", action="store_true", help="claim only")
-    release = add(api.Command.RELEASE, "destroy copies by ID, owner or expiry")
-    release.add_argument("copy_ids", nargs="*", metavar="COPY_ID", help="copies to release")
+    claim.add_argument(
+        "--no-announce", action="store_true", help="claim the copy without announcing it"
+    )
+    release = add(api.Command.RELEASE, "destroy copies, chosen by ID, owner or expiry")
+    release.add_argument(
+        "copy_ids", nargs="*", metavar="COPY_ID", help="the IDs of copies to release"
+    )
     _group_arguments(release)
     release.add_argument("--owner", help="release every copy this owner has")
-    release.add_argument("--expired", action="store_true", help="release expired copies")
+    release.add_argument(
+        "--expired", action="store_true", help="release every copy past its expiry time"
+    )
     announce = add(api.Command.ANNOUNCE, "announce existing copies again")
     _group_arguments(announce)
-    announce.add_argument("--owner", help="announce this owner's copies (default: the pool)")
+    announce.add_argument(
+        "--owner", help="announce this owner's copies (default: the pool's unclaimed copies)"
+    )
     copies = add(api.Command.COPIES, "list copies")
     _group_arguments(copies)
-    prune = add(api.Command.PRUNE, "apply retention")
-    prune.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    prune = add(api.Command.PRUNE, "remove old images, as the spec's prune settings say")
+    prune.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     prune.add_argument(
         "--target",
         required=True,
         choices=[target.value for target in PruneTarget],
-        help="the build's stores, the export stores, or staging",
+        help="where to prune: the build's stores, the export stores, or staging",
     )
     prune.add_argument(
         "--dry-run",
         dest="report_only",
         action="store_true",
-        help="report what would be removed, and the space recovered",
+        help="report what would be removed, and the space it would recover, without removing it",
     )
 
 
 def _ci_parsers(add: _Add) -> None:
-    ci = add("ci", "CI/CD configuration")
+    ci = add("ci", "work with CI/CD configuration")
     actions = ci.add_subparsers(dest="ci_command", required=True, metavar="ACTION")
     summary = "write CI/CD configuration for a spec's jobs"
     init = actions.add_parser("init", help=summary, description=summary)
@@ -227,44 +247,56 @@ def _ci_parsers(add: _Add) -> None:
         type=_jobs,
         action="append",
         required=True,
-        help=f"jobs, comma-separated or repeated, on one side of the boundary: {','.join(JobKind)}",
+        help=(
+            "the jobs to write, comma-separated or repeated, all on one side of the"
+            f" boundary: {','.join(JobKind)}"
+        ),
     )
-    init.add_argument("--spec", required=True, help="the spec file (YAML or JSON)")
+    init.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     init.add_argument(
-        "--runner", help="the runner jobs run on; required for build, promote and lock"
+        "--runner",
+        help="the runner the jobs run on. Jobs on the production side (build, promote, lock,"
+        " and prune there) need it",
     )
-    init.add_argument("--work", help="the build's work directory in production scratch space")
     init.add_argument(
-        "--side", choices=[side.value for side in Side], help="the side prune alone runs on"
+        "--work",
+        help="the build's work directory, an absolute path in production scratch space."
+        " Build needs it",
+    )
+    init.add_argument(
+        "--side",
+        choices=[side.value for side in Side],
+        help="the side of the boundary prune runs on, when prune is the only job",
     )
     init.add_argument("--output", help="the repository root to write into (default: .)")
-    init.add_argument("--image", help="the Datadouble image jobs run (default: this version's)")
+    init.add_argument("--image", help="the Datadouble image the jobs run (default: this version's)")
     init.add_argument(
         "--agent",
         choices=[agent.value for agent in Agent],
-        help="where jobs run Datadouble: a runner with Docker, or a Kubernetes pod"
+        help="where jobs run Datadouble: on a runner with Docker, or in a Kubernetes pod"
         " (default: the system's own)",
     )
     init.add_argument(
-        "--cloud", help="the Kubernetes cloud Kubernetes agents start in (default: the system's)"
+        "--cloud",
+        help="the Kubernetes cloud that Kubernetes agents start in (default: the system's)",
     )
     init.add_argument(
         "--env",
         dest="environment",
         action="append",
         metavar="NAME",
-        help="another environment variable every job passes on (repeatable)",
+        help="another environment variable that every job passes on (repeatable)",
     )
     init.add_argument(
         "--docker",
         metavar="COMMAND",
-        help="the Docker command steps run the image with (default: the runner's"
+        help="the Docker command that steps run the image with (default: the runner's"
         " DATADOUBLE_DOCKER, or docker)",
     )
     init.add_argument(
         "--docker-socket",
         metavar="PATH",
-        help="the Docker daemon's socket on the runner, an absolute path (default: the"
+        help="the Docker daemon's socket on the runner, as an absolute path (default: the"
         " runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock)",
     )
 
@@ -283,21 +315,25 @@ def build_parser() -> CommandParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="print the JSON request without running it",
+        help="print the JSON request instead of running it",
     )
     parser.add_argument(
-        "--ci", metavar="SYSTEM", help="report to this CI/CD system and mask secrets in its logs"
+        "--ci",
+        metavar="SYSTEM",
+        help="the CI/CD system to report to, such as github-actions. Datadouble masks"
+        " secrets in its logs",
     )
     parser.add_argument(
         "--ci-job",
         choices=list(JobKind),
         metavar="JOB",
-        help="the generated job this runs for, which notifies as the spec's `notify` says",
+        help="the generated job this command runs for. It sends notifications as the spec's"
+        " `notify` section says",
     )
     parser.add_argument(
         "--ci-directory",
         metavar="DIR",
-        help="where the CI/CD adapter writes outputs for the native step to pick up",
+        help="the directory where the CI/CD adapter writes outputs, for the native step to pick up",
     )
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
@@ -308,14 +344,17 @@ def build_parser() -> CommandParser:
         return child
 
     add(api.Command.VERSION, "show the installed version")
-    add(api.Command.SCHEMA, "print the spec JSON Schema")
-    lock = add(api.Command.LOCK, "write the catalog lock for a spec, listing what changed")
+    add(api.Command.SCHEMA, "print the JSON Schema that specs are checked against")
+    lock = add(
+        api.Command.LOCK,
+        "write the catalog lock for a spec, and list what changed since the last one",
+    )
     _spec_arguments(lock)
     lock.add_argument(
         "--output",
         help=(
-            "a directory for the new lock (catalog.lock) and its changes (changes.txt),"
-            " leaving the current lock as it is"
+            "a directory to write the new lock (catalog.lock) and its changes (changes.txt)"
+            " to, leaving the current lock as it is"
         ),
     )
     importing = add(
@@ -323,16 +362,18 @@ def build_parser() -> CommandParser:
         "translate a Jailer subset into native spec settings, and lock the catalog",
     )
     _spec_arguments(importing)
-    importing.add_argument("--model", required=True, help="the Jailer extraction model (.jm)")
+    importing.add_argument("--model", required=True, help="the Jailer extraction model, a .jm file")
     importing.add_argument("--datamodel", required=True, help="the Jailer data model folder")
     importing.add_argument(
-        "--output", required=True, help="where to write the native subset settings (YAML)"
+        "--output", required=True, help="the file to write the native subset settings to, as YAML"
     )
-    planning = add(api.Command.PLAN, "plan a build without extracting")
+    planning = add(api.Command.PLAN, "plan a build without extracting anything")
     _spec_arguments(planning)
     _override_arguments(planning)
     run = add(api.Command.RUN, "run build stages, or resume a generation")
-    run.add_argument("stages", type=_stages, help=f"comma-separated stages: {','.join(Stage)}")
+    run.add_argument(
+        "stages", type=_stages, help=f"the stages to run, comma-separated: {','.join(Stage)}"
+    )
     _spec_arguments(run)
     _override_arguments(run)
     run.add_argument("--work", help="the work directory (default: .datadouble)")
@@ -341,11 +382,12 @@ def build_parser() -> CommandParser:
     resuming.add_argument(
         "--retry-key",
         metavar="KEY",
-        help="the CI system's ID for this run; a retry resumes the generation it started",
+        help="the CI system's ID for this run. A retry of the run resumes the generation it"
+        " started",
     )
     _operation_parsers(add)
     _ci_parsers(add)
-    add("api", "read a JSON request from standard input")
+    add("api", "read a JSON request from standard input, and run it")
     return parser
 
 

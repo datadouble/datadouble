@@ -22,25 +22,41 @@ name: shop
 sources:
   app:
     engine: postgres
-    connection: {dsn: {env: SHOP_SOURCE_DSN}}
-runtime: {docker: {}}
+    connection:
+      dsn:
+        env: SHOP_SOURCE_DSN
+runtime:
+  docker: {}
 subset:
-  seeds: {customer: "id <= 50"}
+  seeds:
+    customer: "id <= 50"
 anonymize:
   customer:
-    email: {faker: email, unique: true}
-store: [{filesystem: {path: /srv/datadouble/store}}]
-signing: {cosign: {keyless: true}}
+    email:
+      faker: email
+      unique: true
+store:
+  - filesystem:
+      path: /srv/datadouble/store
+signing:
+  cosign:
+    keyless: true
 trust:
   cosign:
     identity: $identity
     issuer: $issuer
-promote: {to: [{filesystem: {path: /srv/datadouble/export}}]}
+promote:
+  to:
+    - filesystem:
+        path: /srv/datadouble/export
 fetch:
-  from: {filesystem: {path: /srv/datadouble/export}}
+  from:
+    filesystem:
+      path: /srv/datadouble/export
   staging: /srv/datadouble/staging
 replicate:
-  using: {docker-volume: {}}
+  using:
+    docker-volume: {}
   mode: on-demand
   size: 1
 SPEC

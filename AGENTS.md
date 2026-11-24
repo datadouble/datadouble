@@ -25,6 +25,9 @@ fails, read its temporary files, then remove them with `make clean-work`.
 
 ## Before proposing anything
 
+Before writing or changing documentation, READMEs, spec field descriptions or
+CLI help, read [WRITING.md](WRITING.md).
+
 1. Read [docs/decisions.md](docs/decisions.md). Decided items are settled; don't
    reopen them unless asked. Open questions are listed there too.
 2. Read the design document for the area you're touching:
