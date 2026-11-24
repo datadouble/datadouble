@@ -169,6 +169,11 @@ PyPI in advance which workflow may publish each package.
    first release from `release.yml` creates the project and turns the pending
    publisher into a normal one.
 
+The upload goes one package at a time, so a release that fails partway, such
+as on a package without a publisher, leaves the earlier packages on PyPI.
+Fix the cause and re-run the failed job: it skips the files PyPI already has
+and uploads the rest.
+
 `release.yml` runs `uv build --all-packages`, so every workspace member except
 the workspace itself is a package. These are the package names:
 
