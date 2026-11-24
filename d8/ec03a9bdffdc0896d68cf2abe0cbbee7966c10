@@ -1,0 +1,41 @@
+core/src/datadouble/cli.py
+  s_ad63f2bf16b775::t_67d939ab75ca96 217,257-264
+core/src/datadouble/spec.py
+  s_ad63f2bf16b775::t_fcc2660ae40bfc 56,58-65,120-122,129-130,220-221,473-475,566-569,628-633,1082-1083,1086-1087,1142-1145,1150-1153,1178-1180
+docs/agent-skills.md
+  s_ad63f2bf16b775::t_0fec33e7128446 63-65,80,92-97,105-106,112-116,168-180
+docs/local-development.md
+  s_ad63f2bf16b775::t_dae4653f871a38 106,235,256-258,262-269
+docs/prior-art.md
+  s_ad63f2bf16b775::t_300082ebfd7105 27,37,39-43,45-48
+docs/using/agent-skills.md
+  s_ad63f2bf16b775::t_8e5afde835b6ab 11-12,15-16,35-36
+docs/using/cli-reference.md
+  s_ad63f2bf16b775::t_0e5a48347f4f5b 154,188-189
+docs/using/example-repository.md
+  s_ad63f2bf16b775::t_5ea2b37b6aaec3 14,27-32,37-40
+docs/using/quickstart.md
+  s_ad63f2bf16b775::t_4a9c5b57c5afec 118-120,182-186,197-198
+docs/using/source-requirements.md
+  s_ad63f2bf16b775::t_664d9cd3e33140 93-95,167
+docs/using/spec-reference.md
+  s_ad63f2bf16b775::t_25796298b28b90 43-44,51,169,210-211,292,501,513,518,527,529-533,561
+docs/v1-plan.md
+  s_ad63f2bf16b775::t_f3f8c4d12352ca 31-32,44-45,53-56,62,202,292,295,330-331,347-348,363,388-389,404-405
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d8ec03a9bdffdc0896d68cf2abe0cbbee7966c10",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
