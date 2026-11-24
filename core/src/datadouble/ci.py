@@ -279,7 +279,7 @@ NON_PRODUCTION_JOBS = frozenset(
 )
 _SECTIONS: dict[tuple[JobKind, Side], tuple[str, ...]] = {
     (JobKind.BUILD, Side.PRODUCTION): (
-        "source",
+        "sources",
         "files",
         "package",
         "store",
@@ -289,7 +289,7 @@ _SECTIONS: dict[tuple[JobKind, Side], tuple[str, ...]] = {
         "notify",
     ),
     (JobKind.PROMOTE, Side.PRODUCTION): ("store", "promote", "trust", "notify"),
-    (JobKind.LOCK, Side.PRODUCTION): ("source", "notify"),
+    (JobKind.LOCK, Side.PRODUCTION): ("sources", "notify"),
     (JobKind.PRUNE, Side.PRODUCTION): ("store", "promote", "notify"),
     (JobKind.FETCH, Side.NON_PRODUCTION): ("fetch", "trust", "notify"),
     (JobKind.PROVISION, Side.NON_PRODUCTION): (

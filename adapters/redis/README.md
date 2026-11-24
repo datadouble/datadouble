@@ -16,13 +16,14 @@ image is the `dump.rdb` they save (`physical`; there is no logical format).
 Copies keep no expiry.
 
 ```yaml
-source:
-  engine: redis
-  connection:
-    url:                       # a redis:// or rediss:// URL, by reference
-      env: SESSIONS_URL
-    databases: [0]
-    patterns: ["session:{}"]   # keys inference would group wrongly
+sources:
+  app:
+    engine: redis
+    connection:
+      url:                       # a redis:// or rediss:// URL, by reference
+        env: SESSIONS_URL
+      databases: [0]
+      patterns: ["session:{}"]   # keys inference would group wrongly
 subset:
   seeds:
     user:{}: "1*"              # seeds and `when` clauses are globs over _key

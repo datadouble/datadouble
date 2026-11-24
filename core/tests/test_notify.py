@@ -38,7 +38,7 @@ notify:
     - email:
         to: [data-team@example.com]
 """
-BASE = "name: shop\nsource: {engine: fake}\n"
+BASE = "name: shop\nsources: {app: {engine: fake}}\n"
 PROXY_VARIABLES = (
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
     "ALL_PROXY", "all_proxy", "REQUEST_METHOD",
@@ -126,7 +126,7 @@ def test_the_notify_section() -> None:
         json.dumps(
             {
                 "name": "shop",
-                "source": {"engine": "fake"},
+                "sources": {"app": {"engine": "fake"}},
                 "notify": {"when": ["warning"], "to": [{"email": {"to": ["a@example.com"]}}]},
             }
         )

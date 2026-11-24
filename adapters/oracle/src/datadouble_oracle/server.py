@@ -72,7 +72,7 @@ def default_image(server_version: str) -> str:
     parts = server_version.split(".")
     if len(parts) < _TAG_PARTS or not all(part.isdigit() for part in parts):
         message = (
-            f"no Oracle image is known for version {server_version}; set source.image to"
+            f"no Oracle image is known for version {server_version}; set sources.<name>.image to"
             " an Oracle Database Free image of that version"
         )
         raise EngineError(message)

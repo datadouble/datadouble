@@ -23,7 +23,7 @@ from pathlib import Path
 from pydantic import JsonValue
 
 from datadouble.catalog import ColumnKind, Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.names import ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
 from datadouble.spec import ExpressionRule, Hook, ImageFormat, NullRule
@@ -268,11 +268,12 @@ class SalesforceWorking:
         self,
         plan: Plan,  # noqa: ARG002 - the protocol passes the plan; loading needs only the group
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Build the group's copy from the extract and apply its fallbacks."""
+        extract = one_extract(extracts)
         if hooks:
             message = "the salesforce adapter does not run hooks"
             raise EngineError(message)

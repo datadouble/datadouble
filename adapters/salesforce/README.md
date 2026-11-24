@@ -8,16 +8,17 @@ table per object, anonymization runs there, and golden images are logical,
 each object's records as JSON lines with a description of its fields.
 
 ```yaml
-source:
-  engine: salesforce
-  connection:
-    instance_url:                               # by reference, like the token
-      env: SHOP_SF_INSTANCE_URL
-    access_token:
-      env: SHOP_SF_ACCESS_TOKEN
-    api_version: "62.0"                         # the default
-    objects: [Account, Contact, Opportunity, "Acme__*"]   # optional
-    hidden: [Contact.Pronouns]                  # optional: fields copies may go without
+sources:
+  app:
+    engine: salesforce
+    connection:
+      instance_url:                               # by reference, like the token
+        env: SHOP_SF_INSTANCE_URL
+      access_token:
+        env: SHOP_SF_ACCESS_TOKEN
+      api_version: "62.0"                         # the default
+      objects: [Account, Contact, Opportunity, "Acme__*"]   # optional
+      hidden: [Contact.Pronouns]                  # optional: fields copies may go without
 subset:
   seeds:
     Account: "Industry = 'Technology' AND CreatedDate <= :as_of"   # SOQL; :as_of is the anchor
@@ -110,10 +111,11 @@ replicated as running databases yet. Loading an image's records into an org
 whole adapter runs without an org:
 
 ```yaml
-source:
-  engine: salesforce
-  connection:
-    fake: /path/to/org.sqlite
+sources:
+  app:
+    engine: salesforce
+    connection:
+      fake: /path/to/org.sqlite
 ```
 
 `FakeOrg` builds the file (objects, fields, records and packages) and

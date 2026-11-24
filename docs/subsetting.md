@@ -167,6 +167,18 @@ Every read in a run sees the same point in time.
   reference between two of them fails the plan), so each database is
   consistent on its own; the manifest records every database's snapshot
   (`snapshots`).
+- **Several sources** (several servers, `sources`): no snapshot spans
+  servers, so each source is read under its own, opened one after another
+  before anything is read. An image of several sources is not one point in
+  time: its manifest records each source's snapshot and when it was opened.
+  A virtual reference between sources runs with strategy B, its keys read
+  through each side's own snapshot, and the plan lists it
+  (`between_sources`). A child read in one snapshot may name a parent the
+  other snapshot does not hold yet; verification's reference check then
+  fails and stops the build, unless the reference has an `on_missing`
+  fallback. Foreign tables between servers are not listed yet; links to
+  other servers ([#80](https://github.com/datadouble/datadouble/issues/80))
+  will handle them (see [several sources](architecture.md#several-sources)).
 - **MySQL:** `START TRANSACTION WITH CONSISTENT SNAPSHOT` on one connection,
   which reads every key and row; the extract runs single-connection. The
   snapshot covers every InnoDB table on the server, so a source reading several
@@ -243,7 +255,7 @@ strategy B.
 - **Redis:** each key pattern is a table. ID-like segments of a key (numbers,
   UUIDs, long hex strings) become `{}`, so `user:42` belongs to `user:{}` and
   `user:42:sessions` to `user:{}:sessions`; patterns the inference gets wrong
-  are declared in `source.connection.patterns`. A table's key is `_key`, the
+  are declared in `sources.<name>.connection.patterns`. A table's key is `_key`, the
   values its `{}` stand for (`42`), and its other columns are what its keys
   hold: `value` for strings, the fields of hashes and stream entries (sampled,
   as for MongoDB), `members` for lists, sets and sorted sets, and `scores` for

@@ -108,6 +108,29 @@ def create_database(script: str, database: str) -> str:
     return compose("CREATE DATABASE IF NOT EXISTS {}", name)
 
 
+def _scripts(extracts: tuple[Path, ...], directory: Path) -> list[tuple[str, str]]:
+    """Each source's schema and trigger scripts, without definers, written to ``directory``."""
+    scripts: list[tuple[str, str]] = []
+    for position, extract in enumerate(extracts):
+        names = (f"schema-{position:03d}.sql", f"triggers-{position:03d}.sql")
+        for source, name in zip(("schema.sql", "triggers.sql"), names, strict=True):
+            script = without_definers((extract / source).read_text("utf-8"))
+            (directory / name).write_text(script, "utf-8")
+        scripts.append(names)
+    return scripts
+
+
+def merged(indexes: tuple[ExtractIndex, ...]) -> ExtractIndex:
+    """Several sources' extract indexes as one; the first source's default database leads."""
+    return ExtractIndex(
+        databases=tuple(d for index in indexes for d in index.databases),
+        default=indexes[0].default,
+        tables=tuple(t for index in indexes for t in index.tables),
+        omitted_views=tuple(v for index in indexes for v in index.omitted_views),
+        plugins=tuple(dict.fromkeys(p for index in indexes for p in index.plugins)),
+    )
+
+
 def load_statement(table: ExtractedTable) -> str:
     """``LOAD DATA`` for one extracted table; hexadecimal columns pass through ``UNHEX``."""
     targets = ", ".join(
@@ -355,20 +378,31 @@ class MysqlWorking:
         self,
         plan: Plan,
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
-        """Build the group's working database."""
-        index = ExtractIndex.model_validate_json((extract / "index.json").read_bytes())
-        members = frozenset(group.packaged())
-        own = group_extract(extract, group.name)
-        mounts = [extract] if own is None else [extract, own]
-        server = MysqlServer(self.tools, directory / _DATADIR, directory, mounts)
+        """Build the group's working database from every source's extract.
+
+        Each source's schema runs in turn, then every source's rows, the
+        fallbacks, and every source's triggers; hooks run first, in the first
+        source's default database. A standalone group's rows come from each
+        source's group extract where it has them.
+        """
+        read = [
+            (extract, ExtractIndex.model_validate_json((extract / "index.json").read_bytes()))
+            for extract in extracts
+        ]
+        index = merged(tuple(found for _, found in read))
+        loaded = [
+            (folder, table)
+            for extract, found in read
+            for folder, table in _sources(group, found, extract)
+        ]
+        owns = [own for extract in extracts if (own := group_extract(extract, group.name))]
+        server = MysqlServer(self.tools, directory / _DATADIR, directory, [*extracts, *owns])
         server.initialize()
-        for name in ("schema.sql", "triggers.sql"):
-            script = without_definers((extract / name).read_text("utf-8"))
-            (directory / name).write_text(script, "utf-8")
+        scripts = _scripts(extracts, directory)
         omitted = frozenset(r.name for r in plan.omitted)
         with server.running():
             with server.connect() as connection:
@@ -381,7 +415,7 @@ class MysqlWorking:
                             f"installing plugin {plugin.name}",
                             f"INSTALL PLUGIN {plugin.name} SONAME '{plugin.library}'",
                         )
-                schema = (directory / "schema.sql").read_text("utf-8")
+                schema = (directory / scripts[0][0]).read_text("utf-8")
                 _execute(
                     connection,
                     "creating the default database",
@@ -391,12 +425,13 @@ class MysqlWorking:
             with server.connect(index.default) as connection:
                 for hook in hooks:
                     _execute(connection, "a before_load hook", hook.sql)
-            server.tool("mysql", [], directory / "schema.sql")
+            for schema_script, _ in scripts:
+                server.tool("mysql", [], directory / schema_script)
             with server.connect(index.default) as connection:
                 _execute(
                     connection, "preparing to load", "SET foreign_key_checks = 0, unique_checks = 0"
                 )
-                for folder, table in _sources(group, index, extract):
+                for folder, table in loaded:
                     _execute(
                         connection,
                         f"loading {table.table}",
@@ -405,26 +440,38 @@ class MysqlWorking:
                     )
                 for fixup in group.fixups:
                     self._fixup(connection, plan, index, fixup)
-            server.tool("mysql", [], directory / "triggers.sql")
+            for _, triggers_script in scripts:
+                server.tool("mysql", [], directory / triggers_script)
             with server.connect(index.default) as connection:
-                _execute(connection, "preparing to prune", "SET foreign_key_checks = 0")
-                for table in index.tables:
-                    if table.table not in members:
-                        _execute(
-                            connection,
-                            f"dropping {table.table}",
-                            compose("DROP TABLE IF EXISTS {}", qualified(table.table)),
-                        )
-                self._prune(connection, index.databases)
-                if group.standalone:
-                    _rowless_references(connection, group)
-                    _drop_outside(connection, plan, group)
+                self._trim(connection, plan, group, index)
                 counts = MysqlRestored(connection).counts(group.packaged())
         info = DatabaseInfo(
             databases=index.databases, default=index.default, server_version=self.server_version()
         )
         (directory / _INFO).write_text(info.model_dump_json(indent=2), "utf-8")
         return tuple(TableCount(table=t, rows=n) for t, n in counts.items())
+
+    def _trim(
+        self, connection: Connection, plan: Plan, group: PlannedGroup, index: ExtractIndex
+    ) -> None:
+        """Drop the tables the group's image lacks, and what then points nowhere.
+
+        A standalone group's image also loses references into pulled-in
+        tables without rows, and every object its closure lacks.
+        """
+        members = frozenset(group.packaged())
+        _execute(connection, "preparing to prune", "SET foreign_key_checks = 0")
+        for table in index.tables:
+            if table.table not in members:
+                _execute(
+                    connection,
+                    f"dropping {table.table}",
+                    compose("DROP TABLE IF EXISTS {}", qualified(table.table)),
+                )
+        self._prune(connection, index.databases)
+        if group.standalone:
+            _rowless_references(connection, group)
+            _drop_outside(connection, plan, group)
 
     @staticmethod
     def _prune(connection: Connection, databases: tuple[str, ...]) -> None:

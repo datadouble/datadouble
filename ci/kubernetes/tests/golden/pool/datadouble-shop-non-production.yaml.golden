@@ -28,11 +28,12 @@ spec:
           content: |2
 
             name: shop
-            source:
-              engine: postgres
-              connection:
-                dsn:
-                  env: SHOP_SOURCE_DSN
+            sources:
+              app:
+                engine: postgres
+                connection:
+                  dsn:
+                    env: SHOP_SOURCE_DSN
             runtime:
               kubernetes:
                 claim: datadouble

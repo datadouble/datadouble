@@ -28,7 +28,7 @@ from datadouble.spec import (
     spec_schema,
 )
 
-MINIMAL = "name: shop\nsource: {engine: postgres}\n"
+MINIMAL = "name: shop\nsources: {app: {engine: postgres}}\n"
 
 
 def test_minimal_spec_defaults() -> None:
@@ -46,11 +46,12 @@ def test_full_spec_in_yaml() -> None:
     spec = parse_spec(
         """
 name: shop
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: SHOP_DSN
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: SHOP_DSN
 exclude: ["dba_maint_*"]
 structure_only: [event_log]
 strict:
@@ -154,7 +155,7 @@ def test_json_is_accepted() -> None:
         json.dumps(
             {
                 "name": "shop",
-                "source": {"engine": "postgres"},
+                "sources": {"app": {"engine": "postgres"}},
                 "secrets": {"anonymization_key": {"env": "KEY"}},
             }
         )
@@ -165,7 +166,7 @@ def test_json_is_accepted() -> None:
 @pytest.mark.parametrize(
     ("text", "location", "problem"),
     [
-        ("name: Shop\nsource: {engine: postgres}", "name", "lowercase"),
+        ("name: Shop\nsources: {app: {engine: postgres}}", "name", "lowercase"),
         (MINIMAL + "strict: sometimes", "strict", "a mapping of levels per kind"),
         (MINIMAL + "strict: off", "strict", "a mapping of levels per kind"),
         (MINIMAL + "strict: {data: warn}", "strict.data", "Input should be"),
@@ -198,6 +199,24 @@ def test_json_is_accepted() -> None:
             "Input should be",
         ),
         (MINIMAL + "objects: [{table: a}]", "objects.0.table.[key]", "Input should be"),
+        ("name: shop\nsource: {engine: postgres}", "source", "`source` is now `sources`"),
+        ("name: shop\nsources: {}", "sources", "at least 1"),
+        ("name: shop\nsources: {App: {engine: postgres}}", "sources", "lowercase"),
+        (
+            "name: shop\nsources: {a: {engine: postgres}, b: {engine: mysql}}",
+            "sources",
+            "every source must use one engine: source a is postgres and source b is mysql",
+        ),
+        (
+            "name: shop\nsources: {a: {engine: postgres, image: x}, b: {engine: postgres}}",
+            "sources",
+            "sources a and b give different `image` settings",
+        ),
+        (
+            "name: shop\nsources: {a: {engine: postgres}, b: {engine: postgres, server: {x: 1}}}",
+            "sources",
+            "sources a and b give different `server` settings",
+        ),
     ],
 )
 def test_invalid_specs(text: str, location: str, problem: str) -> None:
@@ -290,3 +309,13 @@ def test_files_builds_carry_no_accounts() -> None:
     files = spec.files_spec()
     assert files is not None
     assert files.package.accounts == ()
+
+
+def test_the_sources_share_an_engine_and_a_working_server() -> None:
+    spec = parse_spec(
+        "name: shop\nsources:\n  app: {engine: postgres, image: pg:18}\n"
+        "  warehouse: {engine: postgres, image: pg:18}\n"
+    )
+    assert spec.engine == "postgres"
+    assert spec.working.image == "pg:18"
+    assert list(spec.sources) == ["app", "warehouse"]

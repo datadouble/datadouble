@@ -12,14 +12,15 @@ golden image is a snapshot repository (`physical`) or each index's mappings,
 settings and documents as NDJSON (`logical`).
 
 ```yaml
-source:
-  engine: elasticsearch
-  connection:
-    url:                         # http[s]://[user:password@]host[:port], by reference
-      env: SEARCH_URL
-    api_key:                     # optional; sent instead of the URL's credentials
-      env: SEARCH_KEY
-    indices: ["*", "-logs-*"]    # index patterns; the default is every open index
+sources:
+  app:
+    engine: elasticsearch
+    connection:
+      url:                         # http[s]://[user:password@]host[:port], by reference
+        env: SEARCH_URL
+      api_key:                     # optional; sent instead of the URL's credentials
+        env: SEARCH_KEY
+      indices: ["*", "-logs-*"]    # index patterns; the default is every open index
 subset:
   seeds:
     customers: '{"range": {"created": {"lte": ":as_of"}}}'   # Query DSL; ":as_of" is the plan's anchor
@@ -57,7 +58,7 @@ assertions are `{"index": "...", "query": {...}}`, failing when they match
 any document.
 
 The source must be Elasticsearch 7.17 or later. Working nodes have a 512 MB
-heap; set `source.server.heap` (such as `2g`) for larger subsets.
+heap; set `sources.<name>.server.heap` (such as `2g`) for larger subsets.
 
 ## Plugins
 
@@ -75,7 +76,7 @@ FROM elasticsearch:9.5.5
 RUN elasticsearch-plugin install --batch analysis-icu analysis-kuromoji
 ```
 
-Then name it in `source.image`. A plugin the copies can go without, such
-as a repository plugin, can be left out with `source.omit`; an index whose
+Then name it in `sources.<name>.image`. A plugin the copies can go without, such
+as a repository plugin, can be left out with `sources.<name>.omit`; an index whose
 mapping uses an omitted plugin's analyzer or field type fails to load, so
 exclude it too.

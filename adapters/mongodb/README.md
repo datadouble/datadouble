@@ -10,12 +10,13 @@ data directory (`physical`) or a `mongodump` archive (`logical`). Servers,
 source's exact version, through the spec's container runtime.
 
 ```yaml
-source:
-  engine: mongodb
-  connection:
-    uri:                     # a mongodb:// or mongodb+srv:// URI, by reference
-      env: CINEMA_URI
-    database: cinema
+sources:
+  app:
+    engine: mongodb
+    connection:
+      uri:                     # a mongodb:// or mongodb+srv:// URI, by reference
+        env: CINEMA_URI
+      database: cinema
 subset:
   seeds:
     users: '{"created": {"$lte": ":as_of"}}'   # JSON filters; ":as_of" is the plan's anchor

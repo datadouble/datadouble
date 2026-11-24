@@ -329,6 +329,10 @@ class PostgresSession:
         )
         return merged, physical
 
+    def namespaces(self) -> tuple[str, ...]:
+        """Every database read, tables or not."""
+        return tuple(self.connections)
+
     def catalog(self) -> Catalog:
         """Introspect the source."""
         try:

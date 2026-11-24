@@ -223,7 +223,7 @@ def test_sides(kinds: tuple[JobKind, ...], side: Side | None, problem: str) -> N
 def test_the_lock_job(tmp_path: Path) -> None:
     spec = parse_spec(
         SPEC.replace("STORE", str(tmp_path / "store")).replace(
-            "    where: here\n", "    dsn:\n      env: SHOP_SOURCE_DSN\n"
+            "      where: here\n", "      dsn:\n        env: SHOP_SOURCE_DSN\n"
         )
         + "secrets:\n  anonymization_key:\n    env: SHOP_KEY\n"
     )
@@ -291,14 +291,20 @@ def test_host_paths_and_secret_names() -> None:
     spec = parse_spec(
         """
 name: shop
-source:
-  engine: fake
-  connection:
-    host: /var/run/postgresql
-    password:
-      env: PGPASSWORD
-    url: "s3://x/y"
-    note: "/* not a path */"
+sources:
+  app:
+    engine: fake
+    connection:
+      host: /var/run/postgresql
+      password:
+        env: PGPASSWORD
+      url: "s3://x/y"
+      note: "/* not a path */"
+  warehouse:
+    engine: fake
+    connection:
+      password:
+        env: WAREHOUSE_PASSWORD
 store:
   - filesystem:
       path: /srv/store/
@@ -315,7 +321,11 @@ files:
         "/srv/work",
         "/var/run/postgresql",
     )
-    assert secret_names(spec, JobKind.BUILD, Side.PRODUCTION) == ("PGPASSWORD",)
+    # Every source's credentials reach the build, each by its own reference.
+    assert secret_names(spec, JobKind.BUILD, Side.PRODUCTION) == (
+        "PGPASSWORD",
+        "WAREHOUSE_PASSWORD",
+    )
     assert secret_names(spec, JobKind.FETCH, Side.NON_PRODUCTION) == ()
 
 
@@ -323,8 +333,9 @@ def test_build_jobs_get_account_passwords() -> None:
     spec = parse_spec(
         """
 name: shop
-source:
-  engine: fake
+sources:
+  app:
+    engine: fake
 package:
   accounts:
     - user: app

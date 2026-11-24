@@ -22,8 +22,8 @@ from datadouble.registry import Registry, RegistryError, installed
 from datadouble.run import Run, RunError, RunOptions, Stage
 from datadouble.spec import parse_spec
 from datadouble.storage import StoreError, filesystem_store
-from fake_engine import FakeEngine, FakeRuntime, check_protocols
-from fakes import catalog, shop, table
+from fake_engine import FakeEngine, FakeRuntime, FakeServer, check_protocols
+from fakes import FakeSource, catalog, shop, table
 
 
 @pytest.fixture
@@ -261,7 +261,7 @@ def test_errors_map_to_codes(spec_file: Path, tmp_path: Path) -> None:
     assert isinstance(missing, api.ErrorResponse)
     assert missing.error is ErrorCode.INVALID_SPEC
     bad = tmp_path / "bad.yml"
-    bad.write_text("name: shop\nsource: {engine: nope}\n", encoding="utf-8")
+    bad.write_text("name: shop\nsources: {app: {engine: nope}}\n", encoding="utf-8")
     response = api.handle_json(json.dumps({"command": "lock", "spec": str(bad)}))
     assert isinstance(response, api.ErrorResponse)
     assert response.error is ErrorCode.ADAPTER_MISSING
@@ -431,3 +431,18 @@ def test_lock_lists_changes(spec_file: Path, tmp_path: Path, engine: FakeEngine)
 def test_lock_output_in_a_dry_run() -> None:
     _, out = cli_run("--dry-run", "lock", "--spec", "s.yml", "--output", "review")
     assert json.loads(out) == {"command": "lock", "spec": "s.yml", "output": "review"}
+
+
+def test_lock_refuses_sources_sharing_a_database(tmp_path: Path, engine: FakeEngine) -> None:
+    engine.servers["empty"] = FakeServer(catalog(), FakeSource(rows={}), namespaces=("public",))
+    spec = tmp_path / "two.yml"
+    spec.write_text(
+        "name: shop\nsources: {app: {engine: fake}, other: {engine: fake,"
+        " connection: {server: empty}}}\n",
+        encoding="utf-8",
+    )
+    response = api.handle_json(json.dumps({"command": "lock", "spec": str(spec)}))
+    assert isinstance(response, api.ErrorResponse)
+    assert response.error is ErrorCode.PLAN_FAILED
+    assert response.details[0].problem.startswith("public is in sources app and other;")
+    assert not (tmp_path / "catalog.lock").exists()

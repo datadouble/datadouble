@@ -3,7 +3,7 @@
 
 """Parsing adapter settings from the spec.
 
-The spec passes adapter-specific settings (``source.connection``, each entry of
+The spec passes adapter-specific settings (``sources.<name>.connection``, each entry of
 ``store``) through untouched; the adapter parses them here, at its boundary,
 into its own strict model.
 """

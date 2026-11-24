@@ -36,13 +36,14 @@ SCRATCH = ("items", "added")
 # Parents (films, staff, stores) come in as the references need them.
 SAMPLE_SPEC = f"""
 name: rentals
-source:
-  engine: elasticsearch
-  connection:
-    url:
-      env: {URL}
-    indices: ["*", "-items", "-added"]
-  image: {IMAGE}
+sources:
+  app:
+    engine: elasticsearch
+    connection:
+      url:
+        env: {URL}
+      indices: ["*", "-items", "-added"]
+    image: {IMAGE}
 subset:
   unselected: none
   seeds:

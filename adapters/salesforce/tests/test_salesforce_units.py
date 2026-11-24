@@ -16,9 +16,17 @@ import pytest
 
 from datadouble.catalog import Catalog, Column, ColumnKind, RequirementKind, Table
 from datadouble.engine import EngineError, Tooling, Transformation
-from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, TableName
+from datadouble.names import ColumnName, ColumnRef, EngineName, GroupName, SourceName, TableName
 from datadouble.pii import detect
-from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule, PlanOptions, plan
+from datadouble.planner import (
+    Fixup,
+    Plan,
+    PlannedGroup,
+    PlannedRule,
+    PlanOptions,
+    SourceCatalog,
+    plan,
+)
 from datadouble.registry import installed
 from datadouble.settings import SettingsError
 from datadouble.spec import (
@@ -651,7 +659,7 @@ def test_connections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         assert isinstance(session, SalesforceSource)
         assert session.hidden == frozenset({"Contact.X"})
     tooling = Tooling(runtime=installed().runtime("docker", {}), image="vendor/x:1")
-    with pytest.raises(EngineError, match=r"source\.image does not apply"):
+    with pytest.raises(EngineError, match=r"sources\.<name>\.image does not apply"):
         engine.working(tmp_path, tooling, "62.0")
     with pytest.raises(EngineError, match="no server to start"):
         engine.server(tmp_path, None)
@@ -704,11 +712,12 @@ def _plan() -> Plan:
     table = Table(name=ACCOUNT, columns=columns, primary_key=(ColumnName("Id"),))
     catalog = Catalog(engine=EngineName("salesforce"), tables=(table,))
     spec = parse_spec(
-        "name: crm\nsource: {engine: salesforce, connection: {fake: x}}\n"
+        "name: crm\nsources: {app: {engine: salesforce, connection: {fake: x}}}\n"
         "subset: {seeds: {Account: 'Id != null'}}\nstore: [{filesystem: {path: /tmp/store}}]\n"
     )
     options = PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF))
-    return plan(spec, catalog, None, SalesforceEngine().capabilities(), options)
+    sources = (SourceCatalog(name=SourceName("app"), catalog=catalog, server_version="62.0"),)
+    return plan(spec, sources, None, SalesforceEngine().capabilities(), options)
 
 
 def _group(*fixups: Fixup) -> PlannedGroup:
@@ -739,10 +748,10 @@ def test_fixups(tmp_path: Path) -> None:
     working.close()
     planned = _plan()
     nulled = _group(Fixup(edge=_edge("Kind = 'y'"), mode=EdgeMode.NULL, parent_present=True))
-    counts = working.load(planned, nulled, extract, tmp_path / "nulled", ())
+    counts = working.load(planned, nulled, (extract,), tmp_path / "nulled", ())
     assert {c.table.name: c.rows for c in counts} == {"Account": 1, "Contact": 3}
     stubbed = _group(Fixup(edge=_edge(), mode=EdgeMode.STUB, parent_present=False))
-    counts = working.load(planned, stubbed, extract, tmp_path / "stubbed", ())
+    counts = working.load(planned, stubbed, (extract,), tmp_path / "stubbed", ())
     assert {c.table.name: c.rows for c in counts} == {"Account": 3, "Contact": 3}
     transformation = Transformation(rules=(), mapper=lambda _r, _v: {}, hooks=())
     working.transform(stubbed, tmp_path / "stubbed", tmp_path / "copy", transformation)
@@ -770,11 +779,11 @@ def test_working_copies_refuse_what_they_cannot_do(tmp_path: Path) -> None:
     planned = _plan()
     hook = Hook(sql="SELECT 1")
     with pytest.raises(EngineError, match="does not run hooks"):
-        working.load(planned, _group(), extract, tmp_path / "a", (hook,))
+        working.load(planned, _group(), (extract,), tmp_path / "a", (hook,))
     pair = _edge(columns=("AccountId", "Kind"))
     bad = _group(Fixup(edge=pair, mode=EdgeMode.NULL, parent_present=True))
     with pytest.raises(EngineError, match="names one field and the parent's Id"):
-        working.load(planned, bad, extract, tmp_path / "b", ())
+        working.load(planned, bad, (extract,), tmp_path / "b", ())
     elsewhere = Edge(
         name="Contact.OwnerId",
         child=CONTACT,
@@ -784,8 +793,8 @@ def test_working_copies_refuse_what_they_cannot_do(tmp_path: Path) -> None:
     )
     stub = _group(Fixup(edge=elsewhere, mode=EdgeMode.STUB, parent_present=False))
     with pytest.raises(EngineError, match="stub parents need User"):
-        working.load(planned, stub, extract, tmp_path / "c", ())
-    working.load(planned, _group(), extract, tmp_path / "d", ())
+        working.load(planned, stub, (extract,), tmp_path / "c", ())
+    working.load(planned, _group(), (extract,), tmp_path / "d", ())
     expression = PlannedRule(
         column=ColumnRef(CONTACT, ColumnName("Kind")),
         kind=ColumnKind.TEXT,
@@ -816,17 +825,16 @@ def test_working_copies_refuse_what_they_cannot_do(tmp_path: Path) -> None:
 def test_the_extract(tmp_path: Path, org: RestOrg, monkeypatch: pytest.MonkeyPatch) -> None:
     source = SalesforceSource(org, "62.0", ("Account", "Contact"))
     spec = parse_spec(
-        "name: crm\nsource: {engine: salesforce, connection: {fake: x}}\n"
+        "name: crm\nsources: {app: {engine: salesforce, connection: {fake: x}}}\n"
         "subset: {seeds: {Account: \"Industry = 'Retail'\"}, unselected: none}\n"
         "store: [{filesystem: {path: /tmp/store}}]\n"
     )
     capabilities = SalesforceEngine().capabilities()
+    sources = (
+        SourceCatalog(name=SourceName("app"), catalog=source.catalog(), server_version="62.0"),
+    )
     planned = plan(
-        spec,
-        source.catalog(),
-        None,
-        capabilities,
-        PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF)),
+        spec, sources, None, capabilities, PlanOptions(strict=StrictOverrides(data=StrictLevel.OFF))
     )
     ids = frozenset((f"001{n:012d}AAA",) for n in range(1, 31))
     retail = Predicate("Industry = 'Retail'")

@@ -63,7 +63,7 @@ def write_spec(source: PostgresScratch, tmp_path: Path, keys: Path, kind: str) -
     address = os.environ.get("DATADOUBLE_TEST_DOCKER_ADDRESS", "localhost")
     spec = {
         "name": "scratch",
-        "source": {"engine": "postgres", "connection": dict(source.connection)},
+        "sources": {"app": {"engine": "postgres", "connection": dict(source.connection)}},
         "subset": {"seeds": {"items": "id > 0"}, "unselected": "none"},
         "runtime": runtime_for_tests(),
         "store": [{"filesystem": {"path": str(tmp_path / "build")}}],

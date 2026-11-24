@@ -36,12 +36,13 @@ URL_VARIABLE = "DATADOUBLE_TEST_ORACLE_URL"
 # stores are taken whole, which breaks the store-staff cycle.
 SAMPLE_SPEC = """
 name: sakila
-source:
-  engine: oracle
-  connection:
-    url:
-      env: DATADOUBLE_TEST_ORACLE_URL
-    schemas: [SAKILA]
+sources:
+  app:
+    engine: oracle
+    connection:
+      url:
+        env: DATADOUBLE_TEST_ORACLE_URL
+      schemas: [SAKILA]
 exclude: ["dba_*"]
 subset:
   unselected: none

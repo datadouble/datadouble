@@ -5,17 +5,18 @@
 
 Spec settings::
 
-    source:
-      engine: mysql
-      connection:
-        url: {env: SHOP_MYSQL_URL}   # mysql://user:password@host:3306/database, by reference
-        databases: [shop, "billing_*"]  # names or globs; the URL's database by default
+    sources:
+      app:
+        engine: mysql
+        connection:
+          url: {env: SHOP_MYSQL_URL}   # mysql://user:password@host:3306/database, by reference
+          databases: [shop, "billing_*"]  # names or globs; the URL's database by default
 
 The catalog spans the databases ``databases`` lists (``["*"]`` for every one
 but MySQL's own), or the URL's database; each table is named
 ``database.table``. Working databases, restores and ``mysqldump`` run in the
 official MySQL image of exactly the source's version (``mysql:<version>``), or
-in ``source.image``, through the spec's container runtime. ``mysqldump``
+in ``sources.<name>.image``, through the spec's container runtime. ``mysqldump``
 connects to the source from a container, so the source must be reachable from
 there at the URL's address.
 """
@@ -56,7 +57,7 @@ COPY_USER = "datadouble"
 
 
 class MysqlConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -117,6 +118,7 @@ class MysqlEngine:
             version_line=2,
             accounts=AccountNames(max_characters=32, reserved=(USER, COPY_USER)),
             standalone=True,
+            several_sources=True,
         )
 
     @contextmanager

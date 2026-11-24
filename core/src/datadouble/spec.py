@@ -27,7 +27,14 @@ from pydantic import (
 )
 
 from datadouble.catalog import ObjectKind
-from datadouble.names import DEFAULT_GROUP, EngineName, GroupName, SpecName, check_name
+from datadouble.names import (
+    DEFAULT_GROUP,
+    EngineName,
+    GroupName,
+    SourceName,
+    SpecName,
+    check_name,
+)
 
 
 class SpecError(Exception):
@@ -264,20 +271,24 @@ type SecretRef = EnvSecret | FileSecret
 
 
 class Source(_Model):
-    """The system to extract from.
+    """One server to extract from.
 
     ``connection`` is checked by the engine adapter, which knows its fields.
     """
 
     engine: EngineName
+    """The engine adapter; every source of a spec has the same one."""
     connection: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    """Where the server is and what to read, checked by the engine adapter."""
     image: str | None = None
     """The vendor image working databases and engine tools run in; by default
-    the engine adapter picks the official image of the source's version."""
+    the engine adapter picks the official image of the newest source's version.
+    Every source gives the same image, or none does."""
     server: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
-    """Settings for the engine's working servers, checked by the engine adapter."""
+    """Settings for the engine's working servers, checked by the engine adapter.
+    Every source gives the same settings, since one working server holds them all."""
     omit: tuple[str, ...] = ()
-    """Requirements (extensions, plugins, modules) the source uses that copies
+    """Requirements (extensions, plugins, modules) this source uses that copies
     leave out, by name. Anything that uses one must be excluded too, or the
     build fails."""
 
@@ -780,6 +791,8 @@ class PathsFrom(_Model):
 
 FILES = EngineName("files")
 """The engine that copies a ``files`` section's tree."""
+FILES_SOURCE = SourceName("files")
+"""The name of the ``files`` section's build's one source."""
 
 
 class Files(_Model):
@@ -812,8 +825,10 @@ class Spec(_Model):
 
     name: SpecName
     """The spec's name: the first part of its images' identity."""
-    source: Source
-    """The system to copy from: its engine and connection."""
+    sources: dict[SourceName, Source] = Field(min_length=1)
+    """The servers to copy from, by name: one engine, each with its connection.
+    Every source's databases go into one working server, so their names must
+    not collide; each source is read under its own snapshot."""
     exclude: tuple[str, ...] = ()
     """Tables left out of every image, as globs matched from the right: ``audit.*``
     is every table in a namespace ``audit``, ``shop.*.*`` every table in
@@ -871,6 +886,38 @@ class Spec(_Model):
     notify: Notify | None = None
     """Who hears when a generated CI job fails or warns: webhooks and email."""
 
+    @property
+    def engine(self) -> EngineName:
+        """The engine every source uses."""
+        return next(iter(self.sources.values())).engine
+
+    @property
+    def working(self) -> Source:
+        """The first source, whose ``image`` and ``server`` every source shares."""
+        return next(iter(self.sources.values()))
+
+    @field_validator("sources")
+    @classmethod
+    def _sources(cls, value: dict[SourceName, Source]) -> dict[SourceName, Source]:
+        for name in value:
+            check_name("source name", name)
+        first_name, first = next(iter(value.items()))
+        for name, source in value.items():
+            if source.engine != first.engine:
+                message = (
+                    f"every source must use one engine: source {first_name} is {first.engine}"
+                    f" and source {name} is {source.engine}"
+                )
+                raise ValueError(message)
+            for setting in ("image", "server"):
+                if getattr(source, setting) != getattr(first, setting):
+                    message = (
+                        f"sources {first_name} and {name} give different `{setting}` settings;"
+                        " one working server holds every source, so give each the same one"
+                    )
+                    raise ValueError(message)
+        return value
+
     def files_spec(self) -> "Spec | None":
         """The spec of the ``files`` section's build, sharing this one's images and storage."""
         if self.files is None:
@@ -878,7 +925,9 @@ class Spec(_Model):
         files = self.files
         return Spec(
             name=self.name,
-            source=Source(engine=FILES, connection=files.connection, image=files.image),
+            sources={
+                FILES_SOURCE: Source(engine=FILES, connection=files.connection, image=files.image)
+            },
             exclude=files.exclude,
             case_sensitive=self.case_sensitive,
             # Every top-level directory must be selected or excluded instead.
@@ -952,6 +1001,12 @@ def _plain(value: object) -> object:
     raise TypeError(message)
 
 
+_RENAMED = (
+    "`source` is now `sources`, a map of named sources: "
+    "`sources: {app: {engine: ..., connection: ...}}`"
+)
+
+
 def parse_spec(text: str, *, origin: str = "spec") -> Spec:
     """Parse a spec from YAML or JSON text (JSON is valid YAML)."""
     try:
@@ -968,7 +1023,10 @@ def parse_spec(text: str, *, origin: str = "spec") -> Spec:
         return Spec.model_validate_json(text)
     except ValidationError as error:
         details = tuple(
-            (".".join(str(part) for part in problem["loc"]) or "(spec)", problem["msg"])
+            (
+                ".".join(str(part) for part in problem["loc"]) or "(spec)",
+                _RENAMED if problem["loc"] == ("source",) else problem["msg"],
+            )
             for problem in error.errors(include_url=False)
         )
         message = f"{origin} does not match the spec schema: {error.error_count()} problem(s)"

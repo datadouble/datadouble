@@ -29,10 +29,11 @@ pytestmark = pytest.mark.integration
 # references are polymorphic, so they are virtual; leads are left out.
 SAMPLE_SPEC = """
 name: crm
-source:
-  engine: salesforce
-  connection:
-    fake: ORG
+sources:
+  app:
+    engine: salesforce
+    connection:
+      fake: ORG
 exclude: [Lead]
 subset:
   unselected: none

@@ -53,11 +53,12 @@ if URL_VARIABLE in os.environ:
 # and the two stores are taken whole, which breaks the store-staff cycle.
 SAMPLE_SPEC = """
 name: sakila
-source:
-  engine: mysql
-  connection:
-    url:
-      env: DATADOUBLE_TEST_MYSQL_URL
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:
+        env: DATADOUBLE_TEST_MYSQL_URL
 exclude: ["dba_*"]
 subset:
   unselected: none

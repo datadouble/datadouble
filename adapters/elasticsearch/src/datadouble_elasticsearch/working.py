@@ -25,7 +25,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from datadouble.catalog import Requirement
-from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation
+from datadouble.engine import EngineError, RestoredImage, TableCount, Transformation, one_extract
 from datadouble.files import copy_tree
 from datadouble.names import ColumnName, ColumnRef, TableName
 from datadouble.planner import Fixup, Plan, PlannedGroup, PlannedRule
@@ -332,11 +332,12 @@ class ElasticWorking:
         self,
         plan: Plan,  # noqa: ARG002 - the protocol passes the plan; loading needs only the group
         group: PlannedGroup,
-        extract: Path,
+        extracts: tuple[Path, ...],
         directory: Path,
         hooks: tuple[Hook, ...],
     ) -> tuple[TableCount, ...]:
         """Create and fill the group's indices and apply its fallbacks."""
+        extract = one_extract(extracts)
         if hooks:
             message = "the elasticsearch adapter does not run hooks"
             raise EngineError(message)

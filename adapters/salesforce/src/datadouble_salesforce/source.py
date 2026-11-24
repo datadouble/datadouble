@@ -42,7 +42,7 @@ from datadouble.catalog import (
     RequirementKind,
     Table,
 )
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling, outermost
 from datadouble.names import ColumnName, EngineName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple, NoRows
@@ -224,7 +224,7 @@ def introspect(org: Org, patterns: tuple[str, ...], accepted: frozenset[str]) ->
         message = (
             f"field-level security hides {len(unaccepted)} field(s) from the connecting user,"
             f" so copies would lack them: {', '.join(unaccepted)}; grant the user read access"
-            " to them, or list them in source.connection.hidden"
+            " to them, or list them in sources.<name>.connection.hidden"
         )
         raise EngineError(message)
     tables = [_table(description, names) for description in descriptions]
@@ -399,6 +399,10 @@ class SalesforceSource:
             )
             raise EngineError(message)
         return self.api_version
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces of the catalog's tables."""
+        return outermost(self.catalog())
 
     def catalog(self) -> Catalog:
         """Introspect the org."""

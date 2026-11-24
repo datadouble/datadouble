@@ -9,12 +9,13 @@ Oracle Database Free containers, and packages golden images as an unplugged
 pluggable database (`physical`) or the schema and rows (`logical`).
 
 ```yaml
-source:
-  engine: oracle
-  connection:
-    url:                          # oracle://user:password@host:1521/service, by reference
-      env: SHOP_ORACLE_URL
-    schemas: [SHOP]               # the schemas to copy; the connecting user's by default
+sources:
+  app:
+    engine: oracle
+    connection:
+      url:                          # oracle://user:password@host:1521/service, by reference
+        env: SHOP_ORACLE_URL
+      schemas: [SHOP]               # the schemas to copy; the connecting user's by default
 ```
 
 ## Options
@@ -24,7 +25,7 @@ from outside the copied schemas, such as Oracle Text's `CTXSYS.CONTEXT` or
 Spatial's `MDSYS.SPATIAL_INDEX_V2`, is an option, listed in the lock as
 `option CTXSYS.CONTEXT`. The working image provides those in
 `DBA_INDEXTYPES`. Oracle Database Free's full image includes Oracle Text; its
-`-lite` image leaves components out. `source.omit` names an
+`-lite` image leaves components out. `sources.<name>.omit` names an
 index type to leave out, and the copies then have no indexes of that type;
 the rows are the same.
 

@@ -8,7 +8,7 @@ packages golden images as a data directory (`physical`) or `pg_dump` archives
 (`logical`). Clusters, restores and `pg_dump` run in the official
 PostgreSQL image of the source's exact version, through the spec's container
 runtime; a source that uses extensions names an image that has them in
-`source.image`.
+`sources.<name>.image`.
 
 ## Accounts
 
@@ -64,12 +64,13 @@ wherever only one table fits: `public.users` or `users` for
 plan, naming each; write enough of it to choose one.
 
 ```yaml
-source:
-  engine: postgres
-  connection:
-    dsn:                             # which database it names matters only as the default
-      env: SHOP_DSN
-    databases: [shop, "billing_*"]   # names or globs; ["*"] for every database
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:                             # which database it names matters only as the default
+        env: SHOP_DSN
+      databases: [shop, "billing_*"]   # names or globs; ["*"] for every database
 ```
 
 - **Choosing databases.** Each entry is a name or a glob. A name must exist
@@ -101,6 +102,43 @@ source:
 Sources must be PostgreSQL 13 or later: reading which triggers a partition
 inherits from its parent needs `pg_trigger.tgparentid`.
 
+## Several servers
+
+A spec can read databases from several PostgreSQL servers, one source per
+server, into one image (see
+[several sources](../../docs/architecture.md#several-sources)):
+
+```yaml
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: APP_DSN
+      databases: [orders, billing]
+  warehouse:
+    engine: postgres
+    connection:
+      dsn:
+        env: WAREHOUSE_DSN
+      databases: [warehouse]
+```
+
+- **Every database once.** A database name read from two servers fails the
+  plan, naming it; the working cluster holds every source's databases under
+  their own names.
+- **One version line.** The servers must share a major version (`17`),
+  PostgreSQL's compatibility line; the working cluster runs the newest of
+  their versions, and each server's schema is dumped by `pg_dump` from the
+  image of its own version. Every source gives
+  the same `image` and `server` settings, or none.
+- **Snapshots per database, per server.** Each database is still read under
+  its own snapshot, and the image's manifest records them by source
+  (`sources.<name>.snapshots`, with the time each source's snapshots were
+  opened). A virtual reference between sources joins two databases, which
+  PostgreSQL refuses as it does within one server.
+- **The default database** for hooks and assertions is the first source's.
+
 ## Extensions
 
 Every extension installed in a database read, except `plpgsql`, is a
@@ -122,30 +160,31 @@ requirement at the version the source runs (`pg_extension.extversion`).
   only their newest version (pgvector 0.8.7 cannot create 0.8.2), so pick
   the image release that matches the source's extension version.
 - **Some extensions load at server start.** Name them in
-  `source.server.shared_preload_libraries`. Working clusters start with the
+  `sources.<name>.server.shared_preload_libraries`. Working clusters start with the
   setting, and a physical image keeps it in `postgresql.conf`, so its copies
   load the libraries too.
 - **A managed service's own extensions** (`aws_s3`, `aws_commons`,
   `rds_tools`, `google_ml_integration`, `azure`) are in no public image.
-  Leave them out with `source.omit`, and exclude whatever uses them.
+  Leave them out with `sources.<name>.omit`, and exclude whatever uses them.
 - **Logical images** restore with `pg_restore`, which creates extensions at
   the restoring server's default version.
 
 ```yaml
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: SHOP_DSN
-  image: postgis/postgis:18-3.6          # the source uses PostGIS
-  server:
-    shared_preload_libraries: [pg_stat_statements]
-  omit: [aws_s3, aws_commons]            # RDS-only; nothing kept uses them
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: SHOP_DSN
+    image: postgis/postgis:18-3.6          # the source uses PostGIS
+    server:
+      shared_preload_libraries: [pg_stat_statements]
+    omit: [aws_s3, aws_commons]            # RDS-only; nothing kept uses them
 ```
 
 ## Server settings
 
-`source.server` takes `shared_preload_libraries`, a list of library names.
+`sources.<name>.server` takes `shared_preload_libraries`, a list of library names.
 Nothing else.
 
 ## Objects

@@ -25,7 +25,7 @@ datadouble ci init --system <github-actions|gitlab|jenkins|argocd> \
 ```
 
 Generate `promote` with it, so it follows a successful build. `lock` is a
-manual job on the same runner, with only the source's and `notify`'s
+manual job on the same runner, with only the sources' and `notify`'s
 secrets: it re-locks
 the catalog and publishes the new lock and its changes for review, never
 committing them (see `datadouble-spec`). Add `--env

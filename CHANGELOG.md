@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A manual `lock` CI job, and lock changes**
   ([#67](https://github.com/datadouble/datadouble/issues/67)).
   `ci init --job lock` writes a job on the production side, on the build's
-  runner with only the source's and `notify`'s secrets and no schedule, for
+  runner with only the sources' and `notify`'s secrets and no schedule, for
   every Tier 1 system. It runs `datadouble lock --output datadouble-lock` and publishes the
   new lock and its changes as the job's artifact (on Argo CD, in the job's
   log), and never commits: someone checks the changes for personal data and
@@ -122,6 +122,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   though Jenkins' own environment sets the mark. One spec serves both
   sides, each in its own namespace, and each side's engine pods start in
   its namespace.
+- **Several servers of one engine in one spec**
+  ([#77](https://github.com/datadouble/datadouble/issues/77)). A spec's
+  `sources` names one source per server; PostgreSQL and MySQL copy every
+  source's databases into one image and one working server per group, and
+  other engines read one source per spec. The sources must share an engine
+  and a compatibility line (`17` for PostgreSQL, `8.4` for MySQL; the working
+  server runs the newest of their versions),
+  give the same `image` and `server`, hold no database name in common (empty
+  databases included), and agree on requirements: one used at two versions,
+  or omitted by one source and used by another, fails the plan naming both. Each source is read under its
+  own snapshot, opened together, and the image's manifest records each
+  source's snapshot and when it was opened (`sources`), since such an image
+  is not one point in time. A virtual reference between sources is read with
+  the keys strategy and listed in the plan and manifest (`between_sources`).
+  Anonymization is keyed once per run, so equal values get equal
+  replacements in every source. Each source's credentials are its own secret
+  references, and `ci init` gives the build job all of them.
 - **Several databases from one server in one source**
   ([#76](https://github.com/datadouble/datadouble/issues/76)). MySQL and
   PostgreSQL take `source.connection.databases`, a list of names or globs
@@ -424,6 +441,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   give a Jenkins Kubernetes cloud the Role the Kubernetes plugin documents:
   pods (with `patch` and `update`), `pods/exec`, `pods/log` and watching
   events.
+- **BREAKING: a spec's `source` is now `sources`, a map of named sources**
+  ([#77](https://github.com/datadouble/datadouble/issues/77)). Write
+  `sources: {app: {engine: ..., connection: ...}}` instead of
+  `source: {engine: ..., connection: ...}`, even for one server; the schema
+  refuses `source`, saying so. Settings move with the source
+  (`sources.<name>.image`, `.server`, `.omit`, `.connection`), and messages
+  name them that way. Each source's extract is in its own directory
+  (`extract/data/<name>`), and the image manifest's `source_server_version`,
+  `snapshot`, `snapshots` and `snapshot_seconds` moved into `sources`, by
+  source. Engine adapters' `WorkingDatabases.load` takes a tuple of extract
+  directories, one per source, and source sessions report the databases they
+  read (`namespaces()`). `RequirementError.problems` pairs each problem with
+  the source that uses the requirement.
 - **BREAKING: PostgreSQL tables are named `database.schema.table`, and spec
   names match from the right**
   ([#76](https://github.com/datadouble/datadouble/issues/76)). A spec may

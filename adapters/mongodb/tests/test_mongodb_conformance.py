@@ -31,13 +31,14 @@ URI = "DATADOUBLE_TEST_MONGODB_URI"
 # every one is virtual; notes refer to users or movies, by subject_type.
 SAMPLE_SPEC = """
 name: cinema
-source:
-  engine: mongodb
-  connection:
-    uri:
-      env: DATADOUBLE_TEST_MONGODB_URI
-    database: cinema
-  image: mongo:9.0.8@sha256:bdcd178c7ef0c0afca7f345e413f6e8960b20f65662c2db45f8380221f32338e
+sources:
+  app:
+    engine: mongodb
+    connection:
+      uri:
+        env: DATADOUBLE_TEST_MONGODB_URI
+      database: cinema
+    image: mongo:9.0.8@sha256:bdcd178c7ef0c0afca7f345e413f6e8960b20f65662c2db45f8380221f32338e
 exclude: ["maintenance_runs"]
 subset:
   unselected: none

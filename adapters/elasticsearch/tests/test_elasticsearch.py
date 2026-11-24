@@ -62,9 +62,10 @@ VERSION = "9.5.5"
 INDICES = ("parent", "child", "gone", "other")
 SPEC = """
 name: scratch
-source:
-  engine: elasticsearch
-  connection: CONNECTION
+sources:
+  app:
+    engine: elasticsearch
+    connection: CONNECTION
 exclude: ["gone"]
 subset:
   unselected: none
@@ -417,15 +418,15 @@ def test_working_failures(source: Scratch, tmp_path: Path) -> None:
     plan = Plan.model_validate_json((work / "plan" / "plan.json").read_bytes())
     group = plan.groups[0]
     working = ElasticWorking(tools(), tmp_path / "scratch")
-    extract = work / "extract" / "data"
+    extract = work / "extract" / "data" / "app"
     with pytest.raises(EngineError, match="does not run hooks"):
-        working.load(plan, group, extract, tmp_path / "x", (Hook(sql="x"),))
+        working.load(plan, group, (extract,), tmp_path / "x", (Hook(sql="x"),))
     # An extract without the group's indices leaves nothing to count.
     empty = tmp_path / "empty"
     empty.mkdir()
     Dump(indices=()).write(empty)
     with pytest.raises(EngineError, match=r"counting \w+ failed: index_not_found_exception"):
-        working.load(plan, group, empty, tmp_path / "empty-db", ())
+        working.load(plan, group, (empty,), tmp_path / "empty-db", ())
 
     child = table("child")
 

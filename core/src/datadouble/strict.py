@@ -129,7 +129,7 @@ RESOLUTIONS = (
 
 REQUIREMENT_RESOLUTIONS = (
     "check that the working image provides it, then re-lock with `datadouble lock`",
-    "leave it out with `source.omit`, then re-lock with `datadouble lock`",
+    "leave it out with `sources.<name>.omit`, then re-lock with `datadouble lock`",
 )
 """The ways to resolve a new requirement."""
 

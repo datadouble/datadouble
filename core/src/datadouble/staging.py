@@ -184,7 +184,7 @@ def fetch(
     if spec.fetch is None or spec.trust is None:
         message = "the spec needs `fetch` and `trust` sections to fetch images"
         raise StagingError(message)
-    check_owner(registry.engine(spec.source.engine))
+    check_owner(registry.engine(spec.engine))
     settings = spec.fetch
     source = registry.store(*next(iter(settings.source.items())))
     staging = Staging(settings)

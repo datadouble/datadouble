@@ -220,7 +220,7 @@ def test_urls_and_settings() -> None:
             parse_url(bad)
     assert server_settings({"accept_eula": True}).edition == "Developer"
     assert server_settings({"accept_eula": True, "edition": "Express"}).edition == "Express"
-    with pytest.raises(EngineError, match=r"set source\.server\.accept_eula"):
+    with pytest.raises(EngineError, match=r"set sources\.<name>\.server\.accept_eula"):
         server_settings({})
     with pytest.raises(SettingsError, match="accept_eula"):
         server_settings({"accept_eula": False})

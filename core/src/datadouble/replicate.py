@@ -196,7 +196,7 @@ class Replication:
         if spec.fetch is None or spec.replicate is None:
             message = "the spec needs `fetch` and `replicate` sections to make copies"
             raise ReplicateError(message)
-        check_owner(registry.engine(spec.source.engine))
+        check_owner(registry.engine(spec.engine))
         self.spec = spec
         self.settings: Replicate = spec.replicate
         self.staging = Staging(spec.fetch)

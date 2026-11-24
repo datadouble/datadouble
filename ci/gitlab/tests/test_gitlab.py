@@ -29,11 +29,12 @@ TEMPLATE_FILE = Path(__file__).parents[1] / "src" / "datadouble_gitlab" / "datad
 
 SPEC = """
 name: shop
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: SHOP_SOURCE_DSN
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: SHOP_SOURCE_DSN
 secrets:
   anonymization_key:
     env: SHOP_ANONYMIZATION_KEY

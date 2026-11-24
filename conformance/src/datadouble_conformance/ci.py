@@ -60,11 +60,12 @@ INSERT INTO orders SELECT g, 1 + g % 30, g * 1.5 FROM generate_series(1, 90) g;
 
 _SPEC = """
 name: shop
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: DDCI_SOURCE_DSN
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: DDCI_SOURCE_DSN
 runtime: {runtime}
 strict:
   data: {strict}

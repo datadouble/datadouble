@@ -5,18 +5,18 @@
 
 Spec settings::
 
-    source:
-      engine: mongodb
-      connection:
-        uri:                     # mongodb:// or mongodb+srv://, by reference
-          env: CINEMA_URI
-        database: cinema
-        sample: 1000             # documents sampled per collection for its fields
+    sources:
+      app:
+        engine: mongodb
+        connection:
+          uri: {env: CINEMA_URI}   # mongodb:// or mongodb+srv://, by reference
+          database: cinema
+          sample: 1000             # documents sampled per collection for its fields
 
 The source must be a replica set or sharded cluster: snapshot reads need one.
 Extract reads through the driver. Working databases, restores, ``mongodump``
 and ``mongorestore`` run in the official MongoDB image of the source's exact
-version (``mongo:<version>``), or in ``source.image``, through the spec's
+version (``mongo:<version>``), or in ``sources.<name>.image``, through the spec's
 container runtime.
 """
 
@@ -43,7 +43,7 @@ MOUNT = "/var/lib/datadouble"
 
 
 class MongoConnection(BaseModel):
-    """The ``source.connection`` settings."""
+    """The ``sources.<name>.connection`` settings."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 

@@ -75,7 +75,7 @@ reads the source, so it runs only inside the boundary. Where the only machine
 there is a CI runner, the manual `lock` job (`ci init --job lock`) re-locks:
 
 - It runs on the production side, on the same `--runner` as `build`, with
-  only the secrets the spec's `source` and `notify` sections name. It is
+  only the secrets the spec's `sources` and `notify` sections name. It is
   refused on a vendor's hosted runner, like `build`.
 - It has no schedule: someone always means to re-lock.
 - It runs `datadouble lock --spec <spec> --output datadouble-lock`, which
@@ -336,9 +336,10 @@ so the jobs are the same on every system. Generated configuration:
 - Pins the Datadouble version: the native step at that release's tag, and
   the release's image.
 - References secrets by name only. Each job gets only the secrets its own
-  spec sections name (`build` the source's, the build store's and the
-  password references of `package.accounts`, `fetch` the trust
-  settings'), plus `COSIGN_PASSWORD` for a build signed with a key, and
+  spec sections name (`build` every source's, each by its own reference, the
+  build store's and the password references of `package.accounts`, `fetch`
+  the trust settings'), plus `COSIGN_PASSWORD` for a build signed with a
+  key, and
   any `--env NAME` given for credentials adapters read from the
   environment, such as `AWS_ACCESS_KEY_ID`.
 - Includes schedules, in UTC, and job chaining: `promote` after a successful
@@ -513,7 +514,7 @@ production boundary: self-hosted GitHub runners (or Actions Runner Controller), 
 runners selected by tag, Jenkins agents selected by label, or a Kubernetes
 cluster in production.
 
-- **Runners are marked inside the boundary.** Reading a spec's source (`lock`,
+- **Runners are marked inside the boundary.** Reading a spec's sources (`lock`,
   `plan`, and every `run` that plans or extracts) and `promote` refuse to run
   unless the machine's environment sets `DATADOUBLE_BOUNDARY=inside`, with the
   error `outside_boundary` (decision 98). The operator sets it once, where the

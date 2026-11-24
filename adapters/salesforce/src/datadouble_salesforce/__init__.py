@@ -5,15 +5,14 @@
 
 Spec settings::
 
-    source:
-      engine: salesforce
-      connection:
-        instance_url:                               # by reference
-          env: SHOP_SF_INSTANCE_URL
-        access_token:
-          env: SHOP_SF_ACCESS_TOKEN
-        api_version: "62.0"                         # the default
-        objects: [Account, Contact, "Acme__*"]      # optional: only these objects
+    sources:
+      app:
+        engine: salesforce
+        connection:
+          instance_url: {env: SHOP_SF_INSTANCE_URL}   # by reference
+          access_token: {env: SHOP_SF_ACCESS_TOKEN}
+          api_version: "62.0"                         # the default
+          objects: [Account, Contact, "Acme__*"]      # optional: only these objects
 
 or, for the fake org (:mod:`datadouble_salesforce.fake`)::
 
@@ -56,7 +55,7 @@ type HiddenField = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_]+\.[A
 
 
 class OrgConnection(BaseModel):
-    """The ``source.connection`` settings for an org."""
+    """The ``sources.<name>.connection`` settings for an org."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -70,7 +69,7 @@ class OrgConnection(BaseModel):
 
 
 class FakeConnection(BaseModel):
-    """The ``source.connection`` settings for the fake org."""
+    """The ``sources.<name>.connection`` settings for the fake org."""
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
 
@@ -132,7 +131,9 @@ class SalesforceEngine:
         """SQLite copies under ``scratch``; no container image applies."""
         parse_settings(NoSettings, tooling.server, "salesforce server")
         if tooling.image is not None:
-            message = "Salesforce copies are local SQLite databases; source.image does not apply"
+            message = (
+                "Salesforce copies are local SQLite databases; sources.<name>.image does not apply"
+            )
             raise EngineError(message)
         return SalesforceWorking(scratch)
 

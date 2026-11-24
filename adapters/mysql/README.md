@@ -14,11 +14,12 @@ tables a view reads; reading an older server's catalog fails, naming its
 version.
 
 ```yaml
-source:
-  engine: mysql
-  connection:
-    url:                         # mysql://user:password@host:3306/database, by reference
-      env: SHOP_MYSQL_URL
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:                         # mysql://user:password@host:3306/database, by reference
+        env: SHOP_MYSQL_URL
 ```
 
 ## Accounts
@@ -58,12 +59,13 @@ others. Each table is named `database.table`, and a spec may leave the
 database out wherever only one table fits (`orders` for `shop.orders`).
 
 ```yaml
-source:
-  engine: mysql
-  connection:
-    url:                           # the database in it is optional with databases
-      env: SHOP_MYSQL_URL
-    databases: [shop, "billing_*"] # names or globs; ["*"] for every database
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:                           # the database in it is optional with databases
+        env: SHOP_MYSQL_URL
+      databases: [shop, "billing_*"] # names or globs; ["*"] for every database
 ```
 
 - **Choosing databases.** Each entry is a name or a glob. A name must exist
@@ -92,6 +94,43 @@ source:
   expression rules run against their own table, so unqualified column names
   in them need nothing.
 
+## Several servers
+
+A spec can read databases from several MySQL servers, one source per server,
+into one image (see
+[several sources](../../docs/architecture.md#several-sources)):
+
+```yaml
+sources:
+  app:
+    engine: mysql
+    connection:
+      url:
+        env: APP_MYSQL_URL
+      databases: [shop, billing]
+  warehouse:
+    engine: mysql
+    connection:
+      url:
+        env: WAREHOUSE_MYSQL_URL
+      databases: [warehouse]
+```
+
+- **Every database once.** A database name read from two servers fails the
+  plan, naming it; the working server holds every source's databases under
+  their own names, and loads each source's schema, then every source's rows,
+  then every source's triggers.
+- **One version line.** The servers must share a compatibility line, the
+  major and minor version (`8.4`; 8.0 and 8.4 are separate lines); the working
+  server runs the newest of their versions. Every source gives the same
+  `image` and `server` settings, or none.
+- **A snapshot per server.** Each server's consistent snapshot covers only
+  its own databases, so the image is not one point in time; its manifest
+  records each source's GTID set and when its snapshot was opened. A virtual
+  reference between sources is read with strategy B, its keys through each
+  server's own snapshot, and the plan lists it under `between_sources`.
+- **The default database** for hooks and assertions is the first source's.
+
 ## Plugins
 
 Plugins the data needs, storage engines and full-text parsers installed from
@@ -104,7 +143,7 @@ is missing; the version is the server's, so it is not compared. `load`
 installs each plugin in the working server, and the data directory keeps it,
 so later servers and copies of a physical image load it too. A plugin from
 another distribution, such as Percona's MyRocks, needs that distribution's
-image in `source.image`.
+image in `sources.<name>.image`.
 
 ## Objects
 

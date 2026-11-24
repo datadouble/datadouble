@@ -82,8 +82,9 @@ def make_spec(tmp_path: Path, extra: str = "", *, mode: str = "pool", size: int 
     return parse_spec(
         f"""
 name: shop
-source:
-  engine: fake
+sources:
+  app:
+    engine: fake
 store:
   - filesystem:
       path: {tmp_path / "build"}
@@ -269,11 +270,11 @@ def test_promote_without_a_verification_report(tmp_path: Path, registry: Registr
 
 
 def test_promote_needs_settings_and_images(tmp_path: Path, registry: Registry) -> None:
-    bare = parse_spec("name: shop\nsource: {engine: fake}\n")
+    bare = parse_spec("name: shop\nsources: {app: {engine: fake}}\n")
     with pytest.raises(PromoteError, match="1 problem"):
         promote(bare, registry)
     unstored = parse_spec(
-        "name: shop\nsource: {engine: fake}\ntrust: {cosign: {public_key: {env: P}}}\n"
+        "name: shop\nsources: {app: {engine: fake}}\ntrust: {cosign: {public_key: {env: P}}}\n"
         f"promote: {{to: [{{filesystem: {{path: {tmp_path}}}}}]}}\n"
     )
     with pytest.raises(PromoteError) as caught:
@@ -353,7 +354,7 @@ def test_fetch_checks_signatures_and_hashes(tmp_path: Path, registry: Registry) 
 
 def test_fetch_errors(tmp_path: Path, registry: Registry) -> None:
     with pytest.raises(StagingError, match="needs `fetch` and `trust`"):
-        fetch(parse_spec("name: shop\nsource: {engine: fake}\n"), registry)
+        fetch(parse_spec("name: shop\nsources: {app: {engine: fake}}\n"), registry)
     spec = make_spec(tmp_path)
     with pytest.raises(StagingError, match="there are no images in"):
         fetch(spec, registry)
@@ -378,7 +379,7 @@ def test_fetch_errors(tmp_path: Path, registry: Registry) -> None:
     with pytest.raises(StagingError, match="for engine version 17"):
         fetch(pinned, registry)
     with pytest.raises(StagingError, match="needs a `fetch` section"):
-        activate(parse_spec("name: shop\nsource: {engine: fake}\n"), Generation("x"))
+        activate(parse_spec("name: shop\nsources: {app: {engine: fake}}\n"), Generation("x"))
 
 
 # export stores that cannot list keys
@@ -448,8 +449,9 @@ def test_fetch_over_https_with_basic_auth(
         return parse_spec(
             f"""
 name: shop
-source:
-  engine: fake
+sources:
+  app:
+    engine: fake
 store:
   - filesystem:
       path: {tmp_path / "build"}
@@ -659,7 +661,7 @@ def test_claims_the_adapter_observes(tmp_path: Path, registry: Registry) -> None
 
 
 def test_replicate_errors(tmp_path: Path, registry: Registry) -> None:
-    bare = parse_spec("name: shop\nsource: {engine: fake}\n")
+    bare = parse_spec("name: shop\nsources: {app: {engine: fake}}\n")
     with pytest.raises(ReplicateError, match="needs `fetch` and `replicate`"):
         replicate(bare, registry, Options())
     spec = make_spec(tmp_path)
@@ -792,7 +794,7 @@ def test_prune_staging(tmp_path: Path, registry: Registry) -> None:
 
 
 def test_prune_errors(registry: Registry) -> None:
-    bare = parse_spec("name: shop\nsource: {engine: fake}\n")
+    bare = parse_spec("name: shop\nsources: {app: {engine: fake}}\n")
     with pytest.raises(PruneError, match="no store stores"):
         prune(bare, registry, PruneTarget.STORE)
     with pytest.raises(PruneError, match="no export stores"):

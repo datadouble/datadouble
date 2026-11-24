@@ -72,15 +72,15 @@ def default_image(server_version: str) -> str:
 
     Image tags name the release and cumulative update
     (``2022-CU28-ubuntu-22.04``), not the build; a source on a security
-    update (GDR) needs ``source.image``. A major version alone (``16``) gets
+    update (GDR) needs ``sources.<name>.image``. A major version alone (``16``) gets
     the release's latest image.
     """
     build, _, level = server_version.partition("-")
     year = _YEARS.get(build.split(".")[0])
     if year is None:
         message = (
-            f"no SQL Server image is known for version {server_version}; set source.image to"
-            " Microsoft's image of that version"
+            f"no SQL Server image is known for version {server_version};"
+            " set sources.<name>.image to Microsoft's image of that version"
         )
         raise EngineError(message)
     if not level:

@@ -43,38 +43,46 @@ common add-ons.
 {
   "outcome": "failure",
   "error": "requirement_unmet",
-  "message": "the working image lacks 1 requirement(s) of the source; name an image that has them in source.image, or leave them out with source.omit",
+  "message": "the working image lacks 1 requirement(s) of the sources; name an image that has them in sources.<name>.image, or leave them out with sources.<name>.omit",
   "details": [
-    {"location": "source.image", "problem": "extension postgis is not in the working image"}
+    {"location": "sources.app.image", "problem": "extension postgis is not in the working image"}
   ]
 }
 ```
 
 Pick one of these, in this order:
 
-1. **Use an image that has it.** Set `source.image` to an image built on the
+1. **Use an image that has it.** Set `sources.<name>.image` to an image built on the
    source's server release with the add-on installed, such as
    `postgis/postgis:18-3.6`. The adapter's README lists images for common
    add-ons. If your source runs a release no public image matches, build your
    own image from the vendor's.
 2. **Set the server settings it needs.** Some add-ons load at server start;
-   for PostgreSQL, list them in `source.server.shared_preload_libraries`.
-3. **Leave it out, if your copies don't need it.** `source.omit` names
+   for PostgreSQL, list them in `sources.<name>.server.shared_preload_libraries`.
+3. **Leave it out, if your copies don't need it.** `sources.<name>.omit` names
    requirements to leave out. Datadouble never leaves one out on its own, and
    anything that uses an omitted requirement, such as a column of its type,
    must be excluded too, or the build fails. Managed services' own extensions,
    such as `aws_s3` on Amazon RDS, are the usual case.
 
+With several sources, one working server provides every source's
+requirements, so the sources must agree: a requirement two sources use must
+be at the same version in both, and one source may leave a requirement out
+only if every source that uses it does too. The plan fails naming both
+sources otherwise. Messages name the source that uses each requirement
+(`sources.app.image`, `sources.app.omit`).
+
 ```yaml
-source:
-  engine: postgres
-  connection:
-    dsn:
-      env: SHOP_DSN
-  image: postgis/postgis:18-3.6
-  server:
-    shared_preload_libraries: [pg_stat_statements]
-  omit: [aws_s3, aws_commons]
+sources:
+  app:
+    engine: postgres
+    connection:
+      dsn:
+        env: SHOP_DSN
+    image: postgis/postgis:18-3.6
+    server:
+      shared_preload_libraries: [pg_stat_statements]
+    omit: [aws_s3, aws_commons]
 ```
 
 After changing any of these, re-lock with `datadouble lock` if the source

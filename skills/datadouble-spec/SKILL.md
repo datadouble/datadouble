@@ -44,7 +44,7 @@ re-locking below).
 - **Globs stay within a part.** `audit.*` is every table in namespaces called
   `audit`; `shop.*.*` is every table in PostgreSQL's database `shop`.
 - **Several databases from one server** go in one spec with
-  `source.connection.databases`, names or globs, for MySQL and PostgreSQL
+  `sources.<name>.connection.databases`, names or globs, for MySQL and PostgreSQL
   (`["*"]` for all). The copies then hold every database. Read the adapter's
   README before choosing: MySQL reads them all under one snapshot, references
   between them included, and leaves out views over databases it does not
@@ -57,6 +57,32 @@ re-locking below).
   at all.
 - **A new database a glob picks up** shows up as new tables in strict mode,
   handled like any other new table below.
+
+## Sources and several servers
+
+- **Every spec names its sources.** `sources` is a map from a name to a
+  source (`sources: {app: {engine: postgres, connection: ...}}`), even with
+  one server; there is no `source` key. Name each source after what it holds
+  (`app`, `warehouse`), in lowercase letters, digits, `-` and `_`; the names
+  appear in plans and manifests, and in error messages as
+  `sources.<name>....`.
+- **Several servers of one engine** are several sources, copied into one
+  image (PostgreSQL and MySQL; other engines read one source per spec). They
+  must share an engine and a compatibility line (`17` for PostgreSQL,
+  `8.4` for MySQL, where 8.0 is another line), give the same `image` and
+  `server`, hold no database name in common (empty databases count), and
+  agree on requirements: the same version everywhere, and an `omit` in every
+  source that uses it or in none. The plan fails naming whichever is not so. Each source has its own credentials, as its own
+  secret references.
+- **Such an image is not one point in time.** Each server is read under its
+  own snapshot; say so when the person asks about consistency. A virtual
+  reference between sources is followed with the keys strategy and listed in
+  the plan's `between_sources`. A child may name a parent the other
+  server's snapshot does not hold yet, and then verification fails and stops
+  the build, unless the reference has an `on_missing` fallback; explain that
+  trade-off and let the person choose. PostgreSQL refuses such references,
+  as it does between its databases. Foreign tables between servers are not
+  handled yet.
 
 ## When strict mode fails
 
@@ -202,11 +228,11 @@ fails with `requirement_unmet` when the working image lacks one.
 
 - **Look before you ask.** The lock (`catalog.lock`) lists the requirements;
   the engine adapter's README lists images that provide common ones.
-- **Suggest an image first.** Propose a `source.image` built on the source's
+- **Suggest an image first.** Propose a `sources.<name>.image` built on the source's
   server release that has the add-on, such as `postgis/postgis:18-3.6`. Some
-  add-ons also need `source.server` settings; for PostgreSQL,
+  add-ons also need `sources.<name>.server` settings; for PostgreSQL,
   `shared_preload_libraries`.
-- **Leaving one out is the person's decision.** `source.omit` drops a
+- **Leaving one out is the person's decision.** `sources.<name>.omit` drops a
   requirement from the copies, and anything that uses it must be excluded
   too. Explain that, and add it only when the person asks (rule 4). Managed
   services' own extensions, such as `aws_s3` on Amazon RDS, are the usual

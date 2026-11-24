@@ -27,7 +27,7 @@ from typing import BinaryIO
 from pydantic import BaseModel, ConfigDict
 
 from datadouble.catalog import Catalog
-from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling
+from datadouble.engine import EngineError, ExtractResult, Snapshot, TableCount, Tooling, outermost
 from datadouble.names import ColumnName, TableName
 from datadouble.planner import Plan
 from datadouble.subset import Condition, KeyTuple
@@ -281,6 +281,10 @@ class OracleSession:
     def server_version(self) -> str:
         """The source's version."""
         return server_version(self.connection)
+
+    def namespaces(self) -> tuple[str, ...]:
+        """The outermost namespaces of the catalog's tables."""
+        return outermost(self.catalog())
 
     def catalog(self) -> Catalog:
         """Introspect the source."""

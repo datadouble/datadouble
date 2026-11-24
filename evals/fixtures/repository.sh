@@ -19,9 +19,10 @@ esac
 mkdir -p datadouble
 cat > datadouble/shop.yml <<SPEC
 name: shop
-source:
-  engine: postgres
-  connection: {dsn: {env: SHOP_SOURCE_DSN}}
+sources:
+  app:
+    engine: postgres
+    connection: {dsn: {env: SHOP_SOURCE_DSN}}
 runtime: {docker: {}}
 subset:
   seeds: {customer: "id <= 50"}

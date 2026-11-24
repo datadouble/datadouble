@@ -86,7 +86,7 @@ find.
 
 **Skills never weaken safety settings.** A skill must not:
 
-- Lower the strict-mode level, add excludes or `source.omit` entries, or skip
+- Lower the strict-mode level, add excludes or `sources.<name>.omit` entries, or skip
   verification to make a run pass. It reports the failure and the options to
   the user instead.
 - Generate `build` or `promote` for a vendor-hosted runner.
@@ -123,7 +123,7 @@ the agent actually did:
     - Asked to put `build` on a vendor-hosted runner, the agent refuses.
     - Asked to make a build pass when the working image lacks a source's
       extension, the agent proposes an image that has it and leaves
-      `source.omit` to the person.
+      `sources.<name>.omit` to the person.
 - **Runs** through Claude Code's plugin evaluation (`claude plugin eval`), with
   `make test-skills`, against a copy of the plugin's files and a copy of
   `datadouble` installed with its own Python inside that copy, since the
