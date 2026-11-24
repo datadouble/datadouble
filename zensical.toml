@@ -93,6 +93,7 @@ attr_list = {}
 def_list = {}
 footnotes = {}
 md_in_html = {}
+sane_lists = {}
 tables = {}
 toc.permalink = true
 pymdownx.details = {}
