@@ -16,9 +16,9 @@ You will:
 
 You need Docker and a checkout of
 [datadouble/datadouble](https://github.com/datadouble/datadouble). Run every
-command from the root of the checkout. The commands assume Linux with a local
-Docker daemon, because Datadouble shares file paths and the network with the
-containers it starts. Step 4 explains why.
+command from the root of the checkout. The commands work on Linux, and on
+macOS with OrbStack. Datadouble shares file paths and the network with the
+containers it starts, and step 4 explains what that means on each.
 
 ## 1. Build the image
 
@@ -131,19 +131,39 @@ then belong to the server that will open them.
 
 The containers Datadouble starts see files at the same paths Datadouble does.
 So Datadouble needs the Docker socket, and every directory it writes must be
-mounted at the same path inside its container as on the host.
+mounted at the same path inside its container as on the Docker host.
 
-Create the directories it writes, owned by that user:
+Create the directories it writes, owned by that user. A container creates
+them, so the command is the same on every system:
 
 ```
-sudo install -d -o 999 -g 999 /var/tmp/shop /var/tmp/shop/store /var/tmp/shop/work
+docker run --rm --user 0 -v /var/tmp:/var/tmp --entrypoint install datadouble \
+    -d -o 999 -g 999 /var/tmp/shop /var/tmp/shop/store /var/tmp/shop/work
+```
+
+On Linux, these directories are on your machine. On macOS, Docker runs inside
+a Linux virtual machine, and the directories are inside that machine instead
+of on your Mac. That is what Datadouble needs: it and the containers it starts
+all see the same `/var/tmp/shop`. To look at the files, run a container that
+mounts the directory:
+
+```
+docker run --rm -v /var/tmp/shop:/var/tmp/shop --entrypoint ls datadouble -R /var/tmp/shop
+```
+
+Datadouble's user also needs the group that owns the Docker socket, as
+containers see it. Ask a container for it:
+
+```
+DOCKER_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+    --entrypoint stat datadouble -c %g /var/run/docker.sock)
 ```
 
 Then define `datadouble` as an alias that runs the image:
 
 ```
 alias datadouble='docker run --rm --network host --user 999:999 \
-    --group-add $(stat -c %g /var/run/docker.sock) \
+    --group-add "$DOCKER_GID" \
     -v /var/run/docker.sock:/var/run/docker.sock -v /var/tmp/shop:/var/tmp/shop \
     -v "$PWD:$PWD" -w "$PWD" -e HOME=/tmp -e DATADOUBLE_BOUNDARY=inside \
     -e SHOP_DSN=postgresql://postgres:local-only@172.31.0.10:5432/postgres datadouble'
@@ -155,7 +175,7 @@ Each option has a reason:
 |---|---|
 | `--network host` | The working servers Datadouble starts publish their ports on the host, and Datadouble must reach them there. |
 | `--user 999:999` | Run as PostgreSQL's user, as described above. |
-| `--group-add ...` and the socket mount | Let that user start containers through the host's Docker daemon. |
+| `--group-add "$DOCKER_GID"` and the socket mount | Let that user start containers through the Docker daemon. |
 | `-v /var/tmp/shop:/var/tmp/shop` | The directories Datadouble writes, at the same path. |
 | `-v "$PWD:$PWD" -w "$PWD"` | The checkout, so Datadouble can read `shop/shop.yml`. |
 | `-e HOME=/tmp` | User 999 has no home directory in the image. |
