@@ -90,7 +90,7 @@ started on its own schedule:
 |---|---|---|---|
 | **build** | plan → extract → load → transform → package → verify → store | Production | Schedule (for example, weekly) |
 | **promote** | promote | Production | After a successful build |
-| **fetch** | fetch | Non-production | Schedule (cheap: reads the channel and the image summary, not the image) |
+| **fetch** | fetch | Non-production | Schedule (cheap: reads the channel, and downloads only a new image) |
 | **provision** | replicate → announce | Non-production | Schedule (pool mode), or a request such as a pull request (on-demand mode) |
 | **release** | release | Non-production | Pull request closed, environment stopped, or schedule |
 | **prune** | prune | Each environment | Schedule |
@@ -152,7 +152,7 @@ as new as the copy's `server_version`. The newest release of a line opens what
 older releases wrote. In practice:
 
 - Where the vendor publishes a tag for the line, use it: `postgres:17`,
-  `mysql:8.4`, `redis:7.4`, `mongo:8.0`, `opensearchproject/opensearch:2`.
+  `mysql:8.4`, `redis:7.4`, `mongo:8.0`.
 - Elsewhere, use the newest exact release.
 - Oracle is the exception. A pluggable database plugs cleanly only into the
   release update that wrote it, so serve Oracle copies with exactly
@@ -168,7 +168,8 @@ the image's full manifest, which travels inside the image, and holds:
 - the image's identity;
 - its build time;
 - its content hashes;
-- its verification result;
+- its verification result and strict-mode levels;
+- the exact server version it was built from;
 - its signature reference.
 
 Here is one image group's directory in a store:
@@ -180,8 +181,9 @@ export-store/shop/billing/
     0193a7c21b4e9f30.physical.tar.gz   # one archive per format, possibly many GB
     0193a7c21b4e9f30.logical.tar.gz
     0193a7c21b4e9f30.verify.json       # the full verification report
+    0193a7c21b4e9f30.sigstore.json     # the signature bundle
     0193a7c21b4e9f30.summary.json      # the image summary, written last
-    channels/latest                    # points at generation 0193a7c21b4e9f30
+    channels/latest.json               # points at generation 0193a7c21b4e9f30
 ```
 
 The `index.json` file is explained under [export stores](#the-index).
@@ -232,7 +234,7 @@ A run ends in one of three **outcomes**:
 | Outcome | Meaning | Example |
 |---|---|---|
 | success | Image built and verified | |
-| warning | Image built and verified, with something an operator should fix | Source server version newer than the load server |
+| warning | Image built and verified, with something an operator should fix | A `files.paths_from` value that matched no pattern, so its file was not copied |
 | failure | No image stored | Any verification failure, any strict-mode violation |
 
 Anything that could put real personal data into a copy is always a failure,
@@ -245,11 +247,13 @@ never a warning. CI/CD adapters map warnings to each system's own state, as
 and copies an image into an **export store**, the only storage the
 non-production side can read.
 
-It refuses an image unless the image's manifest records all of these:
+It checks every image before copying any, and refuses an image unless it
+has all of these:
 
-- a passing `verify` report, with no checks skipped;
+- a passing `verify` report: at least one check run, and none failed;
 - strict-mode levels, for every kind, at least as strict as `promote.strict`
   requires (by default `data: columns`, and `warn` for each kind of object);
+- a signature that the spec's `trust` settings accept;
 - content hashes that match the stored artifacts.
 
 On the other side, `fetch` pulls from the export store with read-only
@@ -360,8 +364,8 @@ inside the boundary. Where the only machine there is a CI runner, the manual
 - It publishes that directory as the CI system's job artifact: a GitHub
   artifact, a GitLab job artifact, or a Jenkins archived artifact. Kubernetes
   keeps no job artifacts, so on Argo CD the job prints both files to its log.
-  Its termination message carries the outputs: `fingerprint`, and `changes`,
-  the number of changes.
+  Its termination message carries the outputs: `fingerprint`, and, when
+  there was a committed lock, `changes`, the number of changes.
 - It never commits. A person reviews the changes, checks every new or changed
   column for personal data, and commits the lock. That review is the point of
   strict mode, so no job does it for them.
@@ -385,23 +389,26 @@ where they are.
 `fetch` pulls an image from the export store into non-production **staging**,
 the local area copies are made from. It:
 
-1. reads the channel and the image summary, and skips all the work below when
-   the summary shows nothing newer than what is already staged;
-2. downloads the image;
-3. checks its signature (decision 58) and the summary's hashes;
+1. reads the export store's channel, and skips all the work below when
+   staging already holds the generation it points at;
+2. reads the image summary and checks the image's signature (decision 58);
+3. downloads the image's archive in the format `fetch.format` names, and
+   checks it against the summary's hash;
 4. unpacks it into the form `replicate` copies from, for example a
    ready-to-mount data directory;
 5. advances the staging channel.
 
-Because the first step reads only a few kilobytes, running `fetch` every few
+Because the first step reads only a few bytes, running `fetch` every few
 minutes is cheap.
 
 Two safeguards protect staging:
 
-- An image being written to staging is locked until it is complete, so
-  `replicate` never copies a partial image.
-- Staging keeps the last N images, so `activate` can move the channel back to
-  a previous generation if a new image turns out to be bad.
+- `fetch` unpacks an image under a temporary name, holding the image line's
+  lock, and renames it when complete. So `replicate` never copies a partial
+  image.
+- Staging keeps the newest `fetch.keep` generations (3 by default), so
+  `activate` can move the channel back to a previous generation if a new
+  image turns out to be bad.
 
 ### replicate {#replicate}
 
@@ -413,8 +420,9 @@ long a copy takes to make:
 | **pool** | Keep N unclaimed copies of the active generation ready; consumers claim one | Large images, where copying takes longer than a developer will wait |
 | **on-demand** | Make N copies for a named requester (a pipeline, merge request or environment); asking again makes none until some are released | Small images, CI test jobs |
 
-Copies are written under a temporary name and renamed when complete. A copy
-that never completed is removed by `release`.
+Each copy is recorded before it is made, and marked ready when complete. A
+copy that never completed is removed the next time `replicate`, `claim` or
+`release` works on its image line.
 
 A copy is one of two kinds, and each replicate adapter declares which kind it
 produces:
@@ -452,8 +460,9 @@ reach it.
 - **Instance clones** are announced as connection parameters: host, port,
   database, and the clone's own credentials.
 
-Every clone carries labels (spec, image group, engine, compatibility line,
-channel, owner) and provenance (image ID, generation, build time).
+Every clone is announced with its copy ID and labels: spec, image group,
+engine, compatibility line (`engine-version`), generation, build time
+(`built-at`), mode (pool or on-demand) and, when it has one, owner.
 
 | Announce adapter | Writes | For |
 |---|---|---|
@@ -466,16 +475,18 @@ A clone's credentials go only to targets that can keep a secret: `k8s-secret`,
 `vault` and `dotenv`. `ci-outputs` announces the endpoint without them,
 because job outputs on most systems are not secret.
 
-A `k8s-pv` copy needs no separate announcement. Its PersistentVolume is
-labelled with the copy's spec, group, engine line (`engine-version`), exact
-server version (`server-version`) and generation. That volume is itself the
+A `k8s-pv` copy needs no separate announcement. Its PersistentVolume carries
+labels under `datadouble.dev/` for the copy's ID (`copy`), spec, group,
+engine, engine line (`engine-version`), exact server version
+(`server-version`) and generation. That volume is itself the
 announcement: consumers match it with a PersistentVolumeClaim selector
 (decision 61).
 
 #### Reaching another cluster {#reaching-another-cluster}
 
-`k8s-pv`, `k8s-secret` and the `kubernetes` runtime reach the cluster they run
-in through its service account. A job that drives a different cluster gives
+`k8s-pv`, `k8s-secret` and the `kubernetes` runtime use `kubectl`. Without
+other settings, it reaches the cluster a pod runs in through its service
+account, or the cluster of the ambient kubeconfig elsewhere. A job that drives a different cluster gives
 each of them two settings:
 
 - `kubeconfig`: a secret reference to the kubeconfig's content
@@ -505,24 +516,30 @@ made:
 
 - **On-demand copies** are released by copy ID or by owner, which is the
   normal teardown path. A scheduled sweep with `--expired` catches copies
-  whose teardown never ran.
-- **Pool copies** are recycled by generation. When another generation becomes
-  active (a newer one, or an older one after `activate`), unclaimed copies of
-  other generations are replaced one for one as new copies are made. So the
-  pool never empties. For urgent replacement, `--all-at-once` replaces them
-  all at once.
-- **Claimed copies** belong to their consumer. On Kubernetes, a `Delete`
-  reclaim policy removes the volume when the claim is deleted.
-- **Incomplete copies** are always removed.
+  past `replicate.expires_hours` whose teardown never ran.
+- **Pool copies** are recycled by `replicate`, not `release`. When another
+  generation becomes active (a newer one, or an older one after `activate`),
+  unclaimed copies of other generations are removed as fresh copies
+  replace them, and any left over once the pool is full. So the pool never
+  empties. For urgent replacement,
+  `replicate --all-at-once` removes them before making new ones.
+- **Claimed copies** belong to their consumer until released. On Kubernetes,
+  a `k8s-pv` volume is kept (`Retain`) when its claim is deleted, and
+  Datadouble removes the released volume the next time `replicate`, `claim`
+  or `release` runs for its image line.
+- **Incomplete copies** are always removed, by the same three commands.
 
 #### Withdrawing announcements {#withdrawing-announcements}
 
-Releasing a copy also withdraws its announcements, so a deleted copy's
+The `release` command also withdraws a released copy's announcements, so its
 credentials don't linger in a Secret or a vault. This is harder than it
 sounds, because the place an announcement went can depend on where it was
 made. A `k8s-secret` Secret announced from a laptop goes into the laptop's
 kubeconfig context's namespace, while a release sweep may run in a pod in
 another namespace.
+
+Only `release` withdraws announcements. A copy that `replicate`, `claim` or
+`prune` removes, such as a recycled pool copy, keeps its announcements.
 
 So Datadouble's registry of copies records, for each copy, the targets each
 `announce` entry reported. `release` gives each entry back only its own
@@ -551,17 +568,22 @@ announcements to remove by hand.
 
 ### prune {#prune}
 
-`prune` applies retention to images in any store and in staging. It keeps:
+`prune` applies retention to images in any store and in staging. Its
+`--target` says where: `store` (the build's stores), `export` (the export
+stores) or `staging`. For each image line it keeps:
 
-- the last N generations;
-- anything younger than M days;
-- always, the image a channel points to.
+- the newest `prune.keep` generations (3 by default; `fetch.keep` in
+  staging);
+- in stores, anything built within `prune.keep_days` days (7 by default);
+- always, whatever any channel points at.
 
-Retention also works by compatibility line. Once a newer line is in use,
-older lines' images, staging and pools can be removed, keeping the K most
-recent lines.
+Retention also works by compatibility line. Only a group's newest
+`prune.keep_versions` lines (2 by default) keep their generations. Older
+lines keep only their channels' targets. With `--target staging`, their
+unclaimed pool copies are removed too.
 
-`prune` supports `--dry-run`, which reports the space it would recover.
+`prune` supports `--dry-run`, which reports what it would remove and the
+space it would recover.
 
 ### activate {#activate}
 
@@ -625,36 +647,52 @@ Generated configuration:
 
 - **Pins the Datadouble version:** the native step at that release's tag, and
   the release's image.
-- **References secrets by name only.** Each job gets only the secrets its own
-  spec sections name:
-    - `build`: every source's secret, each by its own reference, the build
-      store's, and the password references of `package.accounts`, plus
-      `COSIGN_PASSWORD` for a build signed with a key;
-    - `fetch`: the trust settings' secrets;
-    - any job: each `--env NAME` given, for credentials that adapters read
-      from the environment, such as `AWS_ACCESS_KEY_ID`.
+- **References secrets by name only.** Each job gets only the secrets named
+  in the spec sections it reads, and mounts only the absolute paths named
+  there:
+    - `build` reads `sources`, `files`, `package` (only the password
+      references of `package.accounts`), `store`, `signing`, `secrets` and
+      `runtime`. It also gets `COSIGN_PASSWORD` for a build signed with a key;
+    - `promote` reads `store`, `promote` and `trust`;
+    - `lock` reads `sources`;
+    - `fetch` reads `fetch` and `trust`;
+    - `provision` and `release` read `fetch`, `replicate`, `announce` and
+      `runtime`;
+    - `activate` reads `fetch`;
+    - `prune` reads `store` and `promote` in production, and `fetch` and
+      `replicate` outside it;
+    - every job reads `notify`, and gets each `--env NAME` given, for
+      credentials that adapters read from the environment, such as
+      `AWS_ACCESS_KEY_ID`.
 - **Includes schedules,** in UTC, and job chaining: `promote` after a
   successful `build`, and a pool's `provision` after `fetch`.
-- **Includes the system's concurrency controls,** per job, and per request
-  for on-demand copies.
+- **Includes the system's concurrency controls,** per job. On GitHub,
+  on-demand copies also get one per request.
 - **Exposes run-time switches as job parameters:** `--dry-run` for `prune`,
   and the generation to `activate`.
 - **Passes the CI system's run ID as `--retry-key` to `build`,** so retrying a
-  failed run resumes the generation it started (decision 100).
+  failed run resumes the generation it started (decision 100). Jenkins runs a
+  retry as a new build, so its `build` job takes a `RETRY_KEY` parameter:
+  give it the failed build's `BUILD_TAG` to resume it.
 - **Publishes the `lock` job's new lock and its changes** as the job's
   artifact (see [the lock job](#the-lock-job)). No other job publishes files.
 - **Writes the spec's `notify` email** in the system's own form, or lists the
   setup in `instructions` (see [notifications](#notifications)).
-- **Makes on-demand copies when a pull or merge request opens,** for the owner
-  `pr-<number>`, and releases them when it closes. Requests from forks never
-  run on the team's runners.
+- **Makes on-demand copies when a pull or merge request opens,** and releases
+  them when it closes. The owner is `pr-<number>` on GitHub and Argo CD, and
+  `mr-<iid>` on GitLab. Jenkins shares no request events across
+  installations, so there a request's own pipeline starts `provision` and
+  `release` with an `OWNER` parameter. On GitHub and GitLab, requests from
+  forks never run on the team's runners.
 
 The mode, pool or on-demand, comes from the spec's `replicate` section.
 
 Every production-side call needs an explicit runner, `--runner`. That
 includes `build`, `promote` and `lock`, and also `prune --side production` on
-its own. `build` also needs `--work`, an absolute work directory. See
-[where jobs run](#where-jobs-run).
+its own. GitLab, Jenkins and Argo CD need `--runner` on both sides: runner
+tags, agent labels, or the side's namespace. On GitHub, a non-production call
+without it runs on any `self-hosted` runner. `build` also needs `--work`, an
+absolute work directory. See [where jobs run](#where-jobs-run).
 
 ### Supported systems {#supported-systems}
 
@@ -663,10 +701,10 @@ one has its own native form:
 
 | System | Native form | Outputs | Secrets | Teardown hook |
 |---|---|---|---|---|
-| GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions@v1`) that runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository or environment secrets; OIDC to cloud storage and for keyless signing | A `pull_request: closed` workflow |
-| GitLab CI | An included file of jobs extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`); CI/CD Catalog components once the GitLab mirror exists | dotenv report artifacts | CI/CD variables, `id_tokens` OIDC | Environments with `on_stop` |
-| Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step, on an agent with Docker or, with `--agent kubernetes`, in a pod of the Kubernetes plugin; `activate` takes the generation as a parameter | Step return values, the build's description | Credentials binding | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
-| Argo CD | An Application per side, installing this repository's Helm chart at the release's tag: a CronJob per job, with a following job also running as a later step of its leader's pod; a PreSync hook Job for on-demand provision; a PostDelete hook Job for release; an ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` or `k8s-secret`; containers' termination messages | Kubernetes Secrets, External Secrets | PostDelete hook |
+| GitHub Actions | A workflow per job, using one action in this repository (`datadouble/datadouble/ci/github-actions`) at the release's tag, which runs the Datadouble image | `$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY` | Repository secrets of the same name; the workflow's identity token for keyless signing | A `pull_request: closed` workflow |
+| GitLab CI | An included file of jobs per side, extending a job template that this repository publishes at each release's tag, pinned by its SHA-256 (`include: remote` with `integrity`) | dotenv report artifacts | Masked, protected CI/CD variables | Environments with `on_stop` |
+| Jenkins | A declarative Jenkinsfile per job, loading this repository's shared library at the release's tag and calling its one `datadouble` step, on an agent with Docker or, with `--agent kubernetes`, in a pod of the Kubernetes plugin; `activate` takes the generation as a parameter | Step return values, the build's description | Secret text credentials, bound with `withCredentials` | A request's own pipeline starts `release` with its `OWNER`, for example in `post { cleanup }` |
+| Argo CD | An Application per side, installing this repository's Helm chart at the release's tag: a CronJob per job, with a following job also running as a later step of its leader's pod; a PreSync hook Job for on-demand provision; a PostDelete hook Job for release. The adapter's README has an ApplicationSet example with the pull-request generator | Kubernetes PersistentVolume or Secret via `k8s-pv` or `k8s-secret`; containers' termination messages | A Kubernetes Secret, `datadouble-<spec>`, with a key per variable | PostDelete hook |
 
 The Kubernetes pieces (container image, Job templates, RBAC) form a shared
 base. Argo CD uses it directly, and the Tier 2 Kubernetes systems will build
@@ -695,7 +733,8 @@ guesses. The CI/CD adapter then handles four things.
 **Secrets.** Secrets reach Datadouble as environment variables, set from the
 system's own secrets. The adapter registers every secret value Datadouble
 resolves with the system's log masking, where the system has it (GitHub's
-`add-mask`).
+`add-mask`). GitLab masks the variables defined as masked, and Jenkins masks
+the credentials it binds, so their adapters have nothing to add.
 
 **Outputs and outcomes.** The adapter:
 
@@ -716,8 +755,10 @@ Each system shows a warning in its own way:
 
 **Concurrency.** Generated configuration includes the system's concurrency
 controls: GitHub `concurrency`, GitLab `resource_group`, Jenkins
-`disableConcurrentBuilds` or `lock`. The core also takes locks in storage and
-staging, because different systems may run jobs for the same spec.
+`disableConcurrentBuilds`, and a CronJob's `concurrencyPolicy: Forbid` on Argo
+CD. Different systems may run jobs for the same spec, so the core also locks
+each image line in staging: only one `fetch`, `replicate` or `release` works
+on a line at a time.
 
 **Failure.** There is no continue-on-error switch. A failed stage stops the
 job.
@@ -799,13 +840,12 @@ of ten seconds, a refused connection, a redirect, and any status other than
 2xx. The warning names the webhook by its position and never quotes its URL.
 The job's outcome is what it would have been without the webhook.
 
-A missing webhook secret is different: it is a missing secret, like any
-other.
+A missing webhook secret depends on the system:
 
 - Jenkins' `withCredentials` and Argo CD's `secretKeyRef` fail the job before
-  it starts.
-- GitHub and GitLab pass an empty variable instead, and the job logs that the
-  variable is not set.
+  it starts, as for any missing credential.
+- GitHub and GitLab pass an empty variable instead. The job runs, and its log
+  warns that the webhook's variable is not set.
 
 #### Email {#email}
 
@@ -891,7 +931,9 @@ Four rules keep them there:
 
 - **Generation needs a runner.** `datadouble ci init --job build` (or
   `promote`, or `lock`) fails without `--runner`. It never writes a
-  vendor-hosted runner such as `ubuntu-latest`.
+  vendor-hosted runner: the GitHub and GitLab adapters refuse their vendors'
+  runner labels, such as `ubuntu-latest` or `saas-linux-small-amd64`, on
+  either side.
 - **Hosted runners are refused even when marked.** At run time, reading the
   source and `promote` also fail if any installed CI/CD adapter recognizes a
   vendor-hosted runner, for example from GitHub's
@@ -984,9 +1026,9 @@ over the container's.
 
 **Permissions.** The pods run as a service account,
 `datadouble-<spec>-<side>`. Its RBAC lets Datadouble run engine pods (pods,
-their logs, exec and port forwarding, and Secrets) and, for `k8s-pv`, manage
-PersistentVolumes. `ci init`'s `instructions` list it, with the plugin's cloud
-and the claim.
+their logs, exec and port forwarding, and Secrets), read
+PersistentVolumeClaims and, for `k8s-pv`, manage PersistentVolumes.
+`ci init`'s `instructions` list it, with the plugin's cloud and the claim.
 
 Kubernetes agents refuse a Docker command or socket. GitLab's Kubernetes
 executor and GitHub's Actions Runner Controller could follow the same model.
@@ -1033,10 +1075,10 @@ tests, which start the system's local runtime themselves. `SYSTEM` is one of
 ### 3. Scheduled runs on hosted services {#testing-scheduled-runs}
 
 Local runtimes like `act` don't reproduce every API and runner change. So
-GitHub Actions on this repository, and a GitLab.com project, run nightly. The
-GitLab run waits for that project; see decision 99. Both use self-hosted
-runners that the test starts, so the hosted-runner refusal in `build` is
-exercised exactly as in real use.
+GitHub Actions on this repository runs the generated jobs nightly, on a
+self-hosted runner that the test starts, and the hosted-runner refusal in
+`build` is exercised exactly as in real use. A nightly run on a GitLab.com
+project is planned, once that project exists (decision 99).
 
 On GitHub (`.github/workflows/nightly.yml`, decision 104):
 

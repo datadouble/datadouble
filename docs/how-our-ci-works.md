@@ -40,7 +40,7 @@ page is the tour.
 | CI | **Lint, types and unit tests** on Python 3.13; **Unit tests** on each later Python (3.14 and 3.15); **Claude Code plugin** validation; **Integration jobs**, which lists the integration shards; one **Integration** job per shard (20 today); one **CI/CD conformance** job per CI/CD system (five); **Integration coverage**; **sonar**; the **k8s** and **btrfs** privileged adapter jobs; **Documentation site** |
 | PR Images | One job that builds the runtime image, pushes it to GitHub Container Registry, signs it with cosign, and attests its SBOM and provenance |
 | CodeQL | Static analysis, one job for Python and one for the workflows |
-| Snyk Security | Dependency and container scanning |
+| Snyk Security | Dependency scanning |
 | Dependency Review | Checks the dependencies a pull request adds |
 
 Some workflows also run at other times:
@@ -250,8 +250,8 @@ code, a new bug, or a security hotspot, for example.
 So a hang shows up as a timeout that names the stuck test, instead of holding
 the pull request for hours.
 
-**A setup step fails with a refused connection.** Every job blocks network
-traffic except to the addresses it lists. A new download needs its address
+**A setup step fails with a refused connection.** Every job a pull request
+starts blocks network traffic except to the addresses it lists. A new download needs its address
 added to that job's list, with a comment saying why it is there.
 
 **Pulls fail with `429 Too Many Requests`.** This is Docker Hub's rate limit.

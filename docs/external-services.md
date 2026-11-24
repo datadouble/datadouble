@@ -1,9 +1,9 @@
 # External services
 
 Datadouble's CI depends on several outside services: GitHub itself, PyPI,
-Snyk, SonarQube Cloud, Codecov, GitLab.com and, later, a Salesforce org. Each
-needs a one-time setup by a maintainer. This page is the checklist for that
-setup.
+Snyk, SonarQube Cloud, Codecov and, later, GitLab.com and a Salesforce org.
+Each needs a one-time setup by a maintainer. This page is the checklist for
+that setup.
 
 Each service has its own section, with its steps in the order you do them.
 Each step says why the setting matters, so you can judge what to do when a
@@ -25,7 +25,7 @@ that creates it.
 
 | Secret | Used for | Set up in |
 |---|---|---|
-| `SNYK_TOKEN` | Dependency and container scanning | [Snyk](#snyk) |
+| `SNYK_TOKEN` | Dependency scanning | [Snyk](#snyk) |
 | `SONAR_TOKEN` | Static analysis | [SonarQube Cloud](#sonarqube-cloud) |
 | `GITLAB_MIRROR_SSH_KEY` | Pushing this repository to its GitLab mirror | [GitLab](#gitlabcom) |
 | `GITLAB_RUNNER_TOKEN` | Registering the ephemeral runner for nightly GitLab tests | [GitLab](#gitlabcom) |
@@ -33,10 +33,10 @@ that creates it.
 | `RUNNER_ADMIN_TOKEN` | Registering the nightly tests' ephemeral self-hosted GitHub runner, and starting the workflows it runs | [GitHub](#runner-registration-token) |
 | `DATADOUBLE_NIGHTLY_DSN` | The nightly run's throwaway source database. The nightly job starts the database with this DSN's password, so any random password will do | `gh secret set` |
 | `SF_CLIENT_ID`, `SF_JWT_KEY`, `SF_USERNAME` | Re-recording the Salesforce cassette on a schedule (not wired up yet) | [Salesforce](#salesforce) |
-| `CODECOV_TOKEN` (optional) | Uploading coverage when OpenID Connect can't be used | [Codecov](#codecov) |
+| `CODECOV_TOKEN` (optional) | Uploading coverage from pull requests from forks, which can't use OpenID Connect | [Codecov](#codecov) |
 
-Codecov, GitHub Container Registry and PyPI use OpenID Connect, so they need
-no secret.
+Codecov and PyPI use OpenID Connect, and workflows push to GitHub Container
+Registry with their own token, so none of them needs a secret.
 
 No workflow uses the GitLab or Salesforce secrets yet. Set them up when the
 nightly GitLab run and the scheduled re-recording are wired up.
@@ -189,7 +189,7 @@ release.
 
 ## Snyk
 
-Snyk scans the dependencies and the container image. Its tokens belong to a
+Snyk scans the locked Python dependencies. Its tokens belong to a
 user, not an organization, and CI scans run under that user's default
 organization. So there is no Snyk organization to create.
 
@@ -251,23 +251,24 @@ decides whether a pull request passes.
 2. Install the Codecov app on the `datadouble` organization, for
    `datadouble/datadouble`.
 
-CI uploads with OpenID Connect (`use_oidc: true`), so no token is needed. If
-uploads fail, copy the repository upload token from Codecov's repository
-settings into a `CODECOV_TOKEN` secret, and tell whoever maintains CI. CI
-uses that token, when it is set, for runs that OpenID Connect can't serve.
+CI uploads with OpenID Connect (`use_oidc: true`), so no token is needed for
+runs from this repository. A pull request from a fork can't use OpenID
+Connect, so CI uploads its coverage with a `CODECOV_TOKEN` secret, when one
+is set: copy the repository upload token from Codecov's repository settings.
+A failed upload never fails the job, since CI's own gate has already passed.
 
 ## GitLab.com
 
-GitLab hosts two things: the CI/CD Catalog components, and the nightly GitLab
-end-to-end tests. Its project is a mirror of this repository, and nobody
-commits to it directly.
+GitLab will host two things: the CI/CD Catalog components, and the nightly
+GitLab end-to-end tests. Its project will be a mirror of this repository,
+and nobody commits to it directly. Neither is wired up yet: no workflow
+pushes the mirror or starts a GitLab pipeline. These steps prepare for them.
 
 1. **Group and project.** Create a public group named `datadouble`. If that
-   name is taken, pick another and update [CI/CD integration](ci-cd.md).
-   Then create an empty public project named `datadouble` in it, with a
-   description.
-2. **Mirror key.** GitHub Actions pushes to GitLab over SSH, so it needs a
-   key that GitLab accepts:
+   name is taken, pick another. Then create an empty public project named
+   `datadouble` in it, with a description.
+2. **Mirror key.** GitHub Actions will push to GitLab over SSH, so it needs
+   a key that GitLab accepts:
     1. Generate a key pair locally:
        `ssh-keygen -t ed25519 -N '' -C datadouble-mirror -f mirror_key`.
     2. In the GitLab project, open **Settings → Repository → Deploy keys**.
@@ -276,12 +277,12 @@ commits to it directly.
        tags**. Allow the deploy key to push to `main` and to `v*` tags.
     4. Save the contents of `mirror_key` as `GITLAB_MIRROR_SSH_KEY`. Then
        delete both key files.
-3. **Ephemeral runner.** The nightly tests start their own runner. Open
+3. **Ephemeral runner.** The nightly tests will start their own runner. Open
    **Settings → CI/CD → Runners → New project runner**, with tag
    `datadouble-e2e` and "run untagged jobs" off, so the runner takes only
    these tests' jobs. Save the runner authentication token (it starts with
    `glrt-`) as `GITLAB_RUNNER_TOKEN`.
-4. **Trigger token.** This lets GitHub start the nightly pipeline. Open
+4. **Trigger token.** This will let GitHub start the nightly pipeline. Open
    **Settings → CI/CD → Pipeline trigger tokens → Add new token**, and save
    it as `GITLAB_TRIGGER_TOKEN`.
 5. **CI/CD Catalog.** Wait for the first mirror push, after which the project

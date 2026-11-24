@@ -36,7 +36,8 @@ The options:
 - `--job` lists the jobs to write. All of them must belong to one side.
 - `--spec` is the spec the jobs run.
 - `--runner` is where the jobs run: a runner tag or label, or on Kubernetes
-  the side's namespace. The production side always needs one.
+  the side's namespace. The production side always needs one, and so does
+  either side on GitLab, Jenkins and Argo CD.
 - `--work` is `build`'s work directory, an absolute path in production
   scratch space. It is kept between runs, so a retried build resumes.
 - `--side` names the side when you generate `prune` on its own, since `prune`
@@ -67,10 +68,10 @@ library (decision 100). Schedules are in UTC.
 | build | production | plan through store | weekly schedule (Mondays at 02:00), or by hand |
 | promote | production | promote | a successful build, or by hand |
 | lock | production | lock, publishing the new lock and its changes for review | by hand |
-| prune | either | prune | daily schedule (04:00) |
-| fetch | non-production | fetch | every 15 minutes |
-| provision | non-production | replicate | hourly and after fetch (pool), or a pull request (on demand) |
-| release | non-production | release | a closed pull request (on demand), and a daily sweep (03:30) |
+| prune | either | prune | daily schedule (04:00), or by hand |
+| fetch | non-production | fetch | every 15 minutes, or by hand |
+| provision | non-production | replicate | hourly, after fetch, or by hand (pool); a pull or merge request opening (on demand) |
+| release | non-production | release | a daily sweep of expired copies (03:30), or by hand; also a closed pull or merge request (on demand) |
 | activate | non-production | activate a chosen generation | by hand |
 
 ### What each system gets {#what-each-system-gets}
@@ -147,22 +148,28 @@ It works like Argo CD:
 - `--cloud` names the Jenkins Kubernetes plugin's cloud. Without it, the
   plugin's default cloud is used.
 
-To set it up:
+First, the spec. `ci init` refuses a spec that breaks either rule:
+
+- For jobs that start engines, use the spec's `kubernetes` runtime on the
+  `datadouble` claim, with every path the spec names under the runtime's
+  `mount`.
+- Leave the runtime's `namespace` out. Engine pods then start in the
+  namespace of the job's own pod, so one spec serves both sides. If you do
+  set it, it must be the side's `--runner`.
+
+Then the cluster. `ci init` lists each of these steps in its `instructions`:
 
 1. Give each side its own namespace, ideally its own cluster.
-2. For jobs that start engines, use the spec's `kubernetes` runtime on that
-   claim, with every path the spec names under the runtime's `mount`.
-3. Leave the runtime's `namespace` out. Engine pods then start in the
-   namespace of the job's own pod, so one spec serves both sides. If you do
-   set it, it must be the side's `--runner`, or `ci init` refuses.
-4. Give the plugin's cloud the Role the plugin documents (pods, `pods/exec`,
-   `pods/log`, events).
-5. Give the pods' service account RBAC for engine pods: pods, their logs,
-   exec and port forwarding, Secrets, and PersistentVolumes for `k8s-pv`.
-6. Mark the production namespace with the `datadouble-boundary` ConfigMap.
+2. Set up the plugin's cloud, with the Role the plugin documents (pods,
+   `pods/exec`, `pods/log`, events).
+3. Create the `datadouble` PersistentVolumeClaim in the namespace, owned by
+   the engine's user.
+4. Create the pods' service account, `datadouble-<spec>-<side>`, with RBAC
+   for engine pods: pods, their logs, exec and port forwarding, Secrets, and
+   reading PersistentVolumeClaims. On the non-production side, `k8s-pv` also
+   needs PersistentVolumes.
+5. Mark the production namespace with the `datadouble-boundary` ConfigMap.
    On Kubernetes agents, this is the only boundary mark that counts.
-
-`ci init` lists each of these steps in its `instructions`.
 
 ## Re-lock after a schema change {#re-lock-after-a-schema-change}
 
@@ -206,8 +213,9 @@ notify:
     - Jenkins: a `mail` step in the Jenkinsfile's `post` section;
     - GitLab: the Pipeline status emails integration, set up by hand as
       `instructions` says;
-    - GitHub: GitHub's own notifications, set up by hand as `instructions`
-      says;
+    - GitHub: none a workflow can send. GitHub mails a failed run only to
+      whoever started it, so `instructions` suggests a webhook to a service
+      that sends mail;
     - Argo CD: refused, since it has no mail.
 - **A notification that fails** is a warning in the job's log. It never
   changes the job's outcome.
