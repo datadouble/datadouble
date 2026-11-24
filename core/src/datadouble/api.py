@@ -322,7 +322,7 @@ class CiInitRequest(_Request):
     jobs: tuple[JobKind, ...] = Field(min_length=1)
     spec: Path
     runner: str | None = None
-    """The runner jobs run on; required for build, promote and lock."""
+    """The runner jobs run on; required for every job on the production side."""
     work: Path | None = None
     """The build's work directory in production scratch space; required for build."""
     side: Side | None = None
