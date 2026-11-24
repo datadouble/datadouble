@@ -1,0 +1,21 @@
+scripts/make_tag.py
+  s_ad63f2bf16b775::t_a411f6b913a464 14-15,210-212
+tests/scripts/test_make_tag.py
+  s_ad63f2bf16b775::t_36a081368d5cd9 132-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "750bea52c9816e0a16af37f3d54cd281c35f1a2d",
+  "prompts": {},
+  "sessions": {
+    "s_ad63f2bf16b775": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7695759-5257-4c98-b0c0-2e7c8cbc14ca",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
