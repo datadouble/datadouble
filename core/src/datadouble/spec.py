@@ -1301,12 +1301,6 @@ def _plain(value: object) -> object:
     raise TypeError(message)
 
 
-_RENAMED = (
-    "`source` is now `sources`, a map of named sources: "
-    "`sources: {app: {engine: ..., connection: ...}}`"
-)
-
-
 def parse_spec(text: str, *, origin: str = "spec") -> Spec:
     """Parse a spec from YAML or JSON text (JSON is valid YAML)."""
     try:
@@ -1323,10 +1317,7 @@ def parse_spec(text: str, *, origin: str = "spec") -> Spec:
         return Spec.model_validate_json(text)
     except ValidationError as error:
         details = tuple(
-            (
-                ".".join(str(part) for part in problem["loc"]) or "(spec)",
-                _RENAMED if problem["loc"] == ("source",) else problem["msg"],
-            )
+            (".".join(str(part) for part in problem["loc"]) or "(spec)", problem["msg"])
             for problem in error.errors(include_url=False)
         )
         message = f"{origin} does not match the spec schema: {error.error_count()} problem(s)"

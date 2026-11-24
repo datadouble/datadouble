@@ -199,7 +199,7 @@ def test_json_is_accepted() -> None:
             "Input should be",
         ),
         (MINIMAL + "objects: [{table: a}]", "objects.0.table.[key]", "Input should be"),
-        ("name: shop\nsource: {engine: postgres}", "source", "`source` is now `sources`"),
+        ("name: shop\nsource: {engine: postgres}", "source", "Extra inputs are not permitted"),
         ("name: shop\nsources: {}", "sources", "at least 1"),
         ("name: shop\nsources: {App: {engine: postgres}}", "sources", "lowercase"),
         (

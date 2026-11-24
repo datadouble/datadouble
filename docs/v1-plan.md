@@ -29,7 +29,8 @@ Version 1 includes:
     - MongoDB and Redis;
     - Elasticsearch and OpenSearch;
     - a `files` adapter, for file trees beside a database;
-    - Salesforce, against a fake org.
+    - Salesforce, which reads a real org over its REST APIs. Its tests run
+      against a fake org and recorded cassettes.
 3. The core:
     - the spec and the catalog lock;
     - excludes and strict mode;
@@ -207,10 +208,13 @@ mapping fields.
 - an unmatched top-level directory fails the plan;
 - a planted file of fake personal data fails verify.
 
-### M7: Salesforce against the fake
+### M7: Salesforce
 
-**Builds:** the Salesforce adapter against the fake org, plus the tooling for
-recording, scrubbing and replaying cassettes.
+**Builds:** the Salesforce adapter, which reads a real org over its REST APIs
+with an instance URL and an access token. Its tests run against a fake org (a
+SQLite file served over HTTP) and against cassettes recorded from a real org
+(`make record-salesforce`), so they need no org. M7 also builds the tooling
+for recording, scrubbing and replaying the cassettes.
 
 **Done when:**
 
@@ -345,7 +349,7 @@ Every adapter is tested against a sample dataset:
 | Redis | Generated keyspace with every data type and key-encoded references |
 | Elasticsearch, OpenSearch | Generated indices derived from Pagila, with join keys across indices |
 | Files | Generated upload tree keyed by customer IDs in a PostgreSQL table, with EXIF metadata and a text file containing fake personal data |
-| Salesforce | A fake org, a SQLite file of made-up records (`sample_org`) |
+| Salesforce | For tests, a fake org: a SQLite file of made-up records (`sample_org`), served over HTTP |
 
 Every dataset includes the awkward cases listed in [local
 development](local-development.md).
