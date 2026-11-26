@@ -151,23 +151,45 @@ there is nothing to create first. After the first image is pushed:
 ## PyPI
 
 Datadouble uses **trusted publishing**: GitHub Actions authenticates to PyPI
-with OpenID Connect, so there is no PyPI token anywhere. Instead, you tell
-PyPI in advance which workflow may publish each package.
+with OpenID Connect, so releases need no PyPI token. Instead, each package's
+project on PyPI names the workflow that may publish it.
+
+PyPI's usual way to set that up for a new name is a **pending publisher**,
+which creates the project at the first release. That works for one package
+from a repository, not for 22. PyPI identifies a pending publisher by its
+owner, repository, workflow and environment, not by the project name, so the
+second one for `release.yml` fails:
+
+```
+A pending trusted publisher matching this configuration has already been
+registered for a different project name.
+```
+
+So create every project first, then give each one the same publisher:
 
 1. **Account.** Create a PyPI account, or use yours, with two-factor
    authentication on.
-2. **Pending publishers.** Open **Your account → Publishing → Add a new
-   pending publisher**, and add one for each package name in the list below,
-   with:
-    - **PyPI project name:** the package name;
+2. **Reserve the names.** Create an API token scoped to the whole account
+   (**Account settings → API tokens**). For each package name in the list
+   below that isn't on PyPI yet, upload a placeholder with that token: a
+   version `0.0.0` wheel that contains no code and whose description says the
+   name is reserved for Datadouble. PyPI lets an account create only 4 new
+   projects a day, and answers `429 Too many new projects created` after
+   that, so 22 names take six days. To go faster, ask PyPI support to raise
+   the limit, in an issue at
+   [pypi/support](https://github.com/pypi/support).
+3. **Add a publisher to each project.** Open **Your projects → (project) →
+   Manage → Publishing**, and add a GitHub publisher with:
     - **Owner:** `datadouble`;
     - **Repository name:** `datadouble`;
     - **Workflow name:** `release.yml`;
     - **Environment name:** `pypi`, the environment that waits for your
       approval.
-3. **First release.** A pending publisher does not reserve the name. The
-   first release from `release.yml` creates the project and turns the pending
-   publisher into a normal one.
+
+    Unlike pending publishers, existing projects can share one publisher.
+4. **Clean up.** Delete each project's `0.0.0` release (**Manage →
+   Releases**). The project and its publisher stay. Then delete the API
+   token.
 
 The upload goes one package at a time, so a release that fails partway, such
 as on a package without a publisher, leaves the earlier packages on PyPI.
@@ -188,9 +210,9 @@ datadouble-vault         datadouble-github-actions
 datadouble-gitlab        datadouble-jenkins       datadouble-argocd
 ```
 
-The version 1 run does not tag releases. If it adds package names, its pull
-request lists them, and they need pending publishers before the first
-release.
+A pull request that adds a package lists its name. The name needs steps 2
+to 4 before the first release that includes it, or that release fails to
+publish it.
 
 ## Snyk
 
