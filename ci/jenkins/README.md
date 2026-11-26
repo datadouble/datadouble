@@ -60,11 +60,11 @@ build's `BUILD_TAG`, shown at the top of its log.
 
 The manual `lock` job (`--job lock`, on the production side with `build`)
 re-locks after a schema change. It runs `datadouble lock --output
-datadouble-lock` and archives the new `catalog.lock` and `changes.txt` as the
-build's artifacts. It never commits: download them from the build's page,
-check every new or changed column in `changes.txt` for personal data, then
-commit `catalog.lock` beside the spec. A lock contains names, types and versions,
-never values (decision 123).
+datadouble-lock` and archives the new lock (named after the spec, such as
+`shop.lock`) and `changes.txt` as the build's artifacts. It never commits:
+download them from the build's page, check every new or changed column in
+`changes.txt` for personal data, then commit the lock beside the spec. A lock
+contains names, types and versions, never values (decision 123).
 
 ## What a job needs on its agent
 

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A spec can extend other specs, so one copy comes in several sizes**
+  ([#131](https://github.com/datadouble/datadouble/issues/131)). A new
+  top-level `extends` names other spec files, by paths relative to the
+  file, inside the directory of the spec being run. Their settings merge
+  left to right, then the file's own: mappings merge key by key, and any
+  other value, lists included, replaces. Each file merges once, after all
+  the files it extends, so two sizes of one base combine without the base
+  undoing either. Paths are taken as written: a symbolic link keeps its
+  name, so a ConfigMap mounted as a directory works. Only the merged spec is
+  validated, so a typo in any file still fails. The merged `name` must
+  differ from every parent's, and a cycle fails naming its files. A micro
+  copy for laptops is then a few lines: `extends: shop.yml`, its own
+  `name`, and its seeds. The plan and each image's manifest record
+  `spec_layers`: each file's path and SHA-256. `ci init` on Argo CD
+  carries every file in the Application's values. The new Spec sizes page
+  in the documentation explains it.
+- **A `spec` command prints the merged spec**
+  ([#131](https://github.com/datadouble/datadouble/issues/131)).
+  `datadouble spec --spec FILE` prints the spec merged with the specs it
+  extends, as YAML, after a comment listing the files it was read from.
+  `--json` and the JSON request `{"command": "spec", "spec": FILE}` give the
+  spec and its `layers`.
+
+### Changed
+
+- **BREAKING: the catalog lock is named after its spec**
+  ([#131](https://github.com/datadouble/datadouble/issues/131)). The
+  default lock is the spec's path with the suffix `.lock`: `shop.yml` uses
+  `shop.lock`, and `shop-micro.yml` uses `shop-micro.lock`, so each spec in
+  a directory has its own. `--lock` still names any file, and `lock
+  --output DIR` writes the new lock under the current lock's file name,
+  such as `DIR/shop-micro.lock`. Anyone upgrading from 0.0.1 renames
+  `catalog.lock` to the spec's lock name, and generates Argo CD
+  Applications again. Until then, any command that uses the default lock
+  fails when `catalog.lock` sits beside the spec, and says to rename it,
+  rather than reading it.
+
 ## [0.0.1] - 2026-11-24
 
 ### Added

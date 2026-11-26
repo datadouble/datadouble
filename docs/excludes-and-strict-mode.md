@@ -87,8 +87,9 @@ safe behaviour is the default, and relaxing it is explicit.
 
 To notice a change, strict mode needs to know what the schema looked like
 when the subset model was built. That record is the **catalog lock**, a file
-called `catalog.lock`. `datadouble lock` writes it, and you commit it next to
-the spec. It lists tables, columns, primary keys and foreign keys, with a
+named after the spec: `shop.lock` for `shop.yml`. `datadouble lock` writes
+it, and you commit it next to the spec. Each spec has its own lock, including
+each [size](using/spec-sizes.md) of one spec. It lists tables, columns, primary keys and foreign keys, with a
 fingerprint. `datadouble import-jailer` writes one too (see
 [Jailer](jailer.md#design)). A spec that reads a Jailer model on every run
 needs a lock as well: Datadouble checks Jailer's data model folder against

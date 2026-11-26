@@ -179,21 +179,22 @@ test data, so it is fine to mark it for these commands.
 ### Run the three commands
 
 ```
-datadouble lock --spec shop/shop.yml --lock shop/out/catalog.lock
-datadouble plan --spec shop/shop.yml --lock shop/out/catalog.lock
+datadouble lock --spec shop/shop.yml --lock shop/out/shop.lock
+datadouble plan --spec shop/shop.yml --lock shop/out/shop.lock
 datadouble run plan,extract,load,transform,package,verify,store \
-    --spec shop/shop.yml --lock shop/out/catalog.lock --work shop/out/work
+    --spec shop/shop.yml --lock shop/out/shop.lock --work shop/out/work
 ```
 
-By default the lock goes beside the spec, as `shop/catalog.lock`. Here it goes
-in `shop/out`, because on Linux Datadouble's user can't write to `shop` itself.
+By default the lock goes beside the spec and is named after it, as
+`shop/shop.lock`. Here it goes in `shop/out`, because on Linux Datadouble's
+user can't write to `shop` itself.
 
 `plan` doesn't write a file. It prints a summary of what a build would copy,
 or fails if the source no longer matches the spec and the lock. To see the
 full plan as JSON, put `--json` before the command:
 
 ```
-datadouble --json plan --spec shop/shop.yml --lock shop/out/catalog.lock
+datadouble --json plan --spec shop/shop.yml --lock shop/out/shop.lock
 ```
 
 `run` saves the same plan as `plan.json` in the build's work directory, under
@@ -203,7 +204,7 @@ When it finishes, `run` lists each stage it ran, then the verification
 result, then the image summary it stored. Look at what it wrote:
 
 ```
-cat shop/out/catalog.lock
+cat shop/out/shop.lock
 ls shop/out/store/shop/all/postgres-18/
 ```
 

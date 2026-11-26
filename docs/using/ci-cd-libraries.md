@@ -178,7 +178,7 @@ When the source's schema changes, strict mode needs a new catalog lock. The
 source needs the boundary.
 
 1. Start the `lock` job by hand.
-2. Download the job's artifact. It contains the new `catalog.lock`, and
+2. Download the job's artifact. It contains the new lock, named after the spec (such as `shop.lock`), and
    `changes.txt`: what changed since the committed lock. On Argo CD, both are
    in the job's log instead.
 3. Check every new or changed column for personal data.

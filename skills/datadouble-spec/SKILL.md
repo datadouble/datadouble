@@ -40,13 +40,13 @@ Follow `../RULES.md` throughout.
 ## Check it, without production data
 
 `datadouble plan --spec <spec>` reads only the catalog and checks the spec
-against it and its lock (`catalog.lock` beside the spec). Planning reads the
-source, so it runs only where the operator marked the machine inside the
-production boundary. Outside it, generate the `build` job (with
-`datadouble-build`) and let its first run plan on the production runner; the
-person can share the plan's output, which names tables and columns but never
-values. The first lock comes the same way, from the `lock` job (see
-re-locking below).
+against it and its lock (beside the spec, named after it: `shop.lock` for
+`shop.yml`). Planning reads the source, so it runs only where the operator
+marked the machine inside the production boundary. Outside it, generate the
+`build` job (with `datadouble-build`) and let its first run plan on the
+production runner; the person can share the plan's output, which names tables
+and columns but never values. The first lock comes the same way, from the
+`lock` job (see re-locking below).
 
 ## Table names and databases
 
@@ -133,7 +133,7 @@ everything is new, and when the earlier lock cannot be read, which
 - **No shell inside the boundary?** Re-lock through the CI `lock` job.
   Generate it with the production jobs (`--job lock` in `datadouble-build`'s
   `ci init`), and have the person start it by hand. It publishes the new
-  `catalog.lock` and `changes.txt` as the job's artifact (on Argo CD, in the
+  lock (`<spec>.lock`) and `changes.txt` as the job's artifact (on Argo CD, in the
   job's log) and never commits.
 - **The person reviews the diff, not you.** Each new or changed column in
   `changes.txt` must be checked for personal data before the lock is
@@ -236,6 +236,30 @@ the copy holds, so show the person the options and let them pick:
 
 A Jailer subset already behaves as `none`; change the Jailer model instead.
 
+## Several sizes of one copy
+
+When the person wants another size of a copy a spec already makes (a micro
+copy for laptops, a larger one for QA, every row for staging), write a new
+spec file that extends the existing one rather than a copy of it:
+
+```yaml
+extends: shop.yml
+name: shop-micro
+subset:
+  seeds:
+    customers: id <= 5
+```
+
+- Give it its own `name`; one that matches a parent's fails.
+- Write only what differs. Mappings merge key by key; a list, such as
+  `exclude`, replaces the parent's whole list, so repeat what it keeps. A
+  parent's seed key can be overridden but not removed.
+- Parents are paths relative to the file, inside the spec's directory.
+- `datadouble spec --spec shop-micro.yml` prints the merged spec; check it
+  with the person before planning.
+- Each size has its own lock (`shop-micro.lock`), so lock it and generate its
+  jobs (`ci init`) separately.
+
 ## Extensions, plugins and modules
 
 The lock lists the add-ons the source uses beyond its server (its
@@ -244,7 +268,7 @@ plugins, Oracle index types), each at the source's version where it has one.
 Strict mode fails the plan when one is new, removed or upgraded, and a build
 fails with `requirement_unmet` when the working image lacks one.
 
-- **Look before you ask.** The lock (`catalog.lock`) lists the requirements;
+- **Look before you ask.** The lock (`<spec>.lock`) lists the requirements;
   the engine adapter's README lists images that provide common ones.
 - **Suggest an image first.** Propose a `sources.<name>.image` built on the source's
   server release that has the add-on, such as `postgis/postgis:18-3.6`. Some

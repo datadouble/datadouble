@@ -617,7 +617,7 @@ class CiConformance:
         leaves the job's outcome alone.
         """
         spec = shop.spec("on-demand")
-        (spec.parent / "catalog.lock").unlink()
+        spec.with_suffix(".lock").unlink()
         shop.write_spec("on-demand", strict="off")
         unheard = shop.context(run_id="200", webhook=UNREACHABLE)
         unreached = ci_harness.run(shop.repository, "build", Event.MANUAL, unheard)
@@ -716,7 +716,7 @@ class CiConformance:
 
     def test_the_lock_job(self, ci_harness: CiHarness, shop: World) -> None:
         """``lock`` publishes the new lock and its changes for review, and commits nothing."""
-        lock = shop.spec("on-demand").parent / "catalog.lock"
+        lock = shop.spec("on-demand").with_suffix(".lock")
         committed = lock.read_bytes()
         history = _history(shop.repository)
         docker(
@@ -731,8 +731,8 @@ class CiConformance:
         assert _history(shop.repository) == history
         if ci_harness.artifact_storage:
             names = {path.name for path in ci_harness.uploaded()}
-            assert {"catalog.lock", "changes.txt"} <= names, names
+            assert {"on-demand.lock", "changes.txt"} <= names, names
         else:
-            assert "==> datadouble-lock/catalog.lock <==" in done.log
+            assert "==> datadouble-lock/on-demand.lock <==" in done.log
             assert '"name": "phone"' in done.log
         assert shop.secrets["DDCI_SOURCE_DSN"].split("@")[0].split(":")[-1] not in done.log

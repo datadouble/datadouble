@@ -38,12 +38,12 @@ runners inside the boundary.
 
 The manual `lock` job (`--job lock`, on the production side with `build`)
 re-locks after a schema change. It runs `datadouble lock --output
-datadouble-lock` and uploads the new `catalog.lock` and `changes.txt` as the
-workflow run's artifact, `datadouble-<spec>-lock`, with
-`actions/upload-artifact`. It never commits: download the artifact from the
-run's page, check every new or changed column in `changes.txt` for personal
-data, then commit `catalog.lock` beside the spec. A lock contains names, types
-and versions, never values (decision 123).
+datadouble-lock` and uploads the new lock (named after the spec, such as
+`shop.lock`) and `changes.txt` as the workflow run's artifact,
+`datadouble-<spec>-lock`, with `actions/upload-artifact`. It never commits:
+download the artifact from the run's page, check every new or changed column
+in `changes.txt` for personal data, then commit the lock beside the spec. A
+lock contains names, types and versions, never values (decision 123).
 
 ## What a job needs on its runner
 

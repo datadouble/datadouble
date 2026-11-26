@@ -88,9 +88,11 @@ from datadouble.spec import (
     ImageFormat,
     Spec,
     SpecError,
+    SpecLayer,
     Strategy,
     StrictOverrides,
     load_spec,
+    read_spec,
     spec_schema,
 )
 from datadouble.staging import Fetched, StagingError, activate, fetch
@@ -103,6 +105,7 @@ class Command(StrEnum):
 
     VERSION = "version"
     SCHEMA = "schema"
+    SPEC = "spec"
     LOCK = "lock"
     IMPORT_JAILER = "import-jailer"
     PLAN = "plan"
@@ -173,13 +176,42 @@ class SchemaRequest(_Request):
     command: Literal[Command.SCHEMA]
 
 
+_OLD_LOCK = "catalog.lock"
+"""The lock's name beside every spec before locks were named after their specs."""
+
+
+def default_lock(spec: Path) -> Path:
+    """The spec's own lock: its path with the suffix ``.lock``, such as ``shop.lock``.
+
+    Fails when that is missing and a ``catalog.lock`` sits beside the spec,
+    rather than reading a lock that may belong to another spec.
+    """
+    lock = spec.with_suffix(".lock")
+    old = spec.parent / _OLD_LOCK
+    if not lock.exists() and old.exists():
+        message = (
+            f"{spec} has no lock {lock.name}, but {old} exists. Each spec's lock is named after"
+            f" the spec: if {old.name} is this spec's lock, rename it to {lock.name}"
+        )
+        raise CatalogError(message)
+    return lock
+
+
+class SpecRequest(_Request):
+    """Read a spec, merged with the specs it extends, and show the result and its files."""
+
+    command: Literal[Command.SPEC]
+    spec: Path
+
+
 class _SpecRequest(_Request):
     spec: Path
     lock: Path | None = None
-    """The catalog lock; ``catalog.lock`` next to the spec when omitted."""
+    """The catalog lock; the spec's path with the suffix ``.lock`` when omitted, such as
+    ``shop.lock`` for ``shop.yml``."""
 
     def lock_path(self) -> Path:
-        return self.lock or self.spec.parent / "catalog.lock"
+        return self.lock or default_lock(self.spec)
 
 
 class LockRequest(_SpecRequest):
@@ -187,8 +219,8 @@ class LockRequest(_SpecRequest):
 
     command: Literal[Command.LOCK]
     output: Path | None = None
-    """A directory to write the new lock (``catalog.lock``) and its changes
-    (``changes.txt``) into, leaving the current lock as it is, for someone to
+    """A directory to write the new lock (named after the spec, such as ``shop.lock``) and its
+    changes (``changes.txt``) into, leaving the current lock as it is, for someone to
     review before committing; the CI ``lock`` job uses it. The current lock is
     replaced when omitted."""
 
@@ -211,8 +243,10 @@ class _Overrides(_SpecRequest):
     strategy: Strategy | None = None
     formats: tuple[ImageFormat, ...] | None = Field(default=None, min_length=1)
 
-    def plan_options(self) -> PlanOptions:
-        return PlanOptions(strict=self.strict, strategy=self.strategy, formats=self.formats)
+    def plan_options(self, layers: tuple[SpecLayer, ...]) -> PlanOptions:
+        return PlanOptions(
+            strict=self.strict, strategy=self.strategy, formats=self.formats, layers=layers
+        )
 
 
 class PlanRequest(_Overrides):
@@ -351,6 +385,7 @@ class CiInitRequest(_Request):
 type Request = (
     VersionRequest
     | SchemaRequest
+    | SpecRequest
     | LockRequest
     | ImportJailerRequest
     | PlanRequest
@@ -371,6 +406,7 @@ _REQUEST: TypeAdapter[Request] = TypeAdapter(
     Annotated[
         VersionRequest
         | SchemaRequest
+        | SpecRequest
         | LockRequest
         | ImportJailerRequest
         | PlanRequest
@@ -410,6 +446,17 @@ class SchemaResponse(_Message):
     schema_: dict[str, JsonValue] = Field(alias="schema")
 
     model_config = ConfigDict(strict=True, frozen=True, extra="forbid", serialize_by_alias=True)
+
+
+class SpecResponse(_Message):
+    """A spec merged with the specs it extends, and the files it was read from."""
+
+    command: Literal[Command.SPEC] = Command.SPEC
+    outcome: Literal[Outcome.SUCCESS] = Outcome.SUCCESS
+    spec: dict[str, JsonValue]
+    """The merged spec as written, before defaults, without ``extends``."""
+    layers: tuple[SpecLayer, ...]
+    """Every file the spec was read from, in the order they merged: the spec's own file last."""
 
 
 class LockResponse(_Message):
@@ -534,6 +581,7 @@ class ErrorResponse(_Message):
 type Response = (
     VersionResponse
     | SchemaResponse
+    | SpecResponse
     | LockResponse
     | ImportJailerResponse
     | PlanResponse
@@ -656,7 +704,7 @@ def _write_lock(request: LockRequest, registry: Registry) -> LockResponse:
     changes_file: Path | None = None
     if request.output is not None:
         request.output.mkdir(parents=True, exist_ok=True)
-        path = request.output / "catalog.lock"
+        path = request.output / current.name
         changes_file = request.output / "changes.txt"
         text = "".join(f"{line}\n" for line in describe_changes(found, unreadable))
         changes_file.write_text(text, encoding="utf-8")
@@ -707,26 +755,27 @@ def _import_jailer(request: ImportJailerRequest, registry: Registry) -> ImportJa
 
 
 def _plan(request: PlanRequest, registry: Registry) -> PlanResponse:
-    spec = load_spec(request.spec)
+    loaded = read_spec(request.spec)
+    spec = loaded.spec
     lock = _lock(request)
     engine = registry.engine(spec.engine)
     sources = _catalogs(spec, registry)
-    planned = plan(spec, sources, lock, engine.capabilities(), request.plan_options())
+    planned = plan(spec, sources, lock, engine.capabilities(), request.plan_options(loaded.layers))
     if planned.warnings:
         return PlanResponse(outcome=Outcome.WARNING, plan=planned)
     return PlanResponse(outcome=Outcome.SUCCESS, plan=planned)
 
 
 def _run(request: RunRequest, registry: Registry) -> RunResponse:
-    spec = load_spec(request.spec)
+    loaded = read_spec(request.spec)
     options = RunOptions(
         stages=request.stages,
         work=request.work,
         resume=request.resume,
         retry_key=request.retry_key,
-        plan=request.plan_options(),
+        plan=request.plan_options(loaded.layers),
     )
-    result = Run(spec, _lock(request), registry, options).execute()
+    result = Run(loaded.spec, _lock(request), registry, options).execute()
     if result.failed():
         outcome = Outcome.FAILURE
     elif result.warnings:
@@ -786,12 +835,14 @@ def _with_secrets(
 
 
 def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
-    spec = load_spec(request.spec)
+    loaded = read_spec(request.spec)
+    spec = loaded.spec
     adapter = registry.ci_system(request.system)
     engine = registry.engine(spec.engine)
     root = request.output.resolve()
     try:
-        spec_path = request.spec.resolve().relative_to(root).as_posix()
+        # A linked spec keeps its own name: its parents and lock are beside the link.
+        spec_path = (request.spec.parent.resolve() / request.spec.name).relative_to(root).as_posix()
     except ValueError:
         message = f"the spec {request.spec} is not inside {request.output}, the repository root"
         raise CiError(message) from None
@@ -805,7 +856,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     if request.cloud and agent is not Agent.KUBERNETES:
         message = "a cloud applies only to kubernetes agents"
         raise CiError(message)
-    lock = request.spec.parent / "catalog.lock"
+    lock = default_lock(request.spec)
     options = PipelineOptions(
         kinds=request.jobs,
         spec_path=spec_path,
@@ -821,7 +872,10 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
         agent=agent,
         cloud=request.cloud,
         remote=registry.remote_settings(),
-        spec_text=request.spec.read_text(encoding="utf-8"),
+        spec_files=tuple(
+            (layer.path.as_posix(), (loaded.directory / layer.path).read_text(encoding="utf-8"))
+            for layer in loaded.layers
+        ),
         lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
     )
     planned = pipeline(spec, options)
@@ -889,14 +943,28 @@ def _build(
             assert_never(request)
 
 
+def _describe(
+    request: VersionRequest | SchemaRequest | SpecRequest,
+) -> VersionResponse | SchemaResponse | SpecResponse:
+    """Answer a request that reads no source and needs no adapters."""
+    match request:
+        case VersionRequest():
+            return VersionResponse(version=__version__, python=platform.python_version())
+        case SchemaRequest():
+            return SchemaResponse(schema=spec_schema())
+        case SpecRequest():
+            loaded = read_spec(request.spec)
+            return SpecResponse(spec=loaded.document, layers=loaded.layers)
+        case _:
+            assert_never(request)
+
+
 def handle(request: Request, registry: Registry | None = None) -> Response:
     """Carry out a parsed request with the installed adapters (or ``registry``)."""
     try:
         match request:
-            case VersionRequest():
-                return VersionResponse(version=__version__, python=platform.python_version())
-            case SchemaRequest():
-                return SchemaResponse(schema=spec_schema())
+            case VersionRequest() | SchemaRequest() | SpecRequest():
+                return _describe(request)
             case LockRequest() | ImportJailerRequest() | PlanRequest() | RunRequest():
                 return _build(request, registry or installed())
             case (
@@ -1049,7 +1117,7 @@ def notify(
     if request.ci is None or request.ci.job is None:
         return ()
     match request:
-        case VersionRequest() | SchemaRequest():
+        case VersionRequest() | SchemaRequest() | SpecRequest():
             return ()
         case _:
             path = request.spec

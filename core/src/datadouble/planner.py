@@ -58,6 +58,7 @@ from datadouble.spec import (
     PulledRows,
     Rule,
     Spec,
+    SpecLayer,
     Strategy,
     Strict,
     StrictLevel,
@@ -346,6 +347,8 @@ class Plan(_Model):
     between_sources: tuple[SourceReference, ...] = ()
     """References whose child and parent are in different sources: each side is
     read under its own snapshot, so the pair is not one point in time."""
+    spec_layers: tuple[SpecLayer, ...] = ()
+    """Every file the spec was read from, with its SHA-256, the spec's own file last."""
 
     def graph(self) -> Graph:
         """The selection graph."""
@@ -403,6 +406,8 @@ class PlanOptions(_Model):
     """Levels set over the spec's ``strict``, for the kinds named."""
     strategy: Strategy | None = None
     formats: tuple[ImageFormat, ...] | None = None
+    layers: tuple[SpecLayer, ...] = ()
+    """The files the spec was read from, recorded in the plan."""
 
 
 _FAKER_KINDS: dict[FakerKind, frozenset[ColumnKind]] = {
@@ -1174,6 +1179,7 @@ class _Planner:
             unselected=unselected,
             sources=self.sources,
             between_sources=between,
+            spec_layers=self.options.layers,
         )
 
     def between_sources(self, edges: Iterable[Edge]) -> tuple[SourceReference, ...]:

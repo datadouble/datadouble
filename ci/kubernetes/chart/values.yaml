@@ -14,9 +14,13 @@ user:
   uid: 999
   gid: 999
 # The spec and its catalog lock, mounted where the jobs' arguments find them.
+# `path` is the spec's path in the workspace. `files` maps each file the spec
+# is read from (the spec and the specs it extends), by its path from the
+# spec's directory, to its text. The lock is mounted beside the spec, named
+# after it: datadouble/spec.lock for datadouble/spec.yml.
 spec:
   path: datadouble/spec.yml
-  content: ""
+  files: {}
   lock: ""
 # The PersistentVolumeClaim every path the spec names lives on, mounted at
 # the same path in every pod (the `kubernetes` runtime's claim and mount).

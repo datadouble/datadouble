@@ -29,6 +29,14 @@ Show the installed version.
 
 Print the JSON Schema that specs are checked against.
 
+## `datadouble spec`
+
+Print a spec merged with the specs it extends, and the files it was read from.
+
+| Argument | Description |
+|---|---|
+| `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
+
 ## `datadouble lock`
 
 Write the catalog lock for a spec, and list what changed since the last one.
@@ -37,8 +45,8 @@ Write the catalog lock for a spec, and list what changed since the last one.
 |---|---|
 | `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
-| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
-| `--output` `OUTPUT` | A directory to write the new lock (catalog.lock) and its changes (changes.txt) to, leaving the current lock as it is. |
+| `--lock` `LOCK` | The catalog lock file (default: the spec's path with the suffix .lock, such as shop.lock for shop.yml). |
+| `--output` `OUTPUT` | A directory to write the new lock (named after the spec, such as shop.lock) and its changes (changes.txt) to, leaving the current lock as it is. |
 
 ## `datadouble import-jailer`
 
@@ -47,7 +55,7 @@ Translate a Jailer subset into native spec settings, and lock the catalog.
 | Argument | Description |
 |---|---|
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
-| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--lock` `LOCK` | The catalog lock file (default: the spec's path with the suffix .lock, such as shop.lock for shop.yml). |
 | `--model` `MODEL` | The Jailer extraction model, a .jm file (required). |
 | `--datamodel` `DATAMODEL` | The Jailer data model folder (required). |
 | `--output` `OUTPUT` | The file to write the native subset settings to, as YAML (required). |
@@ -59,7 +67,7 @@ Plan a build without extracting anything.
 | Argument | Description |
 |---|---|
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
-| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--lock` `LOCK` | The catalog lock file (default: the spec's path with the suffix .lock, such as shop.lock for shop.yml). |
 | `--strict` `KIND=LEVEL` | Override strict mode's level for one kind, such as data=tables or functions=fail (repeatable). |
 | `--strategy` `STRATEGY` | Override the spec's subset strategy (one of auto, nested, keys). |
 | `--format` `FORMATS` | An image format to produce, in place of the spec's package.formats (repeatable) (one of physical, logical). |
@@ -73,7 +81,7 @@ Run build stages, or resume a generation.
 | `--ci-record` `FILE` | With --ci-job, the file the generated job records its last outcome in, so that a success after anything else notifies as a recovery. ci init names it. |
 | `STAGES` | The stages to run, comma-separated: plan,extract,load,transform,package,verify,store (required). |
 | `--spec` `SPEC` | The spec file, in YAML or JSON (required). |
-| `--lock` `LOCK` | The catalog lock file (default: catalog.lock beside the spec). |
+| `--lock` `LOCK` | The catalog lock file (default: the spec's path with the suffix .lock, such as shop.lock for shop.yml). |
 | `--strict` `KIND=LEVEL` | Override strict mode's level for one kind, such as data=tables or functions=fail (repeatable). |
 | `--strategy` `STRATEGY` | Override the spec's subset strategy (one of auto, nested, keys). |
 | `--format` `FORMATS` | An image format to produce, in place of the spec's package.formats (repeatable) (one of physical, logical). |

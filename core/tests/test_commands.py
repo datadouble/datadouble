@@ -3,6 +3,7 @@
 
 """The lock, plan, run and schema commands, through the CLI and the JSON API."""
 
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ from datadouble import api, cli
 from datadouble.api import ErrorCode
 from datadouble.catalog import CatalogLock, read_lock, write_lock
 from datadouble.engine import EngineError
+from datadouble.images import unpack
 from datadouble.names import TableName
 from datadouble.outcome import ExitCode
 from datadouble.registry import Registry, RegistryError, installed
@@ -66,7 +68,7 @@ def test_schema() -> None:
 def test_lock_then_plan_then_run(spec_file: Path, tmp_path: Path) -> None:
     code, out = cli_run("lock", "--spec", str(spec_file))
     assert code == ExitCode.SUCCESS
-    assert out.startswith(f"wrote {tmp_path / 'catalog.lock'}: 10 tables (sha256:")
+    assert out.startswith(f"wrote {tmp_path / 'shop.lock'}: 10 tables (sha256:")
 
     code, out = cli_run("plan", "--spec", str(spec_file))
     assert code == ExitCode.SUCCESS
@@ -151,7 +153,7 @@ def test_verification_failure_summary(spec_file: Path, tmp_path: Path) -> None:
     text = spec_file.read_text()
     text = text.replace(text[text.index("anonymize:\n") : text.index("store:\n")], "")
     spec_file.write_text(text, encoding="utf-8")
-    write_lock(CatalogLock.of(shop()), tmp_path / "catalog.lock")
+    write_lock(CatalogLock.of(shop()), tmp_path / "shop.lock")
     code, out = cli_run(
         "run", ",".join(Stage), "--spec", str(spec_file), "--work", str(tmp_path / "w")
     )
@@ -163,7 +165,7 @@ def test_verification_failure_summary(spec_file: Path, tmp_path: Path) -> None:
 def test_strict_failures_explain_how_to_resolve(
     spec_file: Path, tmp_path: Path, engine: FakeEngine
 ) -> None:
-    write_lock(CatalogLock.of(shop()), tmp_path / "catalog.lock")
+    write_lock(CatalogLock.of(shop()), tmp_path / "shop.lock")
     engine.catalog = catalog(*shop().tables, table("secrets", ["id"]))
     code, out = cli_run("plan", "--spec", str(spec_file))
     assert code == ExitCode.FAILURE
@@ -219,7 +221,7 @@ def test_minimal_dry_run() -> None:
 
 def test_removed_tables_have_no_resolutions(spec_file: Path, tmp_path: Path) -> None:
     write_lock(
-        CatalogLock.of(catalog(*shop().tables, table("gone", ["id"]))), tmp_path / "catalog.lock"
+        CatalogLock.of(catalog(*shop().tables, table("gone", ["id"]))), tmp_path / "shop.lock"
     )
     code, out = cli_run("plan", "--spec", str(spec_file))
     assert code == ExitCode.FAILURE
@@ -310,7 +312,7 @@ def test_run_errors(
 
 
 def test_settings_errors(spec_file: Path, tmp_path: Path) -> None:
-    write_lock(CatalogLock.of(shop()), tmp_path / "catalog.lock")
+    write_lock(CatalogLock.of(shop()), tmp_path / "shop.lock")
     spec_file.write_text(
         spec_file.read_text().replace("      path: ", "      route: "), encoding="utf-8"
     )
@@ -350,7 +352,7 @@ def test_import_jailer(spec_file: Path, tmp_path: Path) -> None:
     arguments = ["--model", str(jm), "--datamodel", str(datamodel), "--output", str(output)]
     code, out = cli_run("import-jailer", "--spec", str(spec_file), *arguments)
     assert code == ExitCode.WARNING
-    assert out.splitlines()[0] == f"wrote {output} and {tmp_path / 'catalog.lock'}"
+    assert out.splitlines()[0] == f"wrote {output} and {tmp_path / 'shop.lock'}"
     assert "  ignored the layout block, which does not choose rows" in out.splitlines()
     written = yaml.safe_load(output.read_text("utf-8"))
     assert written["exclude"] == ["public.categories"]
@@ -390,7 +392,7 @@ def test_lock_lists_changes(spec_file: Path, tmp_path: Path, engine: FakeEngine)
     assert json.loads(out)["changes"] == []
     assert json.loads(out)["changes_file"] is None
 
-    lock = tmp_path / "catalog.lock"
+    lock = tmp_path / "shop.lock"
     committed = lock.read_bytes()
     engine.catalog = catalog(*shop().tables, table("tags", ["id"]))
     review = tmp_path / "review"
@@ -404,7 +406,7 @@ def test_lock_lists_changes(spec_file: Path, tmp_path: Path, engine: FakeEngine)
         "  added table public.tags",
         "  added column public.tags.id: integer (integer) not null",
     ]
-    assert out.splitlines()[0].startswith(f"wrote {review / 'catalog.lock'}: 11 tables")
+    assert out.splitlines()[0].startswith(f"wrote {review / 'shop.lock'}: 11 tables")
     assert out.splitlines()[5] == "  added primary-key public.tags: (id)"
     assert (review / "changes.txt").read_text(encoding="utf-8") == "\n".join(
         out.splitlines()[2:6]
@@ -416,7 +418,7 @@ def test_lock_lists_changes(spec_file: Path, tmp_path: Path, engine: FakeEngine)
     assert refused.error is ErrorCode.CATALOG_LOCK
     assert "holds the current lock" in refused.message
     assert lock.read_bytes() == committed
-    assert read_lock(review / "catalog.lock").catalog.table(TableName.of("public", "tags"))
+    assert read_lock(review / "shop.lock").catalog.table(TableName.of("public", "tags"))
 
     lock.write_text("{}", encoding="utf-8")
     response = api.handle_json(json.dumps({"command": "lock", "spec": str(spec_file)}))
@@ -445,4 +447,58 @@ def test_lock_refuses_sources_sharing_a_database(tmp_path: Path, engine: FakeEng
     assert isinstance(response, api.ErrorResponse)
     assert response.error is ErrorCode.PLAN_FAILED
     assert response.details[0].problem.startswith("public is in sources app and other;")
-    assert not (tmp_path / "catalog.lock").exists()
+    assert not (tmp_path / "two.lock").exists()
+
+
+def test_an_extending_spec_has_its_own_lock_and_records_its_files(
+    spec_file: Path, tmp_path: Path
+) -> None:
+    micro = tmp_path / "shop-micro.yml"
+    micro.write_text(
+        "extends: shop.yml\nname: shop-micro\nsubset:\n  seeds:\n    users: id <= 1\n",
+        encoding="utf-8",
+    )
+    code, out = cli_run("lock", "--spec", str(micro))
+    assert code == ExitCode.SUCCESS, out
+    assert out.startswith(f"wrote {tmp_path / 'shop-micro.lock'}: ")
+    assert not (tmp_path / "shop.lock").exists()
+    review = tmp_path / "review"
+    code, out = cli_run("lock", "--spec", str(micro), "--output", str(review))
+    assert code == ExitCode.SUCCESS, out
+    assert sorted(p.name for p in review.iterdir()) == ["changes.txt", "shop-micro.lock"]
+
+    layers = [
+        {
+            "path": "shop.yml",
+            "digest": "sha256:" + hashlib.sha256(spec_file.read_bytes()).hexdigest(),
+        },
+        {
+            "path": "shop-micro.yml",
+            "digest": "sha256:" + hashlib.sha256(micro.read_bytes()).hexdigest(),
+        },
+    ]
+    code, out = cli_run("--json", "plan", "--spec", str(micro))
+    assert code == ExitCode.SUCCESS, out
+    planned = json.loads(out)["plan"]
+    assert planned["spec"] == "shop-micro"
+    assert planned["spec_layers"] == layers
+    assert planned["strict"] is not None
+
+    work = tmp_path / "work"
+    code, out = cli_run("--json", "run", ",".join(Stage), "--spec", str(micro), "--work", str(work))
+    assert code == ExitCode.SUCCESS, out
+    result = json.loads(out)["result"]
+    plan_file = work / "shop-micro" / result["generation"] / "plan" / "plan.json"
+    assert json.loads(plan_file.read_text())["spec_layers"] == layers
+    (summary,) = result["images"]
+    _, manifest = unpack(tmp_path / "store" / summary["archives"][0]["key"], tmp_path / "unpacked")
+    assert json.loads(manifest)["spec_layers"] == layers
+
+    # The base spec doesn't read shop-micro.lock: it needs its own.
+    code, out = cli_run("plan", "--spec", str(spec_file))
+    assert code == ExitCode.FAILURE
+    assert "without a catalog lock" in out
+    cli_run("lock", "--spec", str(spec_file))
+    code, out = cli_run("--json", "plan", "--spec", str(spec_file))
+    assert code == ExitCode.SUCCESS, out
+    assert json.loads(out)["plan"]["spec_layers"] == [layers[0]]

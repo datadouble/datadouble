@@ -619,6 +619,45 @@ def test_ci_init_without_secrets(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("registry")
+def test_ci_init_carries_every_file_of_an_extending_spec(tmp_path: Path, ci: FakeCi) -> None:
+    spec = write_spec(tmp_path, make_spec(tmp_path))
+    repo = tmp_path / "repo"
+    sizes = spec.parent / "sizes"
+    sizes.mkdir()
+    (sizes / "micro.yml").write_text("subset:\n  seeds: {}\n", encoding="utf-8")
+    micro = spec.parent / "shop-micro.yml"
+    micro.write_text("extends: [shop.yml, sizes/micro.yml]\nname: shop-micro\n", "utf-8")
+    (spec.parent / "shop-micro.lock").write_text("micro lock\n", encoding="utf-8")
+    (spec.parent / "shop.lock").write_text("shop lock\n", encoding="utf-8")
+    code, out = run(
+        "ci", "init", "--system", "fake-ci", "--job", "prune", "--side", "non-production",
+        "--spec", str(micro), "--output", str(repo),
+    )  # fmt: skip
+    assert code == ExitCode.SUCCESS, out
+    (planned,) = ci.pipelines
+    assert planned.spec == "datadouble/shop-micro.yml"
+    assert planned.name == "shop-micro"
+    assert planned.spec_files == (
+        ("shop.yml", spec.read_text(encoding="utf-8")),
+        ("sizes/micro.yml", "subset:\n  seeds: {}\n"),
+        ("shop-micro.yml", micro.read_text(encoding="utf-8")),
+    )
+    assert planned.lock_text == "micro lock\n"
+
+
+@pytest.mark.usefixtures("registry")
+def test_ci_init_refuses_an_old_catalog_lock(tmp_path: Path) -> None:
+    spec = write_spec(tmp_path, make_spec(tmp_path))
+    (spec.parent / "catalog.lock").write_text("{}\n", encoding="utf-8")
+    code, out = run(
+        "ci", "init", "--system", "fake-ci", "--job", "prune", "--side", "non-production",
+        "--spec", str(spec), "--output", str(tmp_path / "repo"),
+    )  # fmt: skip
+    assert code == ExitCode.FAILURE
+    assert "rename it to shop.lock" in out
+
+
+@pytest.mark.usefixtures("registry")
 def test_ci_init_problems(tmp_path: Path) -> None:
     spec = write_spec(tmp_path, make_spec(tmp_path, mode="on-demand"))
     outside = tmp_path / "elsewhere"
@@ -770,7 +809,7 @@ def test_bridged_lock(tmp_path: Path, ci: FakeCi) -> None:
     assert code == ExitCode.SUCCESS, out
     (report, _) = ci.reports[-1]
     assert report.outputs["changes"] == "0"
-    assert report.files == (review / "catalog.lock", review / "changes.txt")
+    assert report.files == (review / "shop.lock", review / "changes.txt")
     assert report.summary == out.rstrip("\n")
 
 

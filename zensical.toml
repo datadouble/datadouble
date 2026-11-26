@@ -32,6 +32,7 @@ nav = [
   { "Using Datadouble" = [
     "using/index.md",
     { "Quickstart" = "using/quickstart.md" },
+    { "Spec sizes" = "using/spec-sizes.md" },
     { "Spec reference" = "using/spec-reference.md" },
     { "CLI reference" = "using/cli-reference.md" },
     { "Extensions, plugins and modules" = "using/source-requirements.md" },
