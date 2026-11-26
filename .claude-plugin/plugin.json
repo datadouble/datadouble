@@ -1,6 +1,6 @@
 {
   "name": "datadouble",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Set up Datadouble pipelines: specs, and the jobs that build, promote, fetch, copy, release, prune and roll back golden images, in a team's own CI/CD system.",
   "author": {
     "name": "Tight Line LLC",

@@ -435,7 +435,7 @@ wheels = [
 
 [[package]]
 name = "datadouble"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "core" }
 dependencies = [
     { name = "faker" },
@@ -452,7 +452,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-argocd"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "ci/kubernetes" }
 dependencies = [
     { name = "datadouble" },
@@ -467,7 +467,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-btrfs"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/btrfs" }
 dependencies = [
     { name = "datadouble" },
@@ -478,7 +478,7 @@ requires-dist = [{ name = "datadouble", editable = "core" }]
 
 [[package]]
 name = "datadouble-conformance"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "conformance" }
 dependencies = [
     { name = "datadouble" },
@@ -493,7 +493,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-docker"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/docker" }
 dependencies = [
     { name = "datadouble" },
@@ -504,7 +504,7 @@ requires-dist = [{ name = "datadouble", editable = "core" }]
 
 [[package]]
 name = "datadouble-elasticsearch"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/elasticsearch" }
 dependencies = [
     { name = "datadouble" },
@@ -519,7 +519,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-files"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/files" }
 dependencies = [
     { name = "datadouble" },
@@ -530,7 +530,7 @@ requires-dist = [{ name = "datadouble", editable = "core" }]
 
 [[package]]
 name = "datadouble-github-actions"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "ci/github-actions" }
 dependencies = [
     { name = "datadouble" },
@@ -545,7 +545,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-gitlab"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "ci/gitlab" }
 dependencies = [
     { name = "datadouble" },
@@ -560,7 +560,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-http"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/http" }
 dependencies = [
     { name = "datadouble" },
@@ -575,7 +575,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-jenkins"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "ci/jenkins" }
 dependencies = [
     { name = "datadouble" },
@@ -590,7 +590,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-kubernetes"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/kubernetes" }
 dependencies = [
     { name = "datadouble" },
@@ -605,7 +605,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-mongodb"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/mongodb" }
 dependencies = [
     { name = "datadouble" },
@@ -620,7 +620,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-mssql"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/mssql" }
 dependencies = [
     { name = "datadouble" },
@@ -635,7 +635,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-mysql"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/mysql" }
 dependencies = [
     { name = "datadouble" },
@@ -650,7 +650,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-opensearch"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/opensearch" }
 dependencies = [
     { name = "datadouble" },
@@ -665,7 +665,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-oracle"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/oracle" }
 dependencies = [
     { name = "datadouble" },
@@ -680,7 +680,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-postgres"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/postgres" }
 dependencies = [
     { name = "datadouble" },
@@ -695,7 +695,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-redis"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/redis" }
 dependencies = [
     { name = "datadouble" },
@@ -710,7 +710,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-s3"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/s3" }
 dependencies = [
     { name = "boto3" },
@@ -725,7 +725,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-salesforce"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/salesforce" }
 dependencies = [
     { name = "datadouble" },
@@ -740,7 +740,7 @@ requires-dist = [
 
 [[package]]
 name = "datadouble-vault"
-version = "0.0.1"
+version = "0.0.2"
 source = { editable = "adapters/vault" }
 dependencies = [
     { name = "datadouble" },

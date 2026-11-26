@@ -7,7 +7,7 @@ description: Datadouble's jobs on Kubernetes, for Argo CD or Helm
 type: application
 # The chart is versioned with Datadouble (decision 38); scripts/make_tag.py
 # sets both at release time.
-version: 0.0.1
-appVersion: 0.0.1
+version: 0.0.2
+appVersion: 0.0.2
 home: https://datadouble.tightlinesoftware.com/
 sources: [https://github.com/datadouble/datadouble]
