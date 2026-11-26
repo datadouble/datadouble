@@ -77,7 +77,7 @@ There are two ways in:
   Jailer stays the design tool. Edits committed to the `.jm` take effect on
   the next run, with no regeneration step. A spec with `subset.jailer` cannot
   also set `seeds`, `follow`, `edges`, `virtual_fks` or `unselected`. Strict
-  mode still compares the catalog with `catalog.lock`, so commit one beside
+  mode still compares the catalog with the spec's lock, so commit one beside
   the spec (see [strict mode](excludes-and-strict-mode.md#strict-mode)).
 
     ```yaml
@@ -90,8 +90,8 @@ There are two ways in:
 - **Convert it once.** `datadouble import-jailer --spec prod.yml --model
   model.jm --datamodel dir/ --output subset.yml` writes the native `subset`
   and `exclude` settings, as YAML, to the `--output` file, for you to copy
-  into the spec. It also writes a `catalog.lock`, and its response lists
-  the settings it ignored because they don't choose rows.
+  into the spec. It also writes the spec's lock (`prod.lock`), and its
+  response lists the settings it ignored because they don't choose rows.
 
 Either way, the data model is checked against the live catalog. A table the
 data model lists and the catalog doesn't, a column an association joins on

@@ -9,8 +9,8 @@ columns, primary keys and foreign keys, the add-ons the source depends on
 triggers and the like, as :class:`SourceObject`), each with a fingerprint of
 its definition and the tables and objects it depends on. A table lists what
 it needs too, such as the sequence a column's default draws from.
-``datadouble lock`` writes the catalog to ``catalog.lock`` next to the spec,
-listing what changed since the lock it replaces (:func:`changes`), and strict
+``datadouble lock`` writes the catalog to the spec's lock next to it (``shop.lock``
+for ``shop.yml``), listing what changed since the lock it replaces (:func:`changes`), and strict
 mode compares the live catalog against it at plan time.
 
 A lock holds names, engine type names, keys, requirement versions and

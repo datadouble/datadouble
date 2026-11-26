@@ -725,6 +725,7 @@ class Run:
                     for read in extracts
                 },
                 "between_sources": planned.between_sources,
+                "spec_layers": planned.spec_layers,
                 "working_server_version": version,
                 "requirements": planned.catalog.requirements,
                 "omitted": planned.omitted,
@@ -932,7 +933,9 @@ class Run:
         if spec is None:
             return None
         # The spec's strict mode and formats are its source's; the files' have their own.
-        options = self.options.model_copy(update={"plan": PlanOptions(), "within": self.root})
+        options = self.options.model_copy(
+            update={"plan": PlanOptions(layers=self.options.plan.layers), "within": self.root}
+        )
         return Run(spec, None, self.registry, options, self.clock)
 
     @property

@@ -174,7 +174,11 @@ def values(pipeline: Pipeline) -> dict[str, JsonValue]:
         "name": f"datadouble-{_release(pipeline)}",
         "image": pipeline.image,
         "user": {"uid": int(uid), "gid": int(gid)},
-        "spec": {"path": pipeline.spec, "content": pipeline.spec_text, "lock": pipeline.lock_text},
+        "spec": {
+            "path": pipeline.spec,
+            "files": dict(pipeline.spec_files),
+            "lock": pipeline.lock_text,
+        },
         "claim": {"name": CLAIM, "mount": _mount(pipeline)},
         "secret": secret,
         "persistentVolumes": pipeline.side is Side.NON_PRODUCTION,

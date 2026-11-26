@@ -325,11 +325,12 @@ class ArgoCdOnKind:
 
     def _refresh(self, repository: Path, release: str, context: RunContext) -> None:
         """Carry the current spec, lock and generation into the Application's values."""
-        lock = repository / "datadouble" / "catalog.lock"
-        spec = self._spec(repository).read_text("utf-8")
+        path = self._spec(repository)
+        lock = path.with_suffix(".lock")
+        spec = path.read_text("utf-8")
         values: dict[str, JsonValue] = {
             "spec": {
-                "content": spec,
+                "files": {path.name: spec},
                 "lock": lock.read_text("utf-8") if lock.exists() else "",
             },
             "generation": context.inputs.get("generation", ""),
@@ -359,7 +360,8 @@ class ArgoCdOnKind:
 
         def current() -> bool:
             found = self.cluster.json("--namespace", namespace, "get", "configmap", name)
-            if _at(found, "data", "spec") != spec:
+            # The spec is the only file, so the first key holds it.
+            if _at(found, "data", "spec-0") != spec:
                 return False
             cronjobs = self.cluster.json("--namespace", namespace, "get", "cronjobs")
             return _mounts_lock(cronjobs, f"{name}-") == locked
@@ -552,6 +554,38 @@ def test_golden_files_render_and_validate(tmp_path: Path) -> None:
             assert checked.status == 0, (golden.name, checked.stdout, checked.stderr)
     linted = run_program("helm", ["lint", str(CHART)])
     assert linted.status == 0, linted.stdout
+
+
+def test_every_spec_file_and_the_lock_are_mounted(tmp_path: Path) -> None:
+    """A spec that extends others has each file mounted at its path, and its own lock."""
+    golden = GOLDEN / "production" / "datadouble-shop-production.yaml.golden"
+    application = yaml.safe_load(golden.read_text("utf-8"))
+    values = application["spec"]["source"]["helm"]["valuesObject"]
+    values["spec"]["path"] = "datadouble/shop-micro.yml"
+    values["spec"]["files"] = {
+        "shop.yml": "name: shop\n",
+        "sizes/micro.yml": "subset: {}\n",
+        "shop-micro.yml": "extends: [shop.yml, sizes/micro.yml]\n",
+    }
+    (tmp_path / "values.yaml").write_text(yaml.safe_dump(values), encoding="utf-8")
+    rendered = run_program(
+        "helm", ["template", "shop", str(CHART), "--values", str(tmp_path / "values.yaml")]
+    )
+    assert rendered.status == 0, rendered.stderr
+    documents = [d for d in yaml.safe_load_all(rendered.stdout) if d]
+    (config,) = [d for d in documents if d["kind"] == "ConfigMap"]
+    keys = {"spec-0": "shop-micro.yml", "spec-1": "shop.yml", "spec-2": "sizes/micro.yml"}
+    for key, path in keys.items():
+        assert config["data"][key] == values["spec"]["files"][path]
+    cronjob = next(d for d in documents if d["kind"] == "CronJob")
+    pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    mounts = {
+        m["mountPath"]: m["subPath"] for m in pod["containers"][0]["volumeMounts"] if "subPath" in m
+    }
+    assert mounts == {
+        **{f"/workspace/datadouble/{path}": key for key, path in keys.items()},
+        "/workspace/datadouble/shop-micro.lock": "lock",
+    }
 
 
 @pytest.fixture

@@ -98,7 +98,7 @@ def planned(
         runner=runner,
         work=Path("/srv/datadouble/work"),
         side=side,
-        spec_text=text,
+        spec_files=(("shop.yml", text),),
         lock_text="{}\n",
     )
     return pipeline(parse_spec(text), options)
@@ -252,7 +252,7 @@ def test_run_time(tmp_path: Path) -> None:
 
 
 def test_published_files_go_to_the_log(tmp_path: Path) -> None:
-    lock = tmp_path / "catalog.lock"
+    lock = tmp_path / "shop.lock"
     lock.write_text("{}\n", encoding="utf-8")
     changes = tmp_path / "changes.txt"
     changes.write_text("no changes from the earlier lock\n", encoding="utf-8")
@@ -292,3 +292,13 @@ def test_pods_run_without_docker() -> None:
     for changed in (replace(production, docker="podman"), replace(production, docker_socket="/s")):
         with pytest.raises(CiError, match="without Docker"):
             ArgoCd().generate(changed)
+
+
+def test_values_carry_every_file_of_an_extending_spec() -> None:
+    files = (("shop.yml", "name: shop\n"), ("shop-micro.yml", "extends: shop.yml\n"))
+    micro = replace(SCENARIOS["production"], spec="datadouble/shop-micro.yml", spec_files=files)
+    assert at(values_of(micro), "spec") == {
+        "path": "datadouble/shop-micro.yml",
+        "files": {"shop.yml": "name: shop\n", "shop-micro.yml": "extends: shop.yml\n"},
+        "lock": "{}\n",
+    }

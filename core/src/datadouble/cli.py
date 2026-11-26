@@ -21,8 +21,9 @@ import sys
 import threading
 from collections.abc import Callable, Sequence
 from types import FrameType
-from typing import NoReturn, TextIO, assert_never
+from typing import NoReturn, TextIO, assert_never, override
 
+import yaml
 from pydantic import JsonValue
 
 from datadouble import api
@@ -134,7 +135,9 @@ def _jobs(text: str) -> list[str]:
 def _spec_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     parser.add_argument(
-        "--lock", help="the catalog lock file (default: catalog.lock beside the spec)"
+        "--lock",
+        help="the catalog lock file (default: the spec's path with the suffix .lock, such as"
+        " shop.lock for shop.yml)",
     )
 
 
@@ -368,6 +371,11 @@ def build_parser() -> CommandParser:
 
     add(api.Command.VERSION, "show the installed version")
     add(api.Command.SCHEMA, "print the JSON Schema that specs are checked against")
+    showing = add(
+        api.Command.SPEC,
+        "print a spec merged with the specs it extends, and the files it was read from",
+    )
+    showing.add_argument("--spec", required=True, help="the spec file, in YAML or JSON")
     lock = add(
         api.Command.LOCK,
         "write the catalog lock for a spec, and list what changed since the last one",
@@ -376,8 +384,8 @@ def build_parser() -> CommandParser:
     lock.add_argument(
         "--output",
         help=(
-            "a directory to write the new lock (catalog.lock) and its changes (changes.txt)"
-            " to, leaving the current lock as it is"
+            "a directory to write the new lock (named after the spec, such as shop.lock) and"
+            " its changes (changes.txt) to, leaving the current lock as it is"
         ),
     )
     importing = add(
@@ -518,6 +526,7 @@ def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
 _FIELDS: dict[str, Callable[[_Arguments], dict[str, JsonValue]]] = {
     api.Command.VERSION: lambda _: {},
     api.Command.SCHEMA: lambda _: {},
+    api.Command.SPEC: lambda arguments: {"spec": arguments.spec},
     api.Command.LOCK: lambda arguments: _set(_spec_fields(arguments), arguments, "output"),
     api.Command.IMPORT_JAILER: lambda arguments: {
         **_spec_fields(arguments),
@@ -663,14 +672,43 @@ def _ci_lines(response: api.CiInitResponse) -> list[str]:
     return lines
 
 
+class _BlockDumper(yaml.SafeDumper):
+    """Block-style YAML with sequences indented under their keys, as the docs write it."""
+
+    @override
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+        del indentless
+        super().increase_indent(flow, indentless=False)
+
+
+def _spec_text(response: api.SpecResponse) -> str:
+    """The merged spec as block-style YAML, after comments naming the files it was read from."""
+    lines = ["# read from, in the order they merged:"]
+    lines.extend(f"#   {layer.path} ({layer.digest})" for layer in response.layers)
+    text = yaml.dump(
+        response.spec,
+        Dumper=_BlockDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+    return "\n".join(lines) + "\n" + text.rstrip("\n")
+
+
 def _simple(
-    response: api.VersionResponse | api.SchemaResponse | api.LockResponse | api.CiInitResponse,
+    response: api.VersionResponse
+    | api.SchemaResponse
+    | api.SpecResponse
+    | api.LockResponse
+    | api.CiInitResponse,
 ) -> str:
     match response:
         case api.VersionResponse():
             return f"datadouble {response.version} (Python {response.python})"
         case api.SchemaResponse():
             return json.dumps(response.schema_, indent=2)
+        case api.SpecResponse():
+            return _spec_text(response)
         case api.LockResponse():
             lines = [f"wrote {response.lock}: {response.tables} tables ({response.fingerprint})"]
             if response.changes_file is not None:
@@ -687,7 +725,11 @@ def summarize(response: api.Response) -> str:
     """Describe a response for people, the default output without ``--json``."""
     match response:
         case (
-            api.VersionResponse() | api.SchemaResponse() | api.LockResponse() | api.CiInitResponse()
+            api.VersionResponse()
+            | api.SchemaResponse()
+            | api.SpecResponse()
+            | api.LockResponse()
+            | api.CiInitResponse()
         ):
             return _simple(response)
         case api.ImportJailerResponse():

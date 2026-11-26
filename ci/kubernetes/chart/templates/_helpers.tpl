@@ -54,9 +54,12 @@
     allowPrivilegeEscalation: false
   terminationMessagePolicy: File
   volumeMounts:
-    - {name: spec, mountPath: {{ printf "/workspace/%s" $root.Values.spec.path | quote }}, subPath: spec}
+    {{- range $index, $file := keys $root.Values.spec.files | sortAlpha }}
+    - {name: spec, mountPath: {{ printf "/workspace/%s/%s" (dir $root.Values.spec.path) $file | quote }}, subPath: {{ printf "spec-%d" $index }}}
+    {{- end }}
     {{- if $root.Values.spec.lock }}
-    - {name: spec, mountPath: {{ printf "/workspace/%s/catalog.lock" (dir $root.Values.spec.path) | quote }}, subPath: lock}
+    {{- $path := $root.Values.spec.path }}
+    - {name: spec, mountPath: {{ printf "/workspace/%s.lock" (trimSuffix (ext $path) $path) | quote }}, subPath: lock}
     {{- end }}
     - {name: claim, mountPath: {{ $root.Values.claim.mount | quote }}}
     {{- if .artifacts }}

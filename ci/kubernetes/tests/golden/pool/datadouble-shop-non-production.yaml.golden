@@ -25,51 +25,52 @@ spec:
           gid: 999
         spec:
           path: datadouble/shop.yml
-          content: |2
+          files:
+            shop.yml: |2
 
-            name: shop
-            sources:
-              app:
-                engine: postgres
-                connection:
-                  dsn:
-                    env: SHOP_SOURCE_DSN
-            runtime:
-              kubernetes:
-                claim: datadouble
-                mount: /srv/datadouble
-            store:
-              - filesystem:
-                  path: /srv/datadouble/store
-            signing:
-              cosign:
-                key:
-                  env: SHOP_COSIGN_KEY
-            trust:
-              cosign:
-                public_key:
-                  env: SHOP_COSIGN_PUB
-            promote:
-              to:
+              name: shop
+              sources:
+                app:
+                  engine: postgres
+                  connection:
+                    dsn:
+                      env: SHOP_SOURCE_DSN
+              runtime:
+                kubernetes:
+                  claim: datadouble
+                  mount: /srv/datadouble
+              store:
                 - filesystem:
+                    path: /srv/datadouble/store
+              signing:
+                cosign:
+                  key:
+                    env: SHOP_COSIGN_KEY
+              trust:
+                cosign:
+                  public_key:
+                    env: SHOP_COSIGN_PUB
+              promote:
+                to:
+                  - filesystem:
+                      path: /srv/datadouble/export
+              fetch:
+                from:
+                  filesystem:
                     path: /srv/datadouble/export
-            fetch:
-              from:
-                filesystem:
-                  path: /srv/datadouble/export
-              staging: /srv/datadouble/staging
-            notify:
-              when: [failure, warning]
-              to:
-                - webhook:
-                    url:
-                      env: ALERTS_WEBHOOK
-            replicate:
-              using:
-                k8s-pv:
-                  path: /srv/datadouble/copies
-              mode: pool
-              size: 1
+                staging: /srv/datadouble/staging
+              notify:
+                when: [failure, warning]
+                to:
+                  - webhook:
+                      url:
+                        env: ALERTS_WEBHOOK
+              replicate:
+                using:
+                  k8s-pv:
+                    path: /srv/datadouble/copies
+                mode: pool
+                size: 1
           lock: |
             {}
         claim:

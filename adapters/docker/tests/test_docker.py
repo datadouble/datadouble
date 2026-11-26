@@ -88,7 +88,7 @@ def write_spec(source: PostgresScratch, tmp_path: Path, keys: Path, kind: str) -
     path = tmp_path / "spec.json"
     path.write_text(json.dumps(spec), encoding="utf-8")
     with PostgresEngine().connect(source.connection) as session:
-        write_lock(CatalogLock.of(session.catalog()), tmp_path / "catalog.lock")
+        write_lock(CatalogLock.of(session.catalog()), tmp_path / "spec.lock")
     return path
 
 

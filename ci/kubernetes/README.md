@@ -16,8 +16,9 @@ datadouble ci init --system argocd --job fetch,provision,release,prune,activate 
 `--runner` sets the namespace the jobs run in. Each call writes one Argo CD
 Application, `argocd/datadouble-<spec>-<side>.yaml`, which installs the chart
 from this repository at the release's tag. Its values hold the jobs and a
-copy of the spec and its catalog lock, so generate it again after changing
-either. The response lists what to set up:
+copy of the spec, every spec file it extends, and its catalog lock, so
+generate it again after changing any of them. The response lists what to set
+up:
 
 - **A PersistentVolumeClaim** named `datadouble` in the namespace. Every path
   in the spec (stores, staging, copies, the work directory) lives on it,
@@ -56,13 +57,13 @@ The `lock` job (`--job lock`, on the production side with `build`) has no
 schedule; start it with `kubectl create job
 --from=cronjob/datadouble-<spec>-production-lock`. It runs `datadouble lock
 --output datadouble-lock`, into an `emptyDir`, against the lock in the
-Application's values. Kubernetes keeps no job artifacts, so the job prints
-the new `catalog.lock` and `changes.txt` to its log (`kubectl logs`), each
-after a `==> <path> <==` line, and its termination message carries
-`fingerprint` and `changes`, their number. It never commits: check every new
-or changed column for personal data, commit `catalog.lock` beside the spec,
-and generate the Application again so its values carry the new lock. A lock
-contains names, types and versions, never values (decision 123).
+Application's values. Kubernetes keeps no job artifacts, so the job prints the
+new lock (named after the spec, such as `shop.lock`) and `changes.txt` to its
+log (`kubectl logs`), each after a `==> <path> <==` line, and its termination
+message carries `fingerprint` and `changes`, their number. It never commits:
+check every new or changed column for personal data, commit the lock beside
+the spec, and generate the Application again so its values carry the new lock.
+A lock contains names, types and versions, never values (decision 123).
 
 ## On-demand copies
 

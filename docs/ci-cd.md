@@ -358,7 +358,7 @@ inside the boundary. Where the only machine there is a CI runner, the manual
 - It runs `datadouble lock --spec <spec> --output datadouble-lock`. That
   writes two files into the `datadouble-lock` workspace directory and leaves
   the committed lock as it is:
-    - `catalog.lock`, the new lock;
+    - the new lock, named after the spec, such as `shop.lock`;
     - `changes.txt`, its changes against the committed lock (the list the CLI
       prints).
 - It publishes that directory as the CI system's job artifact: a GitHub
@@ -632,6 +632,14 @@ read secrets from.
 
 One call writes one side. Mixing production and non-production jobs in one
 call fails. `prune` runs on either side, so `prune` on its own needs `--side`.
+
+Each call writes the jobs of one spec. A team that builds several
+[sizes](using/spec-sizes.md) of one copy, such as `shop.yml` and
+`shop-micro.yml`, runs `ci init` once per spec and side, and gets a set of
+jobs for each, `lock` included, since each spec has its own lock. The jobs
+read the spec from its path in the repository, and the specs it extends from
+beside it. On Argo CD, the Application's values carry every one of those
+files and the lock.
 
 Datadouble's core, not the adapter, decides what every job runs (decision
 100):

@@ -31,6 +31,9 @@ Generation = NewType("Generation", str)
 ColumnName = NewType("ColumnName", str)
 """A column name as the catalog spells it."""
 
+FileDigest = NewType("FileDigest", str)
+"""The SHA-256 of a file's bytes, written as ``sha256:`` and the hex digest."""
+
 DEFAULT_GROUP = GroupName("all")
 """The single group a spec without an ``images:`` section produces."""
 

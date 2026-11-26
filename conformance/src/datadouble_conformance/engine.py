@@ -52,6 +52,7 @@ from datadouble.spec import (
     StrictLevel,
     StrictOverrides,
     parse_spec,
+    read_spec,
 )
 from datadouble.storage import filesystem_store
 from datadouble.strict import Difference, Severity
@@ -526,7 +527,7 @@ class EngineConformance:
             "utf-8",
         )
         lock = builds.lock(spec.working.connection)
-        write_lock(lock, tmp_path / "catalog.lock")
+        write_lock(lock, tmp_path / "sample.lock")
         work = tmp_path / "work"
         command = [
             sys.executable,
@@ -545,7 +546,15 @@ class EngineConformance:
         finally:
             process.send_signal(signal.SIGKILL)
             process.wait()
-        result = builds.run(spec, lock, "work", resume=Generation(generation.name))
+        # The command recorded the spec's file in the plan, so the resumed run
+        # passes the same layers; otherwise its plan inputs differ.
+        result = builds.run(
+            spec,
+            lock,
+            "work",
+            resume=Generation(generation.name),
+            options=PlanOptions(layers=read_spec(spec_path).layers),
+        )
         status = {(r.stage, r.group): r.status for r in result.stages}
         assert status[(Stage.PLAN, None)] is StageStatus.REUSED
         assert status[(Stage.EXTRACT, None)] is StageStatus.REUSED

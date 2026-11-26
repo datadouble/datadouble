@@ -16,6 +16,8 @@ own machine and introduces the ideas the other pages assume.
 
 ## Setting up a pipeline
 
+- [Spec sizes](spec-sizes.md): a micro, a QA and a staging copy from one
+  spec, with `extends`, and the lock each size uses.
 - [Extensions, plugins and modules](source-requirements.md): sources that
   use more than the bare server, and the images their copies need.
 - [CI/CD libraries](ci-cd-libraries.md): jobs for GitHub Actions, GitLab

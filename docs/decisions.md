@@ -405,6 +405,8 @@ stable.
 
 ### 39. YAML or JSON specs, one schema {#decision-39}
 
+*(Refined by [decision 143](#decision-143).)*
+
 **Decided:** Specs are accepted as YAML or JSON. Both are validated against one
 JSON Schema, generated from the typed models.
 
@@ -1260,7 +1262,7 @@ An unstable build is a warning: its image is built and verified, so it must stil
 
 ### 103. Argo CD on Kubernetes {#decision-103}
 
-*(Amended by [decision 133](#decision-133).)*
+*(Amended by [decisions 133](#decision-133) and [143](#decision-143).)*
 
 **Decided:** On Kubernetes, `ci init --system argocd` writes an Argo CD Application per side. The Application installs this repository's Helm chart (`ci/kubernetes/chart`) at the release's tag, with the jobs, the spec and its catalog lock as values. `--runner` sets the namespace.
 
@@ -1547,6 +1549,8 @@ Applications often also want a read-only account for reporting tools, and such a
 Rebuilding the index from a listing, rather than editing it, means any later promote or prune repairs an index that is stale or missing. Concurrent promotes, or a promote that overlaps a prune, can each write a listing that misses the other's change, such as a new line. The next promote or prune corrects it.
 
 ### 123. A CI job to re-lock the source {#decision-123}
+
+*(Amended by [decision 143](#decision-143).)*
 
 **Decided:** `ci init --job lock` writes a manual `lock` job on the production side. It uses the `build` runner, gets only the `sources` and `notify` sections' secrets, and has no schedule.
 
@@ -2111,6 +2115,40 @@ A run that never reaches Datadouble, such as one stopped while its image is pull
 **Why:** Teams that get failure alerts want to know when a job is healthy again, without opening the CI system. CI systems know the previous run, but Datadouble's webhooks don't ask them, so the job keeps its own record on its own side, where the job already writes and which lasts between runs. The work directory and staging are those places. A separate record per command line keeps a job's lines from reading each other's outcomes. Marking the record `running` first counts a run stopped part-way, such as at its time limit, as one that did not succeed. Naming the record in the generated command line, rather than deriving it, gives `promote`, `lock` and `prune`, whose requests name no directory, a place too. Payloads stay within [decisions 18](#decision-18) and [54](#decision-54).
 
 Amends [decision 125](#decision-125).
+
+### 143. Specs extend other specs, and each spec has its own lock {#decision-143}
+
+**Decided:** A spec file can extend other spec files, so that one copy comes in several sizes, and each spec's catalog lock is named after the spec.
+
+**`extends`.** A top-level `extends` names a file or a list of files.
+
+- Paths are relative to the directory of the file that names them. An absolute path fails, and so does a path outside the directory of the spec given to the command. Subdirectories are fine.
+- Paths are lexical: symbolic links are never followed to name a file. The spec's directory is the directory of the `--spec` path as given, made absolute and normalized. A parent's path is the naming file's lexical directory joined with the name, normalized. The directory check is made on these paths, and they are what the layers record. A file's identity, for cycles and for placing it once, is its real path. So a link keeps its name, a relative path in a linked file starts from the link's directory, and a ConfigMap mounted as a directory (whose files are links into `..data`) reads like any directory.
+- The files merge in one linear order: a depth-first post-order over `extends`, parents left to right, placing each file once, at its first appearance. Each file's own settings, without `extends`, then merge in that order. So each file applies exactly once, after all of its parents. A mapping merges key by key, at every depth. Any other value (a scalar, a list, `null`) replaces the earlier one. There is no syntax to remove a key.
+- A parent need not be a valid spec. Only the merged spec is validated, once, against the usual schema, so an unknown option in any file fails.
+- The merged `name` must differ from the `name` written in every file it extends.
+- A file met again along one chain of `extends` fails, naming the chain (`a.yml -> b.yml -> a.yml`). A file that two branches extend merges once, before both: `combo.yml` extending `few.yml` and `nostore.yml`, which both extend `shop.yml`, merges `shop.yml`, `few.yml`, `nostore.yml`, `combo.yml`, so `shop.yml` doesn't undo `few.yml`.
+- Parsing spec text without a file (`parse_spec`) refuses `extends`, since there is no directory to resolve from.
+- `extends` is in the published JSON Schema and the spec reference, although the spec model never holds it.
+
+**Provenance.** The plan and each image's manifest record `spec_layers`: each file's lexical path from the spec's directory and the SHA-256 of its bytes, in the merge order above, the spec's own file last.
+
+**The `spec` command.** `datadouble spec --spec FILE` (`{"command": "spec"}`) returns the merged spec as written, without defaults or `extends`, and its layers. The CLI prints it as block-style YAML after a comment listing the layers.
+
+**Locks.** The default lock is the spec's path with the suffix `.lock` (`shop-micro.yml` uses `shop-micro.lock`). Every spec that is run has its own. `--lock` still names any file. `lock --output DIR` writes the new lock under the current lock's file name: `DIR/<spec stem>.lock`, or the `--lock` file's name when given. When the default is missing and `catalog.lock` sits beside the spec, every command that uses the default fails and says to rename it.
+
+**CI.** `ci init` reads the spec's own lock. On Argo CD, the values carry every layer, keyed by its path from the spec's directory, and the lock. The chart mounts each file at that path beside the spec, and the lock beside the spec under the spec's lock name.
+
+**Why:** Teams want a micro copy for laptops, a larger one for QA and a full anonymized one for staging. The sizes share their sources, references, anonymization and checks, and differ mostly in seeds. Copies of the spec drift. Image groups split one subset's tables into images that share one set of seeds, so they can't vary the rows. Keeping `extends` in the spec file makes each size one committed file that every command, request and generated job names like any spec. Listing overlays on the command line instead would put the size in every request and pipeline.
+
+- Merging mappings and replacing everything else is predictable without a rule per setting. Validating only the merged spec lets a parent be a small overlay without losing typo checks.
+- The directory rule keeps a spec's files together. The spec's directory is what a CI job receives, so parents outside it would be missing there.
+- The name rule keeps two different specs from filing images under one identity.
+- Merging each file once makes combining two sizes of one base work: re-merging the base for each branch would undo the earlier branch's overrides.
+- Lexical paths name files the way the user and the CI system see them. Argo CD mounts each layer at its recorded path, and a ConfigMap's keys are the link names, not the `..data` targets. Rejecting links would refuse mounted ConfigMaps outright.
+- A lock per spec is one rule that is right even when a size changes `sources` or `exclude`. Sizes that change only seeds re-lock separately after a schema change, and `ci init` already writes a `lock` job per spec. Reading a leftover `catalog.lock` silently could apply one spec's reviewed lock to another, so it fails loudly ([decision 10](#decision-10)'s rule).
+
+Refines [decision 39](#decision-39). Amends [decisions 103](#decision-103) and [123](#decision-123).
 
 ## Open
 

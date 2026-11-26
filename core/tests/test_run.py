@@ -4,7 +4,7 @@
 import datetime as dt
 import json
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -13,7 +13,14 @@ from datadouble.boundary import BoundaryError
 from datadouble.catalog import Catalog, CatalogLock, ColumnKind, Requirement, RequirementKind
 from datadouble.engine import Account, EngineError, RequirementError, Tooling, one_extract
 from datadouble.images import ImageSummary, unpack
-from datadouble.names import ColumnName, ColumnRef, EngineName, Generation, TableName
+from datadouble.names import (
+    ColumnName,
+    ColumnRef,
+    EngineName,
+    FileDigest,
+    Generation,
+    TableName,
+)
 from datadouble.planner import AccountNames, Capabilities, Plan, PlannedRule, PlanOptions
 from datadouble.registry import Registry
 from datadouble.run import (
@@ -34,6 +41,7 @@ from datadouble.spec import (
     ImageFormat,
     NullOptions,
     NullRule,
+    SpecLayer,
     Strategy,
     parse_spec,
 )
@@ -512,9 +520,15 @@ def test_files_build_beside_the_source(tmp_path: Path, engine: FakeEngine) -> No
         "  select:\n", "  exclude: []\n  select:\n    documents: \"path = 'none'\"\n"
     )
     # The default strategy is nested, whose conditions a projection cannot read alone.
-    keys = PlanOptions()
+    layers = (SpecLayer(path=PurePosixPath("shop.yml"), digest=FileDigest("sha256:" + "0" * 64)),)
+    keys = PlanOptions(layers=layers)
     result = run(tmp_path, registry, spec=spec, plan=keys)
     assert not result.failed(), result.verification
+    # The files' build records the spec's files too.
+    files_plan = Plan.model_validate_json(
+        (Path(result.work) / "files" / "plan" / "plan.json").read_text()
+    )
+    assert files_plan.spec_layers == layers
     files = [r for r in result.stages if r.engine == "files"]
     assert {r.stage for r in files} == set(Stage)
     assert {s.identity.engine for s in result.images} == {"fake", "files"}

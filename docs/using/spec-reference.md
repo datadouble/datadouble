@@ -27,6 +27,7 @@ A complete spec, which describes one pipeline.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
+| `extends` | string or list of string |  | Other spec files this one builds on, as a path or a list of paths relative to this file. Each must be inside the directory of the spec being run. Their settings merge left to right, then this file's: mappings merge key by key, and any other value, lists included, replaces the one before it. A file that several files extend merges once, before all of them. Only the merged spec is checked, and its `name` must differ from every name the other files give. |
 | `name` (required) | string |  | The spec's name, the first part of every image's identity. It is 1 to 63 lowercase letters, digits, `-` or `_`, starting with a letter or digit. |
 | `sources` (required) | map of [Source](#source) |  | The servers to copy from, by name. At least one is needed, and every source uses the same engine. All sources' databases go into one working server, so their names must not collide. Each source is read under its own snapshot. Source names follow the same rules as the spec's name. |
 | `exclude` | list of string |  | Tables left out of every image, as globs matched from the right. For example, `audit.*` is every table in a namespace `audit`, and `shop.*.*` is every table in PostgreSQL's database `shop`. |

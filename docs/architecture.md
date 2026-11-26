@@ -59,12 +59,15 @@ A few more **operations** act on images and copies that already exist:
 A few words come up in every section below:
 
 - A **spec** is the YAML file that describes a build: what to read, which
-  rows to keep, how to anonymize them, and what images to make.
+  rows to keep, how to anonymize them, and what images to make. A spec can
+  extend other spec files with `extends`, so that several sizes of one copy
+  share their settings (see [spec sizes](using/spec-sizes.md)).
 - A **source** is a system the spec reads, such as one PostgreSQL server.
 - The **catalog** is what Datadouble learns about a source when it plans:
   its tables, columns and keys, and its other objects. The **catalog lock**
-  (`catalog.lock`) is a reviewed copy of the catalog, committed next to the
-  spec. Strict mode compares the live catalog against it.
+  is a reviewed copy of the catalog, committed next to the spec and named
+  after it: `shop.lock` for `shop.yml`. Strict mode compares the live catalog
+  against it.
 - An **image group** is a named part of the output. Each group becomes its
   own golden image. A spec with no groups has one group holding everything.
 - A **working database** is a throwaway server, started in production scratch
@@ -763,6 +766,8 @@ Every stage writes an **artifact**, its output, plus a **manifest** that
 records:
 
 - hashes of the stage's inputs and configuration;
+- the files the spec was read from, with their SHA-256 (`spec_layers`, in the
+  plan and each image's manifest);
 - source server versions and tool versions;
 - subset rules, resolved excludes and the strict-mode level;
 - anonymization strategy hashes;

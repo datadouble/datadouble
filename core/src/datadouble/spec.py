@@ -9,9 +9,12 @@ Schema, so the two formats cannot disagree.
 """
 
 import datetime as dt
+import hashlib
 import json
+import os
+from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal
 
 import yaml
@@ -21,6 +24,7 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -30,6 +34,7 @@ from datadouble.catalog import ObjectKind
 from datadouble.names import (
     DEFAULT_GROUP,
     EngineName,
+    FileDigest,
     GroupName,
     SourceName,
     SpecName,
@@ -1331,20 +1336,29 @@ def _plain(value: object) -> object:
     raise TypeError(message)
 
 
-def parse_spec(text: str, *, origin: str = "spec") -> Spec:
-    """Parse a spec from YAML or JSON text (JSON is valid YAML)."""
+EXTENDS = "extends"
+"""The top-level key that names the specs a spec file extends."""
+
+_DOCUMENT = TypeAdapter(JsonValue)
+
+
+def _document(text: str, origin: str) -> JsonValue:
+    """YAML or JSON text as plain JSON values."""
     try:
         raw: object = yaml.safe_load(text)
     except yaml.YAMLError as error:
         message = f"{origin} is not valid YAML or JSON: {error}"
         raise SpecError(message) from None
     try:
-        text = json.dumps(raw, default=_plain)
+        return _DOCUMENT.validate_json(json.dumps(raw, default=_plain))
     except TypeError as error:
         message = f"{origin} holds a value that has no JSON form: {error}"
         raise SpecError(message) from None
+
+
+def _validated(document: JsonValue, origin: str) -> Spec:
     try:
-        return Spec.model_validate_json(text)
+        return Spec.model_validate_json(json.dumps(document))
     except ValidationError as error:
         details = tuple(
             (".".join(str(part) for part in problem["loc"]) or "(spec)", problem["msg"])
@@ -1354,18 +1368,226 @@ def parse_spec(text: str, *, origin: str = "spec") -> Spec:
         raise SpecError(message, details) from None
 
 
+def parse_spec(text: str, *, origin: str = "spec") -> Spec:
+    """Parse a spec from YAML or JSON text (JSON is valid YAML).
+
+    Text has no directory to find other files in, so a spec that extends
+    others is refused here; :func:`read_spec` reads one from its file.
+    """
+    document = _document(text, origin)
+    if isinstance(document, dict) and EXTENDS in document:
+        message = (
+            f"{origin} extends other specs, which only a spec read from its file can do:"
+            " their paths are relative to its directory"
+        )
+        raise SpecError(message)
+    return _validated(document, origin)
+
+
+class SpecLayer(_Model):
+    """One file a spec was read from."""
+
+    path: PurePosixPath
+    """The file's path from the spec's directory, as written: symbolic links keep their names."""
+    digest: FileDigest
+    """The SHA-256 of the file's bytes, as ``sha256:`` and the hex digest."""
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedSpec:
+    """A spec read from its file, with every file it extends."""
+
+    spec: Spec
+    layers: tuple[SpecLayer, ...]
+    """Every file the spec was read from, in the order they merged: the spec's own file last."""
+    document: dict[str, JsonValue]
+    """The merged spec as written, before defaults, without ``extends``."""
+    directory: Path
+    """The spec's directory, which every layer's path is relative to."""
+
+
+def merge_documents(base: dict[str, JsonValue], over: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """``over`` merged onto ``base``: mappings key by key, recursively; anything else replaces."""
+    merged = dict(base)
+    for key, value in over.items():
+        earlier = merged.get(key)
+        if isinstance(earlier, dict) and isinstance(value, dict):
+            merged[key] = merge_documents(earlier, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _lexical(path: Path) -> Path:
+    """``path`` made absolute and normalized as written, without following symbolic links."""
+    return Path(os.path.normpath(path.absolute()))
+
+
+@dataclass(frozen=True, slots=True)
+class _Layer:
+    path: Path
+    """The file's lexical path: absolute, normalized, symbolic links not followed."""
+    real: Path
+    """The file's real path, which identifies it however it is named."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Placed:
+    layer: SpecLayer
+    document: dict[str, JsonValue]
+    """The file's own settings, without ``extends``."""
+
+
+class _Layers:
+    """Places a spec file and the files it extends in merge order: each after its parents.
+
+    Files are named by their lexical paths, so a symbolic link keeps its own
+    name and a relative path in it is relative to the link's directory. A
+    file is identified by its real path, so it is placed once, however many
+    files extend it and by whatever names.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+        self.placed: dict[Path, _Placed] = {}
+
+    def relative(self, path: Path) -> PurePosixPath:
+        return PurePosixPath(path.relative_to(self.directory).as_posix())
+
+    def parents(self, layer: _Layer, extends: JsonValue) -> tuple[_Layer, ...]:
+        """The files ``extends`` names, checked to be inside the spec's directory."""
+        origin = self.relative(layer.path)
+        listed = extends if isinstance(extends, list) else [extends]
+        names = [name for name in listed if isinstance(name, str) and name]
+        if len(names) != len(listed):
+            message = f"{origin}: `{EXTENDS}` takes a path, or a list of paths, to other specs"
+            raise SpecError(message)
+        found: list[_Layer] = []
+        for name in names:
+            if Path(name).is_absolute():
+                message = (
+                    f"{origin} extends {name}, an absolute path; give a path relative to {origin}"
+                )
+                raise SpecError(message)
+            parent = _lexical(layer.path.parent / name)
+            if not parent.is_relative_to(self.directory):
+                message = (
+                    f"{origin} extends {name}, which is outside {self.directory}, the directory"
+                    " of the spec being read; the specs a spec extends live in its directory"
+                )
+                raise SpecError(message)
+            found.append(_Layer(path=parent, real=parent.resolve()))
+        return tuple(found)
+
+    def place(self, layer: _Layer, chain: tuple[_Layer, ...]) -> None:
+        """Place the file's parents, left to right, then the file, unless it is placed already."""
+        reals = [step.real for step in chain]
+        if layer.real in reals:
+            steps = (*chain[reals.index(layer.real) :], layer)
+            cycle = " -> ".join(str(self.relative(step.path)) for step in steps)
+            message = f"specs extend each other in a cycle: {cycle}"
+            raise SpecError(message)
+        if layer.real in self.placed:
+            return
+        origin = self.relative(layer.path)
+        try:
+            data = layer.path.read_bytes()
+        except OSError as error:
+            message = f"cannot read {layer.path}: {error.strerror}"
+            raise SpecError(message) from None
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            message = f"{origin} is not UTF-8 text"
+            raise SpecError(message) from None
+        document = _document(text, str(origin))
+        if document is None:
+            document = {}
+        if not isinstance(document, dict):
+            message = f"{origin} is not a mapping of spec settings"
+            raise SpecError(message)
+        own = dict(document)
+        if EXTENDS in own:
+            for parent in self.parents(layer, own.pop(EXTENDS)):
+                self.place(parent, (*chain, layer))
+        digest = FileDigest("sha256:" + hashlib.sha256(data).hexdigest())
+        self.placed[layer.real] = _Placed(SpecLayer(path=origin, digest=digest), own)
+
+    def merged(self) -> dict[str, JsonValue]:
+        """Every placed file's own settings, merged in the order they were placed."""
+        merged: dict[str, JsonValue] = {}
+        for placed in self.placed.values():
+            merged = merge_documents(merged, placed.document)
+        return merged
+
+
+def read_spec(path: Path) -> LoadedSpec:
+    """Read a spec file, merged with the specs it extends, and validate the result once.
+
+    Each file's ``extends`` names other spec files, by paths relative to that
+    file. Every one must be inside the directory of ``path``, as written:
+    paths are checked and recorded without following symbolic links. The
+    files merge in one order, each file once and after all the files it
+    extends, which come left to right: mappings merge key by key, and any
+    other value replaces the one before it.
+    """
+    lexical = _lexical(path)
+    reader = _Layers(lexical.parent)
+    spec_file = _Layer(path=lexical, real=lexical.resolve())
+    reader.place(spec_file, ())
+    document = reader.merged()
+    layered = len(reader.placed) > 1
+    origin = f"{path} with the specs it extends" if layered else str(path)
+    spec = _validated(document, origin)
+    taken = [
+        str(placed.layer.path)
+        for real, placed in reader.placed.items()
+        if real != spec_file.real and placed.document.get("name") == spec.name
+    ]
+    if taken:
+        message = (
+            f"{path} has the name {spec.name}, which {', '.join(taken)} also has; give it a"
+            f" name of its own with `name`, so its images are not filed under {spec.name}"
+        )
+        raise SpecError(message)
+    return LoadedSpec(
+        spec=spec,
+        layers=tuple(placed.layer for placed in reader.placed.values()),
+        document=document,
+        directory=reader.directory,
+    )
+
+
 def load_spec(path: Path) -> Spec:
-    """Read and parse a spec file."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as error:
-        message = f"cannot read {path}: {error.strerror}"
-        raise SpecError(message) from None
-    return parse_spec(text, origin=str(path))
+    """Read and parse a spec file, merged with the specs it extends."""
+    return read_spec(path).spec
 
 
 def spec_schema() -> dict[str, JsonValue]:
     """The JSON Schema for specs."""
     schema: dict[str, JsonValue] = Spec.model_json_schema(mode="validation")
     schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    # Read before validation, so it is not a field of the model.
+    properties = _PROPERTIES.validate_python(schema["properties"])
+    schema["properties"] = {EXTENDS: _EXTENDS_SCHEMA, **properties}
     return schema
+
+
+_PROPERTIES: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+
+
+_EXTENDS_SCHEMA: dict[str, JsonValue] = {
+    "anyOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "array", "items": {"type": "string", "minLength": 1}},
+    ],
+    "title": "Extends",
+    "description": (
+        "Other spec files this one builds on, as a path or a list of paths relative to this"
+        " file. Each must be inside the directory of the spec being run. Their settings merge"
+        " left to right, then this file's: mappings merge key by key, and any other value,"
+        " lists included, replaces the one before it. A file that several files extend merges"
+        " once, before all of them. Only the merged spec is checked, and its `name` must differ"
+        " from every name the other files give."
+    ),
+}

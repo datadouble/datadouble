@@ -15,7 +15,8 @@ This page builds the idea up from one small example database, in this order:
 
 1. how you describe a subset: a few starting filters, and rules for following
    references from there;
-2. what happens to tables those rules don't reach, and how tables are named;
+2. what happens to tables those rules don't reach, how tables are named, and
+   how one subset comes in several sizes;
 3. how Datadouble runs the subset against the source, and how it keeps every
    read at one point in time;
 4. how the same model applies to engines that aren't relational.
@@ -306,7 +307,7 @@ subset:
   unselected: fail               # default; or none (no rows, with a warning) or all
 ```
 
-### Seed keys can be globs
+### Seed keys can be globs {#seed-keys-can-be-globs}
 
 A seed key is a table name or a glob, matched as in
 [table names](#table-names).
@@ -341,6 +342,35 @@ Three details about `all`:
 **Jailer subsets keep Jailer's behaviour.** Tables that no subject or
 association reaches export nothing, as with `unselected: none` (see
 [Jailer](jailer.md)).
+
+## Sizes of one subset {#sizes}
+
+One spec often has to come in several sizes. A developer wants a micro copy
+with five customers, QA wants enough customers for its acceptance tests, and
+staging wants every row, anonymized. The sizes share the shop's references,
+edges and anonymization, and differ in their seeds:
+
+| Size | Seeds |
+|---|---|
+| micro | `customers: "id <= 5"` |
+| QA | `customers: "id % 100 = 0"` |
+| full staging | `"*": "TRUE"` for every table that keeps rows, as [above](#seed-keys-can-be-globs), and `customers: "TRUE"` over the base spec's own `customers` seed |
+
+Each size is a spec file that extends the base spec with `extends` and
+replaces its seeds, so the shared settings live in one file:
+
+```yaml
+# datadouble/shop-micro.yml
+extends: shop.yml
+name: shop-micro
+subset:
+  seeds:
+    customers: "id <= 5"
+```
+
+[Spec sizes](using/spec-sizes.md) explains how the files merge, what
+Datadouble checks, why each size has its own catalog lock, and gives a
+complete set of files for all three sizes.
 
 ## Two execution strategies {#two-execution-strategies}
 
