@@ -8,7 +8,7 @@
 name: ""
 
 # The Datadouble image, pinned to a release.
-image: ghcr.io/datadouble/datadouble:v0.0.1
+image: ghcr.io/datadouble/datadouble:v0.0.2
 # The uid and gid Datadouble runs as: the engine's owner (decision 86).
 user:
   uid: 999

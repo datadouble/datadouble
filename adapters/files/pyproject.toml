@@ -5,7 +5,7 @@
 name = "datadouble-files"
 # All packages share one version until 1.0 (decision 38); scripts/make_tag.py
 # sets it at release time.
-version = "0.0.1"
+version = "0.0.2"
 description = "File tree engine adapter for Datadouble"
 readme = "README.md"
 license = "MIT"

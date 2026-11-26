@@ -5,7 +5,7 @@
 name = "datadouble"
 # All packages share one version until 1.0 (decision 38); scripts/make_tag.py
 # sets it at release time.
-version = "0.0.1"
+version = "0.0.2"
 description = "Realistic, safe copies of production data for development and testing"
 readme = "README.md"
 license = "MIT"
