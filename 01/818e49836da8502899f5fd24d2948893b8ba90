@@ -1,0 +1,39 @@
+core/tests/test_extends.py
+  s_6e2b93ff6c6924::t_2ea1a74fb3a75b 23,69-72,83-86,100,123,140,151-175,233,255-256,259-261,263-304,306-313
+core/src/datadouble/names.py
+  s_6e2b93ff6c6924::t_56fe0295b7edc4 34-36
+core/src/datadouble/api.py
+  s_6e2b93ff6c6924::t_aef445c645c4bd 879
+docs/using/spec-reference.md
+  s_6e2b93ff6c6924::t_89be9083781073 30
+docs/using/spec-sizes.md
+  s_6e2b93ff6c6924::t_8514b8d7dce5c9 138,298
+  s_6e2b93ff6c6924::t_bc66e40f3df9b6 132-133
+  s_6e2b93ff6c6924::t_c491ac893b2bfe 220
+  s_6e2b93ff6c6924::t_cbf6158bc5612a 116,118-123,134-135,137,181-219,256-260
+docs/decisions.md
+  s_6e2b93ff6c6924::t_8efcd49dd9bbf9 2125-2127,2130,2134,2138,2147-2148
+core/src/datadouble/spec.py
+  s_6e2b93ff6c6924::t_8908b1bb3bcb39 14,17,37,1390-1392,1421-1440,1442-1448,1452,1454-1455,1457,1459,1465,1472,1479,1482-1487,1490-1492,1494,1496,1503,1511-1521,1528-1532,1534-1539,1543-1545,1555,1589-1591
+core/tests/test_run.py
+  s_6e2b93ff6c6924::t_2ea1a74fb3a75b 523
+  s_6e2b93ff6c6924::t_98aad5a32876e3 7,16-23
+CHANGELOG.md
+  s_6e2b93ff6c6924::t_31d978ee350814 17-20,53-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "01818e49836da8502899f5fd24d2948893b8ba90",
+  "prompts": {},
+  "sessions": {
+    "s_6e2b93ff6c6924": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c57996bf-5168-4fde-bf67-1c7afc8abf2c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
