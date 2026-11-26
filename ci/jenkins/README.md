@@ -56,6 +56,26 @@ A retried Jenkins build is a new build, with a new `BUILD_TAG`. To resume a
 `build` that failed part way, start it with `RETRY_KEY` set to the failed
 build's `BUILD_TAG`, shown at the top of its log.
 
+## Where jobs find the spec
+
+By default each Jenkinsfile reads the spec, the specs it extends and its
+lock from the build's checkout of this repository. `--spec-source` changes
+that (see [where jobs find the spec](https://datadouble.tightlinesoftware.com/ci-cd/#where-jobs-find-the-spec)):
+
+- `--spec-source mounted --spec-dir DIR`: on an agent with Docker, the
+  spec's directory is `DIR` on the agent, mounted into each job at the same
+  path. On Kubernetes agents, also name a ConfigMap you manage with
+  `--spec-config-map NAME`, keyed by file name. The pod mounts it
+  read-only at `DIR` in the Datadouble container.
+- `--spec-source git --spec-repository URL --spec-ref REF --spec-dir DIR
+  --spec-credential ID`: each Jenkinsfile starts with a `spec` stage that
+  runs `checkout scmGit(...)` inside `dir('.datadouble-spec')`, with the
+  credential `ID`: Username with password (an access token as the
+  password), or SSH Username with private key for an SSH URL. The
+  response's instructions name it. `REF` is a branch by its name, a tag as `refs/tags/<tag>`, or a commit
+  by its full SHA. The Git plugin
+  doesn't recognize a bare tag name.
+
 ## Re-locking the catalog
 
 The manual `lock` job (`--job lock`, on the production side with `build`)

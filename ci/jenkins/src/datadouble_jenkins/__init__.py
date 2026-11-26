@@ -35,6 +35,12 @@ the pinned image is one of its containers, running as the engine's user, and
 the step runs ``datadouble`` in it. The production boundary mark is then only
 the namespace's ``datadouble-boundary`` ConfigMap, mounted as a file, and
 ``--cloud`` names the plugin's cloud.
+
+With a ``git`` spec source, a first ``spec`` stage checks out the spec's
+repository into the workspace with the named credential. With a ``mounted``
+one, the directory is a path on a Docker agent, mounted like the spec's
+other paths, or on a Kubernetes agent the named ConfigMap, which the pod
+mounts read-only in the Datadouble container.
 """
 
 from collections.abc import Mapping
@@ -47,6 +53,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from datadouble.ci import (
     CLAIM,
+    SPEC_CLONE,
     Agent,
     CiError,
     GeneratedFile,
@@ -59,6 +66,7 @@ from datadouble.ci import (
     Side,
     Trigger,
     claim_mount,
+    config_map_step,
     runtime_namespace,
     sections,
 )
@@ -253,6 +261,19 @@ def pod(pipeline: Pipeline) -> dict[str, JsonValue]:
     """
     placement = _placement(pipeline)
     uid, _, gid = pipeline.user.partition(":")
+    mounts: list[JsonValue] = [
+        {"name": "work", "mountPath": placement.mount},
+        {"name": "boundary", "mountPath": str(BOUNDARY), "readOnly": True},
+    ]
+    volumes: list[JsonValue] = [
+        {"name": "work", "persistentVolumeClaim": {"claimName": CLAIM}},
+        {"name": "boundary", "configMap": {"name": "datadouble-boundary", "optional": True}},
+    ]
+    mounted = pipeline.mounted()
+    if mounted is not None and mounted.config_map is not None:
+        # The spec's directory, from a ConfigMap someone else manages.
+        mounts.append({"name": "spec", "mountPath": str(mounted.path), "readOnly": True})
+        volumes.append({"name": "spec", "configMap": {"name": mounted.config_map}})
     agent: dict[str, JsonValue] = {
         "name": "jnlp",
         "command": ["/bin/sh", "-c", AGENT_COMMAND, "jenkins-agent"],
@@ -268,18 +289,12 @@ def pod(pipeline: Pipeline) -> dict[str, JsonValue]:
             "runAsNonRoot": True,
             "allowPrivilegeEscalation": False,
         },
-        "volumeMounts": [
-            {"name": "work", "mountPath": placement.mount},
-            {"name": "boundary", "mountPath": str(BOUNDARY), "readOnly": True},
-        ],
+        "volumeMounts": mounts,
     }
     spec: dict[str, JsonValue] = {
         "serviceAccountName": _account(pipeline),
         "containers": [agent, container],
-        "volumes": [
-            {"name": "work", "persistentVolumeClaim": {"claimName": CLAIM}},
-            {"name": "boundary", "configMap": {"name": "datadouble-boundary", "optional": True}},
-        ],
+        "volumes": volumes,
     }
     if placement.image_pull_secrets:
         spec["imagePullSecrets"] = [{"name": name} for name in placement.image_pull_secrets]
@@ -401,6 +416,19 @@ def _stage(pipeline: Pipeline, job: Job, index: int) -> list[str]:
     return lines
 
 
+def _spec_stage(pipeline: Pipeline) -> list[str]:
+    """The stage that checks out a ``git`` spec source, before every ``datadouble`` stage."""
+    git = pipeline.git()
+    if git is None:
+        return []
+    remote = f"[[url: {_quote(git.url)}, credentialsId: {_quote(git.credential)}]]"
+    checkout = (
+        f"checkout scmGit(branches: [[name: {_quote(git.ref)}]], userRemoteConfigs: {remote})"
+    )
+    steps = _block(f"dir({_quote(SPEC_CLONE)})", [checkout])
+    return _block("stage('spec')", _block("steps", steps))
+
+
 def _block(name: str, lines: list[str]) -> list[str]:
     return [f"{name} {{", *(f"    {line}" for line in lines), "}"] if lines else []
 
@@ -457,7 +485,7 @@ def render(pipeline: Pipeline, job: Job) -> str:
         "disableConcurrentBuilds()",
         f"timeout(time: {job.timeout_minutes}, unit: 'MINUTES')",
     ]
-    stages: list[str] = []
+    stages = _spec_stage(pipeline)
     for index in range(len(job.invocations)):
         stages.extend(_stage(pipeline, job, index))
     body = [
@@ -502,6 +530,7 @@ def _kubernetes(pipeline: Pipeline) -> list[str]:
             f"in {namespace}, create the service account {account}, bound to a Role allowing"
             f" {_allowing(ACCOUNT_RULES)}"
         ),
+        *config_map_step(pipeline, namespace),
     ]
     if pipeline.side is Side.NON_PRODUCTION:
         steps.append(
@@ -545,8 +574,18 @@ class Jenkins:
             " and build it once so Jenkins reads its triggers"
             for job in pipeline.jobs
         ]
-        if pipeline.environment():
-            steps.append("add each variable above as a Secret text credential with that ID")
+        git = pipeline.git()
+        # ci.pipeline refuses a git credential named like one of the jobs' secrets.
+        secrets = [name for name in pipeline.environment() if git is None or name != git.credential]
+        if secrets:
+            but = "" if git is None else f" but {git.credential}"
+            steps.append(f"add each variable above{but} as a Secret text credential with that ID")
+        if git is not None:
+            steps.append(
+                f"add {git.credential} as a credential the Git plugin can clone {git.url} with:"
+                " Username with password (an access token as the password), or SSH Username"
+                " with private key for an SSH URL"
+            )
         requested = [job for job in pipeline.jobs if _REQUESTS & set(job.triggers)]
         if requested:
             names = " and ".join(_stem(pipeline, job.kind) for job in requested)

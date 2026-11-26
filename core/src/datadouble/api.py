@@ -49,7 +49,10 @@ from datadouble.ci import (
     PipelineOptions,
     Report,
     Side,
+    SpecSource,
+    SpecSourceKind,
     pipeline,
+    spec_path,
 )
 from datadouble.engine import EngineError, RequirementError
 from datadouble.images import ImageError
@@ -380,6 +383,12 @@ class CiInitRequest(_Request):
     beside the ``kubernetes`` runtime's); the system's default when unset."""
     cloud: str | None = None
     """The Kubernetes cloud a system's Kubernetes agents start in; its default when unset."""
+    spec_source: SpecSource = SpecSourceKind.CHECKOUT
+    """Where jobs find the spec's directory (the spec, the specs it extends, its lock):
+    ``checkout``, the CI system's checkout of this repository; ``{"mounted": {"path": ...,
+    "config_map": ...}}``, a directory already in the job; or ``{"git": {"url": ...,
+    "ref": ..., "path": ..., "credential": ...}}``, a repository the job clones. ``spec``
+    is still read here, to check it; jobs pass ``<their directory>/<its file name>``."""
 
 
 type Request = (
@@ -839,13 +848,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     spec = loaded.spec
     adapter = registry.ci_system(request.system)
     engine = registry.engine(spec.engine)
-    root = request.output.resolve()
-    try:
-        # A linked spec keeps its own name: its parents and lock are beside the link.
-        spec_path = (request.spec.parent.resolve() / request.spec.name).relative_to(root).as_posix()
-    except ValueError:
-        message = f"the spec {request.spec} is not inside {request.output}, the repository root"
-        raise CiError(message) from None
+    jobs_spec = spec_path(request.spec_source, request.spec, request.output)
     agent = request.agent or adapter.agents[0]
     if agent not in adapter.agents:
         message = (
@@ -859,7 +862,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
     lock = default_lock(request.spec)
     options = PipelineOptions(
         kinds=request.jobs,
-        spec_path=spec_path,
+        spec_path=jobs_spec,
         image=request.image or f"{IMAGE}:v{__version__}",
         version=__version__,
         owner=engine.owner,
@@ -877,6 +880,7 @@ def _ci_init(request: CiInitRequest, registry: Registry) -> CiInitResponse:
             for layer in loaded.layers
         ),
         lock_text=lock.read_text(encoding="utf-8") if lock.is_file() else "",
+        spec_source=request.spec_source,
     )
     planned = pipeline(spec, options)
     written: list[str] = []

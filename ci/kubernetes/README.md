@@ -33,6 +33,25 @@ up:
 - **The boundary mark,** in production namespaces only: a ConfigMap named
   `datadouble-boundary` with `DATADOUBLE_BOUNDARY=inside` (decision 98).
 
+### Where jobs find the spec
+
+By default the Application's values carry the spec, the specs it extends
+and its lock, and the chart mounts them from a ConfigMap of its own. To
+keep the spec's directory in a ConfigMap you manage instead, so that a
+changed spec needs no new Application (see [where jobs find the spec](https://datadouble.tightlinesoftware.com/ci-cd/#where-jobs-find-the-spec)):
+
+```
+datadouble ci init --system argocd --job fetch,provision \
+    --spec datadouble/shop.yml --runner datadouble-dev \
+    --spec-source mounted --spec-dir /etc/datadouble-spec --spec-config-map shop-spec
+```
+
+The ConfigMap, in the side's namespace, has one key per file name: the
+spec, the specs it extends and its lock, all directly in one directory. The
+chart mounts it read-only at `--spec-dir` (the values' `spec.configMap`)
+and renders no spec ConfigMap of its own. `--spec-source git` fails: nothing
+in the chart clones a repository.
+
 ## Jobs
 
 Each job is a CronJob, `datadouble-<spec>-<side>-<job>`, scheduled in UTC, or

@@ -19,23 +19,36 @@ warning exits with 3, which ``allow_failure: exit_codes`` shows as a
 warning, and outputs are a dotenv report. The ``lock`` job's new lock and
 changes are job artifacts beside it. GitLab masks only variables defined as
 masked, so there is no masking at run time.
+
+With a ``git`` spec source, each job's ``before_script`` clones the spec's
+repository into the project directory before the template's script runs,
+with the host's ``git`` (which the shell executor already clones the
+project with). The URL and ref are literals in the script, not variables a
+pipeline run could override. The masked variable reaches ``git`` through a
+credential helper scoped to the repository's host, which reads it from the
+environment, so it is never on a command line or in the clone's
+configuration.
 """
 
 import base64
 import hashlib
 import re
+import shlex
 from collections.abc import Mapping
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import assert_never
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import JsonValue
 
 from datadouble.ci import (
+    SPEC_CLONE,
     Agent,
     CiError,
     GeneratedFile,
+    GitSettings,
     Invocation,
     Job,
     JobKind,
@@ -43,6 +56,7 @@ from datadouble.ci import (
     Placeholder,
     Report,
     Trigger,
+    credential_name,
 )
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import EnvSecret, NotifyOn
@@ -155,6 +169,63 @@ def _rules(pipeline: Pipeline, job: Job, invocation: Invocation) -> list[JsonVal
     return rules
 
 
+_CLONE_USER = "oauth2"
+"""The user name a clone gives with a token when the URL names none: GitLab accepts any
+with a personal, project or group access token."""
+_USER = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def _clone_script(git: GitSettings) -> list[JsonValue]:
+    """``before_script`` lines that clone a ``git`` spec source into the project directory.
+
+    The URL and ref are written into the script, quoted, rather than read from
+    variables a pipeline run could override, and ``--`` ends git's options
+    before them. The credential helper answers only for the spec repository's
+    host, and prints the token only when ``git`` asks for it, reading the
+    masked variable from the environment: the log shows the line as written
+    here, and the token never reaches a command line or the clone's
+    configuration. Fetching the one ref works for a branch, a tag
+    (``refs/tags/<tag>``) or a full commit SHA.
+    """
+    url = urlsplit(git.url)
+    if url.scheme != "https" or not url.hostname:
+        message = f"GitLab jobs clone the spec over https with a token; {git.url} is not https"
+        raise CiError(message)
+    user = url.username or _CLONE_USER
+    if not _USER.fullmatch(user):
+        message = f"the user name in {git.url} must be letters, digits, `.`, `_` and `-`"
+        raise CiError(message)
+    credential = credential_name(git, NAME)
+    host = f"https://{url.netloc.rpartition('@')[2]}"
+    helper = (
+        f"credential.{host}.helper="
+        f'!f() {{ if [ "$1" = get ]; then echo username={user};'
+        f' echo "password=${credential}"; fi; }}; f'
+    )
+    fetch = (
+        f"git -C {SPEC_CLONE} -c credential.helper= -c {shlex.quote(helper)}"
+        f" fetch --quiet --depth 1 -- {shlex.quote(git.url)} {shlex.quote(git.ref)}"
+    )
+    lines = (
+        "set -euo pipefail",
+        f"rm -rf {SPEC_CLONE}",
+        f"git init --quiet {SPEC_CLONE}",
+        fetch,
+        f"git -C {SPEC_CLONE} checkout --quiet FETCH_HEAD",
+    )
+    return [_lines(lines)]
+
+
+def _clone(pipeline: Pipeline) -> dict[str, JsonValue]:
+    """A job's ``before_script`` for a ``git`` spec source; nothing for the others.
+
+    It goes in the generated job, not the template, which is pinned by its SHA-256.
+    It replaces a ``before_script`` the project sets in ``default``.
+    """
+    git = pipeline.git()
+    return {} if git is None else {"before_script": _clone_script(git)}
+
+
 def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str, JsonValue]:
     invocation = job.invocations[index]
     triggers = invocation.when or job.triggers
@@ -197,7 +268,7 @@ def _job(pipeline: Pipeline, job: Job, index: int, stop: str | None) -> dict[str
         body["artifacts"] = {"paths": ["datadouble.env", f"{job.artifacts}/"]}
     variables["DATADOUBLE_ARGUMENTS"] = _lines(tuple(_argument(a) for a in invocation.arguments))
     body["variables"] = variables
-    return body
+    return body | _clone(pipeline)
 
 
 def _webhook_variables(pipeline: Pipeline) -> tuple[str, ...]:
@@ -308,6 +379,13 @@ class GitLab:
                 f"on-demand provision and release run in merge request pipelines, which see no"
                 f" protected variables: make {', '.join(hooks)} available there (not protected,"
                 " or scoped to the environments those jobs use), or their webhook is not posted"
+            )
+        git = pipeline.git()
+        if git is not None and any(requests & set(job.triggers) for job in pipeline.jobs):
+            steps.append(
+                f"on-demand provision and release run in merge request pipelines, which see no"
+                f" protected variables: make {git.credential} available there (not protected,"
+                " or scoped to the environments those jobs use), or they cannot clone the spec"
             )
         emails = pipeline.notify.emails() if pipeline.notify is not None else ()
         if pipeline.notify is not None and emails:

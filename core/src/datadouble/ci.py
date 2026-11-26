@@ -22,9 +22,10 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Annotated, Literal, Protocol, assert_never
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, JsonValue, Tag, field_validator
 
 from datadouble.names import SpecName
 from datadouble.outcome import ExitCode, Outcome
@@ -93,6 +94,157 @@ class Placeholder(StrEnum):
 type Argument = str | Placeholder
 
 
+class SpecSourceKind(StrEnum):
+    """Where a job finds the spec's directory: the spec, the specs it extends, and its lock."""
+
+    CHECKOUT = "checkout"
+    """The CI system's checkout of the repository the pipeline's configuration lives in."""
+    MOUNTED = "mounted"
+    """A directory already at an absolute path in the job, which someone else manages."""
+    GIT = "git"
+    """A directory in another repository, which the job clones before Datadouble runs."""
+
+
+SPEC_CLONE = ".datadouble-spec"
+"""Where a job clones a ``git`` spec source, in its workspace."""
+_CREDENTIAL = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+class _Settings(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra="forbid")
+
+
+class MountedSettings(_Settings):
+    """A spec directory already in the job, at an absolute path."""
+
+    path: PurePosixPath
+    """The directory, an absolute path inside the job. On a Docker agent it is a path on the
+    runner, mounted into the job at the same path."""
+    config_map: str | None = Field(
+        default=None, max_length=253, pattern=r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+    )
+    """On Kubernetes agents, the ConfigMap holding the directory's files, which someone else
+    manages; the job's pod mounts it at ``path``. A Kubernetes object name: lower-case
+    letters, digits, ``-`` and ``.``, at most 253 characters."""
+
+    @field_validator("path")
+    @classmethod
+    def _absolute(cls, path: PurePosixPath) -> PurePosixPath:
+        if not _HOST_PATH.fullmatch(str(path)) or str(path) == "/" or ".." in path.parts:
+            message = (
+                "must be an absolute directory other than /, without `..`, spaces, `:` or globs"
+            )
+            raise ValueError(message)
+        return path
+
+
+class GitSettings(_Settings):
+    """A spec directory in another repository, which the job clones."""
+
+    url: str = Field(min_length=1)
+    """The repository's URL, without a password."""
+    ref: str = Field(min_length=1)
+    """What to check out: a branch by its name (``main``), a tag as ``refs/tags/<tag>``, or
+    a commit by its full SHA. A short SHA fails, and so does a ref starting with ``-``."""
+    path: PurePosixPath = PurePosixPath()
+    """The spec's directory inside the repository; its root by default."""
+    credential: str = Field(min_length=1)
+    """The CI system's secret, by name, that can read the repository: a GitHub secret, a
+    GitLab CI/CD variable or a Jenkins credential ID."""
+
+    @field_validator("url")
+    @classmethod
+    def _no_password(cls, url: str) -> str:
+        if urlsplit(url).password is not None:
+            message = "must not hold a password; the credential names the secret instead"
+            raise ValueError(message)
+        return url
+
+    @field_validator("ref")
+    @classmethod
+    def _not_an_option(cls, ref: str) -> str:
+        if ref.startswith("-"):
+            message = "must not start with `-`, which git would read as an option"
+            raise ValueError(message)
+        return ref
+
+    @field_validator("path")
+    @classmethod
+    def _relative(cls, path: PurePosixPath) -> PurePosixPath:
+        if path.is_absolute() or ".." in path.parts:
+            message = "must be a directory inside the repository, without `..`"
+            raise ValueError(message)
+        return path
+
+
+class MountedSource(_Settings):
+    """``{"mounted": {...}}``."""
+
+    mounted: MountedSettings
+
+
+class GitSource(_Settings):
+    """``{"git": {...}}``."""
+
+    git: GitSettings
+
+
+_SOURCES: tuple[tuple[SpecSourceKind, type[BaseModel]], ...] = (
+    (SpecSourceKind.MOUNTED, MountedSource),
+    (SpecSourceKind.GIT, GitSource),
+)
+
+
+def _source_tag(value: object) -> str | None:
+    """Which spec source a value is: its string, or the one key of its object."""
+    if isinstance(value, str):
+        return value
+    for kind, model in _SOURCES:
+        if isinstance(value, model) or (isinstance(value, dict) and kind.value in value):
+            return kind
+    return None
+
+
+type SpecSource = Annotated[
+    Annotated[Literal[SpecSourceKind.CHECKOUT], Tag(SpecSourceKind.CHECKOUT)]
+    | Annotated[MountedSource, Tag(SpecSourceKind.MOUNTED)]
+    | Annotated[GitSource, Tag(SpecSourceKind.GIT)],
+    Discriminator(_source_tag),
+]
+"""``checkout``, ``{"mounted": {...}}`` or ``{"git": {...}}``."""
+
+
+def spec_path(source: SpecSource, spec: Path, root: Path) -> str:
+    """The path jobs pass as ``--spec``: ``<their spec directory>/<the spec's file name>``.
+
+    With ``checkout`` that is the spec's path from the repository root,
+    ``root``, so the spec must be inside it. A linked spec keeps its own
+    name, since its parents and lock are found beside the link.
+    """
+    match source:
+        case MountedSource(mounted=mounted):
+            return (mounted.path / spec.name).as_posix()
+        case GitSource(git=git):
+            return (PurePosixPath(SPEC_CLONE) / git.path / spec.name).as_posix()
+        case _:
+            try:
+                return (spec.parent.resolve() / spec.name).relative_to(root.resolve()).as_posix()
+            except ValueError:
+                message = f"the spec {spec} is not inside {root}, the repository root"
+                raise CiError(message) from None
+
+
+def credential_name(git: GitSettings, system: str) -> str:
+    """The git credential, checked as a name ``system`` can give a secret: an identifier."""
+    if not _CREDENTIAL.fullmatch(git.credential):
+        message = (
+            f"{system} names secrets with letters, digits and underscores, not starting with a"
+            f" digit; {git.credential!r} cannot be one"
+        )
+        raise CiError(message)
+    return git.credential
+
+
 @dataclass(frozen=True, slots=True)
 class Invocation:
     """One ``datadouble`` command line a job runs, after the global options."""
@@ -130,7 +282,8 @@ class Pipeline:
     """Everything a CI/CD adapter needs to write one side's jobs for a spec."""
 
     spec: str
-    """The spec's path from the repository root."""
+    """The path jobs pass as ``--spec``: from the repository root with the ``checkout``
+    spec source, otherwise in the spec directory the source gives."""
     name: SpecName
     side: Side
     jobs: tuple[Job, ...]
@@ -163,10 +316,28 @@ class Pipeline:
     """The Kubernetes cloud Kubernetes agents' pods start in; None for the system's default."""
     runtime: Mapping[str, JsonValue] | None = None
     """The spec's ``runtime`` section, for systems whose jobs run beside its pods."""
+    spec_source: SpecSource = SpecSourceKind.CHECKOUT
+    """Where jobs find the spec's directory."""
 
     def environment(self) -> tuple[str, ...]:
-        """Every environment variable a job reads a secret from."""
-        return tuple(sorted({name for job in self.jobs for name in job.environment}))
+        """Every secret the jobs read by name.
+
+        That is their environment variables, and the credential a ``git`` spec
+        source clones with.
+        """
+        names = {name for job in self.jobs for name in job.environment}
+        git = self.git()
+        if git is not None:
+            names.add(git.credential)
+        return tuple(sorted(names))
+
+    def mounted(self) -> MountedSettings | None:
+        """The ``mounted`` spec source's settings, if that is the source."""
+        return self.spec_source.mounted if isinstance(self.spec_source, MountedSource) else None
+
+    def git(self) -> GitSettings | None:
+        """The ``git`` spec source's settings, if that is the source."""
+        return self.spec_source.git if isinstance(self.spec_source, GitSource) else None
 
 
 class GeneratedFile(BaseModel):
@@ -638,6 +809,7 @@ class PipelineOptions:
 
     kinds: tuple[JobKind, ...]
     spec_path: str
+    """The path jobs pass as ``--spec`` (:func:`spec_path`)."""
     image: str
     version: str
     owner: str
@@ -658,6 +830,64 @@ class PipelineOptions:
     cloud: str | None = None
     remote: RemoteSettings = field(default_factory=RemoteSettings)
     """The settings the installed adapters declare remote, which never become mounts."""
+    spec_source: SpecSource = SpecSourceKind.CHECKOUT
+
+
+def _spec_mounts(options: PipelineOptions) -> tuple[Path, ...]:
+    """The host paths every job mounts for a ``mounted`` spec source, checked for the agent.
+
+    On a Docker agent the spec's directory is a path on the runner, mounted
+    like any other. On Kubernetes it is a ConfigMap the pod mounts, which
+    ``claim_mount`` must not see, since it is not on the work claim; a
+    ConfigMap holds files in one directory, so the spec's files must all be
+    directly in it.
+    """
+    source = options.spec_source
+    if not isinstance(source, MountedSource):
+        return ()
+    mounted = source.mounted
+    match options.agent:
+        case Agent.DOCKER:
+            if mounted.config_map is not None:
+                message = (
+                    "a ConfigMap applies only to kubernetes agents; on a docker agent the spec's"
+                    f" directory {mounted.path} is a path on the runner, mounted into the job"
+                )
+                raise CiError(message)
+            return (Path(mounted.path),)
+        case Agent.KUBERNETES:
+            if mounted.config_map is None:
+                message = (
+                    f"on kubernetes agents a mounted spec directory comes from a ConfigMap; name"
+                    f" the ConfigMap that holds {mounted.path}'s files"
+                )
+                raise CiError(message)
+            nested = [path for path, _ in options.spec_files if "/" in path]
+            if nested:
+                message = (
+                    f"a ConfigMap holds files in one directory, but the spec reads"
+                    f" {', '.join(nested)} from a subdirectory; keep its files beside it"
+                )
+                raise CiError(message)
+            return ()
+        case _:
+            assert_never(options.agent)
+
+
+def _distinct_credential(source: SpecSource, jobs: tuple[Job, ...]) -> None:
+    """Refuse a ``git`` credential named like a secret the jobs read from the environment.
+
+    The two are different kinds of secret on some systems (a Jenkins
+    credential that clones, and a Secret text one), so one name can't be both.
+    """
+    if not isinstance(source, GitSource):
+        return
+    if any(source.git.credential in job.environment for job in jobs):
+        message = (
+            f"the spec source's credential {source.git.credential} has the name of a secret the"
+            " jobs read from the environment; give the clone's credential its own name"
+        )
+        raise CiError(message)
 
 
 def _docker(options: PipelineOptions) -> tuple[str | None, str | None]:
@@ -707,9 +937,9 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
     if JobKind.FETCH in chosen and spec.fetch is None:
         message = "fetch needs the spec's `fetch` section"
         raise CiError(message)
+    shared = _spec_mounts(options)
     records = _records(spec, side, options.work)
-    spec_path = options.spec_path
-    context = _Context(spec_path, spec, side, chosen, str(options.work))
+    context = _Context(options.spec_path, spec, side, chosen, str(options.work))
     jobs = tuple(
         replace(
             _recording(_JOBS[kind](context), spec, records),
@@ -720,6 +950,7 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
                 (
                     *(extra if kind is JobKind.BUILD else ()),
                     *(() if records is None else (records,)),
+                    *shared,
                 ),
                 options.remote,
             ),
@@ -732,8 +963,9 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         for kind in JobKind
         if kind in chosen
     )
+    _distinct_credential(options.spec_source, jobs)
     return Pipeline(
-        spec=spec_path,
+        spec=options.spec_path,
         name=spec.name,
         side=side,
         jobs=jobs,
@@ -752,6 +984,7 @@ def pipeline(spec: Spec, options: PipelineOptions) -> Pipeline:
         agent=options.agent,
         cloud=options.cloud,
         runtime=spec.runtime,
+        spec_source=options.spec_source,
     )
 
 
@@ -870,3 +1103,17 @@ def claim_mount(pipeline: Pipeline, mount: str | None = None) -> str:
         )
         raise CiError(message)
     return common
+
+
+def config_map_step(pipeline: Pipeline, namespace: str) -> tuple[str, ...]:
+    """The setup step for a ``mounted`` spec source's ConfigMap, for Kubernetes systems."""
+    mounted = pipeline.mounted()
+    if mounted is None or mounted.config_map is None:
+        return ()
+    name = PurePosixPath(pipeline.spec).name
+    step = (
+        f"in {namespace}, keep the ConfigMap {mounted.config_map} holding the spec's directory,"
+        f" one key per file name: {name}, the specs it extends and its lock; the pods mount it"
+        f" read-only at {mounted.path}"
+    )
+    return (step,)

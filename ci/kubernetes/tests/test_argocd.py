@@ -12,13 +12,29 @@ kubeconform. To accept a deliberate change, run the tests with
 import io
 import os
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import (
+    Agent,
+    CiError,
+    GitSettings,
+    GitSource,
+    JobKind,
+    MountedSettings,
+    MountedSource,
+    Pipeline,
+    PipelineOptions,
+    Report,
+    Side,
+    SpecSource,
+    SpecSourceKind,
+    pipeline,
+    spec_path,
+)
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import parse_spec
 from datadouble_argocd import NAME, ArgoCd, adapter
@@ -87,11 +103,14 @@ def planned(
     runner: str | None = "shop",
     side: Side | None = None,
     spec: str = SPEC,
+    source: SpecSource = SpecSourceKind.CHECKOUT,
 ) -> Pipeline:
     text = spec.replace("MODE", mode)
     options = PipelineOptions(
         kinds=kinds,
-        spec_path="datadouble/shop.yml",
+        spec_path=spec_path(source, Path("datadouble/shop.yml"), Path()),
+        spec_source=source,
+        agent=Agent.KUBERNETES,
         image="ghcr.io/datadouble/datadouble:v1.2.3",
         version="1.2.3",
         owner="999:999",
@@ -104,11 +123,15 @@ def planned(
     return pipeline(parse_spec(text), options)
 
 
+CONFIG_MAP = MountedSource(
+    mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec"), config_map="shop-spec")
+)
 ON_DEMAND = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
 SCENARIOS = {
     "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(*ON_DEMAND),
     "pool": planned(JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, mode="pool"),
+    "mounted": planned(*ON_DEMAND, source=CONFIG_MAP),
 }
 
 
@@ -302,3 +325,23 @@ def test_values_carry_every_file_of_an_extending_spec() -> None:
         "files": {"shop.yml": "name: shop\n", "shop-micro.yml": "extends: shop.yml\n"},
         "lock": "{}\n",
     }
+
+
+def test_a_mounted_spec_directory() -> None:
+    assert at(values("mounted"), "spec") == {
+        "path": "/etc/datadouble-spec/shop.yml",
+        "configMap": "shop-spec",
+    }
+    steps = ArgoCd().instructions(SCENARIOS["mounted"])
+    assert steps[1].startswith("in shop, keep the ConfigMap shop-spec holding the spec's directory")
+    unmapped = MountedSource(mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec")))
+    with pytest.raises(CiError, match="name the ConfigMap"):
+        planned(JobKind.FETCH, source=unmapped)
+
+
+def test_a_spec_from_another_repository_is_refused() -> None:
+    git = GitSource(
+        git=GitSettings(url="https://git.example.com/data/specs", ref="main", credential="T")
+    )
+    with pytest.raises(CiError, match=r"use the spec source checkout .* or mounted"):
+        ArgoCd().generate(planned(JobKind.FETCH, source=git))

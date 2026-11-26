@@ -31,6 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extends, as YAML, after a comment listing the files it was read from.
   `--json` and the JSON request `{"command": "spec", "spec": FILE}` give the
   spec and its `layers`.
+- **`ci init` jobs can find the spec outside the pipeline's own checkout**
+  ([#130](https://github.com/datadouble/datadouble/issues/130)). A new
+  `--spec-source` option (`spec_source` in the JSON request) says where
+  jobs find the spec's directory, with the specs it extends and its lock.
+  `checkout`, the default, is the CI system's checkout of the repository.
+  `mounted` is a directory already in the job: a path on a Docker agent's
+  runner, or on Kubernetes agents a ConfigMap that someone else manages,
+  named with `--spec-config-map`. `git` has each job clone a repository at
+  a ref with a named credential before Datadouble runs: a second
+  `actions/checkout` step on GitHub Actions, a `before_script` on GitLab
+  CI, and a `checkout scmGit` stage on Jenkins. Argo CD supports
+  `checkout` and `mounted`.
 
 ### Changed
 

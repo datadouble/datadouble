@@ -636,10 +636,12 @@ call fails. `prune` runs on either side, so `prune` on its own needs `--side`.
 Each call writes the jobs of one spec. A team that builds several
 [sizes](using/spec-sizes.md) of one copy, such as `shop.yml` and
 `shop-micro.yml`, runs `ci init` once per spec and side, and gets a set of
-jobs for each, `lock` included, since each spec has its own lock. The jobs
-read the spec from its path in the repository, and the specs it extends from
-beside it. On Argo CD, the Application's values carry every one of those
-files and the lock.
+jobs for each, `lock` included, since each spec has its own lock. By default
+the jobs read the spec from its path in the repository, and the specs it
+extends from beside it. On Argo CD, the Application's values carry every one
+of those files and the lock. [Where jobs find the
+spec](#where-jobs-find-the-spec) covers the other places a job can read them
+from.
 
 Datadouble's core, not the adapter, decides what every job runs (decision
 100):
@@ -741,6 +743,139 @@ plain-text account password or user name. An adapter from outside this
 repository declares its own settings the same way, with
 `datadouble.settings.remote` on its entry point (see
 [adapters](architecture.md#adapters)).
+
+### Where jobs find the spec {#where-jobs-find-the-spec}
+
+A job needs more than the spec file. It also reads the specs it extends
+([spec sizes](using/spec-sizes.md)) and the spec's catalog lock, and all of
+them sit in the spec's directory. That directory is the unit a job receives.
+
+By default a job reads the directory from the CI system's own checkout of
+the repository the pipeline configuration lives in. Some teams keep the two
+apart:
+
+- A platform team generates and installs jobs for several teams from one
+  place, while each team keeps its specs and locks in its own repository.
+- The same jobs run against a branch for testing, or against a directory
+  that isn't committed.
+- The job's runner shouldn't hold credentials for the specs' repository at
+  all.
+
+`ci init --spec-source` (`spec_source` in the JSON request) says where jobs
+find the directory. `--spec` is still a local path: `ci init` reads that
+spec to check it and to work out the jobs. The jobs pass `--spec <their spec
+directory>/<the spec's file name>`, and Datadouble finds the parents and the
+lock beside it by the usual rules, whichever source the directory comes
+from.
+
+| Source | The job's spec directory | What the jobs pass |
+|---|---|---|
+| `checkout` (default) | The CI system's checkout of this repository | `--spec datadouble/shop.yml` |
+| `mounted` | A directory already in the job, at an absolute path that someone else manages | `--spec /etc/datadouble-spec/shop.yml` |
+| `git` | Another repository, which the job clones into its workspace before Datadouble runs | `--spec .datadouble-spec/datadouble/shop.yml` |
+
+With `checkout`, the spec must be inside the repository root (`--output`),
+since the jobs name it by its path from there. The other sources have no
+such rule.
+
+#### A mounted directory {#mounted-spec-directory}
+
+```
+datadouble ci init --system jenkins --job fetch,provision \
+    --spec datadouble/shop.yml --runner staging \
+    --spec-source mounted --spec-dir /etc/datadouble-spec
+```
+
+The equivalent JSON request:
+
+```json
+{"command": "ci.init", "system": "jenkins", "jobs": ["fetch", "provision"],
+ "spec": "datadouble/shop.yml", "runner": "staging",
+ "spec_source": {"mounted": {"path": "/etc/datadouble-spec"}}}
+```
+
+On a Docker agent, the directory is a path on the runner. Every job mounts
+it at the same path, like the other host paths it needs ([which settings
+become mounts](#which-settings-become-mounts)), so it must exist on the
+runner.
+
+On Kubernetes agents (Jenkins with `--agent kubernetes`, and Argo CD) the
+directory comes from a ConfigMap that someone else manages, named with
+`--spec-config-map` (`config_map`). The job's pod mounts it read-only at the
+path, beside the work claim. The name must be a Kubernetes object name
+(lower-case letters, digits, `-` and `.`, at most 253 characters), which
+`ci init` checks. Each key of the ConfigMap is a file name: the
+spec, the specs it extends and its lock. `ci init` fails when a Kubernetes
+agent has no ConfigMap, and when the spec reads a file from a subdirectory,
+which a ConfigMap can't hold. Kubernetes limits a ConfigMap to 1 MiB.
+
+On Argo CD, the chart then mounts the named ConfigMap instead of rendering
+its own from the values. The Application's values carry only the spec's path
+and the ConfigMap's name, so a changed spec or lock needs a new ConfigMap,
+not a new Application.
+
+#### A directory in another repository {#git-spec-directory}
+
+```
+datadouble ci init --system github-actions --job build,promote \
+    --spec datadouble/shop.yml --runner prod-db --work /srv/datadouble/work \
+    --spec-source git --spec-repository https://github.com/example/specs.git \
+    --spec-ref main --spec-dir datadouble --spec-credential SPECS_TOKEN
+```
+
+The equivalent JSON request:
+
+```json
+{"command": "ci.init", "system": "github-actions", "jobs": ["build", "promote"],
+ "spec": "datadouble/shop.yml", "runner": "prod-db", "work": "/srv/datadouble/work",
+ "spec_source": {"git": {"url": "https://github.com/example/specs.git", "ref": "main",
+                         "path": "datadouble", "credential": "SPECS_TOKEN"}}}
+```
+
+Before Datadouble runs, each job checks out `ref` into `.datadouble-spec` in
+its workspace, which every system already mounts. It then reads the spec from `path` in that clone, the repository's
+root by default. The CI system clones with its own tools and its own
+credential store, so the clone shows in the job's log as a step of its own,
+and the Datadouble image holds no git client and no git credentials.
+
+`ref` is written the same way on every system:
+
+- a branch by its name, such as `main`;
+- a tag as `refs/tags/<tag>`, such as `refs/tags/v1.2`, since Jenkins' Git
+  plugin doesn't recognize a bare tag name;
+- a commit by its full SHA. A short SHA fails on every system.
+
+A ref can't start with `-`.
+
+`credential` names the secret that can read the repository, the way the
+system names secrets. `ci init` lists it among the response's
+`environment`, with the jobs' other secrets. The URL never holds a
+password.
+
+| System | How the job clones | The credential |
+|---|---|---|
+| GitHub Actions | A second `actions/checkout` step, at the same pinned version as the first, with `repository`, `ref`, `path` and `persist-credentials: false`. A host other than `github.com` sets `github-server-url`. The URL must be `https://<server>/<owner>/<name>` | A repository secret, used as the step's `token` |
+| GitLab CI | The generated job's `before_script` fetches the ref with the runner host's `git`, which the shell executor already uses to clone the project. The URL and ref are written into the script, not into variables a pipeline run could override. The job template, pinned by its SHA-256, is unchanged. The URL must be `https` | A masked CI/CD variable. A credential helper reads it from the environment, so it never appears on a command line or in the clone's configuration. The helper answers only for the repository's host. The user name is `oauth2` unless the URL names one, as a deploy token needs |
+| Jenkins | A first stage, `spec`, runs `checkout scmGit(...)` inside `dir('.datadouble-spec')`, on Docker and Kubernetes agents alike | A credential ID: Username with password (an access token as the password), or SSH Username with private key for an SSH URL |
+| Argo CD | Not supported: `ci init` fails, naming `checkout` and `mounted` | |
+
+GitHub secret names and GitLab variable names are letters, digits and
+underscores, not starting with a digit, and `ci init` refuses any other
+credential name for those systems. GitHub also reserves names starting with
+`GITHUB_`. On GitHub, the URL, ref and path can't hold `${{`, which GitHub
+would read as an expression. On every system, the credential can't have the
+name of a secret the jobs read from the environment.
+
+On GitLab, a job's `before_script` replaces any `before_script` the project
+sets under `default`, so a git source's jobs don't run the project's
+default one. On-demand `provision` and `release` run in merge request
+pipelines, which see no protected variables, so the response's
+`instructions` say to make the credential available there. The jobs' other
+variables, such as `DATADOUBLE_ARGUMENTS` and `DATADOUBLE_IMAGE`, can be
+overridden by whoever runs a pipeline, from the Run pipeline form, a
+schedule or the trigger API. Consider the project setting
+`restrict_user_defined_variables`, with a minimum role for overriding
+variables, which limits who can do that.
 
 ### Supported systems {#supported-systems}
 
@@ -1143,6 +1278,11 @@ containers write the pod's workspace.
 namespace's `datadouble-boundary` ConfigMap, mounted as a file. An
 environment variable won't do, because the CI system lays its own environment
 over the container's.
+
+**The spec's directory.** With `--spec-source mounted`, the pod also
+mounts a ConfigMap that holds the spec's directory, read-only, in the
+Datadouble container. It is not on the claim, so its path need not be under
+the claim's mount ([where jobs find the spec](#mounted-spec-directory)).
 
 **Permissions.** The pods run as a service account,
 `datadouble-<spec>-<side>`. Its RBAC lets Datadouble run engine pods (pods,

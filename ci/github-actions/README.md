@@ -34,6 +34,25 @@ generation. `ci init` refuses GitHub's own runner labels for every job: the
 jobs need runners that keep their files, and build, promote and lock need
 runners inside the boundary.
 
+## Where jobs find the spec
+
+By default each workflow reads the spec, the specs it extends and its lock
+from the runner's checkout of this repository. `--spec-source` changes that
+(see [where jobs find the spec](https://datadouble.tightlinesoftware.com/ci-cd/#where-jobs-find-the-spec)):
+
+- `--spec-source mounted --spec-dir DIR`: the spec's directory is `DIR` on
+  the runner, mounted into each job at the same path.
+- `--spec-source git --spec-repository URL --spec-ref REF --spec-dir DIR
+  --spec-credential SECRET`: each workflow has a second `actions/checkout`
+  step that checks out `REF` of that repository into `.datadouble-spec`,
+  with the repository secret `SECRET` as its token and
+  `persist-credentials: false`. The URL is
+  `https://<server>/<owner>/<name>`. A server other than `github.com` sets
+  `github-server-url`. `REF` is a branch by its name, a tag as `refs/tags/<tag>`, or a commit
+  by its full SHA. `SECRET` can't start with
+  `GITHUB_`, and the URL, ref and directory can't hold `${{`. The response
+  lists `SECRET` with the jobs' other secrets.
+
 ## Re-locking the catalog
 
 The manual `lock` job (`--job lock`, on the production side with `build`)
