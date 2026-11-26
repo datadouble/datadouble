@@ -1,0 +1,141 @@
+core/src/datadouble/spec.py
+  s_6e2b93ff6c6924::t_08a7ab288496c5 1407
+  s_6e2b93ff6c6924::t_4b9d10a8ceaca7 1409-1416,1433-1435,1455,1479,1544-1556,1558-1559
+  s_6e2b93ff6c6924::t_c4020858eb2d80 12,14,26,1337-1344,1351,1355-1357,1359,1369-1406,1408,1417-1432,1436-1454,1456-1478,1480-1498,1500,1504-1530
+  s_6e2b93ff6c6924::t_8bb0056414c113 1537-1539,1541-1543
+  s_6e2b93ff6c6924::t_86f6773646c5ea 1557
+docs/using/index.md
+  s_6e2b93ff6c6924::t_c2b512a1c83aa4 19-20
+docs/using/cli-reference.md
+  s_6e2b93ff6c6924::t_7d20e0c606fdc3 32-39,48-49,58,70,84
+CHANGELOG.md
+  s_6e2b93ff6c6924::t_fa97486be2db23 10-22,25-44
+  s_6e2b93ff6c6924::t_407896b652384a 23-24
+ci/kubernetes/tests/golden/production/datadouble-shop-production.yaml.golden
+  s_6e2b93ff6c6924::t_0360b0059be7ab 28-29,31-42,44-59,61-73
+ci/kubernetes/chart/templates/spec.yaml
+  s_6e2b93ff6c6924::t_2daafb7e207520 4-6,13-15
+ci/gitlab/README.md
+  s_6e2b93ff6c6924::t_5829b744ea1f55 46-50
+  s_6e2b93ff6c6924::t_e1b3571734e7dc 45
+core/src/datadouble/run.py
+  s_6e2b93ff6c6924::t_1042ae0ee3f3ee 728
+  s_6e2b93ff6c6924::t_9f2ed7bc3b889f 936-938
+conformance/src/datadouble_conformance/engine.py
+  s_6e2b93ff6c6924::t_edcb9d856b7b50 529
+adapters/docker/tests/test_docker.py
+  s_6e2b93ff6c6924::t_94b8394f054126 91
+ci/github-actions/README.md
+  s_6e2b93ff6c6924::t_e1b3571734e7dc 41
+  s_6e2b93ff6c6924::t_5829b744ea1f55 42-46
+core/src/datadouble/catalog.py
+  s_6e2b93ff6c6924::t_9acbe8adb91382 12-13
+skills/datadouble-spec/SKILL.md
+  s_6e2b93ff6c6924::t_fbced316cea209 43,136,271
+  s_6e2b93ff6c6924::t_564c7897eef756 44-49,239-261
+  s_6e2b93ff6c6924::t_426de6e8f2e842 262
+ci/jenkins/README.md
+  s_6e2b93ff6c6924::t_e1b3571734e7dc 63
+  s_6e2b93ff6c6924::t_5829b744ea1f55 64-67
+core/tests/test_extends.py
+  s_6e2b93ff6c6924::t_d86a09cd4c265a 170,174,177,251,254,257
+  s_6e2b93ff6c6924::t_63f8ea86fefee4 97-99
+  s_6e2b93ff6c6924::t_20f19c6fc0381d 1-10,12-28,32-96,100-169,171-173,175-176,178-250,252-253,255-256,258-378
+  s_6e2b93ff6c6924::t_46588c764419a9 11,29-31
+docs/decisions.md
+  s_6e2b93ff6c6924::t_6efb30cf25031f 408-409,1265,1553-1554,2119-2148
+  s_6e2b93ff6c6924::t_f84b632892a69e 2149
+docs/using/quickstart.md
+  s_6e2b93ff6c6924::t_5c03ab895ed0ef 182-183,185,188,197,207
+  s_6e2b93ff6c6924::t_16f494109c12ca 189-190
+ci/kubernetes/chart/values.yaml
+  s_6e2b93ff6c6924::t_2daafb7e207520 17-20,23
+ci/kubernetes/tests/golden/pool/datadouble-shop-non-production.yaml.golden
+  s_6e2b93ff6c6924::t_0360b0059be7ab 28-29,31-42,44-59,61-73
+core/tests/test_commands.py
+  s_6e2b93ff6c6924::t_db109bac84a17b 497-501,503
+  s_6e2b93ff6c6924::t_05f58c13903032 6,20,451-496,502
+  s_6e2b93ff6c6924::t_4614fb35f868b5 71,156,168,224,315,355,395,409,421
+  s_6e2b93ff6c6924::t_2dda847dd1ceb2 450
+  s_6e2b93ff6c6924::t_d30d98eea64522 504
+docs/subsetting.md
+  s_6e2b93ff6c6924::t_fed5d1c07cbd55 18-19,310,346-356,358-373
+  s_6e2b93ff6c6924::t_99f71e7687a51e 357
+  s_6e2b93ff6c6924::t_3a948f2f6619a3 374
+docs/excludes-and-strict-mode.md
+  s_6e2b93ff6c6924::t_a445782797ebf0 90-92
+docs/jailer.md
+  s_6e2b93ff6c6924::t_16f494109c12ca 93-94
+  s_6e2b93ff6c6924::t_5c03ab895ed0ef 80
+docs/using/spec-sizes.md
+  s_6e2b93ff6c6924::t_dceb91bdc89e73 32-33
+  s_6e2b93ff6c6924::t_59553514afefcb 1-31,34-371,373-401
+  s_6e2b93ff6c6924::t_99f71e7687a51e 372
+ci/kubernetes/tests/test_argocd.py
+  s_6e2b93ff6c6924::t_c4e37a116f2c77 295-304
+  s_6e2b93ff6c6924::t_8d4357cc8b2eac 101,255
+ci/kubernetes/src/datadouble_argocd/__init__.py
+  s_6e2b93ff6c6924::t_2daafb7e207520 177-178,180-181
+  s_6e2b93ff6c6924::t_08a7ab288496c5 179
+core/tests/test_ci.py
+  s_6e2b93ff6c6924::t_5322ed6e0a83e8 621-659
+  s_6e2b93ff6c6924::t_4614fb35f868b5 812
+docs/using/ci-cd-libraries.md
+  s_6e2b93ff6c6924::t_5c03ab895ed0ef 181
+core/src/datadouble/api.py
+  s_6e2b93ff6c6924::t_330d31da47492e 91,95,108,179-206,210-211,214,222-223,246-249,388,409,451-461,584,707,758-759,763,770,776,778,838-839,858,874-877,1119
+  s_6e2b93ff6c6924::t_08a7ab288496c5 945-960,965-966
+core/src/datadouble/planner.py
+  s_6e2b93ff6c6924::t_458375441925d1 350-351,409-410,1182
+  s_6e2b93ff6c6924::t_1042ae0ee3f3ee 61
+ci/kubernetes/chart/templates/_helpers.tpl
+  s_6e2b93ff6c6924::t_2daafb7e207520 57-59,61-62
+core/src/datadouble/cli.py
+  s_6e2b93ff6c6924::t_63f8ea86fefee4 24,678-679
+  s_6e2b93ff6c6924::t_393f4dfd29bb82 26,138-140,374-378,387-388,529,684-687,694-697,699-703,710-711,728-732
+  s_6e2b93ff6c6924::t_08a7ab288496c5 681
+  s_6e2b93ff6c6924::t_62ea0129d14127 675-677,680,682-683,688-693
+docs/using/spec-reference.md
+  s_6e2b93ff6c6924::t_7d20e0c606fdc3 30
+zensical.toml
+  s_6e2b93ff6c6924::t_c2b512a1c83aa4 35
+core/tests/test_run.py
+  s_6e2b93ff6c6924::t_037ad1a5b1503e 516-517,520-524
+  s_6e2b93ff6c6924::t_3d2fce76df8873 37
+core/src/datadouble/ci.py
+  s_6e2b93ff6c6924::t_d1a56263a37908 146-148,150,647-648,747
+conformance/src/datadouble_conformance/ci.py
+  s_6e2b93ff6c6924::t_edcb9d856b7b50 620,719,734,736
+ci/kubernetes/tests/test_argocd_conformance.py
+  s_6e2b93ff6c6924::t_8d4357cc8b2eac 328-329
+  s_6e2b93ff6c6924::t_26e9317e8195d7 330,333,363-364
+  s_6e2b93ff6c6924::t_1479e0d78f2b8c 559-590
+ci/kubernetes/tests/golden/on-demand/datadouble-shop-non-production.yaml.golden
+  s_6e2b93ff6c6924::t_0360b0059be7ab 28-29,31-42,44-59,61-73
+docs/ci-cd.md
+  s_6e2b93ff6c6924::t_a445782797ebf0 361
+  s_6e2b93ff6c6924::t_ee07a8d8e79bbb 636-643
+docs/architecture.md
+  s_6e2b93ff6c6924::t_117dc722d471a0 769-770
+  s_6e2b93ff6c6924::t_a445782797ebf0 62-64,68-70
+ci/kubernetes/README.md
+  s_6e2b93ff6c6924::t_e1b3571734e7dc 19
+  s_6e2b93ff6c6924::t_5829b744ea1f55 60-66
+  s_6e2b93ff6c6924::t_31b75fc47b5f00 20-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a2a0aa36a16991acbc3421a9ab95311fc375efb4",
+  "prompts": {},
+  "sessions": {
+    "s_6e2b93ff6c6924": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c57996bf-5168-4fde-bf67-1c7afc8abf2c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
