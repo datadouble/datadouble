@@ -1,0 +1,22 @@
+core/src/datadouble/ci.py
+  s_6e2b93ff6c6924::t_98daf76b035035 207-208,217
+core/tests/test_ci.py
+  s_6e2b93ff6c6924::t_96ffc2b31e4510 50,1052-1062
+  s_6e2b93ff6c6924::t_885b035b684488 1063-1064
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8afdd51c7c079f8cd9642e7f3536048356e5d3c0",
+  "prompts": {},
+  "sessions": {
+    "s_6e2b93ff6c6924": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c57996bf-5168-4fde-bf67-1c7afc8abf2c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nick.marden@tightlinesoftware.com>"
+    }
+  }
+}
