@@ -38,6 +38,34 @@ remote` with `integrity`). GitLab must be able to reach
 change the URL. The CI/CD Catalog components follow once the GitLab mirror of
 this repository exists.
 
+## Where jobs find the spec
+
+By default each job reads the spec, the specs it extends and its lock from
+the project directory. `--spec-source` changes that (see [where jobs find the spec](https://datadouble.tightlinesoftware.com/ci-cd/#where-jobs-find-the-spec)):
+
+- `--spec-source mounted --spec-dir DIR`: the spec's directory is `DIR` on
+  the runner, mounted into each job at the same path.
+- `--spec-source git --spec-repository URL --spec-ref REF --spec-dir DIR
+  --spec-credential VARIABLE`: each generated job's `before_script` fetches
+  `REF` of that repository into `.datadouble-spec` with the runner host's
+  `git`, which the shell executor already uses to clone the project. The
+  URL and ref are written into the script, so a pipeline run can't change
+  them. `REF` is a branch by its name, a tag as `refs/tags/<tag>`, or a commit
+  by its full SHA. The job template and its pinned SHA-256
+  don't change. `VARIABLE` is a masked CI/CD variable holding an access
+  token. A credential helper scoped to the repository's host reads it from
+  the environment, so it never appears on a command line or in the clone.
+  The user name is `oauth2` unless the URL names one
+  (`https://deployer@...`), as a deploy token needs. On-demand jobs run in
+  merge request pipelines, which see no protected variables, so make
+  `VARIABLE` available there.
+
+The generated `before_script` replaces a `before_script` that the project
+sets under `default`, so those jobs don't run it. Whoever runs a pipeline
+can override the jobs' other variables, such as `DATADOUBLE_ARGUMENTS`, from
+the Run pipeline form, a schedule or the trigger API. Consider the project
+setting `restrict_user_defined_variables` to limit who can.
+
 ## Re-locking the catalog
 
 The manual `lock` job (`--job lock`, on the production side with `build`)

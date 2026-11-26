@@ -25,6 +25,10 @@ the job's log.
 The spec's ``notify`` webhooks Datadouble posts itself, from each step; a
 Job has no page, so their ``run_url`` is null. Kubernetes has no mail, so
 ``notify`` email fails ``ci init``, by name.
+
+With a ``mounted`` spec source, the chart mounts the named ConfigMap, which
+someone else manages, at the spec's directory instead of rendering its own.
+A ``git`` spec source fails ``ci init``: nothing in the chart clones.
 """
 
 import sys
@@ -50,6 +54,7 @@ from datadouble.ci import (
     Side,
     Trigger,
     claim_mount,
+    config_map_step,
     runtime_namespace,
 )
 from datadouble.outcome import ExitCode, Outcome
@@ -170,15 +175,18 @@ def values(pipeline: Pipeline) -> dict[str, JsonValue]:
     """The chart's values for one side's jobs."""
     uid, _, gid = pipeline.user.partition(":")
     secret = f"datadouble-{pipeline.name}" if pipeline.environment() else ""
+    mounted = pipeline.mounted()
+    spec: dict[str, JsonValue] = {"path": pipeline.spec}
+    if mounted is not None and mounted.config_map is not None:
+        # The spec's directory comes from someone else's ConfigMap, not from the values.
+        spec["configMap"] = mounted.config_map
+    else:
+        spec |= {"files": dict(pipeline.spec_files), "lock": pipeline.lock_text}
     return {
         "name": f"datadouble-{_release(pipeline)}",
         "image": pipeline.image,
         "user": {"uid": int(uid), "gid": int(gid)},
-        "spec": {
-            "path": pipeline.spec,
-            "files": dict(pipeline.spec_files),
-            "lock": pipeline.lock_text,
-        },
+        "spec": spec,
         "claim": {"name": CLAIM, "mount": _mount(pipeline)},
         "secret": secret,
         "persistentVolumes": pipeline.side is Side.NON_PRODUCTION,
@@ -264,6 +272,12 @@ class ArgoCd:
                 " Docker; leave out the Docker command and socket"
             )
             raise CiError(message)
+        if pipeline.git() is not None:
+            message = (
+                "Argo CD's jobs cannot clone a spec repository; use the spec source checkout"
+                " (the spec is copied into the values) or mounted (a ConfigMap you manage)"
+            )
+            raise CiError(message)
         return (GeneratedFile(path=_path(pipeline), content=render(pipeline)),)
 
     def instructions(self, pipeline: Pipeline) -> tuple[str, ...]:
@@ -274,6 +288,7 @@ class ArgoCd:
                 f"in the namespace {namespace}, create the PersistentVolumeClaim {CLAIM},"
                 f" holding {_mount(pipeline)}, owned by {pipeline.user}"
             ),
+            *config_map_step(pipeline, namespace),
             f"add {_path(pipeline)} to Argo CD (kubectl apply -n argocd -f ...)",
         ]
         if pipeline.environment():

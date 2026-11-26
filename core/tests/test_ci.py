@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from test_operations import make_spec
 from test_run import SPEC, dataset
 
@@ -20,17 +20,25 @@ from datadouble.api import ErrorCode
 from datadouble.boundary import BoundaryError, require_inside
 from datadouble.ci import (
     DEFAULT_MOUNT,
+    SPEC_CLONE,
     Agent,
     CiError,
     GeneratedFile,
+    GitSettings,
+    GitSource,
     JobKind,
+    MountedSettings,
+    MountedSource,
     Pipeline,
     PipelineOptions,
     Placeholder,
     Report,
     Side,
+    SpecSource,
+    SpecSourceKind,
     Trigger,
     claim_mount,
+    credential_name,
     host_paths,
     mask,
     masking,
@@ -39,6 +47,7 @@ from datadouble.ci import (
     secret_names,
     sections,
     side_of,
+    spec_path,
 )
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.registry import Registry
@@ -950,3 +959,187 @@ def test_bridged_requests_keep_a_record(tmp_path: Path, monkeypatch: pytest.Monk
     code, out = run("--ci", "fake-ci", "--ci-job", "build", *arguments)
     assert code == ExitCode.SUCCESS, out
     assert json.loads(record.read_text(encoding="utf-8")) == {"outcome": "warning"}
+
+
+MOUNTED = MountedSource(mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec")))
+GIT = GitSource(
+    git=GitSettings(
+        url="https://git.example.com/data/specs.git",
+        ref="main",
+        path=PurePosixPath("datadouble"),
+        credential="SPECS_TOKEN",
+    )
+)
+
+
+def init_request(tmp_path: Path, spec: Path, source: JsonValue) -> dict[str, JsonValue]:
+    return {
+        "command": "ci.init",
+        "system": "fake-ci",
+        "jobs": ["prune"],
+        "side": "non-production",
+        "spec": str(spec),
+        "output": str(tmp_path / "elsewhere"),
+        "spec_source": source,
+    }
+
+
+@pytest.mark.usefixtures("registry")
+def test_ci_init_with_a_mounted_spec_directory(tmp_path: Path, ci: FakeCi) -> None:
+    spec = write_spec(tmp_path, make_spec(tmp_path))
+    source: JsonValue = {"mounted": {"path": "/etc/datadouble-spec"}}
+    code, out = run("api", stdin=json.dumps(init_request(tmp_path, spec, source)))
+    assert code == ExitCode.SUCCESS, out
+    (planned,) = ci.pipelines
+    assert planned.spec == "/etc/datadouble-spec/shop.yml"
+    assert planned.mounted() == MOUNTED.mounted
+    assert planned.git() is None
+    assert all("/etc/datadouble-spec" in job.mounts for job in planned.jobs)
+    assert planned.jobs[0].invocations[0].arguments[:3] == (
+        "prune",
+        "--spec",
+        "/etc/datadouble-spec/shop.yml",
+    )
+    source = {"mounted": {"path": "/etc/datadouble-spec", "config_map": "shop-spec"}}
+    code, out = run("api", stdin=json.dumps(init_request(tmp_path, spec, source)))
+    assert code == ExitCode.FAILURE
+    assert "a ConfigMap applies only to kubernetes agents" in json.loads(out)["message"]
+
+
+@pytest.mark.usefixtures("registry")
+def test_ci_init_with_a_git_spec_directory(tmp_path: Path, ci: FakeCi) -> None:
+    spec = write_spec(tmp_path, make_spec(tmp_path))
+    source: JsonValue = {
+        "git": {
+            "url": "https://git.example.com/data/specs.git",
+            "ref": "main",
+            "path": "datadouble",
+            "credential": "SPECS_TOKEN",
+        }
+    }
+    code, out = run("api", stdin=json.dumps(init_request(tmp_path, spec, source)))
+    assert code == ExitCode.SUCCESS, out
+    assert json.loads(out)["environment"] == ["SPECS_TOKEN"]
+    (planned,) = ci.pipelines
+    assert planned.spec == f"{SPEC_CLONE}/datadouble/shop.yml"
+    assert planned.git() == GIT.git
+    assert planned.mounted() is None
+    assert all("SPECS_TOKEN" not in job.environment for job in planned.jobs)
+    at_root: JsonValue = {"git": {"url": "https://h/a/b", "ref": "v1", "credential": "T"}}
+    code, out = run("api", stdin=json.dumps(init_request(tmp_path, spec, at_root)))
+    assert code == ExitCode.SUCCESS, out
+    assert ci.pipelines[-1].spec == f"{SPEC_CLONE}/shop.yml"
+
+
+def test_a_git_credential_has_its_own_name(tmp_path: Path) -> None:
+    spec = production_spec(tmp_path)
+    clashing = GitSource(git=GIT.git.model_copy(update={"credential": "SHOP_KEY"}))
+    with pytest.raises(CiError, match="credential SHOP_KEY has the name of a secret"):
+        pipeline(spec, replace(options(JobKind.BUILD), spec_source=clashing))
+
+
+def test_mounted_spec_directories_on_kubernetes(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    kubernetes = replace(options(JobKind.PROMOTE), agent=Agent.KUBERNETES, spec_source=MOUNTED)
+    with pytest.raises(CiError, match="name the ConfigMap that holds /etc/datadouble-spec"):
+        pipeline(spec, kubernetes)
+    mapped = MountedSource(mounted=MOUNTED.mounted.model_copy(update={"config_map": "shop-spec"}))
+    planned = pipeline(spec, replace(kubernetes, spec_source=mapped))
+    assert planned.mounted() == mapped.mounted
+    assert all("/etc/datadouble-spec" not in job.mounts for job in planned.jobs)
+    nested = replace(
+        kubernetes,
+        spec_source=mapped,
+        spec_files=(("base.yml", ""), ("sizes/micro.yml", ""), ("shop.yml", "")),
+    )
+    with pytest.raises(CiError, match=r"reads sizes/micro\.yml from a subdirectory"):
+        pipeline(spec, nested)
+
+
+def test_a_linked_spec_keeps_its_name_in_jobs(tmp_path: Path) -> None:
+    real = tmp_path / "repo" / "real" / "shop.yml"
+    real.parent.mkdir(parents=True)
+    real.write_text("name: shop\n", encoding="utf-8")
+    link = tmp_path / "repo" / "datadouble" / "shop-micro.yml"
+    link.parent.mkdir()
+    link.symlink_to(real)
+    root = tmp_path / "repo"
+    checkout: SpecSource = SpecSourceKind.CHECKOUT
+    assert spec_path(checkout, link, root) == "datadouble/shop-micro.yml"
+    assert spec_path(MOUNTED, link, root) == "/etc/datadouble-spec/shop-micro.yml"
+
+
+def test_spec_sources_are_checked() -> None:
+    sources: TypeAdapter[SpecSource] = TypeAdapter(SpecSource)
+    assert sources.validate_json('"checkout"') is SpecSourceKind.CHECKOUT
+    assert sources.validate_python(MOUNTED) == MOUNTED
+    assert sources.validate_python(GIT) == GIT
+    git: dict[str, JsonValue] = {"url": "https://h/a/b", "ref": "main", "credential": "T"}
+    for bad in (
+        3,
+        "mounted",
+        {"mounted": {"path": "relative"}},
+        {"mounted": {"path": "/"}},
+        {"mounted": {"path": "/a:b"}},
+        {"mounted": {"path": "/etc/s", "url": "https://h/a/b"}},
+        {"git": {**git, "path": "../up"}},
+        {"git": {**git, "path": "/abs"}},
+        {"git": {**git, "url": "https://user:secret@h/a/b"}},
+        {"git": {**git, "credential": ""}},
+        {"git": {**git, "ref": "--upload-pack=touch /tmp/x"}},
+        {"mounted": {"path": "/etc/../srv"}},
+        {"mounted": {"path": "/etc/s", "config_map": "Shop_Spec"}},
+        {"mounted": {"path": "/etc/s", "config_map": "-shop"}},
+        {"mounted": {"path": "/etc/s", "config_map": "a" * 254}},
+        {"checkout": {}, "git": git},
+    ):
+        with pytest.raises(ValidationError):
+            sources.validate_json(json.dumps(bad))
+    assert credential_name(GIT.git, "github-actions") == "SPECS_TOKEN"
+    dashed = GitSettings(url="https://h/a/b", ref="main", credential="specs-read")
+    with pytest.raises(CiError, match="github-actions names secrets with letters"):
+        credential_name(dashed, "github-actions")
+
+
+def test_spec_source_options() -> None:
+    base = ("--dry-run", "ci", "init", "--system", "x", "--job", "prune", "--spec", "s.yml")
+    _, out = run(*base, "--spec-source", "mounted", "--spec-dir", "/etc/s",
+                    "--spec-config-map", "shop-spec")  # fmt: skip
+    assert json.loads(out)["spec_source"] == {
+        "mounted": {"path": "/etc/s", "config_map": "shop-spec"}
+    }
+    _, out = run(*base, "--spec-source", "git", "--spec-repository", "https://h/a/b",
+                    "--spec-ref", "main", "--spec-credential", "T")  # fmt: skip
+    assert json.loads(out)["spec_source"] == {
+        "git": {"url": "https://h/a/b", "ref": "main", "credential": "T"}
+    }
+    _, out = run(*base, "--spec-source", "checkout")
+    assert json.loads(out)["spec_source"] == "checkout"
+    _, out = run(*base)
+    assert "spec_source" not in json.loads(out)
+    for stray in (
+        ("--spec-dir", "/etc/s"),
+        ("--spec-source", "mounted", "--spec-dir", "/etc/s", "--spec-ref", "main"),
+        ("--spec-source", "git", "--spec-config-map", "shop-spec"),
+    ):
+        with pytest.raises(SystemExit) as stopped:
+            run(*base, *stray)
+        assert stopped.value.code == 2
+
+
+@pytest.mark.usefixtures("registry")
+def test_spec_source_problems_name_their_options(tmp_path: Path) -> None:
+    spec = write_spec(tmp_path, make_spec(tmp_path))
+    base = ("ci", "init", "--system", "fake-ci", "--job", "fetch", "--spec", str(spec))
+    code, out = run(*base, "--spec-source", "mounted", "--spec-dir", "etc/spec",
+                    "--spec-config-map", "Shop")  # fmt: skip
+    assert code == ExitCode.FAILURE
+    assert "  spec_source.mounted.mounted.path (--spec-dir): " in out
+    assert "  spec_source.mounted.mounted.config_map (--spec-config-map): " in out
+    code, out = run(*base, "--spec-source", "git", "--spec-repository", "https://h/a/b",
+                    "--spec-ref=-x")  # fmt: skip
+    assert "  spec_source.git.git.ref (--spec-ref): " in out
+    assert "  spec_source.git.git.credential (--spec-credential): " in out
+    source: JsonValue = {"mounted": {"path": "etc/spec"}}
+    _, out = run("api", stdin=json.dumps(init_request(tmp_path, spec, source)))
+    assert "(--" not in out

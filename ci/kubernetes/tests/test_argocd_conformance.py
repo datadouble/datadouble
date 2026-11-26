@@ -588,6 +588,34 @@ def test_every_spec_file_and_the_lock_are_mounted(tmp_path: Path) -> None:
     }
 
 
+def test_a_mounted_spec_directory_comes_from_its_config_map(tmp_path: Path) -> None:
+    """With spec.configMap, pods mount that ConfigMap at the spec's directory, and no other."""
+    golden = GOLDEN / "mounted" / "datadouble-shop-non-production.yaml.golden"
+    application = yaml.safe_load(golden.read_text("utf-8"))
+    values = application["spec"]["source"]["helm"]["valuesObject"]
+    assert values["spec"] == {"path": "/etc/datadouble-spec/shop.yml", "configMap": "shop-spec"}
+    (tmp_path / "values.yaml").write_text(yaml.safe_dump(values), encoding="utf-8")
+    rendered = run_program(
+        "helm", ["template", "shop", str(CHART), "--values", str(tmp_path / "values.yaml")]
+    )
+    assert rendered.status == 0, rendered.stderr
+    documents = [d for d in yaml.safe_load_all(rendered.stdout) if d]
+    assert not [d for d in documents if d["kind"] == "ConfigMap"]
+    cronjobs = [d for d in documents if d["kind"] == "CronJob"]
+    assert cronjobs
+    for cronjob in cronjobs:
+        pod = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+        (volume,) = [v for v in pod["volumes"] if v["name"] == "spec"]
+        assert volume["configMap"] == {"name": "shop-spec"}
+        for container in pod.get("initContainers", []) + pod["containers"]:
+            spec_mounts = [m for m in container["volumeMounts"] if m["name"] == "spec"]
+            assert spec_mounts == [
+                {"name": "spec", "mountPath": "/etc/datadouble-spec", "readOnly": True}
+            ]
+            assert "--spec" in container["args"]
+            assert "/etc/datadouble-spec/shop.yml" in container["args"]
+
+
 @pytest.fixture
 def ci_harness(cluster: Cluster) -> CiHarness:
     return ArgoCdOnKind(cluster)

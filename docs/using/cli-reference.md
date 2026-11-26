@@ -209,6 +209,12 @@ Write CI/CD configuration for a spec's jobs.
 | `--agent` `AGENT` | Where jobs run Datadouble: on a runner with Docker, or in a Kubernetes pod (default: the system's own) (one of docker, kubernetes). |
 | `--cloud` `CLOUD` | The Kubernetes cloud that Kubernetes agents start in (default: the system's). |
 | `--env` `NAME` | Another environment variable that every job passes on (repeatable). |
+| `--spec-source` `SPEC_SOURCE` | Where jobs find the spec's directory (the spec, the specs it extends and its lock): the CI system's checkout of this repository, a directory already in the job, or another repository the job clones. --spec is still read here, to check it (default: checkout) (one of checkout, mounted, git). |
+| `--spec-dir` `DIR` | With --spec-source mounted, the spec's directory: an absolute path in the job; with git, its directory in the repository (default: the repository's root). |
+| `--spec-config-map` `NAME` | With --spec-source mounted on Kubernetes agents, the ConfigMap that holds the spec's directory, which someone else manages. |
+| `--spec-repository` `URL` | With --spec-source git, the repository's URL. |
+| `--spec-ref` `REF` | With --spec-source git, what to check out: a branch by its name, a tag as refs/tags/<tag>, or a commit by its full SHA. |
+| `--spec-credential` `NAME` | With --spec-source git, the CI system's secret that can read the repository: a GitHub secret, a GitLab CI/CD variable or a Jenkins credential ID. |
 | `--docker` `COMMAND` | The Docker command that steps run the image with (default: the runner's DATADOUBLE_DOCKER, or docker). |
 | `--docker-socket` `PATH` | The Docker daemon's socket on the runner, as an absolute path (default: the runner's DATADOUBLE_DOCKER_SOCKET, or /var/run/docker.sock). |
 

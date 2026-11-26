@@ -13,13 +13,29 @@ import base64
 import hashlib
 import os
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 import yaml
 from pydantic import JsonValue, TypeAdapter
 
-from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import (
+    Agent,
+    CiError,
+    GitSettings,
+    GitSource,
+    JobKind,
+    MountedSettings,
+    MountedSource,
+    Pipeline,
+    PipelineOptions,
+    Report,
+    Side,
+    SpecSource,
+    SpecSourceKind,
+    pipeline,
+    spec_path,
+)
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import FileSecret, NotifyOn, Webhook, WebhookTarget, parse_spec
 from datadouble_gitlab import NAME, TEMPLATE_URL, GitLab, adapter, integrity, template
@@ -81,10 +97,12 @@ def planned(
     mode: str = "on-demand",
     runner: str | None = "prod-db",
     side: Side | None = None,
+    source: SpecSource = SpecSourceKind.CHECKOUT,
 ) -> Pipeline:
     options = PipelineOptions(
         kinds=kinds,
-        spec_path="datadouble/shop.yml",
+        spec_path=spec_path(source, Path("datadouble/shop.yml"), Path()),
+        spec_source=source,
         image="ghcr.io/datadouble/datadouble:v1.2.3",
         version="1.2.3",
         owner="999:999",
@@ -93,6 +111,16 @@ def planned(
         side=side,
     )
     return pipeline(parse_spec(SPEC.replace("MODE", mode)), options)
+
+
+MOUNTED = MountedSource(mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec")))
+
+
+def git(url: str = "https://gitlab.example.com/data/specs.git") -> GitSource:
+    settings = GitSettings(
+        url=url, ref="main", path=PurePosixPath("datadouble"), credential="SPECS_TOKEN"
+    )
+    return GitSource(git=settings)
 
 
 SCENARIOS = {
@@ -108,6 +136,8 @@ SCENARIOS = {
     "pool": planned(
         JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, mode="pool", runner="staging"
     ),
+    "mounted": planned(JobKind.FETCH, mode="pool", runner="staging", source=MOUNTED),
+    "git": planned(JobKind.PROVISION, JobKind.RELEASE, runner="staging", source=git()),
 }
 
 
@@ -321,3 +351,51 @@ def test_another_docker_command_and_socket() -> None:
     assert variables["DATADOUBLE_DOCKER"] == "podman"
     assert variables["DATADOUBLE_DOCKER_SOCKET"] == "/run/d.sock"
     assert "DATADOUBLE_DOCKER" not in str(jobs("production"))
+
+
+def test_a_spec_from_another_repository() -> None:
+    config = yaml.safe_load(GitLab().generate(SCENARIOS["git"])[0].content)
+    job = config["datadouble-shop-provision"]
+    (script,) = job["before_script"]
+    assert script.splitlines()[1:3] == [
+        "rm -rf .datadouble-spec",
+        "git init --quiet .datadouble-spec",
+    ]
+    assert script.splitlines()[3] == (
+        "git -C .datadouble-spec -c credential.helper="
+        " -c 'credential.https://gitlab.example.com.helper=!f() {"
+        ' if [ "$1" = get ]; then echo username=oauth2; echo "password=$SPECS_TOKEN"; fi; }; f\''
+        " fetch --quiet --depth 1 -- https://gitlab.example.com/data/specs.git main"
+    )
+    assert "SPECS_TOKEN" not in job["variables"].get("DATADOUBLE_ENVIRONMENT", "")
+    assert not any(name.startswith("DATADOUBLE_SPEC") for name in job["variables"])
+    assert ".datadouble-spec/datadouble/shop.yml" in job["variables"]["DATADOUBLE_ARGUMENTS"]
+    odd_url = git("https://deployer@gitlab.example.com:8443/data/$(id) specs")
+    deploy = planned(JobKind.FETCH, source=odd_url)
+    tagged = GitSource(git=odd_url.git.model_copy(update={"ref": "refs/tags/v1.2"}))
+    generated = GitLab().generate(planned(JobKind.FETCH, source=tagged))
+    (fetch,) = yaml.safe_load(generated[0].content)["datadouble-shop-fetch"]["before_script"]
+    assert "'credential.https://gitlab.example.com:8443.helper=" in fetch
+    assert "echo username=deployer;" in fetch
+    assert (
+        " -- 'https://deployer@gitlab.example.com:8443/data/$(id) specs' refs/tags/v1.2\n" in fetch
+    )
+    odd = GitSource(git=git("https://a'b@gitlab.example.com/data/specs").git)
+    with pytest.raises(CiError, match="must be letters, digits"):
+        GitLab().generate(planned(JobKind.FETCH, source=odd))
+    steps = GitLab().instructions(SCENARIOS["git"])
+    assert any("make SPECS_TOKEN available there" in step for step in steps)
+    assert not any("SPECS_TOKEN" in step for step in GitLab().instructions(deploy))
+    for url in ("git@gitlab.example.com:data/specs.git", "http://gitlab.example.com/data/specs"):
+        with pytest.raises(CiError, match="clone the spec over https"):
+            GitLab().generate(planned(JobKind.FETCH, source=git(url)))
+    dashed = GitSource(git=git().git.model_copy(update={"credential": "specs-read"}))
+    with pytest.raises(CiError, match="names secrets with letters"):
+        GitLab().generate(planned(JobKind.FETCH, source=dashed))
+
+
+def test_a_mounted_spec_directory() -> None:
+    config = yaml.safe_load(GitLab().generate(SCENARIOS["mounted"])[0].content)
+    variables = config["datadouble-shop-fetch"]["variables"]
+    assert "/etc/datadouble-spec\n" in variables["DATADOUBLE_MOUNTS"]
+    assert "/etc/datadouble-spec/shop.yml" in variables["DATADOUBLE_ARGUMENTS"]

@@ -12,7 +12,7 @@ and review the diff.
 import json
 import os
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,13 +21,20 @@ import yaml
 from datadouble.ci import (
     Agent,
     CiError,
+    GitSettings,
+    GitSource,
     JobKind,
+    MountedSettings,
+    MountedSource,
     Pipeline,
     PipelineOptions,
     RemoteSettings,
     Report,
     Side,
+    SpecSource,
+    SpecSourceKind,
     pipeline,
+    spec_path,
 )
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import NotifyOn, parse_spec
@@ -96,10 +103,11 @@ def planned(
     agent: Agent = Agent.DOCKER,
     runtime: str = "",
     cloud: str | None = None,
+    source: SpecSource = SpecSourceKind.CHECKOUT,
 ) -> Pipeline:
     options = PipelineOptions(
         kinds=kinds,
-        spec_path="datadouble/shop.yml",
+        spec_path=spec_path(source, Path("datadouble/shop.yml"), Path()),
         image="ghcr.io/datadouble/datadouble:v1.2.3",
         version="1.2.3",
         owner="999:999",
@@ -108,12 +116,23 @@ def planned(
         side=side,
         agent=agent,
         cloud=cloud,
+        spec_source=source,
     )
     kubernetes = KUBERNETES + runtime + "}}\n"
     text = kubernetes if agent is Agent.KUBERNETES else SPEC
     return pipeline(parse_spec(text.replace("MODE", mode)), options)
 
 
+MOUNTED = MountedSource(mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec")))
+CONFIG_MAP = MountedSource(mounted=MOUNTED.mounted.model_copy(update={"config_map": "shop-spec"}))
+GIT = GitSource(
+    git=GitSettings(
+        url="https://git.example.com/data/specs.git",
+        ref="main",
+        path=PurePosixPath("datadouble"),
+        credential="specs-read",
+    )
+)
 ON_DEMAND = (JobKind.FETCH, JobKind.PROVISION, JobKind.RELEASE, JobKind.PRUNE, JobKind.ACTIVATE)
 SCENARIOS = {
     "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
@@ -133,6 +152,14 @@ SCENARIOS = {
     ),
     "kubernetes-on-demand": planned(
         *ON_DEMAND, runner="shop-staging", agent=Agent.KUBERNETES, runtime=", node: worker-3"
+    ),
+    "mounted": planned(JobKind.FETCH, mode="pool", runner="staging", source=MOUNTED),
+    "git": planned(JobKind.BUILD, JobKind.PROMOTE, source=GIT),
+    "kubernetes-mounted": planned(
+        JobKind.FETCH, runner="shop-staging", agent=Agent.KUBERNETES, source=CONFIG_MAP
+    ),
+    "kubernetes-git": planned(
+        JobKind.FETCH, runner="shop-staging", agent=Agent.KUBERNETES, source=GIT
     ),
 }
 
@@ -526,3 +553,55 @@ def test_another_docker_command_and_socket() -> None:
     assert "    docker: 'podman',\n" in build
     assert "    dockerSocket: '/run/d.sock',\n" in build
     assert "docker:" not in jenkinsfile("production", JobKind.BUILD)
+
+
+def test_a_spec_from_another_repository() -> None:
+    jenkins = Jenkins()
+    build = render(SCENARIOS["git"], SCENARIOS["git"].jobs[0])
+    assert (
+        "        stage('spec') {\n"
+        "            steps {\n"
+        "                dir('.datadouble-spec') {\n"
+        "                    checkout scmGit(branches: [[name: 'main']], userRemoteConfigs:"
+        " [[url: 'https://git.example.com/data/specs.git', credentialsId: 'specs-read']])\n"
+    ) in build
+    assert build.index("stage('spec')") < build.index("stage('datadouble run')")
+    assert "'.datadouble-spec/datadouble/shop.yml'" in build
+    assert "credentialsId: 'specs-read', variable" not in build
+    steps = jenkins.instructions(SCENARIOS["git"])
+    assert (
+        "add each variable above but specs-read as a Secret text credential with that ID" in steps
+    )
+    assert steps[-1].startswith("add specs-read as a credential the Git plugin can clone")
+    alone = replace(
+        SCENARIOS["git"],
+        jobs=tuple(replace(job, environment=()) for job in SCENARIOS["git"].jobs),
+    )
+    assert not any("Secret text" in step for step in jenkins.instructions(alone))
+
+
+def test_a_tag_or_a_commit_of_another_repository() -> None:
+    for ref in ("refs/tags/v1.2", "0123456789abcdef0123456789abcdef01234567"):
+        source = GitSource(git=GIT.git.model_copy(update={"ref": ref}))
+        planned_jobs = planned(JobKind.PROMOTE, source=source)
+        assert f"checkout scmGit(branches: [[name: '{ref}']]," in render(
+            planned_jobs, planned_jobs.jobs[0]
+        )
+
+
+def test_a_mounted_spec_directory() -> None:
+    fetch = render(SCENARIOS["mounted"], SCENARIOS["mounted"].jobs[0])
+    assert "mounts: ['/etc/datadouble-spec', " in fetch
+    assert "'/etc/datadouble-spec/shop.yml'" in fetch
+    steps = Jenkins().instructions(SCENARIOS["kubernetes-mounted"])
+    assert (
+        "in shop-staging, keep the ConfigMap shop-spec holding the spec's directory, one key per"
+        " file name: shop.yml, the specs it extends and its lock; the pods mount it read-only at"
+        " /etc/datadouble-spec"
+    ) in steps
+    assert not any(
+        "ConfigMap shop-spec" in step for step in Jenkins().instructions(SCENARIOS["mounted"])
+    )
+    text = json.dumps(pod(SCENARIOS["kubernetes-mounted"]))
+    assert '{"name": "spec", "configMap": {"name": "shop-spec"}}' in text
+    assert '{"name": "spec", "mountPath": "/etc/datadouble-spec", "readOnly": true}' in text

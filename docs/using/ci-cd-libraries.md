@@ -42,6 +42,10 @@ The options:
   scratch space. It is kept between runs, so a retried build resumes.
 - `--side` sets the side when you generate `prune` on its own, since `prune`
   runs on either side.
+- `--spec-source` sets where the jobs find the spec's directory: the CI
+  system's checkout of this repository (the default), a directory already
+  in the job, or another repository the jobs clone. See [where jobs find the
+  spec](../ci-cd.md#where-jobs-find-the-spec).
 
 Some jobs need a section of the spec: `promote` needs `promote`, `fetch` needs
 `fetch`, and `provision` and `release` need `replicate`. `replicate` also sets

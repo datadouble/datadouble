@@ -3,8 +3,9 @@
 
 # The spec, the specs it extends and its catalog lock, as ci init copied them
 # into the values. A ConfigMap key can't hold a path, so each file is keyed by
-# its place in the sorted list of paths.
-{{- if not .Values.owner }}
+# its place in the sorted list of paths. With `spec.configMap`, the jobs mount
+# that ConfigMap instead, which someone else manages.
+{{- if not (or .Values.owner .Values.spec.configMap) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

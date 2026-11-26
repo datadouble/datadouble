@@ -124,7 +124,8 @@ The rules for those paths are:
 
 The directory rule exists because that directory is what travels with a
 spec. A CI job gets the spec's directory, so the files a spec extends have to
-be in it too. [CI/CD integration](../ci-cd.md) covers how jobs get it.
+be in it too. [Where jobs find the spec](../ci-cd.md#where-jobs-find-the-spec)
+covers how jobs get it.
 
 ### How the files merge {#merge}
 

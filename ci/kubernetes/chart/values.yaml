@@ -17,11 +17,15 @@ user:
 # `path` is the spec's path in the workspace. `files` maps each file the spec
 # is read from (the spec and the specs it extends), by its path from the
 # spec's directory, to its text. The lock is mounted beside the spec, named
-# after it: datadouble/spec.lock for datadouble/spec.yml.
+# after it: datadouble/spec.lock for datadouble/spec.yml. With `configMap`,
+# the spec's directory is that ConfigMap instead, which someone else manages:
+# it is mounted read-only at the directory of `path`, an absolute path, and
+# `files` and `lock` are not used.
 spec:
   path: datadouble/spec.yml
   files: {}
   lock: ""
+  configMap: ""
 # The PersistentVolumeClaim every path the spec names lives on, mounted at
 # the same path in every pod (the `kubernetes` runtime's claim and mount).
 claim:

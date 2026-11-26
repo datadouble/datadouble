@@ -28,7 +28,7 @@ from pydantic import JsonValue
 
 from datadouble import api
 from datadouble.catalog import describe_changes
-from datadouble.ci import Agent, JobKind, Side, masking
+from datadouble.ci import Agent, JobKind, Side, SpecSourceKind, masking
 from datadouble.outcome import ExitCode
 from datadouble.prune import PruneTarget
 from datadouble.registry import RegistryError, installed
@@ -79,6 +79,16 @@ class _Arguments(argparse.Namespace):
     docker_socket: str | None
     agent: str | None
     cloud: str | None
+    spec_source: str | None
+    spec_dir: str | None
+    spec_config_map: str | None
+    spec_repository: str | None
+    spec_ref: str | None
+    spec_credential: str | None
+
+
+class UsageError(Exception):
+    """Command-line options that cannot be put together into a request."""
 
 
 def _stages(text: str) -> list[str]:
@@ -307,6 +317,43 @@ def _ci_parsers(add: _Add) -> None:
         help="another environment variable that every job passes on (repeatable)",
     )
     init.add_argument(
+        "--spec-source",
+        choices=[kind.value for kind in SpecSourceKind],
+        help="where jobs find the spec's directory (the spec, the specs it extends and its"
+        " lock): the CI system's checkout of this repository, a directory already in the job,"
+        " or another repository the job clones. --spec is still read here, to check it"
+        " (default: checkout)",
+    )
+    init.add_argument(
+        "--spec-dir",
+        metavar="DIR",
+        help="with --spec-source mounted, the spec's directory: an absolute path in the job;"
+        " with git, its directory in the repository (default: the repository's root)",
+    )
+    init.add_argument(
+        "--spec-config-map",
+        metavar="NAME",
+        help="with --spec-source mounted on Kubernetes agents, the ConfigMap that holds the"
+        " spec's directory, which someone else manages",
+    )
+    init.add_argument(
+        "--spec-repository",
+        metavar="URL",
+        help="with --spec-source git, the repository's URL",
+    )
+    init.add_argument(
+        "--spec-ref",
+        metavar="REF",
+        help="with --spec-source git, what to check out: a branch by its name, a tag as"
+        " refs/tags/<tag>, or a commit by its full SHA",
+    )
+    init.add_argument(
+        "--spec-credential",
+        metavar="NAME",
+        help="with --spec-source git, the CI system's secret that can read the repository: a"
+        " GitHub secret, a GitLab CI/CD variable or a Jenkins credential ID",
+    )
+    init.add_argument(
         "--docker",
         metavar="COMMAND",
         help="the Docker command that steps run the image with (default: the runner's"
@@ -501,12 +548,49 @@ def _prune_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     return fields
 
 
+_SPEC_SOURCE_OPTIONS = {
+    SpecSourceKind.MOUNTED: {"spec_dir": "path", "spec_config_map": "config_map"},
+    SpecSourceKind.GIT: {
+        "spec_repository": "url",
+        "spec_ref": "ref",
+        "spec_dir": "path",
+        "spec_credential": "credential",
+    },
+}
+"""Each spec source's options, and the request fields they set."""
+
+
+def _spec_source(arguments: _Arguments) -> JsonValue:
+    kind = SpecSourceKind(arguments.spec_source or SpecSourceKind.CHECKOUT)
+    fitting = _SPEC_SOURCE_OPTIONS.get(kind, {})
+    every = sorted({name for names in _SPEC_SOURCE_OPTIONS.values() for name in names})
+    stray = [n for n in every if n not in fitting and getattr(arguments, n) is not None]
+    if stray:
+        options = ", ".join("--" + name.replace("_", "-") for name in stray)
+        message = f"--spec-source {kind} takes no {options}"
+        raise UsageError(message)
+    if not fitting:
+        return str(kind)
+    settings: dict[str, JsonValue] = {
+        field: getattr(arguments, name)
+        for name, field in fitting.items()
+        if getattr(arguments, name) is not None
+    }
+    return {str(kind): settings}
+
+
 def _ci_init_fields(arguments: _Arguments) -> dict[str, JsonValue]:
     fields: dict[str, JsonValue] = {
         "system": arguments.system,
         "jobs": list(dict.fromkeys(name for names in arguments.jobs for name in names)),
         "spec": arguments.spec,
     }
+    if arguments.spec_source is not None or any(
+        getattr(arguments, name) is not None
+        for names in _SPEC_SOURCE_OPTIONS.values()
+        for name in names
+    ):
+        fields["spec_source"] = _spec_source(arguments)
     return _set(
         fields,
         arguments,
@@ -568,9 +652,19 @@ def build_request(arguments: _Arguments) -> str:
     return json.dumps({"command": command, **fields})
 
 
+def _option(location: str) -> str:
+    """A problem's location, with the command-line option that sets it, if one does."""
+    parts = location.split(".")
+    for kind, options in _SPEC_SOURCE_OPTIONS.items():
+        for name, field in options.items():
+            if parts[:2] == ["spec_source", kind] and parts[-1] == field:
+                return f"{location} (--{name.replace('_', '-')})"
+    return location
+
+
 def _error_lines(response: api.ErrorResponse) -> list[str]:
     lines = [f"error: {response.message}"]
-    lines.extend(f"  {detail.location}: {detail.problem}" for detail in response.details)
+    lines.extend(f"  {_option(detail.location)}: {detail.problem}" for detail in response.details)
     if response.strict is not None:
         for finding in response.strict.findings:
             if finding.resolutions:
@@ -803,14 +897,18 @@ def main(
     stop_on_sigterm()
     source: TextIO = sys.stdin if stdin is None else stdin
     sink: TextIO = sys.stdout if stdout is None else stdout
-    arguments = build_parser().parse_args(argv, namespace=_Arguments())
+    parser = build_parser()
+    arguments = parser.parse_args(argv, namespace=_Arguments())
 
     if arguments.command == "api":
         response, code = _respond(source.read())
         sink.write(response.model_dump_json() + "\n")
         return code
 
-    request = build_request(arguments)
+    try:
+        request = build_request(arguments)
+    except UsageError as error:
+        parser.error(str(error))
     if arguments.dry_run:
         sink.write(request + "\n")
         return ExitCode.SUCCESS

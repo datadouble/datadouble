@@ -13,13 +13,29 @@ import io
 import os
 import re
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 import yaml
 
 from datadouble import api
-from datadouble.ci import Agent, CiError, JobKind, Pipeline, PipelineOptions, Report, Side, pipeline
+from datadouble.ci import (
+    Agent,
+    CiError,
+    GitSettings,
+    GitSource,
+    JobKind,
+    MountedSettings,
+    MountedSource,
+    Pipeline,
+    PipelineOptions,
+    Report,
+    Side,
+    SpecSource,
+    SpecSourceKind,
+    pipeline,
+    spec_path,
+)
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import NotifyOn, Spec, parse_spec
 from datadouble_github_actions import NAME, GitHubActions, adapter, render
@@ -87,10 +103,12 @@ def planned(
     mode: str = "on-demand",
     runner: str | None = "prod-db",
     side: Side | None = None,
+    source: SpecSource = SpecSourceKind.CHECKOUT,
 ) -> Pipeline:
     options = PipelineOptions(
         kinds=kinds,
-        spec_path="datadouble/shop.yml",
+        spec_path=spec_path(source, Path("datadouble/shop.yml"), Path()),
+        spec_source=source,
         image="ghcr.io/datadouble/datadouble:v1.2.3",
         version="1.2.3",
         owner="999:999",
@@ -106,6 +124,16 @@ def github() -> tuple[GitHubActions, io.StringIO]:
     return GitHubActions({}, stream), stream
 
 
+MOUNTED = MountedSource(mounted=MountedSettings(path=PurePosixPath("/etc/datadouble-spec")))
+
+
+def git(url: str = "https://github.com/example/specs.git") -> GitSource:
+    settings = GitSettings(
+        url=url, ref="main", path=PurePosixPath("datadouble"), credential="SPECS_TOKEN"
+    )
+    return GitSource(git=settings)
+
+
 SCENARIOS = {
     "production": planned(JobKind.BUILD, JobKind.PROMOTE, JobKind.PRUNE, JobKind.LOCK),
     "on-demand": planned(
@@ -117,6 +145,8 @@ SCENARIOS = {
         runner="staging,linux",
     ),
     "pool": planned(JobKind.FETCH, JobKind.PROVISION, mode="pool", runner=None),
+    "mounted": planned(JobKind.FETCH, JobKind.PROVISION, mode="pool", source=MOUNTED),
+    "git": planned(JobKind.BUILD, JobKind.PROMOTE, source=git()),
 }
 
 
@@ -314,3 +344,59 @@ def test_another_docker_command_and_socket() -> None:
         assert env["DATADOUBLE_DOCKER_SOCKET"] == "/run/d.sock"
     promote = files["datadouble-shop-promote.yml"]["jobs"]["promote"]["steps"][1]["env"]
     assert set(promote) == {"ALERTS_WEBHOOK", "DATADOUBLE_DOCKER", "DATADOUBLE_DOCKER_SOCKET"}
+
+
+def test_a_spec_from_another_repository() -> None:
+    ci, _ = github()
+    files = {file.path.name: yaml.safe_load(file.content) for file in ci.generate(SCENARIOS["git"])}
+    steps = files["datadouble-shop-build.yml"]["jobs"]["build"]["steps"]
+    assert steps[1]["with"] == {
+        "repository": "example/specs",
+        "ref": "main",
+        "path": ".datadouble-spec",
+        "token": "${{ secrets.SPECS_TOKEN }}",
+        "persist-credentials": False,
+    }
+    assert ".datadouble-spec/datadouble/shop.yml" in steps[2]["with"]["arguments"]
+    assert "SPECS_TOKEN" not in steps[2]["with"].get("environment", "")
+    enterprise = planned(JobKind.PROMOTE, source=git("https://git.example.com:8443/data/specs"))
+    (workflow,) = ci.generate(enterprise)
+    checkout = yaml.safe_load(workflow.content)["jobs"]["promote"]["steps"][1]["with"]
+    assert checkout["repository"] == "data/specs"
+    assert checkout["github-server-url"] == "https://git.example.com:8443"
+    for url in (
+        "git@github.com:example/specs.git",
+        "http://github.com/example/specs",
+        "https://github.com/example",
+        "https://github.com/group/sub/specs",
+        "https://bot@github.com/example/specs",
+        "https://github.com/example/specs?x=1",
+    ):
+        with pytest.raises(CiError, match="actions/checkout clones a repository"):
+            ci.generate(planned(JobKind.PROMOTE, source=git(url)))
+    for field, value in (
+        ("url", "https://github.com/example/${{ github.actor }}"),
+        ("ref", "${{ github.head_ref }}"),
+        ("path", PurePosixPath("${{ x }}")),
+    ):
+        injected = GitSource(git=git().git.model_copy(update={field: value}))
+        with pytest.raises(CiError, match=f"spec source's {field} must not hold"):
+            ci.generate(planned(JobKind.PROMOTE, source=injected))
+    reserved = GitSource(git=git().git.model_copy(update={"credential": "GITHUB_TOKEN"}))
+    with pytest.raises(CiError, match="cannot start with GITHUB_"):
+        ci.generate(planned(JobKind.PROMOTE, source=reserved))
+    tagged = GitSource(git=git().git.model_copy(update={"ref": "refs/tags/v1.2"}))
+    (workflow,) = ci.generate(planned(JobKind.PROMOTE, source=tagged))
+    tag = yaml.safe_load(workflow.content)["jobs"]["promote"]["steps"][1]["with"]["ref"]
+    assert tag == "refs/tags/v1.2"
+    dashed = GitSource(git=git().git.model_copy(update={"credential": "specs-read"}))
+    with pytest.raises(CiError, match="names secrets with letters"):
+        ci.generate(planned(JobKind.PROMOTE, source=dashed))
+
+
+def test_a_mounted_spec_directory() -> None:
+    ci, _ = github()
+    files = {f.path.name: yaml.safe_load(f.content) for f in ci.generate(SCENARIOS["mounted"])}
+    step = files["datadouble-shop-fetch.yml"]["jobs"]["fetch"]["steps"][1]["with"]
+    assert "/etc/datadouble-spec\n" in step["mounts"]
+    assert "/etc/datadouble-spec/shop.yml" in step["arguments"]

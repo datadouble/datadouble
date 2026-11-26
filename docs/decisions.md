@@ -1208,7 +1208,7 @@ The first four are the Tier 1 systems, one per pull request. The nightly hosted 
 
 ### 100. How `ci init` writes jobs {#decision-100}
 
-*(Refined by [decisions 123](#decision-123) and [140](#decision-140). Amended by [decisions 126](#decision-126) and [127](#decision-127).)*
+*(Refined by [decisions 123](#decision-123) and [140](#decision-140). Amended by [decisions 126](#decision-126), [127](#decision-127) and [144](#decision-144).)*
 
 **Decided:** `ci init` (`ci.init`) writes one side of the boundary per call.
 
@@ -1262,7 +1262,7 @@ An unstable build is a warning: its image is built and verified, so it must stil
 
 ### 103. Argo CD on Kubernetes {#decision-103}
 
-*(Amended by [decisions 133](#decision-133) and [143](#decision-143).)*
+*(Amended by [decisions 133](#decision-133), [143](#decision-143) and [144](#decision-144).)*
 
 **Decided:** On Kubernetes, `ci init --system argocd` writes an Argo CD Application per side. The Application installs this repository's Helm chart (`ci/kubernetes/chart`) at the release's tag, with the jobs, the spec and its catalog lock as values. `--runner` sets the namespace.
 
@@ -1660,7 +1660,7 @@ Amends [decisions 73](#decision-73) and [100](#decision-100).
 
 ### 127. Jenkins jobs on Kubernetes agents {#decision-127}
 
-*(Amended by [decision 133](#decision-133). Refined by [decision 140](#decision-140).)*
+*(Amended by [decisions 133](#decision-133) and [144](#decision-144). Refined by [decision 140](#decision-140).)*
 
 **Decided:** `ci init --agent kubernetes` runs a system's jobs as Kubernetes pods, instead of `docker run` on an agent with Docker. Docker stays the default.
 
@@ -2149,6 +2149,18 @@ Amends [decision 125](#decision-125).
 - A lock per spec is one rule that is right even when a size changes `sources` or `exclude`. Sizes that change only seeds re-lock separately after a schema change, and `ci init` already writes a `lock` job per spec. Reading a leftover `catalog.lock` silently could apply one spec's reviewed lock to another, so it fails loudly ([decision 10](#decision-10)'s rule).
 
 Refines [decision 39](#decision-39). Amends [decisions 103](#decision-103) and [123](#decision-123).
+
+### 144. Where CI jobs find the spec {#decision-144}
+
+**Decided:** `ci init --spec-source` (`spec_source` in the `ci.init` request) says where generated jobs find the spec's directory: the spec, the specs it extends and its lock. `--spec` stays the local path `ci init` reads and checks. The jobs pass `--spec <their spec directory>/<the spec's file name>`, so the parents and the lock are found by the same rules in every source.
+
+- **`checkout`** (the default) is the CI system's checkout of the repository the configuration lives in. Only this source needs the spec inside the repository root.
+- **`mounted`** (`{"mounted": {"path": ..., "config_map": ...}}`) is a directory already at an absolute path in the job. On Docker agents it is a path on the runner, mounted like the spec's other host paths. On Kubernetes agents (Jenkins with `--agent kubernetes`, and Argo CD) it is a ConfigMap someone else manages, named in `config_map` (checked as a Kubernetes object name), which the pod mounts read-only at the path and which never joins the work claim's paths. `ci init` fails when a Kubernetes agent has no ConfigMap, when a Docker agent names one, and when the spec reads a file from a subdirectory, which a ConfigMap can't hold. On Argo CD the chart mounts the named ConfigMap instead of rendering its own.
+- **`git`** (`{"git": {"url": ..., "ref": ..., "path": ..., "credential": ...}}`) is a directory in another repository. Each job clones `ref` into `.datadouble-spec` in its workspace before Datadouble runs, and reads the spec from `path` in the clone. `ref` is a branch by its name, a tag as `refs/tags/<tag>` (Jenkins' Git plugin doesn't recognize a bare tag) or a commit by its full SHA, and can't start with `-`. `credential` names the system's secret (a GitHub secret, a GitLab CI/CD variable, a Jenkins credential ID), which the response lists among its `environment`. The URL never holds a password. GitHub Actions adds a second `actions/checkout` step at the pinned version; GitLab adds a `before_script` to each generated job, outside the integrity-pinned template, that fetches with the runner host's `git` through a credential helper scoped to the repository's host and reading the masked variable, with the URL and ref written into the script rather than into variables a pipeline run could override; Jenkins adds a `spec` stage with `checkout scmGit` inside `dir('.datadouble-spec')`. Argo CD refuses `git`, naming `checkout` and `mounted`.
+
+**Why:** Some teams keep pipeline configuration apart from specs: a platform team that installs jobs for many teams, jobs run against a branch or an uncommitted directory, runners that shouldn't hold credentials for the specs' repository. The spec's directory is the unit because the lock and the specs a spec extends live there ([decision 143](#decision-143)), so every source delivers them together. Each CI system already checks out code with its own credential store and shows the checkout as its own step, so the CI system clones rather than Datadouble. Having the core accept a remote spec would put a git client and git credentials in the image and the core. Argo CD's chart has nothing that clones, and its values or a ConfigMap already deliver the directory.
+
+Amends [decisions 100](#decision-100), [103](#decision-103) and [127](#decision-127).
 
 ## Open
 

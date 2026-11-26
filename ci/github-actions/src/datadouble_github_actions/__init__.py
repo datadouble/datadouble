@@ -13,6 +13,10 @@ resolved secrets with ``add-mask``. A warning is a warning annotation on a
 passing step, since GitHub Actions has no unstable state. The ``lock`` job's
 new lock and changes are uploaded as the run's artifact with
 ``actions/upload-artifact``.
+
+With a ``git`` spec source, a second ``actions/checkout`` step clones the
+spec's repository into the workspace with the named secret, before any
+``datadouble`` step runs.
 """
 
 import os
@@ -22,14 +26,17 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import TextIO, override
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import JsonValue
 
 from datadouble.ci import (
+    SPEC_CLONE,
     Agent,
     CiError,
     GeneratedFile,
+    GitSettings,
     Invocation,
     Job,
     JobKind,
@@ -37,6 +44,7 @@ from datadouble.ci import (
     Placeholder,
     Report,
     Trigger,
+    credential_name,
 )
 from datadouble.outcome import ExitCode, Outcome
 from datadouble.spec import NotifyOn
@@ -184,6 +192,51 @@ def _step(pipeline: Pipeline, job: Job, invocation: Invocation) -> dict[str, Jso
     return step
 
 
+def _spec_checkout(git: GitSettings) -> dict[str, JsonValue]:
+    """The step that clones a ``git`` spec source: ``actions/checkout`` of another repository.
+
+    ``actions/checkout`` takes a repository as ``owner/name`` on a GitHub
+    server, so the URL must be ``https://<server>/<owner>/<name>``.
+    """
+    expressions = [
+        name
+        for name, value in (("url", git.url), ("ref", git.ref), ("path", str(git.path)))
+        if "${{" in value
+    ]
+    if expressions:
+        message = (
+            f"the spec source's {', '.join(expressions)} must not hold `${{{{`, which GitHub"
+            " would read as an expression"
+        )
+        raise CiError(message)
+    if git.credential.upper().startswith("GITHUB_"):
+        message = f"GitHub secret names cannot start with GITHUB_; {git.credential} does"
+        raise CiError(message)
+    url = urlsplit(git.url)
+    plain = (
+        url.scheme == "https" and url.hostname and not (url.username or url.query or url.fragment)
+    )
+    match url.path.strip("/").removesuffix(".git").split("/"):
+        case [owner, name] if plain and owner and name:
+            repository = f"{owner}/{name}"
+        case _:
+            message = (
+                f"actions/checkout clones a repository on a GitHub server, named"
+                f" https://<server>/<owner>/<name>; {git.url} is not one"
+            )
+            raise CiError(message)
+    settings: dict[str, JsonValue] = {"repository": repository}
+    if url.hostname != "github.com":
+        settings["github-server-url"] = f"https://{url.netloc}"
+    settings |= {
+        "ref": git.ref,
+        "path": SPEC_CLONE,
+        "token": f"${{{{ secrets.{credential_name(git, NAME)} }}}}",
+        "persist-credentials": False,
+    }
+    return {"name": "check out the spec", "uses": CHECKOUT, "with": settings}
+
+
 def _group(pipeline: Pipeline, job: Job) -> str:
     group = f"datadouble-{pipeline.name}-{_stem(pipeline, job.kind)}"
     if Trigger.REQUEST_OPENED in job.triggers or Trigger.REQUEST_CLOSED in job.triggers:
@@ -202,6 +255,9 @@ def _workflow(pipeline: Pipeline, job: Job) -> dict[str, JsonValue]:
     body["timeout-minutes"] = job.timeout_minutes
     checkout: dict[str, JsonValue] = {"uses": CHECKOUT, "with": {"persist-credentials": False}}
     steps: list[JsonValue] = [checkout]
+    git = pipeline.git()
+    if git is not None:
+        steps.append(_spec_checkout(git))
     steps.extend(_step(pipeline, job, invocation) for invocation in job.invocations)
     if job.artifacts is not None:
         # The files a person reviews (the lock job's new lock and its changes);

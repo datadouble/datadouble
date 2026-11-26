@@ -54,6 +54,9 @@
     allowPrivilegeEscalation: false
   terminationMessagePolicy: File
   volumeMounts:
+    {{- if $root.Values.spec.configMap }}
+    - {name: spec, mountPath: {{ dir $root.Values.spec.path | quote }}, readOnly: true}
+    {{- end }}
     {{- range $index, $file := keys $root.Values.spec.files | sortAlpha }}
     - {name: spec, mountPath: {{ printf "/workspace/%s/%s" (dir $root.Values.spec.path) $file | quote }}, subPath: {{ printf "spec-%d" $index }}}
     {{- end }}
@@ -113,7 +116,7 @@ spec:
     {{- include "datadouble.container" (dict "root" $root "step" (last $job.steps) "artifacts" $job.artifacts "name" (printf "step-%d" $count)) | nindent 4 }}
   volumes:
     - name: spec
-      configMap: {name: {{ include "datadouble.name" $root }}}
+      configMap: {name: {{ $root.Values.spec.configMap | default (include "datadouble.name" $root) | quote }}}
     - name: claim
       persistentVolumeClaim: {claimName: {{ $root.Values.claim.name | quote }}}
     {{- if $job.artifacts }}
